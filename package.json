@@ -40,6 +40,7 @@
     "allure-report": "allure generate --clean ./reports/allure/allure-results -o ./reports/allure/allure-report && NODE_NO_WARNINGS=1 allure open --port 8080 ./reports/allure/allure-report",
     "bt:tm:report": "node scripts/browserstack-tm-reporter.js",
     "validate:squads": "node scripts/validate-squad-sync.js",
+    "recorder": "./tools/visual-recorder/run.sh",
     "postinstall": "node scripts/fix-vuln-nested-deps.cjs"
   },
   "dependencies": {

@@ -1,0 +1,251 @@
+# Appium Visual Recorder
+
+Herramienta de grabacion visual de pruebas automatizadas mobile. Permite grabar flujos de usuario directamente desde un dispositivo Android sin escribir codigo, generando casos de prueba en formato Gherkin y archivos de locators listos para ejecutarse con Cucumber + WebdriverIO.
+
+> Esta copia vive integrada en `fwk-mobile-test/tools/visual-recorder`. La raíz
+> del framework se resuelve automáticamente y se expone al proceso mediante
+> `FWK_MOBILE_ROOT`. Las configuraciones locales quedan en `config/` y las
+> capturas temporales en `runtime/`; ambas están excluidas de Git.
+
+## Descubrimiento del framework
+
+Al iniciar, el recorder escanea la raíz de `fwk-mobile-test` y presenta:
+
+- ambientes definidos como `config/envs/.env.*`;
+- squads disponibles en las capas del framework;
+- APK/IPA ubicados en `resources/apps`;
+- datasets de `resources/data`;
+- conteos de features, steps, Screen Objects y locators.
+
+Del `.env` solo se envían a la interfaz los nombres de las variables y si están
+configuradas. Los valores permanecen en el proceso principal y las claves
+sensibles se clasifican como tales. Esto permite usar el ambiente seleccionado
+en una fase posterior sin exponer secretos en Electron.
+
+---
+
+## Como funciona
+
+    MODO 1 - GRABACION
+    Panel Electron → Conecta con dispositivo Android via Appium →
+    XML Hierarchy Viewer permite inspeccionar elementos →
+    Se captura XPath automaticamente → Se generan .feature y .locators
+
+    MODO 2 - EJECUCION
+    Lee el .feature generado → Resuelve variables del .locators →
+    Ejecuta con Cucumber + WebdriverIO + Appium →
+    Genera reporte HTML
+
+---
+
+## Pre-requisitos
+
+    Node.js 18+
+    Verificar : node --version
+    Descargar : https://nodejs.org
+
+    Java 17+
+    Verificar : java --version
+    Descargar : https://adoptium.net
+
+    Android SDK / ADB
+    Verificar : adb --version
+    Incluido en Android Studio : https://developer.android.com/studio
+
+    Appium 3+
+    Verificar : appium --version
+    Instalar  : npm install -g appium
+
+    Appium UiAutomator2 Driver
+    Instalar  : appium driver install uiautomator2
+    Verificar : appium driver list --installed
+
+    Dispositivo Android con depuracion USB activada
+    Verificar : adb devices
+
+---
+
+## Instalacion
+
+    cd tools/visual-recorder
+    npm install
+
+---
+
+## Ejecucion del grabador
+
+    npm run recorder
+
+También puede iniciarse directamente desde esta carpeta:
+
+    ./run.sh
+
+El script automaticamente:
+- Limpia el puerto 4723
+- Inicia Appium en background
+- Compila TypeScript
+- Abre el panel Electron
+
+---
+
+## Flujo de grabacion
+
+    1. CONFIGURACION DEL DISPOSITIVO
+       - El panel detecta automaticamente los dispositivos conectados
+       - Presionar "Detectar" para obtener el package de la app en primer plano
+       - Completar Activity si es necesario
+       - Presionar "INICIAR SESION"
+
+    2. XML HIERARCHY VIEWER
+       - Presionar "Inspector" en el header
+       - Se carga el screenshot del dispositivo y el XML de la pantalla
+       - Hacer hover sobre la imagen para ver elementos resaltados en azul
+       - Hacer click en un elemento para ver sus atributos y XPaths sugeridos
+       - Seleccionar el XPath adecuado de las sugerencias
+       - Presionar "Verificar" para confirmar que el selector encuentra el elemento
+       - Presionar "Usar" para cargar el XPath en el panel principal
+
+    3. INSPECTOR AUTOMATICO
+       - Presionar "Inspeccionar elemento"
+       - Tocar un elemento en el dispositivo fisico
+       - El panel captura automaticamente el XPath del elemento tocado
+
+    4. DEFINIR STEP
+       - Elegir la accion del combo
+       - Completar el valor si aplica
+       - Presionar "EJECUTAR Y GUARDAR STEP"
+
+    5. Repetir pasos 2-4 para cada accion del flujo
+
+    6. Completar Feature y Scenario
+
+    7. Presionar "GENERAR" para crear los archivos
+
+---
+
+## Acciones disponibles
+
+    ABRIR_APP        Lanzar la app por packageName
+    CLICK            Tap en un elemento
+    ESCRIBIR         setValue en un campo de texto
+    LIMPIAR          Limpiar el contenido de un campo
+    SCROLL_DOWN      Scroll hacia abajo
+    SCROLL_UP        Scroll hacia arriba
+    SCROLL_HASTA     Scroll hasta encontrar un elemento
+    SWIPE            Swipe en direccion (left/right/up/down)
+    PRESION_LARGA    Long press en un elemento
+    VERIFICAR_TEXTO  Verificar texto en un elemento
+    VERIFICAR_EXISTE Verificar que un elemento es visible
+    VERIFICAR_NO_EXISTE Verificar que un elemento no existe
+    VOLVER           Presionar boton back del dispositivo
+    ESPERAR          Esperar N segundos
+    SCREENSHOT       Captura de pantalla del dispositivo
+
+---
+
+## Archivos generados
+
+    automation/features/yape-features/<nombre>.feature  Escenario Gherkin ejecutable
+    resources/locators/global.locator.json               Locators globales por plataforma
+
+Los features pueden declarar un módulo de locators; si no lo hacen se usa `global`:
+
+    # locator-module: autenticacion/login/login
+
+Cada archivo `*.locator.json` contiene bloques `android` e `ios`. Los selectores
+deben indicar su estrategia explícitamente, por ejemplo `~Allow`,
+`id=com.app:id/btn_login`, `android=new UiSelector()...` o `iosClassChain=...`.
+
+    Formato .locators:
+    nombre_variable:@:selector
+
+    Selectores soportados:
+    XPath      : //*[@resource-id="com.app:id/btn_login"]
+    Text       : //*[@text="Iniciar sesion"]
+    ContentDesc: //*[@content-desc="Login button"]
+
+    Formato .feature:
+    Feature: Login Yape
+      Scenario: Login exitoso con usuario registrado
+        Given el usuario hace click en "{btn_ingresar}"
+        When el usuario escribe "999999999" en "{input_celular}"
+        When el usuario hace click en "{btn_continuar}"
+        Then el elemento "{lbl_bienvenido}" es visible
+
+---
+
+## Ejecutar casos grabados
+
+    ./test.sh
+
+O manualmente en dos terminales:
+
+    Terminal 1: appium --port 4723 --relaxed-security
+    Terminal 2: npm test
+
+El reporte HTML se genera en:
+
+    recorded/reports/report.html
+
+---
+
+## Estructura del proyecto
+
+    appium-visual-recorder/
+    package.json
+    tsconfig.json
+    cucumber.json
+    run.sh                        Script arranque del grabador
+    test.sh                       Script ejecucion de pruebas
+    README.md
+    src/
+      main.ts                     Proceso principal Electron + IPC handlers
+      preload.ts                  Bridge contextBridge entre UI y Node
+      appiumDriverManager.ts      Maneja sesion Appium + WebdriverIO
+      mobileInspector.ts          Inspector XML Hierarchy Viewer
+      mobileStepExecutor.ts       Ejecuta cada step en el dispositivo
+      locatorManager.ts           Lee y escribe el archivo .locators
+      featureGenerator.ts         Genera el archivo .feature
+      models.ts                   Tipos e interfaces TypeScript
+    renderer/
+      index.html                  Panel visual con dos pantallas
+      app.js                      Logica del panel (config + recorder)
+      css/
+        style.css                 Estilos del panel
+    features/
+      step_definitions/
+        steps.ts                  Step definitions para Cucumber
+    recorded/
+      features/                   Features generados aqui
+      locators/                   Locators generados aqui
+      reports/                    Reportes de ejecucion
+
+---
+
+## Tecnologias
+
+    Electron         28+
+    TypeScript       5+
+    Appium           3.4+
+    WebdriverIO      8+
+    UiAutomator2     7.5+
+    Cucumber         10+
+    Node.js          18+
+    ADB              Android SDK
+
+---
+
+## Scripts disponibles
+
+    ./run.sh     Iniciar el grabador
+    ./test.sh    Ejecutar casos grabados
+
+---
+
+## Notas
+
+    - El dispositivo debe tener depuracion USB activada
+    - Mantener la pantalla del dispositivo encendida durante la grabacion
+    - El XML Hierarchy Viewer es la forma mas confiable de capturar selectores
+    - Los selectores por resource-id son los mas estables para automatizacion
+    - Los selectores por text pueden fallar si el texto cambia por idioma

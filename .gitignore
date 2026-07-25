@@ -27,10 +27,12 @@ chromeDriver
 .tmp
 *.mp4
 reports/
+tools/visual-recorder/dist/
 .vscode/launch.json
 .vscode/settings.json
 
 package-lock.json
+!tools/visual-recorder/package-lock.json
 
 #cypress screenshot
 cypress/

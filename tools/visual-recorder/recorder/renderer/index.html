@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appium Visual Recorder</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- PANTALLA 1: CONFIGURACION -->
+    <div id="screenConfig" class="screen">
+        <div class="config-container">
+            <div class="config-header">
+                <span class="logo">📱</span>
+                <h1>Appium Visual Recorder</h1>
+                <p class="subtitle">Configuracion del dispositivo</p>
+            </div>
+
+            <div class="config-section framework-section">
+                <label class="field-label">Proyecto fwk-mobile-test:</label>
+                <div class="framework-grid">
+                    <div>
+                        <label class="field-label">Ambiente:</label>
+                        <select id="cmbFrameworkEnvironment" class="field-select">
+                            <option value="">Cargando ambientes...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="field-label">Squad:</label>
+                        <select id="cmbFrameworkSquad" class="field-select">
+                            <option value="">Cargando squads...</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="lblFrameworkStatus" class="device-info">Escaneando framework...</div>
+            </div>
+
+            <!-- Tab switcher -->
+            <div class="config-tabs">
+                <button id="tabLocal" class="config-tab active">📱 Local</button>
+                <button id="tabBS"    class="config-tab">☁️ BrowserStack</button>
+                <button id="btnOpenUploadModal" class="config-tab-upload" title="Subir APK a BrowserStack">📤</button>
+            </div>
+
+            <!-- ── Panel Local ─────────────────────────────── -->
+            <div id="localPanel" class="config-body">
+                <div class="config-section">
+                    <label class="field-label">Dispositivo conectado:</label>
+                    <div class="device-row">
+                        <select id="cmbDevices" class="field-select"></select>
+                        <button class="btn btn-dark" id="btnRefreshDevices">🔄</button>
+                    </div>
+                    <div id="lblDeviceInfo" class="device-info"></div>
+                </div>
+                <div class="config-section">
+                    <label class="field-label">Package de la app:</label>
+                    <div class="input-row">
+                        <input type="text" id="txtPackage" class="field-input" placeholder="ej: com.example.app" value="com.yape.qa"/>
+                        <button class="btn btn-dark" id="btnDetectApp">🔍 Detectar</button>
+                    </div>
+                    <label class="field-label">Activity principal:</label>
+                    <input type="text" id="txtActivity" class="field-input" placeholder="ej: .MainActivity" value="com.yape.activity.MainActivity"/>
+                    <label class="field-label">Version Android:</label>
+                    <input type="text" id="txtPlatformVersion" class="field-input" value="16"/>
+                </div>
+                <div class="config-section">
+                    <label class="field-label">APK (opcional):</label>
+                    <select id="cmbFrameworkApp" class="field-select">
+                        <option value="">— Seleccionar app del framework —</option>
+                    </select>
+                    <input type="text" id="txtApkPath" class="field-input" placeholder="Ruta al .apk"/>
+                </div>
+                <div id="lblConfigStatus" class="config-status"></div>
+                <button class="btn btn-green btn-full btn-start" id="btnStartSession">🚀 INICIAR SESION</button>
+            </div>
+
+            <!-- ── Panel BrowserStack ──────────────────────── -->
+            <div id="bsPanel" class="config-body" style="display:none">
+
+                <!-- Credenciales -->
+                <div class="config-section">
+                    <label class="field-label">Credenciales BrowserStack</label>
+                    <input type="text"     id="txtBsUser"  class="field-input" placeholder="Username (ej: kevinarnold_xxxx)"/>
+                    <label class="field-label" style="margin-top:6px">Access Key:</label>
+                    <div class="input-row">
+                        <input type="password" id="txtBsKey" class="field-input" placeholder="Tu access key..."/>
+                        <button class="btn btn-dark" id="btnBsSaveCreds" title="Guardar credenciales localmente">💾</button>
+                    </div>
+                    <div id="lblBsCreds" class="device-info"></div>
+                </div>
+
+                <!-- Plataforma -->
+                <div class="config-section">
+                    <label class="field-label">Plataforma:</label>
+                    <div class="bs-platform-toggle">
+                        <button id="btnBsPlatformAndroid" class="bs-platform-btn active">🤖 Android</button>
+                        <button id="btnBsPlatformIos"     class="bs-platform-btn">🍎 iOS</button>
+                    </div>
+                </div>
+
+                <!-- Dispositivos BS -->
+                <div class="config-section">
+                    <label class="field-label" id="lblBsDevicesTitle">Dispositivo Android en BrowserStack:</label>
+                    <div class="device-row">
+                        <select id="cmbBsDevices" class="field-select">
+                            <option value="">— Primero lista los dispositivos —</option>
+                        </select>
+                        <button class="btn btn-dark" id="btnBsListDevices" title="Listar dispositivos disponibles">🔍</button>
+                    </div>
+                    <div id="lblBsDeviceInfo" class="device-info"></div>
+                </div>
+
+                <!-- App -->
+                <div class="config-section">
+                    <label class="field-label" id="lblBsAppsTitle">App en BrowserStack:</label>
+                    <div class="device-row">
+                        <select id="cmbBsApps" class="field-select">
+                            <option value="">— Carga tus apps o pega la URL abajo —</option>
+                        </select>
+                        <button class="btn btn-dark" id="btnBsListApps" title="Listar apps subidas a tu cuenta">📂</button>
+                    </div>
+                    <div id="lblBsAppsInfo" class="device-info"></div>
+                    <label class="field-label" style="margin-top:6px">App URL (bs://...) — se auto-llena al elegir arriba:</label>
+                    <input type="text" id="txtBsAppUrl" class="field-input"
+                           placeholder="bs://c8ddcb5649a8280ca800075bfd8f151115bba6b3"/>
+
+                    <!-- Android: Package + Activity -->
+                    <div id="bsAndroidFields">
+                        <label class="field-label" style="margin-top:6px">Package de la app:</label>
+                        <input type="text" id="txtBsPackage"  class="field-input" placeholder="com.example.app" value="com.yape.qa"/>
+                        <label class="field-label" style="margin-top:6px">Activity principal:</label>
+                        <input type="text" id="txtBsActivity" class="field-input" placeholder=".MainActivity" value="com.yape.activity.MainActivity"/>
+                    </div>
+
+                    <!-- iOS: Bundle ID -->
+                    <div id="bsIosFields" style="display:none">
+                        <label class="field-label" style="margin-top:6px">Bundle ID:</label>
+                        <input type="text" id="txtBsBundleId" class="field-input" value="com.yape.qa" placeholder="com.example.app"/>
+                    </div>
+                </div>
+
+                <div id="lblBsStatus" class="config-status"></div>
+                <button class="btn btn-green btn-full btn-start" id="btnBsStartSession">☁️ CONECTAR CON BROWSERSTACK</button>
+            </div>
+
+        </div>
+
+        <!-- ── Modal: Subir APK a BrowserStack ────────────────── -->
+        <div id="uploadModal" class="upload-modal" style="display:none">
+            <div class="upload-modal-content">
+                <div class="upload-modal-header">
+                    <span class="section-title">📤 Subir APK a BrowserStack</span>
+                    <button class="btn btn-dark" id="btnCloseUploadModal">✕</button>
+                </div>
+                <div class="upload-modal-body">
+                    <p class="upload-hint">
+                        El APK / IPA se sube a tu cuenta de BrowserStack y obtienes el URL <code>bs://...</code>
+                        para usarlo en las sesiones de testing.
+                    </p>
+
+                    <label class="field-label">Custom ID (opcional — para identificar la app):</label>
+                    <input type="text" id="txtUploadCustomId" class="field-input"
+                           placeholder="ej: YapeQA (solo letras, números, guiones)"/>
+
+                    <div id="uploadDropZone" class="upload-drop-zone">
+                        <div class="upload-drop-icon">📦</div>
+                        <div class="upload-drop-text">Haz clic para seleccionar el APK</div>
+                        <div class="upload-drop-sub">.apk · .aab · .xapk · .ipa</div>
+                    </div>
+
+                    <div id="uploadProgress" class="upload-progress" style="display:none">
+                        <div class="upload-progress-bar">
+                            <div id="uploadProgressFill" class="upload-progress-fill"></div>
+                        </div>
+                        <span id="uploadProgressLabel">Subiendo...</span>
+                    </div>
+
+                    <div id="uploadResult" class="upload-result" style="display:none">
+                        <div id="uploadResultText" class="upload-result-text"></div>
+                        <button class="btn btn-green btn-full" id="btnCopyAppUrl" style="margin-top:8px">
+                            📋 Copiar URL y cerrar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- PANTALLA 2: GRABACION -->
+    <div id="screenRecorder" class="screen" style="display:none">
+        <header class="header">
+            <div class="header-left">
+                <span class="logo">📱</span>
+                <span class="title">Appium Visual Recorder</span>
+                <span id="lblDevice" class="device-badge">Sin dispositivo</span>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-dark-sm" id="btnRefreshScreen">🔄</button>
+                <button class="btn btn-blue" id="btnXmlInspector">🔍 Inspector</button>
+                <button class="btn btn-red-sm" id="btnCloseSession">⏹ Cerrar</button>
+            </div>
+        </header>
+
+        <main class="main">
+            <section class="panel panel-device">
+                <div class="section-title">📺 PANTALLA</div>
+                <div class="device-screen-container">
+                    <img id="imgDevice" class="device-screen" src="" alt="" style="display:none"/>
+                    <div id="devicePlaceholder" class="device-placeholder">Sin captura</div>
+                </div>
+                <button class="btn btn-purple btn-full" id="btnInspect">🖱️ Inspeccionar elemento</button>
+                <div id="lblInspectStatus" class="inspect-status">— Presiona y toca en el dispositivo</div>
+            </section>
+
+            <section class="panel panel-left">
+                <div class="section-title">🔍 SELECTOR</div>
+                <label class="field-label">XPath / Selector:</label>
+                <div class="input-row">
+                    <input type="text" id="txtSelector" class="field-input" placeholder="XPath..."/>
+                    <button class="btn btn-dark" id="btnCopy">📋</button>
+                </div>
+                <label class="field-label">Nombre variable:</label>
+                <input type="text" id="txtVarName" class="field-input" placeholder="ej: btn_login"/>
+                <button class="btn btn-navy btn-full" id="btnVerify">✅ Verificar selector</button>
+                <div id="lblVerifyResult" class="verify-result">— Ingresa un selector</div>
+                <div class="separator"></div>
+                <div class="section-title">⚡ STEP</div>
+                <label class="field-label">Accion:</label>
+                <select id="cmbAction" class="field-select">
+                    <option value="ABRIR_APP">📱 ABRIR APP</option>
+                    <option value="CLICK" selected>👆 CLICK</option>
+                    <option value="ESCRIBIR">✏️ ESCRIBIR</option>
+                    <option value="LIMPIAR">🧹 LIMPIAR</option>
+                    <option value="SCROLL_DOWN">⬇️ SCROLL DOWN</option>
+                    <option value="SCROLL_UP">⬆️ SCROLL UP</option>
+                    <option value="SCROLL_HASTA">🔍 SCROLL HASTA</option>
+                    <option value="SWIPE">👉 SWIPE</option>
+                    <option value="PRESION_LARGA">👇 PRESION LARGA</option>
+                    <option value="VERIFICAR_TEXTO">✅ VERIFICAR TEXTO</option>
+                    <option value="VERIFICAR_EXISTE">👁️ VERIFICAR EXISTE</option>
+                    <option value="VERIFICAR_NO_EXISTE">🚫 VERIFICAR NO EXISTE</option>
+                    <option value="VOLVER">◀️ VOLVER</option>
+                    <option value="ESPERAR">⏳ ESPERAR</option>
+                    <option value="SCREENSHOT">📸 SCREENSHOT</option>
+                </select>
+                <label class="field-label">Valor:</label>
+                <input type="text" id="txtValue" class="field-input" placeholder="texto, segundos..."/>
+                <label class="field-label">Descripcion (opcional):</label>
+                <input type="text" id="txtDesc" class="field-input" placeholder="describe el step..."/>
+                <button class="btn btn-green btn-full btn-execute" id="btnExecute">▶ EJECUTAR Y GUARDAR</button>
+                <div class="separator"></div>
+                <div class="section-title">📄 NOMBRE</div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label class="field-label">Feature:</label>
+                        <input type="text" id="txtFeature" class="field-input" value="Flujo mobile"/>
+                    </div>
+                    <div class="input-group">
+                        <label class="field-label">Scenario:</label>
+                        <input type="text" id="txtScenario" class="field-input" value="Escenario grabado"/>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel panel-right">
+                <div class="steps-header">
+                    <span class="section-title">📋 STEPS</span>
+                    <div class="steps-actions">
+                        <button class="btn btn-red-sm" id="btnDeleteStep">🗑️</button>
+                        <button class="btn btn-dark-sm" id="btnClearSteps">🧹</button>
+                    </div>
+                </div>
+                <ul id="lstSteps" class="steps-list">
+                    <li class="step-empty">Sin steps grabados...</li>
+                </ul>
+                <div class="separator"></div>
+                <div class="section-title">👁️ GHERKIN</div>
+                <textarea id="txtGherkin" class="gherkin-preview" readonly></textarea>
+                <div class="btn-row">
+                    <button class="btn btn-navy btn-half" id="btnPreview">👁️ Preview</button>
+                    <button class="btn btn-orange btn-half" id="btnEnlazar">🔗 Enlazar</button>
+                    <button class="btn btn-green btn-half" id="btnGenerate">💾 GENERAR</button>
+                </div>
+                <div id="lblGenerateResult" class="generate-result"></div>
+            </section>
+        </main>
+
+        <!-- XML HIERARCHY VIEWER -->
+        <div id="xmlModal" class="xml-modal" style="display:none">
+            <div class="xml-modal-content">
+                <div class="xml-modal-header">
+                    <span class="section-title">🔍 XML Hierarchy Viewer</span>
+                    <div class="xml-modal-actions">
+                        <button class="btn btn-dark" id="btnCopyXml" title="Mostrar XML completo">📋 XML</button>
+                        <button class="btn btn-dark" id="btnCopyTree" title="Mostrar árbol de elementos">🌳 Árbol</button>
+                        <button class="btn btn-dark" id="btnCopyHierarchy" title="Copiar la vista actual">📄 Copiar</button>
+                        <button class="btn btn-blue" id="btnRefreshXml">🔄 Refresh</button>
+                        <button class="btn btn-dark" id="btnCloseXml">✕ Cerrar</button>
+                    </div>
+                </div>
+                <div class="xml-modal-body">
+
+                    <!-- Screenshot interactivo -->
+                    <div class="hier-device">
+                        <div class="section-title" style="margin-bottom:6px">
+                            📱 Click en elemento
+                        </div>
+                        <div class="hier-screen-wrap" id="hierScreenWrap">
+                            <img id="hierImg" class="hier-screen" src="" alt=""/>
+                            <canvas id="hierCanvas" class="hier-canvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Árbol o XML crudo -->
+                    <div class="hier-tree-panel">
+                        <div class="section-title" id="lblHierarchyMode" style="margin-bottom:6px">🌳 Hierarchy</div>
+                        <div id="hierTree" class="hier-tree">
+                            <span class="hier-hint">Haz click en la imagen</span>
+                        </div>
+                    </div>
+
+                    <!-- Atributos + selector -->
+                    <div class="hier-attrs-panel">
+                        <div class="section-title" style="margin-bottom:6px">📋 Atributos</div>
+                        <div id="hierAttrs" class="hier-attrs">
+                            <span class="hier-hint">Selecciona un elemento</span>
+                        </div>
+                        <div class="separator" style="margin:8px 0"></div>
+                        <div class="section-title" style="margin-bottom:6px">🎯 Selectores sugeridos</div>
+                        <div id="hierXpathSuggestions" class="xpath-suggestions"></div>
+                        <label class="field-label" style="margin-top:8px">Estrategia:</label>
+                        <select id="cmbLocatorStrategy" class="field-select">
+                            <option value="accessibility">Accessibility ID</option>
+                            <option value="id">ID</option>
+                            <option value="class">Class Name</option>
+                            <option value="xpath">XPath</option>
+                            <option value="android">Android UIAutomator</option>
+                            <option value="iosPredicate">iOS Predicate String</option>
+                            <option value="iosClassChain">iOS Class Chain</option>
+                        </select>
+                        <label class="field-label" style="margin-top:8px">Valor del selector:</label>
+                        <textarea id="txtLocatorValue" class="xpath-manual"
+                                  placeholder="com.example:id/login_button"></textarea>
+                        <div class="btn-row" style="margin-top:6px">
+                            <button class="btn btn-navy btn-half" id="btnVerifyXpathManual">✅ Verificar</button>
+                            <button class="btn btn-green btn-half" id="btnUseXpath">⬆️ Usar</button>
+                        </div>
+                        <div id="lblXmlVerify" class="verify-result" style="margin-top:6px">
+                            — Verifica antes de usar
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <footer class="statusbar">
+            <span id="lblStatus">✓ Listo</span>
+        </footer>
+
+        <!-- ENLAZAR MODAL -->
+        <div id="enlazarModal" class="xml-modal" style="display:none">
+            <div class="enlazar-modal-content">
+                <div class="enlazar-header">
+                    <span class="section-title">🔗 Constructor de Escenario</span>
+                    <div class="xml-modal-actions">
+                        <button class="btn btn-dark" id="btnCloseEnlazar">✕ Cerrar</button>
+                    </div>
+                </div>
+                <div class="enlazar-body">
+
+                    <!-- Panel izquierdo: Steps grabados -->
+                    <div class="enlazar-steps-panel">
+                        <div class="section-title" style="margin-bottom:8px">📋 STEPS GRABADOS</div>
+                        <ul id="enlazarStepsList" class="steps-list enlazar-steps-list">
+                            <li class="step-empty">Sin steps grabados</li>
+                        </ul>
+                    </div>
+
+                    <!-- Panel derecho: Constructor de escenario -->
+                    <div class="enlazar-scenario-panel">
+                        <div class="enlazar-scenario-header">
+                            <span class="section-title">🎬 CONSTRUCTOR DE ESCENARIO</span>
+                            <button class="btn btn-blue" id="btnNuevoStep">+ Nuevo Step</button>
+                        </div>
+                        <div id="scenarioRows" class="scenario-rows">
+                            <div class="scenario-empty-hint">
+                                Agrega un step con el botón "+ Nuevo Step"<br/>
+                                o haz click en un step grabado de la izquierda
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="enlazar-footer">
+                    <span class="enlazar-hint" id="enlazarHint">🔗 Modo Enlazar — asigna steps a cada fila del escenario</span>
+                    <button class="btn btn-green" id="btnConfirmarEscenario">✓ Confirmar Escenario</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
