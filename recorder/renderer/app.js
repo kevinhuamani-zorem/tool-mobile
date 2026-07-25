@@ -88,6 +88,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const btnExecute      = document.getElementById('btnExecute');
     const lstSteps        = document.getElementById('lstSteps');
     const txtGherkin      = document.getElementById('txtGherkin');
+    const cmbPreviewFile  = document.getElementById('cmbPreviewFile');
     const txtFeature      = document.getElementById('txtFeature');
     const txtScenario     = document.getElementById('txtScenario');
     const txtCaseId       = document.getElementById('txtCaseId');
@@ -102,6 +103,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     const btnClear        = document.getElementById('btnClearSteps');
     const lblStatus       = document.getElementById('lblStatus');
     const lblGenerate     = document.getElementById('lblGenerateResult');
+    let lastPreviewToken  = '';
+    let previewDocuments  = [];
 
     // ─── ELEMENTOS HIERARCHY VIEWER ──────────────────────────────────────────
     const xmlModal        = document.getElementById('xmlModal');
@@ -238,6 +241,32 @@ window.addEventListener('DOMContentLoaded', async () => {
             dataName: txtDataName.value.trim()
         };
     }
+
+    function buildPreparedGenerationRequest() {
+        const request = buildGenerationRequest();
+        if (linkedScenarioData) {
+            request.scenarioRows = linkedScenarioData.stepRows.map(row => ({
+                ...row,
+                actions: linkedScenarioData.linked[row.text] || []
+            }));
+        }
+        return request;
+    }
+
+    function invalidatePreview() {
+        lastPreviewToken = '';
+        previewDocuments = [];
+        if (cmbPreviewFile) cmbPreviewFile.style.display = 'none';
+    }
+
+    function showPreviewDocument(index) {
+        const document = previewDocuments[index];
+        if (document && txtGherkin) txtGherkin.value = document.content;
+    }
+
+    cmbPreviewFile.addEventListener('change', () => {
+        showPreviewDocument(Number(cmbPreviewFile.value));
+    });
 
     function disableBtn(btn, text) {
         if (!btn) return;
@@ -1060,6 +1089,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
 
         const step = { action, variableName: varName, selector, value, description: desc };
+        invalidatePreview();
         disableBtn(btnExecute, '⏳ Ejecutando...');
         setStatus('⚡ Ejecutando...', '#FF6600');
 
@@ -1072,8 +1102,11 @@ window.addEventListener('DOMContentLoaded', async () => {
             clearStepFields();
             const sr = await api.getSteps();
             renderSteps(sr.steps);
-            const pr = await api.previewFwkFiles(buildGenerationRequest());
-            if (pr.success && txtGherkin) txtGherkin.value = pr.preview.featureContent;
+            const pr = await api.previewGherkin(
+                txtFeature.value.trim() || 'Flujo mobile',
+                txtScenario.value.trim() || 'Escenario'
+            );
+            if (pr.success && txtGherkin) txtGherkin.value = pr.preview;
         } else {
             setStatus('✗ ' + result.message, '#CC0000');
         }
@@ -1082,6 +1115,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     btnDelete.addEventListener('click', async () => {
         if (selectedStepIndex < 0) { setStatus('⚠ Selecciona un step', '#FF6600'); return; }
         await api.deleteStep(selectedStepIndex);
+        invalidatePreview();
         selectedStepIndex = -1;
         const r = await api.getSteps();
         renderSteps(r.steps);
@@ -1090,6 +1124,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     btnClear.addEventListener('click', async () => {
         await api.clearSteps();
+        invalidatePreview();
         selectedStepIndex = -1;
         renderSteps([]);
         if (txtGherkin) txtGherkin.value = '';
@@ -1097,10 +1132,43 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     btnPreview.addEventListener('click', async () => {
-        const r = await api.previewFwkFiles(buildGenerationRequest());
+        const r = await api.previewFwkFiles(buildPreparedGenerationRequest());
         if (r.success && txtGherkin) {
-            txtGherkin.value = r.preview.featureContent;
-            setGenerate(`Preparado: ${r.preview.files.length} archivo(s)`, 'ok');
+            lastPreviewToken = r.previewToken;
+            previewDocuments = [
+                { path: r.preview.featurePath, content: r.preview.featureContent },
+                ...(r.preview.locatorPath
+                    ? [{ path: r.preview.locatorPath, content: r.preview.locatorContent }]
+                    : []),
+                ...(r.preview.stepPath
+                    ? [{ path: r.preview.stepPath, content: r.preview.stepContent }]
+                    : []),
+                ...(r.preview.screenPath
+                    ? [{ path: r.preview.screenPath, content: r.preview.screenContent }]
+                    : [])
+            ];
+            cmbPreviewFile.innerHTML = '';
+            previewDocuments.forEach((previewDocument, index) => {
+                const option = document.createElement('option');
+                option.value = String(index);
+                option.textContent = previewDocument.path;
+                cmbPreviewFile.appendChild(option);
+            });
+            cmbPreviewFile.style.display = 'block';
+            showPreviewDocument(0);
+
+            const problems = [
+                ...r.validation.errors,
+                ...r.validation.conflicts.map(file => `Conflicto: ${file}`)
+            ];
+            if (problems.length > 0) {
+                setGenerate('✗ ' + problems.join(' | '), 'err');
+            } else {
+                const warnings = r.validation.warnings.length
+                    ? ` · ${r.validation.warnings.join(' | ')}`
+                    : '';
+                setGenerate(`✓ Revisar ${r.preview.files.length} archivo(s)${warnings}`, 'ok');
+            }
         } else {
             setGenerate('✗ ' + r.error, 'err');
         }
@@ -1108,21 +1176,21 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     btnGenerate.addEventListener('click', async () => {
         disableBtn(btnGenerate, '⏳ Generando...');
-
-        const request = buildGenerationRequest();
-        if (linkedScenarioData) {
-            request.scenarioRows = linkedScenarioData.stepRows.map(row => ({
-                ...row,
-                actions: linkedScenarioData.linked[row.text] || []
-            }));
+        if (!lastPreviewToken) {
+            enableBtn(btnGenerate);
+            setGenerate('✗ Debes ejecutar Preview y revisar los archivos antes de generar.', 'err');
+            return;
         }
-        const r = await api.generateFwkFiles(request);
+
+        const request = buildPreparedGenerationRequest();
+        const r = await api.generateFwkFiles(request, lastPreviewToken);
         enableBtn(btnGenerate);
         if (r.success) {
             const paths = r.generated.files.join(' | ');
             setGenerate('✓ ' + paths, 'ok');
             setStatus('✓ Feature y locators generados', '#00CC00');
             linkedScenarioData = null;
+            invalidatePreview();
         } else {
             setGenerate('✗ ' + r.error, 'err');
         }

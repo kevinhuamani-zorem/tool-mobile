@@ -18,6 +18,8 @@ import { projectPaths, validateFrameworkRoot } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
+import { OutputValidator } from '../../core/outputValidator';
+import crypto from 'crypto';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -28,6 +30,8 @@ const bsDm           = new BrowserStackDriverManager();
 const frameworkScanner = new FrameworkScanner();
 const fwkMobileGenerator = new FwkMobileGenerator();
 const reuseAnalyzer = new ReuseAnalyzer();
+const outputValidator = new OutputValidator();
+const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
 const featureGen     = new FeatureGenerator(
@@ -527,23 +531,52 @@ function prepareGenerationRequest(
 
 ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
     try {
+        const prepared = prepareGenerationRequest(request);
         const preview = fwkMobileGenerator.preview(
-            prepareGenerationRequest(request),
+            prepared,
             recordedSteps
         );
-        return { success: true, preview };
+        const validation = outputValidator.validate(preview);
+        const fingerprint = generationFingerprint(prepared, recordedSteps);
+        const previewToken = crypto.randomUUID();
+        approvedPreviews.clear();
+        approvedPreviews.set(previewToken, fingerprint);
+        return { success: true, preview, validation, previewToken };
     } catch (e: any) {
         return { success: false, error: e.message };
     }
 });
 
-ipcMain.handle('generate-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
+function generationFingerprint(request: GenerationRequest, steps: RecordedStep[]): string {
+    return crypto.createHash('sha256')
+        .update(JSON.stringify({ request, steps }))
+        .digest('hex');
+}
+
+ipcMain.handle('generate-fwk-files', async (
+    _,
+    request: Omit<GenerationRequest, 'platform'>,
+    previewToken: string
+) => {
     try {
+        const prepared = prepareGenerationRequest(request);
+        const expectedFingerprint = approvedPreviews.get(previewToken);
+        const actualFingerprint = generationFingerprint(prepared, recordedSteps);
+        if (!previewToken || !expectedFingerprint || expectedFingerprint !== actualFingerprint) {
+            throw new Error('La grabación cambió. Ejecuta Preview nuevamente antes de generar.');
+        }
+        const preview = fwkMobileGenerator.preview(prepared, recordedSteps);
+        const validation = outputValidator.validate(preview);
+        if (!validation.valid) {
+            const details = [...validation.errors, ...validation.conflicts].join(', ');
+            throw new Error(`La salida no superó la validación: ${details}`);
+        }
         const generated = fwkMobileGenerator.generate(
-            prepareGenerationRequest(request),
+            prepared,
             recordedSteps
         );
-        return { success: true, generated };
+        approvedPreviews.delete(previewToken);
+        return { success: true, generated, validation };
     } catch (e: any) {
         return { success: false, error: e.message };
     }
