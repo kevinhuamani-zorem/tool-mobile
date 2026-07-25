@@ -76,11 +76,11 @@ export class LocatorManager {
         fs.writeFileSync(filePath, JSON.stringify(document, null, 2) + '\n', 'utf-8');
     }
 
-    add(name: string, selector: string): void {
+    add(name: string, selector: string, persist = true): void {
         if (!name || !selector) throw new Error('Nombre y selector son obligatorios');
         this.activeLocators.set(name, selector);
         this.locators.set(name, selector);
-        this.saveActiveModule();
+        if (persist) this.saveActiveModule();
         console.log(`[LocatorManager] Guardado: ${this.moduleName}.${name} → ${selector}`);
     }
 
