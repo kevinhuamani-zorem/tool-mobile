@@ -17,6 +17,7 @@ import { RecordedStep } from '../../core/models';
 import { projectPaths, validateFrameworkRoot } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
+import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -26,6 +27,7 @@ const dm             = new AppiumDriverManager();
 const bsDm           = new BrowserStackDriverManager();
 const frameworkScanner = new FrameworkScanner();
 const fwkMobileGenerator = new FwkMobileGenerator();
+const reuseAnalyzer = new ReuseAnalyzer();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
 const featureGen     = new FeatureGenerator(
@@ -98,6 +100,19 @@ app.on('window-all-closed', async () => {
 ipcMain.handle('scan-framework', async () => {
     try {
         return { success: true, catalog: frameworkScanner.scan() };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('analyze-step-reuse', async (_, texts: string[], squad?: string) => {
+    try {
+        reuseAnalyzer.refresh();
+        return {
+            success: true,
+            steps: reuseAnalyzer.analyzeSteps(texts),
+            screenMethods: reuseAnalyzer.getScreenMethods(squad)
+        };
     } catch (e: any) {
         return { success: false, error: e.message };
     }
@@ -495,10 +510,25 @@ ipcMain.handle('preview-gherkin', async (_, featureName: string, scenarioName: s
     return { success: true, preview: featureGen.preview(featureName, scenarioName, recordedSteps) };
 });
 
+function prepareGenerationRequest(
+    request: Omit<GenerationRequest, 'platform'>
+): GenerationRequest {
+    const prepared: GenerationRequest = { ...request, platform: recordingPlatform };
+    if (prepared.scenarioRows?.length) {
+        reuseAnalyzer.refresh();
+        const reuse = reuseAnalyzer.analyzeSteps(prepared.scenarioRows.map(row => row.text));
+        prepared.scenarioRows = prepared.scenarioRows.map((row, index) => ({
+            ...row,
+            status: reuse[index].status
+        }));
+    }
+    return prepared;
+}
+
 ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
     try {
         const preview = fwkMobileGenerator.preview(
-            { ...request, platform: recordingPlatform },
+            prepareGenerationRequest(request),
             recordedSteps
         );
         return { success: true, preview };
@@ -510,7 +540,7 @@ ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, '
 ipcMain.handle('generate-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
     try {
         const generated = fwkMobileGenerator.generate(
-            { ...request, platform: recordingPlatform },
+            prepareGenerationRequest(request),
             recordedSteps
         );
         return { success: true, generated };

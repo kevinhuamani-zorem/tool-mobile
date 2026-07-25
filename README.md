@@ -38,6 +38,25 @@ La generación valida todas las rutas, escribe primero archivos temporales y no
 sobrescribe archivos existentes. Los locators capturados permanecen en memoria
 hasta que el usuario presiona `GENERAR`.
 
+### Reutilización de Steps y Screen Objects
+
+El modo `Enlazar` permite redactar los steps Gherkin del escenario y asociarles
+una o más acciones grabadas. Antes de generar:
+
+1. se indexan las expresiones regulares `Given`, `When` y `Then` existentes;
+2. cada texto Gherkin se prueba contra el índice;
+3. las coincidencias se reutilizan sin crear código duplicado;
+4. para los steps faltantes se generan únicamente:
+
+       features/yape-steps-definitions/<squad>/<archivo>.steps.ts
+       screenobjects/<squad>/<módulo>.screen.ts
+
+El Steps file solo orquesta y llama al Screen Object. El Screen Object extiende
+`BaseScreen`, resuelve elementos con `LocatorFactory` y usa los helpers del
+framework para clicks, escritura, espera, validaciones y gestos soportados.
+También se indexan los métodos públicos disponibles por squad y los de
+`commons`, para facilitar su reutilización asistida.
+
 ---
 
 ## Como funciona

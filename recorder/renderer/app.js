@@ -198,7 +198,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         lblFrameworkStatus.textContent =
             `✓ ${catalog.environments.length} ambientes · ${catalog.squads.length} squads · ` +
             `${catalog.apps.length} apps · ${catalog.dataSets.length} datasets · ` +
-            `${totals.features} features · ${totals.steps} steps`;
+            `${totals.features} features · ${catalog.reusable.stepDefinitions} definiciones · ` +
+            `${catalog.reusable.screenMethods} métodos reutilizables`;
         lblFrameworkStatus.className = 'device-info ok';
     }
 
@@ -1107,18 +1108,21 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     btnGenerate.addEventListener('click', async () => {
         disableBtn(btnGenerate, '⏳ Generando...');
-        if (linkedScenarioData) {
-            enableBtn(btnGenerate);
-            setGenerate('✗ El modo Enlazar se adaptará en la fase de reutilización de steps.', 'err');
-            return;
-        }
 
-        const r = await api.generateFwkFiles(buildGenerationRequest());
+        const request = buildGenerationRequest();
+        if (linkedScenarioData) {
+            request.scenarioRows = linkedScenarioData.stepRows.map(row => ({
+                ...row,
+                actions: linkedScenarioData.linked[row.text] || []
+            }));
+        }
+        const r = await api.generateFwkFiles(request);
         enableBtn(btnGenerate);
         if (r.success) {
             const paths = r.generated.files.join(' | ');
             setGenerate('✓ ' + paths, 'ok');
             setStatus('✓ Feature y locators generados', '#00CC00');
+            linkedScenarioData = null;
         } else {
             setGenerate('✗ ' + r.error, 'err');
         }
@@ -1975,7 +1979,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         }, 0);
     });
 
-    btnConfirmarEscenario.addEventListener('click', () => {
+    btnConfirmarEscenario.addEventListener('click', async () => {
         if (scenarioRows.length === 0) {
             enlazarHint.textContent = '⚠ Agrega al menos un step al escenario';
             enlazarHint.style.color = '#CC0000';
@@ -2003,7 +2007,19 @@ window.addEventListener('DOMContentLoaded', async () => {
         });
 
         // Guardar en memoria para cuando el usuario haga click en GENERAR
-        linkedScenarioData = { linked, stepTexts, stepRows };
+        const reuse = await api.analyzeStepReuse(stepTexts, cmbFrameworkSquad.value);
+        if (!reuse.success) {
+            enlazarHint.textContent = '✗ No se pudo analizar la reutilización: ' + reuse.error;
+            enlazarHint.style.color = '#CC0000';
+            return;
+        }
+        linkedScenarioData = {
+            linked,
+            stepTexts,
+            stepRows,
+            reuse: reuse.steps,
+            screenMethods: reuse.screenMethods
+        };
 
         // Construir preview Gherkin y actualizar el textarea de la pantalla principal
         const featureName  = (txtFeature  && txtFeature.value.trim())  || 'Flujo mobile';
@@ -2023,7 +2039,13 @@ window.addEventListener('DOMContentLoaded', async () => {
         ];
         if (txtGherkin) txtGherkin.value = gherkinLines.join('\n');
 
-        setStatus('✓ Escenario enlazado — presiona GENERAR para crear los archivos', '#FF9900');
+        const reused = reuse.steps.filter(step => step.status === 'reused').length;
+        const missing = reuse.steps.length - reused;
+        setStatus(
+            `✓ Análisis: ${reused} steps reutilizados · ${missing} faltantes · ` +
+            `${reuse.screenMethods.length} métodos disponibles`,
+            missing ? '#FF9900' : '#00CC00'
+        );
         enlazarModal.style.display = 'none';
     });
 
