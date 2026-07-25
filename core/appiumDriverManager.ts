@@ -131,6 +131,93 @@ export class AppiumDriverManager {
         return await this.getDriver().takeScreenshot();
     }
 
+    async tapAt(x: number, y: number): Promise<void> {
+        const tapX = Math.max(0, Math.round(x));
+        const tapY = Math.max(0, Math.round(y));
+        const driver = this.getDriver();
+        const capabilities = driver.capabilities as Record<string, any>;
+        const platformName = String(
+            capabilities.platformName ||
+            capabilities.platform ||
+            capabilities['appium:platformName'] ||
+            ''
+        ).toLowerCase();
+
+        // BrowserStack/XCUITest puede no publicar el endpoint W3C /actions.
+        // Los gestos móviles se transportan por executeScript y funcionan tanto
+        // en el hub remoto como en un servidor Appium local.
+        if (platformName.includes('ios')) {
+            await driver.execute('mobile: tap', { x: tapX, y: tapY });
+            return;
+        }
+
+        // Android usa el protocolo W3C estándar. BrowserStack expone distintas
+        // versiones de UiAutomator2 y algunas no incluyen mobile: clickGesture.
+        await driver.performActions([{
+            type: 'pointer',
+            id: 'manual-touch',
+            parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 80 },
+                { type: 'pointerUp', button: 0 },
+            ],
+        }]);
+        // Algunos proveedores ejecutan el tap pero no implementan DELETE /actions.
+        await driver.releaseActions().catch(() => undefined);
+    }
+
+    async swipeFromTo(startX: number, startY: number, endX: number, endY: number): Promise<void> {
+        const fromX = Math.max(0, Math.round(startX));
+        const fromY = Math.max(0, Math.round(startY));
+        const toX = Math.max(0, Math.round(endX));
+        const toY = Math.max(0, Math.round(endY));
+        const driver = this.getDriver();
+        const capabilities = driver.capabilities as Record<string, any>;
+        const platformName = String(
+            capabilities.platformName ||
+            capabilities.platform ||
+            capabilities['appium:platformName'] ||
+            ''
+        ).toLowerCase();
+
+        if (platformName.includes('ios')) {
+            await driver.execute('mobile: dragFromToForDuration', {
+                fromX,
+                fromY,
+                toX,
+                toY,
+                duration: 0.35,
+            });
+            return;
+        }
+        if (platformName.includes('android')) {
+            await driver.execute('mobile: dragGesture', {
+                startX: fromX,
+                startY: fromY,
+                endX: toX,
+                endY: toY,
+                speed: 1800,
+            });
+            return;
+        }
+
+        await driver.performActions([{
+            type: 'pointer',
+            id: 'manual-drag',
+            parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: fromX, y: fromY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 100 },
+                { type: 'pointerMove', duration: 350, x: toX, y: toY },
+                { type: 'pointerUp', button: 0 },
+            ],
+        }]);
+        await driver.releaseActions().catch(() => undefined);
+    }
+
     async getCurrentActivity(): Promise<string> {
         try { return await this.getDriver().getCurrentActivity(); }
         catch { return ''; }

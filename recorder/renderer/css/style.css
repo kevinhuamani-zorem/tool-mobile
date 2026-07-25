@@ -331,6 +331,29 @@ body {
     padding: 20px;
 }
 
+.device-mode-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.device-mode-actions .btn { padding: 7px 4px; }
+.device-mode-actions .btn.mode-active {
+    background: #17833A;
+    border-color: #21B14B;
+    box-shadow: 0 0 0 1px rgba(33, 177, 75, 0.25);
+}
+.device-screen.manual-interaction {
+    cursor: pointer;
+    outline: 2px solid #21B14B;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+.device-screen.manual-interaction.busy {
+    cursor: wait;
+    opacity: 0.72;
+}
+
 .inspect-status {
     font-size: 11px; color: var(--text3);
     padding: 5px 8px;
