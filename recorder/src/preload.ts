@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('api', {
     scanFramework:       ()                     => ipcRenderer.invoke('scan-framework'),
     analyzeStepReuse:    (texts: string[], squad?: string) =>
         ipcRenderer.invoke('analyze-step-reuse', texts, squad),
+    getSquadCatalog:     (squad: string, platform: string) =>
+        ipcRenderer.invoke('get-squad-catalog', squad, platform),
 
     // ── Local ────────────────────────────────────────────────────────────────
     getDevices:          ()                     => ipcRenderer.invoke('get-devices'),
