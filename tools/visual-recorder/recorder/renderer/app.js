@@ -333,6 +333,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     function selectCatalogLocator(locator) {
+        clearSelectorChips();
         txtVarName.value = locator.name;
         txtSelector.value = executableCatalogSelector(locator);
         selectedCatalogLocator = locator;
@@ -527,6 +528,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     function clearStepFields() {
+        clearSelectorChips();
         if (txtSelector) txtSelector.value = '';
         if (txtVarName)  txtVarName.value  = '';
         selectedCatalogLocator = null;
@@ -1117,6 +1119,22 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
         if (iosValue && iosValue.length > 0 && iosValue.length < 80 && !el.text)
             cands.push({ label: 'iOS Predicate value', selector: "iosPredicate=value == '" + iosValue.replace(/'/g, "\\'") + "'", priority: p++ });
+        if (
+            /XCUIElementType(TextField|SecureTextField)/.test(el.tag) &&
+            !iosName && !iosLabel && el.iosAncestorName
+        ) {
+            cands.push({
+                label: 'iOS campo por contenedor accesible',
+                selector: '//' + (el.iosAncestorTag || 'XCUIElementTypeOther') +
+                    '[@name="' + el.iosAncestorName.replace(/"/g, '\\"') + '"]//' + el.tag,
+                priority: p++
+            });
+            cands.push({
+                label: 'iOS Class Chain editable',
+                selector: 'iosClassChain=**/' + el.tag,
+                priority: p++
+            });
+        }
 
         // Fallback XPath por clase
         const tagName = el.className || el.tag;
@@ -1430,9 +1448,12 @@ window.addEventListener('DOMContentLoaded', async () => {
             const paths = r.generated.files.join(' | ');
             rememberGeneratedFiles(r.generated.files);
             setGenerate('✓ ' + paths, 'ok');
-            setStatus('✓ Feature y locators generados', '#00CC00');
             linkedScenarioData = null;
             invalidatePreview();
+            await loadSquadCatalog(activeMode === 'bs' ? bsPlatform : 'android');
+            renderExistingSteps();
+            renderLocatorCatalog();
+            setStatus('✓ Archivos generados · catálogos de Steps y locators actualizados', '#00CC00');
         } else {
             setGenerate('✗ ' + r.error, 'err');
         }
@@ -1500,6 +1521,36 @@ window.addEventListener('DOMContentLoaded', async () => {
                 x1, y1, x2, y2
             });
         }
+        // Algunos TextField de iOS no exponen name/label propios. Conservamos el
+        // identificador del ancestro accesible para poder construir un selector estable.
+        try {
+            const documentXml = new DOMParser().parseFromString(xml, 'application/xml');
+            documentXml.querySelectorAll('XCUIElementTypeTextField, XCUIElementTypeSecureTextField')
+                .forEach(node => {
+                    const x = Number(node.getAttribute('x'));
+                    const y = Number(node.getAttribute('y'));
+                    const width = Number(node.getAttribute('width'));
+                    const height = Number(node.getAttribute('height'));
+                    const element = elements.find(candidate =>
+                        candidate.tag === node.tagName &&
+                        candidate.x1 === x && candidate.y1 === y &&
+                        candidate.x2 === x + width && candidate.y2 === y + height
+                    );
+                    if (!element) return;
+                    let ancestor = node.parentElement;
+                    while (ancestor && ancestor !== documentXml.documentElement) {
+                        const identifier = ancestor.getAttribute('name') || ancestor.getAttribute('label');
+                        if (identifier) {
+                            element.iosAncestorName = identifier;
+                            element.iosAncestorTag = ancestor.tagName;
+                            break;
+                        }
+                        ancestor = ancestor.parentElement;
+                    }
+                });
+        } catch {
+            // El parser principal seguirá ofreciendo selectores por clase.
+        }
         return elements;
     }
 
@@ -1510,11 +1561,39 @@ window.addEventListener('DOMContentLoaded', async () => {
         // iOS expone muchos XCUIElementTypeOther superpuestos. Preferimos controles
         // que Appium puede accionar, como los botones del permiso del sistema.
         const actionable = candidates.filter(el => el.isIos
-            ? (/XCUIElementType(Button|Link|Switch|TextField|SecureTextField|Cell)/.test(el.tag) ||
+            ? (/XCUIElementType(Button|Link|Switch|TextField|SecureTextField)/.test(el.tag) ||
                 getAttrVal(el.attrs, 'accessible') === 'true')
             : el.clickable === 'true'
         );
-        const pool = actionable.length ? actionable : candidates;
+        let pool = actionable.length ? actionable : candidates;
+        if (!actionable.length && candidates.some(el => el.isIos)) {
+            const containers = [...candidates].sort((a, b) =>
+                ((a.x2-a.x1) * (a.y2-a.y1)) - ((b.x2-b.x1) * (b.y2-b.y1))
+            );
+            const nearbyEditable = parsedElements.filter(el =>
+                el.isIos && el.isVisible &&
+                /XCUIElementType(TextField|SecureTextField)/.test(el.tag) &&
+                containers.some(container =>
+                    el.x1 >= container.x1 && el.x2 <= container.x2 &&
+                    el.y1 >= container.y1 && el.y2 <= container.y2
+                )
+            ).sort((a, b) => {
+                const distance = el => {
+                    const dx = px < el.x1 ? el.x1-px : px > el.x2 ? px-el.x2 : 0;
+                    const dy = py < el.y1 ? el.y1-py : py > el.y2 ? py-el.y2 : 0;
+                    return Math.hypot(dx, dy);
+                };
+                return distance(a) - distance(b);
+            });
+            if (nearbyEditable.length && (() => {
+                const field = nearbyEditable[0];
+                const dx = px < field.x1 ? field.x1-px : px > field.x2 ? px-field.x2 : 0;
+                const dy = py < field.y1 ? field.y1-py : py > field.y2 ? py-field.y2 : 0;
+                return Math.hypot(dx, dy) <= 48;
+            })()) {
+                pool = [nearbyEditable[0]];
+            }
+        }
         let best = null, bestArea = Infinity;
         pool.forEach(el => {
             const area = (el.x2-el.x1) * (el.y2-el.y1);
@@ -1631,8 +1710,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         let treeId = 0;
         const buildNode = (xmlNode, parent = null, depth = 0) => {
             if (xmlNode.nodeType !== Node.ELEMENT_NODE) return;
-            // Los nodos ocultos de SpringBoard distorsionan el árbol y no se pueden seleccionar.
-            if (xmlNode.getAttribute('visible') === 'false') return;
+            // iOS puede marcar un contenedor como oculto aunque su TextField hijo sea visible.
+            // Omitimos el contenedor, pero conservamos sus descendientes seleccionables.
+            if (xmlNode.getAttribute('visible') === 'false') {
+                Array.from(xmlNode.children).forEach(child => buildNode(child, parent, depth));
+                return;
+            }
             const el = locateElement(xmlNode);
             const node = { id: ++treeId, xmlNode, el, parent, depth, children: [], expanded: depth < 3 };
             xmlExpandedNodes.set(node.id, depth < 3);
@@ -1881,6 +1964,17 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     function selectHierarchyElement(el) {
         if (!el) return;
+        if (el.isIos && el.tag === 'XCUIElementTypeCell') {
+            const childControls = parsedElements.filter(candidate =>
+                candidate.isIos && candidate.isVisible &&
+                /XCUIElementType(Button|Link|Switch|TextField|SecureTextField)/.test(candidate.tag) &&
+                candidate.x1 >= el.x1 && candidate.x2 <= el.x2 &&
+                candidate.y1 >= el.y1 && candidate.y2 <= el.y2
+            ).sort((a, b) =>
+                ((a.x2-a.x1) * (a.y2-a.y1)) - ((b.x2-b.x1) * (b.y2-b.y1))
+            );
+            if (childControls.length > 0) el = childControls[0];
+        }
         selectedHierarchyElement = el;
         syncCanvas();
         const ctx = hierCanvas.getContext('2d');
@@ -1906,6 +2000,15 @@ window.addEventListener('DOMContentLoaded', async () => {
             const identifier = name || label || value;
             const escaped = identifier.replace(/'/g, "\\'");
             const escapedChain = identifier.replace(/"/g, '\\"');
+            const editable = /XCUIElementType(TextField|SecureTextField)/.test(el.tag);
+            if (editable && !identifier && el.iosAncestorName) {
+                const ancestorName = el.iosAncestorName.replace(/"/g, '\\"');
+                suggestions.push({
+                    label: 'XPath campo por contenedor accesible',
+                    selector: '//' + (el.iosAncestorTag || 'XCUIElementTypeOther') +
+                        '[@name="' + ancestorName + '"]//' + el.tag
+                });
+            }
             if (identifier && identifier.trim()) {
                 suggestions.push({ label: 'Accessibility ID', selector: '~' + identifier });
                 suggestions.push({ label: 'iOS Predicate String', selector: "iosPredicate=name == '" + escaped + "'" });
@@ -1914,6 +2017,9 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
             if (label && label !== identifier) {
                 suggestions.push({ label: 'iOS Predicate label', selector: "iosPredicate=label == '" + label.replace(/'/g, "\\'") + "'" });
+            }
+            if (editable) {
+                suggestions.push({ label: 'iOS Class Chain editable', selector: 'iosClassChain=**/' + el.tag });
             }
             suggestions.push({ label: 'Class Name', selector: 'class=' + el.tag });
             suggestions.push({ label: 'XPath class', selector: '//' + el.tag });
@@ -1996,6 +2102,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Abrir inspector
     btnXmlInspector.addEventListener('click', async () => {
+        clearSelectorChips();
+        selectedCatalogLocator = null;
         xmlModal.style.display = 'flex';
         await refreshHierarchy();
     });
@@ -2078,6 +2186,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     btnUseXpath.addEventListener('click', () => {
         const locator = selectedLocator();
         if (!locator) return;
+        clearSelectorChips();
+        selectedCatalogLocator = null;
         txtSelector.value = locator;
         const patterns = [
             /^id=[^/]+\/(.+)$/,
