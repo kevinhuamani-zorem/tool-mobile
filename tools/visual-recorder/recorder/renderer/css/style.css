@@ -33,9 +33,17 @@ body {
 .screen.active { display: flex; }
 
 /* ── CONFIG SCREEN ───────────────────────────────────── */
+#screenConfig {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 16px 0 28px;
+    scrollbar-gutter: stable;
+}
+
 .config-container {
-    margin: auto;
-    width: 520px;
+    flex: 0 0 auto;
+    margin: 0 auto;
+    width: min(520px, calc(100vw - 32px));
     background: var(--bg2);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -250,7 +258,12 @@ body {
 .config-status.err { color: #CC0000; background: rgba(204,0,0,0.08); }
 .config-status.ok  { color: #00CC00; background: rgba(0,204,0,0.08); }
 
-.btn-start { font-size: 14px !important; padding: 12px !important; margin-top: 4px; }
+.btn-start {
+    flex: 0 0 auto;
+    font-size: 14px !important;
+    padding: 12px !important;
+    margin: 4px 0 8px;
+}
 
 /* ── RECORDER SCREEN ─────────────────────────────────── */
 .header {
@@ -342,6 +355,70 @@ body {
     font-size: 12px;
 }
 .field-input::placeholder { color: var(--text3); }
+.catalog-hint {
+    min-height: 16px;
+    margin: 4px 0 6px;
+    color: var(--text3);
+    font-size: 10px;
+}
+.catalog-combobox { position: relative; }
+.catalog-dropdown {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 3px);
+    left: 0;
+    right: 0;
+    display: none;
+    max-height: 320px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    background: #202027;
+    border: 1px solid #666879;
+    border-radius: 5px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+}
+.catalog-dropdown.open { display: block; }
+.catalog-group-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 10px;
+    background: #30303D;
+    color: #B9BAE4;
+    border-bottom: 1px solid #444657;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.catalog-module-header {
+    padding: 5px 10px 4px;
+    color: #8B8DB0;
+    background: #272731;
+    font-size: 9px;
+}
+.catalog-option {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px 6px 16px;
+    cursor: pointer;
+    font-size: 11px;
+}
+.catalog-option:hover,
+.catalog-option.active { background: #3A3150; }
+.catalog-option-name { color: #F0F0F6; font-weight: 700; }
+.catalog-option-source {
+    overflow: hidden;
+    color: #999AA7;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.catalog-empty { padding: 12px; color: var(--text3); font-size: 10px; }
 .field-select option { background: var(--bg4); }
 
 .input-row   { display: flex; gap: 6px; align-items: flex-end; }
@@ -427,7 +504,7 @@ body {
 }
 
 /* SCROLLBAR */
-::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg3); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
@@ -558,6 +635,8 @@ body {
 .xml-modal-actions { display: flex; gap: 8px; }
 .xml-modal-body {
     display: flex; flex: 1;
+    min-height: 0;
+    min-width: 0;
     overflow: hidden;
 }
 
@@ -593,30 +672,40 @@ body {
 /* Columna arbol */
 .hier-tree-panel {
     width: 260px; flex-shrink: 0;
+    min-height: 0;
+    min-width: 0;
     padding: 12px;
     border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
     overflow: hidden;
 }
 .hier-tree {
-    flex: 1; overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+    scrollbar-gutter: stable both-edges;
     font-family: 'Courier New', monospace;
     font-size: 11px;
 }
 .hier-xml-source {
     margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
+    width: max-content;
+    min-width: 100%;
+    white-space: pre;
+    word-break: normal;
     color: #8EC5FF;
     font: 11px/1.45 'Courier New', monospace;
 }
 .hier-node {
+    width: max-content;
+    min-width: 100%;
     padding: 3px 4px;
     border-radius: 3px;
     cursor: pointer;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: clip;
     color: var(--text2);
     transition: background 0.1s;
 }
@@ -670,12 +759,14 @@ body {
 }
 .hier-toggle:disabled { cursor: default; color: #50516A; }
 .hier-xml-row {
+    width: max-content;
+    min-width: 100%;
     min-height: 18px;
     padding-top: 2px;
     padding-bottom: 2px;
-    overflow: hidden;
+    overflow: visible;
     white-space: nowrap;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     color: #8EC5FF;
     cursor: pointer;
 }
@@ -688,12 +779,18 @@ body {
 /* Columna atributos */
 .hier-attrs-panel {
     flex: 1; padding: 12px;
+    min-height: 0;
+    min-width: 0;
     display: flex; flex-direction: column;
     overflow: hidden;
 }
 .hier-attrs {
-    flex: 1; overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
     max-height: 200px;
+    scrollbar-gutter: stable both-edges;
 }
 .hier-attr-row {
     display: flex; gap: 8px;
@@ -748,6 +845,50 @@ body {
     display: flex; flex-direction: column;
     overflow: hidden;
 }
+
+.existing-steps-list {
+    min-height: 100px;
+    max-height: 260px;
+    margin-top: 6px;
+    overflow: auto;
+    scrollbar-gutter: stable;
+}
+
+.feature-step-group { border-bottom: 1px solid var(--border); }
+.feature-step-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 8px;
+    background: #30303D;
+    color: #C2C3EF;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+}
+.feature-step-file {
+    overflow: hidden;
+    color: var(--text3);
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.existing-step-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    cursor: pointer;
+}
+
+.existing-step-item:hover { background: var(--bg4); }
+.existing-step-source { color: var(--text3); font-size: 9px; }
+.scope-commons { color: #5DB0FF; }
+.scope-home { color: #C99BFF; }
+.scope-squad { color: #64D98B; }
 
 .enlazar-header {
     display: flex; align-items: center;

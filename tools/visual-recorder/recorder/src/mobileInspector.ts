@@ -170,9 +170,12 @@ export class MobileInspector {
         const candidates: SelectorCandidate[] = [];
 
         if (el.resourceId && !IGNORED_IDS.includes(el.resourceId)) {
+            const isComposeId = !el.resourceId.includes('/') && !el.resourceId.includes(':');
             candidates.push({
-                label:    'resource-id',
-                selector: `id=${el.resourceId}`,
+                label:    isComposeId ? 'Compose resource-id' : 'resource-id',
+                selector: isComposeId
+                    ? `//*[@resource-id="${el.resourceId}"]`
+                    : `id=${el.resourceId}`,
                 priority: 1,
             });
             const idPart = el.resourceId.split('/')[1];

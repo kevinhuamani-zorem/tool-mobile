@@ -427,6 +427,8 @@ export class FwkMobileGenerator {
     }
 
     private locatorValue(selector: string): string {
+        const shortId = selector.match(/^id=([^/:]+)$/)?.[1];
+        if (shortId) return `//*[@resource-id="${shortId}"]`;
         return selector.trim()
             .replace(/^android=/, '')
             .replace(/^iosPredicate=/, '')
@@ -437,6 +439,7 @@ export class FwkMobileGenerator {
     }
 
     private locatorType(selector: string, platform: MobilePlatform): string {
+        if (/^id=[^/:]+$/.test(selector)) return 'XPATH';
         if (selector.startsWith('android=')) return 'ANDROID';
         if (selector.startsWith('iosPredicate=')) return 'PREDICATESTRING';
         if (selector.startsWith('iosClassChain=')) return 'CLASSCHAIN';

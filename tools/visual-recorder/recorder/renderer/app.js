@@ -79,6 +79,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     const lblInspect      = document.getElementById('lblInspectStatus');
     const txtSelector     = document.getElementById('txtSelector');
     const txtVarName      = document.getElementById('txtVarName');
+    const locatorCombobox = document.getElementById('locatorCombobox');
+    const locatorCatalogDropdown = document.getElementById('locatorCatalogDropdown');
+    const lblLocatorCatalog = document.getElementById('lblLocatorCatalog');
     const btnCopy         = document.getElementById('btnCopy');
     const btnVerify       = document.getElementById('btnVerify');
     const lblVerify       = document.getElementById('lblVerifyResult');
@@ -105,6 +108,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     const lblGenerate     = document.getElementById('lblGenerateResult');
     let lastPreviewToken  = '';
     let previewDocuments  = [];
+    let squadCatalog      = { stepDefinitions: [], screenMethods: [], locators: [], features: [] };
+    let locatorActiveIndex = -1;
+    const collapsedLocatorGroups = new Set([
+        'Botones', 'Campos', 'Textos', 'Imágenes e íconos', 'Listas y contenedores', 'Otros'
+    ]);
 
     // ─── ELEMENTOS HIERARCHY VIEWER ──────────────────────────────────────────
     const xmlModal        = document.getElementById('xmlModal');
@@ -187,6 +195,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         });
         if (catalog.squads.length === 0) {
             cmbFrameworkSquad.innerHTML = '<option value="">Sin squads</option>';
+        } else {
+            const defaultSquad = catalog.squads.some(squad => squad.name === 'payment')
+                ? 'payment'
+                : catalog.squads[0].name;
+            cmbFrameworkSquad.value = defaultSquad;
         }
 
         cmbFrameworkApp.innerHTML = '<option value="">— Seleccionar app del framework —</option>';
@@ -204,7 +217,158 @@ window.addEventListener('DOMContentLoaded', async () => {
             `${totals.features} features · ${catalog.reusable.stepDefinitions} definiciones · ` +
             `${catalog.reusable.screenMethods} métodos reutilizables`;
         lblFrameworkStatus.className = 'device-info ok';
+        await loadSquadCatalog();
     }
+
+    async function loadSquadCatalog(platform = bsPlatform || 'android') {
+        const squad = cmbFrameworkSquad.value || 'payment';
+        if (!api.getSquadCatalog || !squad) return;
+        const result = await api.getSquadCatalog(squad, platform);
+        if (!result.success) {
+            squadCatalog = { stepDefinitions: [], screenMethods: [], locators: [], features: [] };
+            if (lblLocatorCatalog) lblLocatorCatalog.textContent = '✗ ' + result.error;
+            return;
+        }
+        squadCatalog = result.catalog;
+        renderLocatorCatalog();
+        if (typeof renderExistingSteps === 'function') renderExistingSteps();
+    }
+
+    function renderLocatorCatalog() {
+        if (!locatorCatalogDropdown) return;
+        const query = txtVarName.value.trim().toLowerCase();
+        const filtered = squadCatalog.locators.filter(locator =>
+            !query || `${locator.name} ${locator.module} ${locator.scope}`.toLowerCase().includes(query)
+        );
+        const typeOrder = ['Botones', 'Campos', 'Textos', 'Imágenes e íconos', 'Listas y contenedores', 'Otros'];
+        const grouped = new Map(typeOrder.map(type => [type, new Map()]));
+        filtered.forEach(locator => {
+            const type = locatorTypeGroup(locator);
+            const moduleName = locator.module.split('/').pop() || locator.module;
+            const modules = grouped.get(type);
+            if (!modules.has(moduleName)) modules.set(moduleName, []);
+            modules.get(moduleName).push(locator);
+        });
+
+        locatorCatalogDropdown.innerHTML = '';
+        typeOrder.forEach(type => {
+            const modules = grouped.get(type);
+            const count = [...modules.values()].reduce((sum, entries) => sum + entries.length, 0);
+            if (!count) return;
+            const collapsed = !query && collapsedLocatorGroups.has(type);
+            const header = document.createElement('div');
+            header.className = 'catalog-group-header';
+            header.innerHTML = `<span>${collapsed ? '▸' : '▾'} ${type}</span><span>${count}</span>`;
+            header.addEventListener('mousedown', event => {
+                event.preventDefault();
+                collapsedLocatorGroups.has(type)
+                    ? collapsedLocatorGroups.delete(type)
+                    : collapsedLocatorGroups.add(type);
+                renderLocatorCatalog();
+            });
+            locatorCatalogDropdown.appendChild(header);
+            if (collapsed) return;
+
+            [...modules.entries()].sort(([a], [b]) => a.localeCompare(b)).forEach(([moduleName, locators]) => {
+                const moduleHeader = document.createElement('div');
+                moduleHeader.className = 'catalog-module-header';
+                moduleHeader.textContent = `${moduleName} (${locators.length})`;
+                locatorCatalogDropdown.appendChild(moduleHeader);
+                locators.sort((a, b) => a.name.localeCompare(b.name)).forEach(locator => {
+                    const option = document.createElement('div');
+                    option.className = 'catalog-option';
+                    option.dataset.locatorName = locator.name;
+                    option.innerHTML =
+                        `<span class="catalog-option-name">${locator.name}</span>` +
+                        `<span class="catalog-option-source">${locator.scope}</span>`;
+                    option.title = locator.file;
+                    option.addEventListener('mousedown', event => {
+                        event.preventDefault();
+                        selectCatalogLocator(locator);
+                    });
+                    locatorCatalogDropdown.appendChild(option);
+                });
+            });
+        });
+        if (!filtered.length) {
+            locatorCatalogDropdown.innerHTML =
+                '<div class="catalog-empty">Sin coincidencias. El nombre escrito se usará como locator nuevo.</div>';
+        }
+        locatorActiveIndex = -1;
+        if (lblLocatorCatalog) {
+            lblLocatorCatalog.textContent =
+                `${squadCatalog.locators.length} locators indexados · ` +
+                `${cmbFrameworkSquad.value || 'payment'} → commons → home → global`;
+        }
+    }
+
+    function locatorTypeGroup(locator) {
+        const value = `${locator.name} ${locator.selector}`.toLowerCase();
+        if (/(^|\\W)(btn|button)|widget\\.button|xcuielementtypebutton/.test(value)) return 'Botones';
+        if (/(^|\\W)(input|textfield|search|field)|edittext|xcuielementtypetextfield/.test(value)) return 'Campos';
+        if (/(^|\\W)(lbl|label|title|text)|textview|statictext/.test(value)) return 'Textos';
+        if (/(^|\\W)(img|image|icon)|imageview/.test(value)) return 'Imágenes e íconos';
+        if (/(^|\\W)(list|item|card|container)|recyclerview|collectionview|cell/.test(value)) {
+            return 'Listas y contenedores';
+        }
+        return 'Otros';
+    }
+
+    function selectCatalogLocator(locator) {
+        txtVarName.value = locator.name;
+        txtSelector.value = locator.selector;
+        txtLocatorModule.value = locator.module.replace(
+            new RegExp(`^${(cmbFrameworkSquad.value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`),
+            ''
+        );
+        locatorCatalogDropdown.classList.remove('open');
+        txtVarName.setAttribute('aria-expanded', 'false');
+        if (lblLocatorCatalog) lblLocatorCatalog.textContent = `♻️ ${locator.scope}: ${locator.file}`;
+        setStatus(`✓ Locator reutilizado desde ${locator.file}`, '#00CC00');
+    }
+
+    cmbFrameworkSquad.addEventListener('change', () => {
+        linkedScenarioData = null;
+        loadSquadCatalog(bsPlatform || 'android');
+    });
+
+    txtVarName.addEventListener('focus', () => {
+        renderLocatorCatalog();
+        locatorCatalogDropdown.classList.add('open');
+        txtVarName.setAttribute('aria-expanded', 'true');
+    });
+    txtVarName.addEventListener('input', () => {
+        renderLocatorCatalog();
+        locatorCatalogDropdown.classList.add('open');
+    });
+    txtVarName.addEventListener('keydown', event => {
+        const options = [...locatorCatalogDropdown.querySelectorAll('.catalog-option')];
+        if (event.key === 'Escape') {
+            locatorCatalogDropdown.classList.remove('open');
+            txtVarName.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key) || options.length === 0) return;
+        event.preventDefault();
+        if (event.key === 'Enter' && locatorActiveIndex >= 0) {
+            const locator = squadCatalog.locators.find(
+                item => item.name === options[locatorActiveIndex].dataset.locatorName
+            );
+            if (locator) selectCatalogLocator(locator);
+            return;
+        }
+        locatorActiveIndex = event.key === 'ArrowDown'
+            ? Math.min(locatorActiveIndex + 1, options.length - 1)
+            : Math.max(locatorActiveIndex - 1, 0);
+        options.forEach((option, index) => option.classList.toggle('active', index === locatorActiveIndex));
+        options[locatorActiveIndex]?.scrollIntoView({ block: 'nearest' });
+    });
+    document.addEventListener('mousedown', event => {
+        if (locatorCombobox && !locatorCombobox.contains(event.target)) {
+            locatorCatalogDropdown.classList.remove('open');
+            txtVarName.setAttribute('aria-expanded', 'false');
+        }
+    });
 
     cmbFrameworkApp.addEventListener('change', () => {
         if (cmbFrameworkApp.value) txtApkPath.value = cmbFrameworkApp.value;
@@ -379,6 +543,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         cmbBsApps.innerHTML    = '<option value="">— Carga tus apps o pega la URL abajo —</option>';
         if (lblBsDeviceInfo) { lblBsDeviceInfo.textContent = ''; }
         if (lblBsAppsInfo)   { lblBsAppsInfo.textContent   = ''; }
+        loadSquadCatalog(platform);
     }
 
     btnBsPlatAndroid.addEventListener('click', () => switchBsPlatform('android'));
@@ -654,6 +819,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         const config = {
             platform:        bsPlatform,
+            squad:           cmbFrameworkSquad.value || 'payment',
+            environment:     cmbFrameworkEnv.value,
             username:        u,
             accessKey:       k,
             deviceName:      deviceData.deviceName,
@@ -670,6 +837,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         try {
             const result = await api.bsStartSession(config);
             if (result.success) {
+                cmbFrameworkSquad.disabled = true;
                 lblDevice.textContent = '☁️ ' + deviceLabel;
                 setStatus('✓ Sesion BrowserStack — ' + deviceLabel, '#00CC00');
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
@@ -750,12 +918,15 @@ window.addEventListener('DOMContentLoaded', async () => {
         const config = {
             deviceName, udid, platformVersion: version,
             appPackage: pkg, appActivity: act || '.MainActivity',
+            squad: cmbFrameworkSquad.value || 'payment',
+            environment: cmbFrameworkEnv.value,
             ...(apk ? { appPath: apk } : {})
         };
 
         try {
             const result = await api.startSession(config);
             if (result.success) {
+                cmbFrameworkSquad.disabled = true;
                 lblDevice.textContent = deviceName;
                 setStatus('✓ Sesion activa — ' + deviceName, '#00CC00');
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
@@ -779,6 +950,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     btnCloseSession.addEventListener('click', async () => {
         await api.closeSession();
+        cmbFrameworkSquad.disabled = false;
         screenRecorder.style.cssText = 'display:none !important';
         screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
         if (imgDevice) imgDevice.src = '';
@@ -875,7 +1047,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         // Android
         if (el.resourceId && !IGNORED.includes(el.resourceId)) {
-            cands.push({ label: 'ID', selector: 'id=' + el.resourceId, priority: p++ });
+            const isComposeId = !el.resourceId.includes('/') && !el.resourceId.includes(':');
+            cands.push({
+                label: isComposeId ? 'Compose resource-id' : 'ID',
+                selector: isComposeId
+                    ? '//*[@resource-id="' + el.resourceId + '"]'
+                    : 'id=' + el.resourceId,
+                priority: p++
+            });
             const idPart = el.resourceId.split('/')[1];
             if (idPart) cands.push({ label: 'resource-id contains', selector: '//*[contains(@resource-id,"' + idPart + '")]', priority: p++ });
         }
@@ -1676,7 +1855,13 @@ window.addEventListener('DOMContentLoaded', async () => {
             suggestions.push({ label: 'Class Name', selector: 'class=' + el.tag });
             suggestions.push({ label: 'XPath class', selector: '//' + el.tag });
         } else if (el.resourceId && !IGNORED.includes(el.resourceId)) {
-            suggestions.push({ label: 'ID', selector: 'id=' + el.resourceId });
+            const isComposeId = !el.resourceId.includes('/') && !el.resourceId.includes(':');
+            suggestions.push({
+                label: isComposeId ? 'Compose resource-id' : 'ID',
+                selector: isComposeId
+                    ? '//*[@resource-id="' + el.resourceId + '"]'
+                    : 'id=' + el.resourceId
+            });
             const idOnly = el.resourceId.split('/')[1];
             if (idOnly) suggestions.push({ label: 'XPath id contains', selector: '//*[contains(@resource-id,"' + idOnly + '")]' });
         }
@@ -1864,14 +2049,107 @@ window.addEventListener('DOMContentLoaded', async () => {
     const btnConfirmarEscenario= document.getElementById('btnConfirmarEscenario');
     const btnEnlazar           = document.getElementById('btnEnlazar');
     const enlazarHint          = document.getElementById('enlazarHint');
+    const txtExistingStepSearch= document.getElementById('txtExistingStepSearch');
+    const existingStepsList    = document.getElementById('existingStepsList');
 
     // Estado del constructor de escenario
     let enlazarSteps      = [];   // copia de recordedSteps al abrir el modal
     let scenarioRows      = [];   // [{ text: string, stepIndices: number[] }]
     let activeRowIndex    = -1;   // fila seleccionada en el constructor
     let linkedScenarioData = null; // { linked, stepTexts } — seteado al confirmar, usado al generar
+    const expandedFeatureGroups = new Set();
 
     const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
+
+    function stepExpressionExample(expression) {
+        return expression
+            .replace(/^\^|\$$/g, '')
+            .replace(/\((?:\\.|[^)])+\)/g, '<valor>')
+            .replace(/\\([/()[\]{}.+*?^$|])/g, '$1');
+    }
+
+    function renderExistingSteps() {
+        if (!existingStepsList) return;
+        const query = (txtExistingStepSearch?.value || '').trim().toLowerCase();
+        const features = squadCatalog.features || [];
+        const usedExpressions = new Set(
+            features.flatMap(feature => feature.stepDefinitions.map(definition => definition.expression))
+        );
+        const unmatched = (squadCatalog.stepDefinitions || []).filter(
+            definition => !usedExpressions.has(definition.expression)
+        );
+        const groups = [
+            ...features,
+            ...(unmatched.length ? [{
+                name: 'Definiciones sin Feature',
+                file: 'Steps disponibles en el squad/commons',
+                stepDefinitions: unmatched
+            }] : [])
+        ].map(group => ({
+            ...group,
+            stepDefinitions: group.stepDefinitions.filter(definition => {
+                const searchable =
+                    `${group.name} ${group.file} ${definition.expression} ${definition.keyword} ${definition.file}`
+                        .toLowerCase();
+                return !query || searchable.includes(query);
+            })
+        })).filter(group => group.stepDefinitions.length > 0);
+
+        existingStepsList.innerHTML = '';
+        if (groups.length === 0) {
+            existingStepsList.innerHTML = '<li class="step-empty">Sin definiciones para este filtro</li>';
+            return;
+        }
+        groups.forEach((group, groupIndex) => {
+            const groupKey = group.file || `${group.name}-${groupIndex}`;
+            const expanded = Boolean(query) || expandedFeatureGroups.has(groupKey);
+            const wrapper = document.createElement('li');
+            wrapper.className = 'feature-step-group';
+
+            const header = document.createElement('div');
+            header.className = 'feature-step-header';
+            header.innerHTML =
+                `<span>${expanded ? '▾' : '▸'} ${group.name} (${group.stepDefinitions.length})</span>` +
+                `<span class="feature-step-file">${group.file}</span>`;
+            header.addEventListener('click', () => {
+                expandedFeatureGroups.has(groupKey)
+                    ? expandedFeatureGroups.delete(groupKey)
+                    : expandedFeatureGroups.add(groupKey);
+                renderExistingSteps();
+            });
+            wrapper.appendChild(header);
+
+            if (expanded) {
+                group.stepDefinitions.forEach(definition => {
+                    const item = document.createElement('div');
+                    item.className = 'existing-step-item';
+                    const text = stepExpressionExample(definition.expression);
+                    const label = document.createElement('span');
+                    label.textContent = `${definition.keyword} ${text}`;
+                    const source = document.createElement('span');
+                    source.className = `existing-step-source scope-${definition.scope}`;
+                    source.textContent = `${definition.scope} · ${definition.file}`;
+                    item.append(label, source);
+                    item.title = 'Agregar como step reutilizado';
+                    item.addEventListener('click', () => {
+                        scenarioRows.push({
+                            text,
+                            keyword: definition.keyword,
+                            stepIndices: [],
+                            reusedDefinition: definition
+                        });
+                        activeRowIndex = scenarioRows.length - 1;
+                        renderScenarioRows();
+                        updateEnlazarHint();
+                    });
+                    wrapper.appendChild(item);
+                });
+            }
+            existingStepsList.appendChild(wrapper);
+        });
+    }
+
+    txtExistingStepSearch?.addEventListener('input', renderExistingSteps);
 
     function scenarioRowHtml(row, rowIdx) {
         const assignedHtml = row.stepIndices.length === 0
@@ -2027,6 +2305,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         updateEnlazarHint();
         renderEnlazarSteps();
         renderScenarioRows();
+        await loadSquadCatalog(activeMode === 'bs' ? bsPlatform : 'android');
+        renderExistingSteps();
         enlazarModal.style.display = 'flex';
     });
 

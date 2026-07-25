@@ -47,6 +47,8 @@ let executor:      MobileStepExecutor | null = null;
 let recordedSteps: RecordedStep[]     = [];
 let sessionActive  = false;
 let recordingPlatform: MobilePlatform = 'android';
+let activeSquad = 'payment';
+let activeEnvironment = '';
 
 const BS_CONFIG_PATH      = path.join(projectPaths.toolConfig, 'bs_config.json');
 const SESSION_CONFIG_PATH = path.join(projectPaths.toolConfig, 'session_config.json');
@@ -114,8 +116,21 @@ ipcMain.handle('analyze-step-reuse', async (_, texts: string[], squad?: string) 
         reuseAnalyzer.refresh();
         return {
             success: true,
-            steps: reuseAnalyzer.analyzeSteps(texts),
-            screenMethods: reuseAnalyzer.getScreenMethods(squad)
+            steps: reuseAnalyzer.analyzeSteps(texts, squad || activeSquad),
+            screenMethods: reuseAnalyzer.getScreenMethods(squad || activeSquad)
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobilePlatform) => {
+    try {
+        const selectedSquad = squad || activeSquad;
+        const selectedPlatform = platform === 'ios' ? 'ios' : 'android';
+        return {
+            success: true,
+            catalog: reuseAnalyzer.getCatalog(selectedSquad, selectedPlatform)
         };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -139,6 +154,8 @@ ipcMain.handle('start-session', async (_, config: any) => {
     try {
         activeDm = dm;
         recordingPlatform = 'android';
+        activeSquad = config.squad || 'payment';
+        activeEnvironment = config.environment || '';
         await dm.startAppiumServer();
         await dm.init(config);
         locatorManager = new LocatorManager(projectPaths.locators, 'global', 'android');
@@ -150,6 +167,8 @@ ipcMain.handle('start-session', async (_, config: any) => {
         saveSessionConfig({
             type:            'local',
             platform:        'android',
+            squad:           activeSquad,
+            environment:     activeEnvironment,
             deviceName:      config.deviceName,
             udid:            config.udid,
             platformVersion: config.platformVersion,
@@ -411,6 +430,8 @@ ipcMain.handle('bs-start-session', async (_, config: BrowserStackConfig) => {
     try {
         activeDm = bsDm;
         recordingPlatform = config.platform === 'ios' ? 'ios' : 'android';
+        activeSquad = (config as BrowserStackConfig & { squad?: string }).squad || 'payment';
+        activeEnvironment = (config as BrowserStackConfig & { environment?: string }).environment || '';
         await bsDm.init(config);
         locatorManager = new LocatorManager(projectPaths.locators, 'global', config.platform === 'ios' ? 'ios' : 'android');
         inspector  = new MobileInspector(activeDm);
@@ -421,6 +442,8 @@ ipcMain.handle('bs-start-session', async (_, config: BrowserStackConfig) => {
         saveSessionConfig({
             type:            'browserstack',
             platform:        config.platform || 'android',
+            squad:           activeSquad,
+            environment:     activeEnvironment,
             username:        config.username,
             accessKey:       config.accessKey,
             deviceName:      config.deviceName,

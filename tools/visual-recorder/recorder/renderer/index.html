@@ -221,8 +221,14 @@
                     <input type="text" id="txtSelector" class="field-input" placeholder="XPath..."/>
                     <button class="btn btn-dark" id="btnCopy">📋</button>
                 </div>
-                <label class="field-label">Nombre variable:</label>
-                <input type="text" id="txtVarName" class="field-input" placeholder="ej: btn_login"/>
+                <label class="field-label">Nombre del selector:</label>
+                <div id="locatorCombobox" class="catalog-combobox">
+                    <input type="text" id="txtVarName" class="field-input"
+                           autocomplete="off" aria-autocomplete="list" aria-expanded="false"
+                           placeholder="Buscar locator del squad o crear uno..."/>
+                    <div id="locatorCatalogDropdown" class="catalog-dropdown" role="listbox"></div>
+                </div>
+                <div id="lblLocatorCatalog" class="catalog-hint">Cargando locators del squad...</div>
                 <button class="btn btn-navy btn-full" id="btnVerify">✅ Verificar selector</button>
                 <div id="lblVerifyResult" class="verify-result">— Ingresa un selector</div>
                 <div class="separator"></div>
@@ -400,6 +406,13 @@
                         <div class="section-title" style="margin-bottom:8px">📋 STEPS GRABADOS</div>
                         <ul id="enlazarStepsList" class="steps-list enlazar-steps-list">
                             <li class="step-empty">Sin steps grabados</li>
+                        </ul>
+                        <div class="separator"></div>
+                        <div class="section-title" style="margin-bottom:8px">♻️ STEPS DEL SQUAD</div>
+                        <input id="txtExistingStepSearch" class="field-input" type="search"
+                               placeholder="Buscar definición Gherkin..."/>
+                        <ul id="existingStepsList" class="steps-list existing-steps-list">
+                            <li class="step-empty">Cargando índice...</li>
                         </ul>
                     </div>
 
