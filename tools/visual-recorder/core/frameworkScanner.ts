@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { projectPaths, validateFrameworkRoot } from './projectPaths';
+import { ReuseAnalyzer } from './reuseAnalyzer';
 
 type LayerName = 'features' | 'steps' | 'screenobjects' | 'locators' | 'data';
 
@@ -34,6 +35,10 @@ export interface FrameworkCatalog {
     apps: FrameworkFileInfo[];
     dataSets: FrameworkFileInfo[];
     totals: Record<LayerName, number>;
+    reusable: {
+        stepDefinitions: number;
+        screenMethods: number;
+    };
 }
 
 const sensitiveKeyPattern =
@@ -89,6 +94,7 @@ function parseEnv(content: string): Record<string, string> {
 
 export class FrameworkScanner {
     private readonly envsPath = path.join(projectPaths.frameworkRoot, 'config', 'envs');
+    private readonly reuseAnalyzer = new ReuseAnalyzer();
 
     scan(): FrameworkCatalog {
         validateFrameworkRoot();
@@ -141,7 +147,8 @@ export class FrameworkScanner {
                     layer,
                     filesByLayer[layer].length
                 ])
-            ) as Record<LayerName, number>
+            ) as Record<LayerName, number>,
+            reusable: this.reuseAnalyzer.getSummary()
         };
     }
 

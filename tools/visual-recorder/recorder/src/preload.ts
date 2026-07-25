@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('api', {
     // ── Framework ────────────────────────────────────────────────────────────
     scanFramework:       ()                     => ipcRenderer.invoke('scan-framework'),
+    analyzeStepReuse:    (texts: string[], squad?: string) =>
+        ipcRenderer.invoke('analyze-step-reuse', texts, squad),
 
     // ── Local ────────────────────────────────────────────────────────────────
     getDevices:          ()                     => ipcRenderer.invoke('get-devices'),
