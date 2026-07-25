@@ -1,0 +1,11 @@
+{
+  "miPlanYapeEmpresaAndroid": {
+      "txtFechaAfiliacion": "new UiSelector().textContains(\"Fecha de afiliación\")",
+      "txtCobroComision": "new UiSelector().textContains(\"Cobro por servicio\")"
+      
+  },
+  "miPlanYapeEmpresaIos": {
+      "txtFechaAfiliacion": "",
+      "txtCobroComision": ""
+  }
+}

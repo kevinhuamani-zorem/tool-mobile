@@ -1,0 +1,38 @@
+-
+  name: 'Andree 20 TDReceptor'
+  description: 'Usuario Tarjeta Digital YAPE'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'yape_digital'
+  idc: '473036731'
+  cic: '21345786'
+  cod_internacional: '+51'
+  phone_number: '921345786'
+  uuid: 'uuid-andree-20-tdreceptor'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_andree_20'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'andree_20_tdreceptor@yape.com.pe'
+  password: '999999'
+  perfil: '20'
+  tipo_doc_en_yape: '1'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557881595580202'
+      pin4: '4279'
+      expiry_date: '05/33'
+      status: '00'
+      card_type_description: 'DIGITAL'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296532198'
+          currency: 'soles'
+          balance: '245678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

@@ -1,0 +1,22 @@
+{
+    "offerAndroid": {
+        "btnContinue": "Cotiza sin compromiso",
+        "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "lblLoading": "//android.widget.TextView[@text=\"Preparando tus coberturas\"]",
+        "lblFatherTextView": "android.widget.ScrollView",
+        "lblChildrenTextView": "android.widget.TextView",
+        "lblTitleOffer": "new UiSelector().text(\"Protege a tu familia por solo S/ 5.99 al mes, con Yape\")",
+        "lblAccept": "new UiSelector().text(\"$\")",
+        "lblErrorPopup": "$"
+    },
+    "offerIos": {
+       "btnContinue": "Cotiza sin compromiso",
+       "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "lblLoading": "//android.widget.TextView[@text=\"Preparando tus coberturas\"]",
+        "lblFatherTextView": "android.widget.ScrollView",
+        "lblChildrenTextView": "android.widget.TextView",
+        "lblTitleOffer": "new UiSelector().text(\"Protege a tu familia por solo S/ 5.99 al mes, con Yape\")",
+        "lblAccept": "new UiSelector().text(\"ACEPTAR\")",
+        "lblErrorPopup": "$"
+    }
+}

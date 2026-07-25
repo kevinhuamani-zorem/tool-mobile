@@ -1,0 +1,32 @@
+-
+  name: 'Interop Automation 02BCPsinDni'
+  description: 'Usuario BCP DNI con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '889922041'
+  cod_internacional: '+51'
+  phone_number: '992667951'
+  uuid: 'uuid-automatest-interop-perfil02'
+  platform: 'android'
+  version: '8.0'
+  device_token: 'automated_test_device_token_interop_perfil02'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'interop_dni_perfil02@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881092503213'
+      pin4: '4279'
+      expiry_date: '03/30'
+      status: '00'
+      cvv: '999'
+      accounts:
+        -
+          number: '19370627137041'
+          currency: 'soles'
+          balance: '45678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'

@@ -1,0 +1,26 @@
+{
+    "Ios": {
+        "lblDetailPauta": "",
+        "lblSectionQuestion": "",
+        "btnOptionNO": "",
+        "btnOptionSI": "",
+        "lblAnswer": "",
+        "lblAsesor": "",
+        "lblQuestionNo":"",
+        "btnHablarAsesor":"",
+        "btnBack": "",
+        "lblScreenNumberError": ""
+    },
+    "Android": {
+        "lblDetailPauta": "//android.widget.TextView[@text=\"{option}\"]/parent::*",
+        "lblSectionQuestion": "//android.widget.TextView[@text=\"¿Esta información resuelve tu problema?\"]",
+        "btnOptionNO": "//android.widget.Button[@content-desc=\"No\"]",
+        "btnOptionSI": "//android.widget.Button[@content-desc=\"Sí\"]",
+        "lblAnswer": "//android.widget.TextView[@text=\"{option}\"]",
+        "lblAsesor": "//android.widget.Button[@content-desc=\"Hablar con un asesor\"]",
+        "lblQuestionNo": "//android.widget.TextView[@text='¿Te quedaste con alguna duda?']",
+        "btnHablarAsesor": "//android.widget.Button[@content-desc='Hablar con un asesor']",
+        "btnBack": "//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View/android.view.View[2]/android.widget.Button",
+        "lblScreenNumberError": "//android.widget.TextView[@text='Se envió a número equivocado']"
+    }
+}

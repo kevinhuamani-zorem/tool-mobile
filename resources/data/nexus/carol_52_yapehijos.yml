@@ -1,0 +1,37 @@
+-
+  name: 'Carol 52 YAPEHIJOS'
+  description: 'Usuario Tarjeta Digital YAPE'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'yape_digital'
+  idc: '432227101'
+  cic: '43222710'
+  cod_internacional: '+51'
+  phone_number: '963222710'
+  uuid: '68b8bf2e162481da'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_nexus_28'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'carol52@yape.com.pe'
+  perfil: '52'
+  tipo_doc_en_yape: '1'
+  password: '999999'
+  cards:
+    -
+      number: '4557881658060373'
+      pin4: '4279'
+      expiry_date: '04/27'
+      status: '00'
+      card_type_description: 'DIGITAL'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296540222'
+          currency: 'soles'
+          balance: '145678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

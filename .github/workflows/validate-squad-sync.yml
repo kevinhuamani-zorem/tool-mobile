@@ -1,0 +1,31 @@
+name: Validate Squad Sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/workflow-dispatch-e2e.yml'
+      - 'config/bs-test-management/bs-folder-map.json'
+  pull_request:
+    paths:
+      - '.github/workflows/workflow-dispatch-e2e.yml'
+      - 'config/bs-test-management/bs-folder-map.json'
+  workflow_dispatch:
+
+jobs:
+  validate_squad_sync:
+    name: Check workflow dropdown vs bs-folder-map.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate squad sync
+        run: npm run validate:squads

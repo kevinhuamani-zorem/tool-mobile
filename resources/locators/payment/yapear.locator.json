@@ -1,0 +1,8 @@
+{
+    "yapearAndroid": {
+        "btnYapear":  "new UiSelector().description(\"Yapear\")"
+    },
+    "yapearIos": {
+        "btnYapear":  "Yapear"
+    }
+}

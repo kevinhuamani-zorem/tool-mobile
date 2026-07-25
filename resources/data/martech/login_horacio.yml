@@ -1,0 +1,34 @@
+---
+- name: Login_horacio
+  description: "Usuarios DNI con tarjeta credimás soles con cuenta ahorros"
+  personality: 'ciam_val_facial_enrolado'
+  data_in_bcp: 'true'
+  card_usage: bcp_card
+  idc: '775769741'
+  cod_internacional: '+51'
+  phone_number: '987676879'
+  uuid: uuid-horacio
+  platform: android
+  version: '8.0'
+  device_token: automated_test_token_horacio
+  device_type: PERSONAL
+  phone_model: Samsung Note 4 6.0 MARSHMALLOW
+  phone_manufacturer: Samsung
+  email: horaciolimatdd@mailinator.com
+  password: '999999'
+  cards:
+    - number: '4557887097122120'
+      pin4: '1111'
+      expiry_date: 08/26
+      status: '00'
+      cvv: '999'
+      usage: token
+      visa_card_token: '4753498979057'
+      accounts:
+        - number: '19470000948057'
+          currency: soles
+          balance: '10000.00'
+          type: CUENTAS DE AHORROS
+          subtype: PRIMERA CUENTA
+          release_date: new
+          status: active

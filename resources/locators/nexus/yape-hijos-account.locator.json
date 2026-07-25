@@ -1,0 +1,16 @@
+{
+  "homeAndroid": {
+    "txtTitle": "android=new UiSelector().text(\"Estas son tus cuentas en Yape\")",
+    "txtSubtitle": "android=new UiSelector().text(\"Elige la cuenta que quieres cambiar a Yape Hijos.\")",
+    "rbtnFirstAccount": "android=new UiSelector().className(\"android.widget.RadioButton\").instance(0)",
+    "txtTyCyPoliticas": "android=new UiSelector().textContains(\"Al continuar, declaro que he leído y acepto los Términos y condiciones de Yape y, Política de Privacidad.\")",
+    "btnContinuar": "~Continuar"
+  },
+  "homeIos": {
+    "txtTitle": "",
+    "txtSubtitle": "",
+    "rbtnFirstAccount": "",
+    "txtTyCyPoliticas":"",
+    "btnContinuar": ""
+  }
+}

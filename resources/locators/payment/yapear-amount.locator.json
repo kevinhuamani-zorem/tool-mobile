@@ -1,0 +1,17 @@
+{
+    "yapearAndroid": {
+        "amount":"new UiSelector().text(\"0\")",
+        "comment":"new UiSelector().className(\"android.widget.EditText\").instance(1)",
+        "btnyapear":"//android.widget.Button[@content-desc='Yapear']",
+        "btnotrosbancos":"new UiSelector().className(\"android.view.View\").instance(14)",
+       "lblTransactionLimitsEnterprise":"new UiSelector().text(\"Límite por yapeo S/ 500, límite total por día S/ 3,000\")"
+
+    },
+    "yapearIos": {
+        "amount":"**/XCUIElementTypeStaticText[`value == \"0 Soles a yapear\"`]",
+        "comment":"**/XCUIElementTypeTextField[`value == \"Agregar mensaje\"`]",
+        "btnyapear":"**/XCUIElementTypeButton[`name == \"Yapear\"`]",
+        "btnotrosbancos":"**/XCUIElementTypeButton[`name == \"Otros bancos\"`]",
+        "lblTransactionLimitsEnterprise":"name CONTAINS 'Límite por yapeo S/ 500'"
+    }
+}

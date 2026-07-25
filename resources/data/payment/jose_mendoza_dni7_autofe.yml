@@ -1,0 +1,39 @@
+-
+  name: 'Jose Mendoza Dni7 AutoFE'
+  description: 'Usuario con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES (PRIMERA CUENTA)'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '722991731'
+  cod_internacional: '+51'
+  phone_number: '992066986'
+  phone_number_consist: '992066986'
+  uuid: 'c5f16514e113c34b'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'fAmzQzV4S4anNalZPfP9Fn:APA91bERoZxakOJfH0tPL1lXbKerxaHVJPPZghGIERYA86qQsDgBEFBgTl41qFkASrYJ0sUp_BPNOpnWXmH_VzpomBEWMMyLud0Qcr2duHiKlKkZH7a7l-E'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'jmendozadni7_autofe@mailinator.com'
+  email_consist: 'jmendozadni7_autofe@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557885446528252'
+      pin4: '9999'
+      expiry_date: '04/30'
+      status: '00'
+      cvv: '084'
+      usage: 'token'
+      visa_card_token: '4557885446528252'
+      accounts:
+        -
+          number: '19400129060296'
+          currency: 'soles'
+          balance: '20000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

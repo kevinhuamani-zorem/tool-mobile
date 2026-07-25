@@ -1,0 +1,32 @@
+-
+    name: 'Felipe Herrera Ortega'
+    description: 'Usuario BCP DNI con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES'
+    personality: 'real_email'
+    data_in_bcp: 'true'
+    card_usage: 'bcp_card'
+    idc: '940773701'
+    cod_internacional: '+51'
+    phone_number: '982557503'
+    uuid: 'a791f2a9-3df3-4d55-8c9b-30c370e9c011'
+    platform: 'android'
+    version: '9.0'
+    device_token: 'automated_test_device_token_felipe_herreraortega'
+    device_type: 'PERSONAL'
+    phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+    phone_manufacturer: "Samsung"
+    email: 'felipeherreraortega@mailinator.com'
+    password: '999999'
+    cards:
+        -
+            number: '4557881208113268'
+            pin4: '4279'
+            expiry_date: '09/27'
+            status: '00'
+            cvv: '369'
+            accounts:
+                -
+                    number: '57881208113268'
+                    currency: 'soles'
+                    balance: '10000.00'
+                    type: 'CUENTAS DE AHORROS'
+                    subtype: 'PRIMERA CUENTA'

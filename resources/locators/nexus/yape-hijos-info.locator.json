@@ -1,0 +1,20 @@
+{
+  "homeAndroid": {
+    "txtTitle": "android=new UiSelector().text(\"Con Yape Hijos enséñales a manejar su dinero\")",
+    "txtSubtitle": "android=new UiSelector().text(\"Ellos usarán una versión adaptada de Yape y tú podrás supervisar sus gastos.\")",
+    "txtOption1": "android=new UiSelector().text(\"Para tu hijo/a de 10 a 17 años.\")",
+    "txtOption2": "android=new UiSelector().text(\"Con funciones y límites diferenciados.\")",
+    "txtOption3": "android=new UiSelector().text(\"Tú podrás ver el saldo y los movimientos de tu hijo/a.\")",
+    "btnEmpezar": "Empezar",
+    "btnRetroceder": "Atrás"
+  },
+  "homeIos": {
+    "txtTitle": "",
+    "txtSubtitle": "",
+    "txtOption1": "",
+    "txtOption2": "",
+    "txtOption3": "",
+    "btnEmpezar": "",
+    "btnRetroceder": ""
+  }
+}

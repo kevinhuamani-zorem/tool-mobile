@@ -1,0 +1,15 @@
+{
+    "Android": {
+        "lblLastMov": "//android.view.View[@content-desc='Entrada'] | //android.view.View[@content-desc='Salida']",
+        "lblHelpOtherMov": "//android.widget.TextView[@text='Ayuda con un movimiento']",
+        "btnViewAllMov": "//android.widget.Button[@content-desc='Ver todo']"
+
+        
+
+    },
+    "Ios": {
+        "lblLastMov": "",
+        "lblHelpOtherMov": "",
+        "btnViewAllMov": ""
+    }
+}

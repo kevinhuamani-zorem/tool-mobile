@@ -1,0 +1,38 @@
+-
+  name: 'YAPERO CERTI MIBANCO2 THIRD PARTY LENDING'
+  description: 'Usuario con 1 TARJETA DÉBITO (4557) con 1 CUENTA AHORROS SOLES (PRIMERA CUENTA)'
+  personality: 'YCA_disOK'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  cod_internacional: '+51'
+  idc: '424124021'
+  cic: '11998976'
+  phone_number: '944711822'
+  uuid: '26094D21-A2B2-4F5F-9D32-5D615050E428'
+  platform: 'IOS'
+  version: "8.0"
+  device_token: 'automated_test_device_token_yapero_mibanco2'
+  device_type: 'PERSONAL'
+  phone_model: "iphone 11"
+  phone_manufacturer: "iphone"
+  email: 'yaperoc_mibanco2@test-yape.com.pe'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpcerti_simulacionqa'
+      number: '4557880794026272'
+      pin4: '4454'
+      expiry_date: '03/29'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4557880794026272'
+      accounts:
+        -
+          number: '19272019962034'
+          currency: 'soles'
+          balance: '100000'
+          type: 'CUENTAS DE AHORROS'
+          subtype: ''
+          release_date: 'new'
+          status: 'active'

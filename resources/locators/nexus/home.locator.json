@@ -1,0 +1,26 @@
+{
+  "homeAndroid": {
+      "btnMenuHamburguesa": "Opciones de cuenta",
+      "btnshortcutRecargarCelular": "Recargar celular",
+      "btnshortcutAprendeConYape": "Aprende con Yape",
+      "btnshortcutBiometriaDigital": "Biometr",
+      "btnshortcutVerMas": "Ver m",
+      "btnMenuHamburguesaNew": "Mi perfil",
+      "btnVerMas": "Ver más",
+      "btnVerTodo": "Ver todo",
+      "btnVerVentasDelDia": "Ver ventas del día",
+      "shortcutYapeHijos": "Hijos"
+      
+  },
+  "homeIos": {
+      "btnMenuHamburguesa": "",
+      "btnshortcutRecargarCelular": "",
+      "btnshortcutAprendeConYape": "",
+      "btnshortcutBiometriaDigital": "",
+      "btnshortcutVerMas": "",
+      "btnMenuHamburguesaNew": "",
+      "btnVerMas": "",
+      "btnVerTodo": "",
+      "btnVerVentasDelDia": ""
+  }
+}

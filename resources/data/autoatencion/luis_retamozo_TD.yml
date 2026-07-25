@@ -1,0 +1,38 @@
+-
+  name: 'Chris Retam TD001'
+  description: 'Usuario Tarjeta Digital BCP'
+  personality: 'real_email'
+  data_in_bcp: 'false'
+  card_usage: 'yape_digital'
+  cod_internacional: '+51'
+  idc: '763039941'
+  cic: '76303994'
+  phone_number: '933979929'
+  uuid: 'uuid-automatedtest-lr-desabcp'
+  platform: 'android'
+  version: "8.0"
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  device_token: 'automated-test-device-lr-dbcp'
+  email: 'chris_reta_td_01@mailinator.com'
+  email_consist: 'chris_reta_td_01@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881695269015'
+      pin4: '9415'
+      expiry_date: '01/29'
+      status: '00'
+      cvv: '585'
+      usage: 'token'
+      card_type_description: 'DIGITAL'
+      accounts:
+        -
+          number: '19331531469037'
+          currency: 'soles'
+          balance: '1000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

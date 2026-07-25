@@ -1,0 +1,11 @@
+{
+    "Android": {
+        "lblNameScreen": "//android.widget.TextView[@text='Ayuda con un movimiento']",
+        "btnBack": "//android.webkit.WebView[@text='Ayuda con un movimiento | Centro de Ayuda Yape | Yape']/android.view.View/android.view.View[1]/android.view.View/android.widget.TextView[1]"
+
+    },
+    "Ios": {
+        "lblNameScreen":"",
+        "btnBack": ""
+    }
+}

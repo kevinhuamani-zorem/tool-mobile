@@ -1,0 +1,50 @@
+-
+  name: 'Pedro Perez CertificacionDiez'
+  description: 'BCP DÉBITO CORRIENTE - APERTURAR CUENTA USD - NOT DO ONBOARDING - STG'
+  personality: 'tipo_cambio'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '600073381'
+  cic: '11432970'
+  cod_internacional: '+51'
+  phone_number: '932234221'
+  phone_number_consist: '932234221'
+  uuid: '5c3de844-e305-444f-a6e7-a2ee8bacb0b5'
+  idyapeaccount_qa: '296a56ba3b0c5ea39c467d28f65a21ff'
+  idyapeaccount_stg: 'e249e2ea959f56ab802a47775f5806d1'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'auto_test_device_token_600073381_auto'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certificaciondiez@mailinator.com'
+  email_consist: 'pedro_certificaciondiez@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557881494958178'
+      pin4: '9999'
+      expiry_date: '08/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4557881494958178'
+      accounts:
+        -
+          number: '1941092693001'
+          currency: 'soles'
+          balance: '0.00'
+          type: 'CUENTA CORRIENTE'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'
+        -
+          number: '19410926333001'
+          currency: 'dolares'
+          balance: '0.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

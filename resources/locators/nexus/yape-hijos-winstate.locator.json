@@ -1,0 +1,22 @@
+{
+  "homeAndroid": {
+    "txtTitle": "android=new UiSelector().text(\"¡Listo, tu hijo/a ya puede usar Yape!\")",
+    "txtSubtitle": "android=new UiSelector().text(\"¡Ya eres parte del mundo Yape!\")",
+    "txtSubtitle1": "android=new UiSelector().text(\"Recibe dinero y yapea cuando quieras\")",
+    "txtContenido1": "android=new UiSelector().text(\"Tus papás te transfieren un monto y, con ese dinero, podrás hacer todos tus yapeos.\")",
+    "txtSubtitle2": "android=new UiSelector().text(\"Aprende a manejar tu dinero\")",
+    "txtContenido2": "android=new UiSelector().text(\"Yape no es solo para pagar; también te ayuda a dominar tus finanzas como un experto.\")",
+    "btnCompartir": "~Compartir a mi hijo/a",
+    "btnSalir": "~Salir"
+  },
+  "homeIos": {
+    "txtTitle": "",
+    "txtSubtitle": "",
+    "txtSubtitle1": "",
+    "txtContenido1": "",
+    "txtSubtitle2": "",
+    "txtContenido2": "",
+    "btnCompartir": "",
+    "btnSalir": ""
+  }
+}

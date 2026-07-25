@@ -1,0 +1,24 @@
+{
+    "otpAndroid": {
+        "iconoBack": "new UiSelector().className(\"android.widget.Button\").instance(0)",
+        "iconoClose": "Cerrar",
+        "lblTitulo": "new UiSelector().text(\"Seguro de vida\")",
+        "lblSubTitulo": "new UiSelector().text(\"Antes de finalizar,\nenviaremos un código de validación\")",
+        "lblTxtOtp": "new UiSelector().text(\"Código de validación\")",
+        "txtOtp": "new UiSelector().className(\"android.widget.EditText\")",
+        "lblCountSecond": "new UiSelector().text(\"Puedes solicitar un nuevo código en 12 segundos.\")",
+        "btnBuyInsurance": "Pagar s/ 5.99",
+        "lblResendOtp": "new UiSelector().text(\"REENVIAR CÓDIGO\")"
+    },
+    "otpIos": {
+       "iconoBack": "new UiSelector().className(\"android.widget.Button\").instance(0)",
+        "iconoClose": "Cerrar",
+        "lblTitulo": "new UiSelector().text(\"Seguro de vida\")",
+        "lblSubTitulo": "new UiSelector().text(\"Antes de finalizar, enviaremos un código de validación\")",
+        "lblTxtOtp": "new UiSelector().text(\"Código de validación\")",
+        "txtOtp": "//android.widget.EditText/android.view.View",
+        "lblCountSecond": "new UiSelector().text(\"Puedes solicitar un nuevo código en 12 segundos.\")",
+        "btnBuyInsurance": "Pagar s/ 5.99",
+        "lblResendOtp": "new UiSelector().text(\"REENVIAR CÓDIGO\")"
+    }
+}

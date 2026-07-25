@@ -1,0 +1,37 @@
+-
+  name: 'Fiorela Contreras Mauricio'
+  description: 'Usuario con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES (PRIMERA CUENTA)'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '455319801'
+  cic: '44907549'
+  cod_internacional: '+51'
+  phone_number: '944907549'
+  uuid: 'uuid-fcontreras'
+  platform: 'android'
+  version: '1.0'
+  device_token: 'automated_test_device_token_fcontreras'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'fiorelacontreras@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557885790654464'
+      pin4: '1111'
+      expiry_date: '08/26'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7022031146578037'
+      accounts:
+        -
+          number: '1943298466036'
+          currency: 'soles'
+          balance: '45678.00'
+          type: 'CUENTA CORRIENTE'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

@@ -1,0 +1,52 @@
+{
+    "compilerOptions": {
+      "target": "ESNext",
+      "module": "NodeNext",
+      "moduleResolution": "node16",
+      "allowSyntheticDefaultImports": true,
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "strict": true,
+      "forceConsistentCasingInFileNames": true,
+      "allowImportingTsExtensions": true,
+      "noEmit": true,
+      "baseUrl": "./",
+      "lib": [
+        "es2021",
+        "dom"
+      ],
+      "types": [
+        "node",
+        "@wdio/types",
+        "@wdio/globals/types",
+        "@wdio/mocha-framework",
+        "@wdio/cucumber-framework",
+        "chai"
+      ],
+      "resolveJsonModule": true,
+      "sourceMap": false,
+      "removeComments": true,
+      "noImplicitAny": true,
+      "strictPropertyInitialization": true,
+      "strictNullChecks": true,
+
+     /* Path mapping for cleaner imports (Path Aliasing)*/
+      "paths": {
+        "@config/*": ["config/*"],
+        "@features/*": ["features/*"],
+        "@resources/*": ["resources/*"],
+        "@locators/*": ["resources/locators/*"],
+        "@screenobjects/*": ["screenobjects/*"],
+        "@utils/*": ["support/utils/*"],
+        "@support/*": ["support/*"]
+      }
+    },
+    "include": [
+      "**/*.ts",
+      "config/**/*.ts",
+      "tests/**/*.ts"
+    ],
+    "exclude": [
+      "node_modules"
+    ]
+  }

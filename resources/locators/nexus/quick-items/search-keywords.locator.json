@@ -1,0 +1,28 @@
+{
+    "SearchKeywordsAndroid": {
+        "btnClearSearchInput": "//android.widget.Button[@content-desc='Limpiar']",
+        "searchInput": "//*[@content-desc='Buscar en Yape'] | //android.widget.EditText",
+        "btnSearchFunctionalHomeByName": "//android.widget.TextView[contains(@text, '%s') and not(following-sibling::android.widget.TextView)]/following-sibling::android.widget.Button | //*[@content-desc='Buscar en Yape']",
+        "btnSearchCategoryByName": "//android.view.View[count(*)=3 and ./android.widget.TextView[@text='%s']]",
+        "txtSearchEmptyResultTitle": "//android.widget.TextView[@text='No encontramos resultados']",
+        "txtSearchEmptyResultSubtitle": "//android.widget.TextView[@text='Prueba con otra palabra o modifica una parte.']",
+        "screenView": "//android.widget.Button/following-sibling::*[normalize-space(@text)='%s'] | //*[@content-desc='Atrás']/ancestor::android.view.View/android.widget.ScrollView/android.widget.TextView[normalize-space(@text)='%s']",
+        "screenViewFollowing": "//android.widget.Button/preceding-sibling::*[normalize-space(@text)='%s']",
+        "screenViewBiometry": "//android.widget.Button/ancestor::android.view.View/following-sibling::*[normalize-space(@text)='%s'] | //*[@content-desc='Atrás']/parent::android.view.View/following-sibling::android.view.View/android.widget.TextView[normalize-space(@text)='%s']",
+        "webView": "//*[@resource-id='android:id/content']",
+        "btnBack": "(//*[@content-desc='Atrás'] | //androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View/android.view.View[last()]/android.widget.Button[not(@content-desc)])[1]"
+    },
+    "SearchKeywordsIos": {
+        "btnClearSearchInput": "",
+        "searchInput": "",
+        "btnSearchFunctionalHomeByName": "",
+        "btnSearchCategoryByName": "",
+        "txtSearchEmptyResultTitle": "",
+        "txtSearchEmptyResultSubtitle": "",
+        "screenView": "",
+        "screenViewBiometry": "",
+        "screenViewFollowing": "",
+        "webView": "",
+        "btnBack": ""
+    }
+}

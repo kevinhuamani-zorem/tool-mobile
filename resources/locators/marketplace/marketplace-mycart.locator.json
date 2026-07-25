@@ -1,0 +1,8 @@
+{
+    "menuAndroid": {
+        "btnContinueWithThePurchase": "new UiSelector().resourceId(\"btn_market_purchase_summary\")"
+    },
+    "menuIos": {
+        "btnContinueWithThePurchase": "new UiSelector().resourceId(\"btn_market_purchase_summary\")"
+    }
+}

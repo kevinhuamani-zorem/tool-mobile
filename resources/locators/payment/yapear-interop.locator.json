@@ -1,0 +1,13 @@
+{
+    "yapearInteropAndroid": {
+        "btninterop":"new UiSelector().className(\"android.view.View\").instance(8)",
+        "titleYapearInterop":"new UiSelector().text(\"Vas a yapear a:\")",
+        "btnConfirmarYapeo":"new UiSelector().className(\"android.view.View\").instance(4)"
+
+    },
+    "yapearInteropIos": {
+        "btninterop":"{entidad}",
+        "titleYapearInterop":"Vas a yapear a:",
+        "btnConfirmarYapeo":"**/XCUIElementTypeButton[`name == \"Confirmar yapeo\"`]"
+    }
+}

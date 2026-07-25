@@ -1,0 +1,24 @@
+{
+    "YapeoHighConfirmationAndroid": {
+        "buttonBack": "android=new UiSelector().className(\"android.widget.Button\")",
+        "txtMenuTitle": "//*[@text='Confirmación de yapeo alto']",
+        "txtScreenDescription": "//*[@text='Indica un monto de yapeo alto y recibirás un código en caso se te esté pasando la mano al yapear.']",
+        "txtActivateHighYapeoConfirmation": "//*[@text='Activar la confirmación']",
+        "switchButton": "new UiSelector().className(\"android.view.View\").checkable(true)",
+        "txtEnterAmount": "//*[@text='Indica el monto alto']",
+        "editTextAmount": "//android.widget.EditText",
+        "txtToastOnSuccess": "//*[@text='Tus cambios han sido guardados']",
+        "btnSaveChanges": "new UiSelector().description(\"Guardar cambios\")"
+    },
+    "YapeoHighConfirmationIos": {
+        "backButton": "",
+        "txtMenuTitle": "",
+        "txtScreenDescription": "",
+        "txtActivateHighYapeoConfirmation": "",
+        "switchButton": "",
+        "txtEnterAmount": "",
+        "editTextAmount": "",
+        "txtToastOnSuccess": "",
+        "btnSaveChanges": ""
+    }
+}

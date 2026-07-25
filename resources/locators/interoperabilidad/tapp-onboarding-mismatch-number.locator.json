@@ -1,0 +1,14 @@
+{
+    "tappOnboardingMismatchNumberAndroid": {
+        "modalContainer": "//android.view.ViewGroup/android.view.View/android.view.View/android.view.View",
+        "txtMismatchTitle": "//android.widget.TextView[@content-desc=\"Tu número no coincide con el de Yape\" or @text=\"Tu número no coincide con el de Yape\"]",
+        "txtMismatchDescription": "//android.widget.TextView[contains(@content-desc,\"Para registrarte en Tapp\") or contains(@text,\"Para registrarte en Tapp\")]",
+        "btnAccept": "//android.widget.Button[@content-desc=\"ACEPTAR\" or @text=\"ACEPTAR\"] | //android.widget.TextView[@content-desc=\"ACEPTAR\" or @text=\"ACEPTAR\"]"
+    },
+    "tappOnboardingMismatchNumberIos": {
+        "modalContainer": "//*[@name=\"__NOT_IMPLEMENTED__\"]",
+        "txtMismatchTitle": "//*[@name=\"__NOT_IMPLEMENTED__\"]",
+        "txtMismatchDescription": "//*[@name=\"__NOT_IMPLEMENTED__\"]",
+        "btnAccept": "//*[@name=\"__NOT_IMPLEMENTED__\"]"
+    }
+}

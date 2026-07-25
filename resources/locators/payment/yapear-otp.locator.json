@@ -1,0 +1,14 @@
+{
+    "yapearAndroid": {
+        "txttitleYapeoAlto": "new UiSelector().text(\"Confirma tu yapeo alto\")",
+        "txtboxinputcode": "new UiSelector().className(\"android.widget.EditText\")",
+        "btnValidateCode":"new UiSelector().className(\"android.view.View\").instance(7)"
+
+    },
+    "yapearIos": {
+        "txttitleYapeoAlto": "Confirma tu yapeo alto",
+        "txtboxinputcode":"ingresa el codigo",
+        "btnValidateCode":"**/XCUIElementTypeButton[`name == \"Confirmar yapeo\"`]"
+    
+    }
+}

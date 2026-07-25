@@ -1,0 +1,20 @@
+{
+    "menuAndroid": {
+        "lblLifeMenu": "new UiSelector().text(\"Seguro de Vida Yape\")",
+        "lblCuidaFuturoFamilia": "new UiSelector().text(\"Cuida el futuro de tu familia por S/ 5.99 al mes\")",
+        "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "lblLoading": "//android.widget.TextView[@text=\"Cargando\"]",
+        "lblInsurance": "new UiSelector().text(\"Seguros\")",
+        "lblInsuranceMenu": "new UiSelector().text(\"$\")"
+        
+    },
+    "menuIos": {
+        "lblLifeMenu": "new UiSelector().text(\"Seguro de Vida Yape\")",
+       "lblCuidaFuturoFamilia": "new UiSelector().description(\"Cuida el futuro de tu familia por S/ 5.99 al mes\")",
+        "lblCuidaFuturo": "new UiSelector().description(\"Cuida el futuro de tu familia por S/ 5.99 al mes\")",
+        "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "lblLoading": "//android.widget.TextView[@text=\"Cargando\"]",
+        "lblInsurance": "new UiSelector().text(\"Seguros\")",
+        "lblInsuranceMenu": "new UiSelector().text(\"$\")"
+    }
+}

@@ -1,0 +1,31 @@
+{
+    "simulateAmountAndroid": {
+        "txtTPLendingAmountNeeded": "//android.widget.TextView[@text='¿Cuánto necesitas?']",
+        "btnTPLendingSimulateAmount": "//android.widget.Button[@content-desc='Simular crédito']",
+        "txtTPLendingMoneyCurrency": "//android.widget.TextView[@text='S/']",
+        "inputTPLendingMoneyAmount": "(//android.widget.EditText)[1]",
+        "txtTPLendingAmountAllowed": "//android.widget.TextView[@text='Pide desde S/ 500 hasta S/ 12,000']",
+        "txtTPLendingWrongAmount": "//android.widget.TextView[@text='El monto ingresado debe ser múltiplo de 10']",
+        "btnTPLendingSimulateClose": "//android.view.View[@content-desc='Cerrar']",
+        "txtTPLendingAbandonTitle": "//android.widget.TextView[@text='¿Por qué motivo ya no deseas solicitar el crédito?']",
+        "txtTPLendingFirstOption": "//android.widget.TextView[@text='Solo quería ver como funcionaba']",
+        "txtTPLendingSecondOption": "//android.widget.TextView[@text='No son los montos ni plazos de tiempo que esperaba']",
+        "txtTPLendingThirdOption": "//android.widget.TextView[@text='No me queda claro cómo obtener un crédito']",
+        "txtTPLendingFourthOption": "//android.widget.TextView[@text='Otro motivo']",
+        "btnTPLendingSendMetric": "//android.widget.Button[@content-desc='Enviar']"
+    },
+    "simulateAmountIos": {
+        "txtTPLendingAmountNeeded": "//XCUIElementTypeStaticText[@name='¿Cuánto necesitas?']",
+        "btnTPLendingSimulateAmount": "//XCUIElementTypeButton[@name='Simular crédito']",
+        "inputTPLendingMoneyAmount": "//XCUIElementTypeApplication[@name=\"Yape-STG\"]/XCUIElementTypeWindow[1]/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther/XCUIElementTypeOther[2]/XCUIElementTypeStaticText",
+        "txtTPLendingAmountAllowed": "//XCUIElementTypeStaticText[@name='Pide desde S/ 500 hasta S/ 12,000']",
+        "txtTPLendingWrongAmount": "//XCUIElementTypeStaticText[@name='El monto ingresado debe ser múltiplo de 10']",
+        "btnTPLendingSimulateClose": "//XCUIElementTypeButton[@name='Cerrar']",
+        "txtTPLendingAbandonTitle": "//XCUIElementTypeStaticText[@name='¿Por qué motivo ya no deseas solicitar el crédito?']",
+        "txtTPLendingFirstOption": "//XCUIElementTypeStaticText[@name='Solo quería ver como funcionaba']",
+        "txtTPLendingSecondOption": "//XCUIElementTypeStaticText[@name='No son los montos ni plazos de tiempo que esperaba']",
+        "txtTPLendingThirdOption": "//XCUIElementTypeStaticText[@name='No me queda claro cómo obtener un crédito']",
+        "txtTPLendingFourthOption": "//XCUIElementTypeStaticText[@name='Otro motivo']",
+        "btnTPLendingSendMetric": "//XCUIElementTypeButton[@name='Enviar']"
+    }
+}

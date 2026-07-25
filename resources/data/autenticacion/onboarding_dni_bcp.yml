@@ -1,0 +1,40 @@
+-
+  name: 'Onboarding Dni Bcp'
+  description: 'Usuario de prueba del tipo YAPE BCP con DNI que no pasa por biometría'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  cod_internacional: '+51'
+  idc: '953560021'
+  phone_number: '993565011'
+  phone_number_consist: '993565011'
+  uuid: 'a82135fb-9c77-41aa-aa75-55230c0a7577'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_onboarding_dni_bcp'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'onboardingbcpdni@mailinator.com'
+  email_consist: 'onboardingbcpdni@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880792220208'
+      pin4: '2589'
+      pinblock: '18997956CA0F7B21'
+      expiry_date: '02/28'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7017889900567103'
+      accounts:
+        -
+          number: '19489996560212'
+          currency: 'soles'
+          balance: '15000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

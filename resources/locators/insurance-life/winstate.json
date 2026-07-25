@@ -1,0 +1,16 @@
+{
+    "winstateAndroid": {
+        "btnHome": "new UiSelector().description(\"Ir al inicio de Yape\")",
+        "lblFatherTextView": "android.widget.ScrollView",
+        "lblChildrenTextView": "android.widget.TextView",
+        "lblPrice": "5.99 soles",
+        "btnWhatsapp": "Ir a whatsapp"
+    },
+    "winstateIos": {
+        "btnHome": "Ir al inicio de Yape",
+        "lblFatherTextView": "android.widget.ScrollView",
+        "lblChildrenTextView": "android.widget.TextView",
+        "lblPrice": "5.99 soles",
+        "btnWhatsapp": "Ir a whatsapp"
+    }
+}

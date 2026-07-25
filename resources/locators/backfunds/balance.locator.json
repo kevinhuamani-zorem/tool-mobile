@@ -1,0 +1,12 @@
+{
+    "balanceAndroid": {
+        "btnMostrarSaldo": "new UiSelector().text(\"Mostrar saldo\")",
+        "btnOcultarSaldo": "new UiSelector().text(\"Ocultar saldo\")",
+        "txtBalance": "//android.widget.TextView[starts-with(@text, 'S/')]"
+    },
+    "balanceIos": {
+        "btnMostrarSaldo": "Mostrar saldo",
+        "btnOcultarSaldo": "Ocultar saldo",
+        "txtBalance": "//android.widget.TextView[contains(@text, 'S/')]"
+    }
+}

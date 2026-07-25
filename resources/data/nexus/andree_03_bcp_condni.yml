@@ -1,0 +1,35 @@
+-
+  name: 'Andree 003 BCPConDni'
+  description: 'Usuario con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '710167111'
+  cod_internacional: '+51'
+  phone_number: '974770702'
+  uuid: 'uuid-andree-003-bcpcondni'
+  platform: 'ANDROID'
+  version: '12.0'
+  device_token: 'automated_test_device_token_nexus_003'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'andree_03_bcp@yape.com.pe'
+  password: '999999'
+  perfil: '03'
+  tipo_doc_en_yape: '1'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880791321361'
+      pin4: '4279'
+      expiry_date: '03/33'
+      status: '00'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296232003'
+          currency: 'soles'
+          balance: '14534678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'

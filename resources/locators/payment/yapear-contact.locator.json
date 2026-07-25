@@ -1,0 +1,19 @@
+{
+    "yapearAndroid": {
+        "titleYapear": "new UiSelector().text(\"Yapear\")",
+        "inputNumberToYapear": "new UiSelector().resourceId(\"textfield-filtrar-contacto\")",
+        "btnselectNumber": "new UiSelector().resourceId(\"contentContactItem\")",
+        "btnCloseContact": "new UiSelector().description(\"Cerrar\")",
+        "inputNewNumberToYapear": "new UiSelector().text(\"+51 {cellphone}\")",
+        "btnContinuarNuevoYapeo": "new UiSelector().description(\"Continuar\")",
+        "btnselectNewNumber": "new UiSelector().description(\"Nuevo número, {cellphone}\")"
+    },
+    "yapearIos": {
+        "titleYapear": "Yapear",
+        "inputNumberToYapear": "**/XCUIElementTypeTextField[`value == \"Busca el celular o contacto\"`]",
+        "btnselectNumber": "**/XCUIElementTypeCell[`name == 'A nuevo celular {cellphone}'`]",
+        "inputContactToYapear": "**/XCUIElementTypeButton[`name == \"Editar casilla , busca el celular o contacto\"`]",
+        "btnCloseContact": "**/XCUIElementTypeButton[`name == \"Cerrar\"`][2]",
+        "btnselectNewNumber": "**/XCUIElementTypeButton[`name CONTAINS \"{cellphone}\"`]"
+    }
+}

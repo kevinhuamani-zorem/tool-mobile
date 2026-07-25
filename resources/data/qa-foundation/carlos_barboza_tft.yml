@@ -1,0 +1,32 @@
+---
+- name: Carlos Barboza TFT
+  description: Usuario para pruebas aumatizadas de TFT
+  personality: real_email
+  data_in_bcp: 'false'
+  card_usage: bcp_card
+  idc: '902469991'
+  cic: 02469791
+  cod_internacional: '+51'
+  phone_number: '902469791'
+  uuid: uuid-test-cbarboza-tft
+  platform: android
+  device_token: automated_test_device_token_cbarboza_tft
+  device_type: PERSONAL
+  phone_model: Samsung Note 5 7.0 MARSHMALLOW
+  phone_manufacturer: Samsung
+  email: carlosb_tft@mailinator.com
+  password: '999999'
+  cards:
+    - number: '4557881590066078'
+      pin4: '9999'
+      expiry_date: 01/27
+      status: '00'
+      cvv: '999'
+      usage: token
+      visa_card_token: '7000010239193299'
+      accounts:
+        - number: '19380001092099'
+          currency: soles
+          balance: '453580.00'
+          type: CUENTAS DE AHORROS
+          subtype: PRIMERA CUENTA

@@ -1,0 +1,42 @@
+-
+  name: 'Onboarding Ce Bcp'
+  description: 'Usuario con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES (PRIMERA CUENTA)'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '458021093'
+  tipo_doc_en_yape: '3'
+  tipo_doc_desc_en_yape: 'CEXT'
+  cod_internacional: '+51'
+  phone_number: '918279401'
+  phone_number_consist: '918279401'
+  uuid: 'b095f069-81e0-43f2-b28e-e4e2b533b38b'
+  platform: 'android'
+  version: '9.0'
+  device_token: 'automated_test_device_token_onboarding-ce-bcp'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'onboardingbcpce@mailinator.com'
+  email_consist: 'onboardingbcpce@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880791581154'
+      pin4: '9866'
+      expiry_date: '02/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7022041247598003'
+      accounts:
+        -
+          testenv: 'bcpdesa_simulacionqa'
+          number: '19390109279011'
+          currency: 'soles'
+          balance: '99999.99'
+          type: 'CUENTAS DE AHORRO'
+          subtype: ''
+          release_date: 'new'
+          status: 'active'

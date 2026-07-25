@@ -1,0 +1,16 @@
+{
+    "menuAndroid": {
+        "btnSeeMore": "new UiSelector().text(\"Ver más\")",
+        "btnNavigationMenu": "Opciones de cuenta",
+        "settings": "new UiSelector().text(\"Ajustes\")",
+        "optionSettings":"//android.widget.TextView[@text='{options}']",
+        "btnBackSettings":"new UiSelector().className(\"android.widget.Button\")"
+    },
+    "menuIos": {
+        "btnSeeMore": "Ver más",
+        "btnNavigationMenu": "Opciones de cuenta",
+        "settings": "Ajustes",
+        "optionSettings":"**/XCUIElementTypeStaticText[`name == '{options}'`]",
+        "btnBackSettings":""
+    }
+}

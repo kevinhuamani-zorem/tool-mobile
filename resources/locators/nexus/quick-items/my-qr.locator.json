@@ -1,0 +1,30 @@
+{
+    "myQRAndroid": {
+        "backButton": "new UiSelector().className('android.widget.Button').instance(1)",
+        "txtMenuTitle": "//*[@text='Mi QR']",
+        "txtMyQRTitle": "//*[@text='Muestra tu QR para recibir yapeos sin compartir tu número de celular.']",
+        "imgMyQR": "//android.widget.ScrollView/android.view.View[1]/android.view.View",
+        "btnShareAndDownload": "Comparte y descarga tu QR", 
+        "imgMyQRShareAndDownloadScreen": "//android.widget.ScrollView/android.view.View[1]",
+        "txtPayHereShareAndDownloadScreen": "//*[@text='Paga aquí con Yape']",
+        "btnShareAndDownloadScreen": "//android.widget.ScrollView/android.view.View[2]",
+        "txtShareAndDownloadScreen": "//*[@text='Compartir']",
+        "btnDownloadShareAndDownloadScreen": "//android.widget.ScrollView/android.view.View[3]",
+        "txtDownloadShareAndDownloadScreen": "//*[@text='Descargar']",
+        "txtToastDownload": "//*[@text='¡Listo! Se ha guardado en tu dispositivo']"
+    },
+    "myQRIos": {
+        "backButton": "",
+        "txtMenuTitle": "",
+        "txtMyQRTitle": "",
+        "imgMyQR": "",
+        "btnShareAndDownload": "", 
+        "imgMyQRShareAndDownloadScreen": "",
+        "txtPayHereShareAndDownloadScreen": "",
+        "btnShareAndDownloadScreen": "",
+        "txtShareAndDownloadScreen": "",
+        "btnDownloadShareAndDownloadScreen": "",
+        "txtDownloadShareAndDownloadScreen": "",
+        "txtToastDownload": ""
+    }
+}

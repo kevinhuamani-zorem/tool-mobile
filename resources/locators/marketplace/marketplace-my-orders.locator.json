@@ -1,0 +1,24 @@
+{
+    "myOrdersAndroid": {
+        "btnViewDetail": "(//android.widget.Button[@text=\"NO EDITAR - Audifonos K Audifonos K NO EDITAR - Audifonos K Audifonos K Aprobado Llega máx. 17 oct. 8:00 a.m. - 9:00 p.m.\"])[1]",
+        "orderDetailScreen": "(//android.widget.TextView[@text=\"Detalle de pedido\"])[1]",
+        "helpIcon": "text(\"Ícone\")",
+        "btnCancelOrder": "text(\"Cancelar pedido\")",
+        "helpScreen": "textContains(\"Centro de Ayuda\")",
+        "optCancelOrder": "text(\"Ordené esto por error\")",
+        "btnContinue": "//android.widget.Button[@text=\"Continuar\"]",
+        "txtReadyWeCancelYourProduct": "text(\"¡Listo, cancelamos tu pedido!\")",
+        "btnBackDetail": "text(\"Volver al detalle\")"
+    },
+    "myOrdersIos": {
+        "btnViewDetail": "(//XCUIElementTypeButton[@name=\"NO EDITAR - Audifonos K Audifonos K NO EDITAR - Audifonos K Audifonos K Aprobado Llega máx. 19 oct. 8:00 a.m. - 9:00 p.m.\"])[1]",
+        "orderDetailScreen": "//XCUIElementTypeStaticText[@label='Detalle de pedido']",
+        "helpIcon": "//XCUIElementTypeButton[@label='Ícone']",
+        "btnCancelOrder": "//XCUIElementTypeButton[@label='Cancelar pedido']",
+        "helpScreen": "//XCUIElementTypeStaticText[contains(@label, 'Centro de Ayuda')]",
+        "optCancelOrder": "//XCUIElementTypeStaticText[@label='Ordené esto por error']",
+        "btnContinue": "//XCUIElementTypeButton[@label='Continuar']",
+        "txtReadyWeCancelYourProduct": "//XCUIElementTypeStaticText[@label='¡Listo, cancelamos tu pedido!']",
+        "btnBackDetail": "//XCUIElementTypeButton[@label='Volver al detalle']"
+    }
+}

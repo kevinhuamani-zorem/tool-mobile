@@ -1,0 +1,38 @@
+-
+  name: 'payment_e2e'
+  description: 'Usuario de pruebas pago de servicios'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '700391921'
+  cic: '737394461'
+  cod_internacional: '+51'
+  phone_number: '993470456'
+  uuid: 'uuid-katherine-gamboa'
+  platform: 'android'
+  version: '2.0'
+  device_token: 'automated_test_device_token_diandra-sanchez'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 5 7.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'katherinejgamboa@yape.com.pe'
+  password: '999999'
+  timeout_api: '7'
+  cards:
+    -
+      number: '4557885790626514'
+      pin4: '4404'
+      expiry_date: '04/28'
+      status: '00'
+      cvv: '193'
+      usage: 'token'
+      visa_card_token: '4557885790626514'
+      accounts:
+        -
+          number: '19270000785062'
+          currency: 'soles'
+          balance: '10.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: ''
+          release_date: 'new'
+          status: 'active'

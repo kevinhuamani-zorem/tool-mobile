@@ -1,0 +1,22 @@
+{
+  "homeAndroid": {
+    "txtTitle": "android=new UiSelector().text(\"Ingresa tu código de validación\")",
+    "txt1":"~Dígito 1, Campo de texto obligatorio",
+    "txt2":"~Dígito 2, Campo de texto obligatorio",
+    "txt3":"~Dígito 3, Campo de texto obligatorio",
+    "txt4":"~Dígito 4, Campo de texto obligatorio",
+    "txt5":"~Dígito 5, Campo de texto obligatorio",
+    "txt6":"~Dígito 6, Campo de texto obligatorio",
+    "btnContinuar": "~Continuar"
+  },
+  "homeIos": {
+    "txtTitle": "",
+    "txt1":"",
+    "txt2":"",
+    "txt3":"",
+    "txt4":"",
+    "txt5":"",
+    "txt6":"",
+    "btnContinuar": ""
+  }
+}

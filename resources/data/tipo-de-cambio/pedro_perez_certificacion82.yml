@@ -1,0 +1,47 @@
+-
+  name: 'Pedro Perez CertificacionOchentaydos'
+  description: 'BCP AHORRO - NOT DO ONBOARDING'
+  personality: 'tipo_cambio'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '293269211'
+  cic: '00052326'
+  cod_internacional: '+51'
+  phone_number: '992883645'
+  phone_number_consist: '992883645'
+  uuid: '050e3d40-d609-4c4e-bff1-c4b284765d77'
+  idyapeaccount_stg: 'c06b40210259537ea36d3ac0aa402358'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'auto_test_device_token_293269211'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certiochentaydos@mailinator.com'
+  email_consist: 'pedro_certiochentaydos@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880793235650'
+      pin4: '2235'
+      expiry_date: '07/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4557880793235650'
+      accounts:
+        -
+          number: '19470426684062'
+          currency: 'soles'
+          balance: '20000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'
+        -
+          number: '19370437081164'
+          currency: 'dolares'
+          balance: '20000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

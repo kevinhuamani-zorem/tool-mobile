@@ -1,0 +1,26 @@
+{
+  "menuAndroid": {
+      "txtMenuMiplanYapeEmpresa": "new UiSelector().text(\"Mi plan Yape Empresas\")",
+      "txtMenuMisDirecciones": "new UiSelector().text(\"Mis direcciones\")",
+      "txtMenuLimitesTransaccionales": "new UiSelector().text(\"Límites Transaccionales\")",
+      "txtMenuBiometriaDigital": "new UiSelector().text(\"Biometría digital\")",
+      "txtMenuYapeoAlto": "new UiSelector().text(\"Confirmación de yapeo alto\")",
+      "txtMenuMisDatos": "new UiSelector().text(\"Mis datos\")",
+      "txtMenuMiQR": "new UiSelector().text(\"Mi QR \")",
+      "txtMenuCambiarMiClave": "new UiSelector().text(\"Cambiar mi clave\")",
+      "txtMundoAjustes": "new UiSelector().text(\"Ajustes\")",
+      "txtMundoMiCuenta": "new UiSelector().text(\"Mi cuenta\")"
+  },
+  "menuIos": {
+      "txtMenuMiplanYapeEmpresa": "",
+      "txtMenuMisDirecciones": "",
+      "txtMenuLimitesTransaccionales": "",
+      "txtMenuBiometriaDigital": "",
+      "txtMenuYapeoAlto": "",
+      "txtMenuMisDatos": "",
+      "txtMenuMiQR": "",
+      "txtMenuCambiarMiClave": "",
+      "txtMundoAjustes": "",
+      "txtMundoMiCuenta": ""
+  }
+}

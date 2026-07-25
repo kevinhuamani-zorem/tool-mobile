@@ -1,0 +1,8 @@
+{
+    "yapearAndroid": {
+        "btnYapearqr": "new UiSelector().className(\"android.view.View\").instance(11)"
+    },
+    "yapearIos": {
+        "btnYapearqr":  "**/XCUIElementTypeButton[`name == 'Yapear'`]"
+    }
+}

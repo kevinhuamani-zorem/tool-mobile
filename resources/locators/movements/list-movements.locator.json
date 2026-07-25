@@ -1,0 +1,16 @@
+{
+    "movementAndroid": {
+        "ViewHomeMovements": "Salida",
+        "txtMovements": "new UiSelector().text(\"Movimientos\")",
+        "btnSeeAll": "new UiSelector().text(\"VER TODOS\")",
+        "btnLastMovement": "new UiSelector().description(\"Salida\").instance(0)",
+        "txtWinStateMovement": "new UiSelector().text(\"¡Yapeaste!\")"
+    },
+    "movementIos": {
+        "ViewHomeMovements": "Salida",
+        "txtMovements": "new UiSelector().text(\"Movimientos\")",
+        "btnSeeAll": "new UiSelector().text(\"VER TODOS\")",
+         "btnLastMovement": "new UiSelector().description(\"Salida\").instance(0)",
+        "txtWinStateMovement": "new UiSelector().text(\"¡Yapeaste!\")"
+    }
+}

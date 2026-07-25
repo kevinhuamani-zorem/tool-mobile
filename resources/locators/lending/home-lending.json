@@ -1,0 +1,26 @@
+{
+    "menuAndroid": {
+        "lblLendingHomeTitle": "new UiSelector().text(\"Créditos Yape\")",
+        "lblLendingHomeHeading": "new UiSelector().text(\"Te prestamos hasta\")",
+        "lblLendingHomeAmount": "new UiSelector().text(\"S/ 2,560\")",
+        "lblLendingHomeSubHeading": "new UiSelector().text(\"Pide desde S/ 700, tú eliges el monto y la cantidad de cuotas.\")",
+        "btnLendingHomeSimulate": "new UiSelector().description(\"Simula tu crédito\")",
+        "lblLendingHomeFAQTitle": "new UiSelector().text(\"Resuelve tus dudas aquí\")",
+        "lblLendingHomeFAQFirstQuestion": "new UiSelector().text(\"¿Qué es un crédito?\")",
+        "lblLendingHomeFAQSecondQuestion": "new UiSelector().text(\"¿Qué necesito para solicitar un crédito?\")",
+        "lblLendingHomeFAQThirdQuestion": "new UiSelector().text(\"¿Cómo pago mi crédito Yape?\")",
+        "btnLendingHomeFAQ": "new UiSelector().text(\"VER MÁS\")"
+    },
+    "menuIos": {
+        "lblLendingHomeTitle": "new UiSelector().text(\"Créditos Yape\")",
+        "lblLendingHomeHeading": "new UiSelector().text(\"Te prestamos hasta\")",
+        "lblLendingHomeAmount": "new UiSelector().text(\"S/ 2,560\")",
+        "lblLendingHomeSubHeading": "new UiSelector().text(\"Pide desde S/ 700, tú eliges el monto y la cantidad de cuotas.\")",
+        "btnLendingHomeSimulate": "new UiSelector().description(\"Simula tu crédito\")",
+        "lblLendingHomeFAQTitle": "new UiSelector().text(\"Resuelve tus dudas aquí\")",
+        "lblLendingHomeFAQFirstQuestion": "new UiSelector().text(\"¿Qué es un crédito?\")",
+        "lblLendingHomeFAQSecondQuestion": "new UiSelector().text(\"¿Qué necesito para solicitar un crédito?\")",
+        "lblLendingHomeFAQThirdQuestion": "new UiSelector().text(\"¿Cómo pago mi crédito Yape?\")",
+        "btnLendingHomeFAQ": "new UiSelector().text(\"VER MÁS\")"
+    }
+}

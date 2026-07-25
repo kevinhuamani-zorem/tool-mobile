@@ -1,0 +1,38 @@
+{
+    "YapeoNotificationsAndroid": {
+        "buttonBack": "new UiSelector().className(\"android.widget.Button\")",
+        "txtMenuTitle": "//*[@text='Notificaciones por yapeo']",
+        "txtYapeos": "//*[@text='YAPEOS']",
+        "txtGetEmail": "//*[@text='Recibir aviso por correo']",
+        "txtSetAmount": "//*[@text='Indica el monto desde el cual deseas recibir tus notificaciones.']",
+        "txtAdvice": "new UiSelector().textContains(\"Te avisamos desde\")",
+        "btnChange": "new UiSelector().description(\"Cambiar\")",
+        "closesheet": "android=new UiSelector().className(\"android.widget.Button\").instance(0)",
+        "txtChooseAmount": "//*[@text='Elige desde que monto te notificaremos']",
+        "txt10balance": "//*[@text=' S/ 10']",
+        "txt50balance": "//*[@text=' S/ 50']",
+        "txt100balance": "//*[@text=' S/ 100']",
+        "txt500balance": "//*[@text=' S/ 500']",
+        "txtToastOnSuccess": "//*[@text='Tus cambios han sido guardados']",
+        "btnSwitch": "new UiSelector().className(\"android.view.View\").checkable(true)"
+    },
+    "YapeoNotificationsIos": {
+        "buttonBack": "",
+        "txtMenuTitle": "",
+        "txtYapeos": "",
+        "txtGetEmail": "",
+        "txtSetAmount": "",
+        "switchButton": "",
+        "txtAdvice": "",
+        "btnChange": "",
+        "closesheet": "",
+        "txtChooseAmount": "",
+        "txt10balance": "",
+        "txt50balance": "",
+        "txt100balance": "",
+        "txt500balance": "",
+        "txtToastOnSuccess": "",
+        "btnSwitch":""
+    }
+    
+}

@@ -1,0 +1,20 @@
+{
+  "searchAndroid": {
+    "searchInput": "new UiSelector().className(\"android.widget.EditText\")",
+    "yapearServiceBtn": "//android.widget.TextView[@text=\"Yapear servicios\"]",
+    "approveCompraBtn": "//android.widget.TextView[@text=\"Aprobar compras\"]",
+    "promosBtn": "//android.widget.TextView[@text=\"Promos\"]",
+    "entradasBtn": "//android.widget.TextView[@text=\"Entradas\"]",
+    "shopBtn": "//android.widget.TextView[@text=\"Tienda\"]",
+    "gamingBtn": "//android.widget.TextView[@text=\"Gaming\"]"
+  },
+  "searchIos": {
+    "searchInput": "",
+    "yapearServiceBtn": "",
+    "approveCompraBtn": "",
+    "promosBtn": "",
+    "entradasBtn": "",
+    "shopBtn": "",
+    "gamingBtn": ""
+  }
+}

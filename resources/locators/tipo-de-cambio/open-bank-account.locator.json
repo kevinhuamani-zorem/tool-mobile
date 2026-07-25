@@ -1,0 +1,42 @@
+{
+    "openBankAccountAndroid": {
+        "btnCreateDollarAccount": "//android.widget.Button[@content-desc='Crear']",
+        "btnIDontHave": "//android.widget.Button[@content-desc='No tengo']",
+        "inputOccupation": "//android.widget.ScrollView/android.widget.EditText[1]",
+        "selectEmploymentStatus": "//android.widget.Spinner[@content-desc='Situación laboral']",
+        "optionEmploymentStatus": "//android.widget.RadioButton[@content-desc='${option}']",
+        "inputWorkplace": "//android.widget.ScrollView/android.widget.EditText[2]",
+        "btnContinue": "//android.widget.Button[@content-desc='Continuar']",
+        "selectRegion": "//android.widget.Spinner[@content-desc='Región']",
+        "optionRegion": "//android.widget.RadioButton[@content-desc='${option}']",
+        "selectProvince": "//android.widget.Spinner[@content-desc='Provincia']",
+        "optionProvince": "//android.widget.RadioButton[@content-desc='${option}']",
+        "checkboxes": "//android.widget.ScrollView/android.widget.CheckBox",
+        "btnOpenAccount": "//android.widget.Button[@content-desc='Abrir cuenta']",
+        "btnContinueWorkingPlace": "//android.widget.Button[@content-desc='Continuar']",
+        "btnContinueRegion": "//android.widget.Button[@content-desc='Continuar']",
+        "inputOtpCode": "//android.widget.EditText[@content-desc='Código OTP']",
+        "btnRegisterDollarAccountOtp": "//android.widget.Button[@content-desc='Registrar']",
+        "titleDollarAccountCreated": "//android.widget.TextView[@content-desc='Ya puedes disfrutar de tu nueva cuenta Yape en dólares']"
+    },
+    "openBankAccountIOS": {
+        "btnCreateDollarAccount": "button-open-dollar-account-dollar-home",
+        "btnIDontHave": "button-primary-register-dollar-account-tax-residence",
+        "inputOccupation": "edittext-profession-register-dollar-account-occupation",
+        "selectEmploymentStatus": "edittext-employment-situation-register-dollar-account-occupation",
+        "optionEmploymentStatus": "${option}",
+        "inputWorkplace": "edittext-working-place-register-dollar-account-occupation",
+        "btnContinue": "button-primary-dollar-onboarding",
+        "selectRegion": "edittext-region-register-dollar-account-region",
+        "optionRegion": "",
+        "selectProvince": "edittext-province-register-dollar-account-region",
+        "optionProvince": "",
+        "checkboxes": "icon-accept-contract-check-register-dollar-account-region",
+        "btnOpenAccount": "button-primary-register-dollar-account-onboarding",
+        "btnContinueWorkingPlace": "button-primary-register-dollar-account-occupation",
+        "btnContinueRegion": "button-primary-register-dollar-account-region",
+        "inputOtpCode": "edittext-otp-code-register-dollar-account-otp",
+        "btnRegisterDollarAccountOtp": "button-primary-register-dollar-account-otp",
+        "titleDollarAccountCreated": "label-title-register-dollar-account-completed"
+    }
+}

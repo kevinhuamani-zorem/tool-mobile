@@ -1,0 +1,8 @@
+{
+    "menuAndroid": {
+        "lblLendingMenu": "new UiSelector().description(\"Créditos\")"
+    },
+    "menuIos": {
+        "lblLendingMenu": ""
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "Ios": {
+        "lblPauta":"",
+        "selectOption": ""
+    },
+    "Android": {
+        "lblPauta": "//android.widget.TextView[@text='{option}']",
+        "selectOption": "//android.widget.TextView[@text=\"{option}\"]/parent::*"
+    }
+}

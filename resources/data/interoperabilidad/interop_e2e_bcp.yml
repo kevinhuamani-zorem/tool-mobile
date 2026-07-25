@@ -1,0 +1,41 @@
+---
+-
+  name: 'Interop E2E BCP Real'
+  description: 'Usuario de prueba del tipo YAPE BCP con DNI que no pasa por biometría REAL en DESA'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  cod_internacional: '+51'
+  idc: '953500051'
+  phone_number: '993506011'
+  phone_number_consist: '993506011'
+  uuid: '28f771a7-edd5-4bb4-8422-b3128b916d8a'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_interop_e2e_bcp'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'INTEROP_E2E_BCP@TEST-YAPE.COM.PEM'
+  email_consist: 'INTEROP_E2E_BCP@TEST-YAPE.COM.PE'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880791750360'
+      pin4: '2589'
+      pinblock: '18997956CA0F7C25'
+      expiry_date: '02/28'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7017889000558303'
+      accounts:
+        -
+          number: '19489976551212'
+          currency: 'soles'
+          balance: '15000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

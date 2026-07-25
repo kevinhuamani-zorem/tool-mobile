@@ -1,0 +1,130 @@
+version: 2
+registries:
+  git-registry:
+    type: git
+    url: https://github.com
+    username: x-access-token
+    password: ${{ secrets.GH_PAT }}
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    versioning-strategy: increase
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: ".github/workflows"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "gomod"
+    directory: "/"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "gradle"
+    directory: "/"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "maven"
+    directory: "/"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "pip"
+    directory: "/"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    versioning-strategy: increase
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "swift"
+    directory: "/"
+    registries:
+      - git-registry
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 50
+    groups:
+      version_updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security_updates:
+        applies-to: security-updates
+        patterns:
+          - "*"

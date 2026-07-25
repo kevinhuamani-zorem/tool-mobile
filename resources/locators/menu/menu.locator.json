@@ -1,0 +1,48 @@
+{
+    "menuAndroid": {
+        "scrollViewMenu": "//android.widget.ScrollView", 
+        "txtMenuTitle": "//*[@text='Mi Perfil']",
+        "btnCloseMenu": "//android.widget.Button",
+        "txtMenuAppVersion": "//*[@text='Versión Yape:']",
+        "txtMenuAccountType": "//*[contains(@text, 'Tipo de cuenta:')]",
+        "txtMenuCompanyName": "//*[@text='Banco de Crédito del Perú']",
+        "txtMenuRUC": "//*[@text='RUC:']",
+        "txtMenuRUCNumber": "//*[@text='20100047218']",
+        "txtMenuTermsAndConditions": "//*[@text='Términos y condiciones']",
+        "txtMenuPrivacyPolicy": "//*[@text='Política de privacidad']",
+        "txtMenuSignOut": "//*[@text='Cerrar sesión']",
+        "helpButton": "//*[@text='Ayuda']",
+        "deleteAccountButton": "//android.widget.ScrollView/android.view.View[5]/android.widget.Button",
+        "txtMenuMyData": "//*[@text='Mis datos']",
+        "txtSubItemMyQR": "//*[@text='Mi QR ']",
+        "txtMenuNotifications": "//*[@text='Notificaciones por yapeo']/..",
+        "txtBiometricButton": "//*[@text='Biometría digital']",
+        "txtHighConfirmationButton":"//*[@text='Confirmación de yapeo alto']",
+        "txtInternetPurchases": "//android.widget.TextView[@text='Compras por internet']"
+        
+
+        
+
+    },
+    "menuIos": {
+        "scrollViewMenu": "",
+        "txtMenuTitle": "",
+        "btnCloseMenu": "",
+        "txtMenuAppVersion": "",
+        "txtMenuAccountType": "",
+        "txtMenuCompanyName": "",
+        "txtMenuRUC": "",
+        "txtMenuRUCNumber": "",
+        "txtMenuTermsAndConditions": "",
+        "txtMenuPrivacyPolicy": "",
+        "txtMenuSignOut": "",
+        "helpButton": "",
+        "deleteAccountButton": "",
+        "txtMenuMyData": "",
+        "txtSubItemMyQR": "",
+        "txtMenuNotifications": "",
+        "txtBiometricButton": "",
+        "txtHighConfirmationButton":"",
+        "txtInternetPurchases": ""
+    }
+}

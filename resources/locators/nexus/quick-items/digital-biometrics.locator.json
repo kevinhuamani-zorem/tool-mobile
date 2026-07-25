@@ -1,0 +1,14 @@
+{
+    "biometryAndroid": {
+        "backButton": "android=new UiSelector().className('android.widget.Button').instance(1)",
+        "txtActiveBio": "//*[@text='Activa la Biometría digital e ingresa a tu Yape, ¡al toque!']",
+        "txtInform": "//*[@text='Los datos biométricos registrados en tu celular podrán usarse para ingresar a Yape.']",
+        "txtAcceptTerms": "android=new UiSelector().description(\"Acepto los Términos y Condiciones para activar mi biometría digital en Yape.\")"
+    },
+    "biometryIos": {
+        "backButton": "",
+        "txtActiveBio": "",
+        "txtInform": "",
+        "txtAcceptTerms": ""
+    }
+}

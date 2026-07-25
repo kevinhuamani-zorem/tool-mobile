@@ -1,0 +1,39 @@
+-
+  name: 'Juan Carlos Castro Castillo'
+  description: 'Usuario real con cuenta de ahorros'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  cod_internacional: '+51'
+  idc: '767332551'
+  phone_number: '999993255'
+  phone_number_consist: '999993255'
+  uuid: '9c63b30113143ecf'
+  platform: 'android'
+  version: "11"
+  device_token: 'automated_token_datalake_yapepos_reales1'
+  device_type: 'PERSONAL'
+  phone_model: "SM A525M"
+  phone_manufacturer: "Galaxy A52"
+  email: 'yapeposusereal1@mailinator.com'
+  email_consist: 'vy'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880692436573'
+      pin4: '5350'
+      expiry_date: '08/27'
+      status: '00'
+      cvv: '708'
+      usage: 'token'
+      visa_card_token: '4557880692436573'
+      accounts:
+        -
+          number: '19270425867037'
+          currency: 'soles'
+          balance: '19500.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: ''
+          release_date: 'new'
+          status: 'active'

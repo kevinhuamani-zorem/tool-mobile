@@ -1,0 +1,12 @@
+{
+    "menuAndroid": {
+        "codeAuthorization": "new UiSelector().className(\"android.widget.TextView\")",
+        "descriptionHelp": "new UiSelector().text(\"Este código es solo para compras por internet. Nunca te lo pediremos por chat, llamada, SMS o correo.\")",
+        "btnTextAll": "//android.widget.Button[@content-desc='{options}']"
+    },
+    "menuIos": {
+        "codeAuthorization": "**/XCUIElementTypeStaticText",
+        "descriptionHelp": "**/XCUIElementTypeStaticText[`name == 'Este código es solo para compras por internet. Nunca te lo pediremos por chat, llamada, SMS o correo.'`]",
+        "btnTextAll":"**/XCUIElementTypeButton[`name == '{options}'`]"
+    }
+}

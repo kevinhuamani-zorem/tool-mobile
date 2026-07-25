@@ -1,0 +1,23 @@
+{
+    "quoteAndroid": {
+        "chkTermsConditions": "//android.widget.CheckBox",
+        "btnBuyInsurance": "Pagar s/ 5.99",
+        "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "lblLoading": "//android.widget.TextView[@text=\"Estamos procesando tu afiliación\"]",
+        "lblTitleQuote": "new UiSelector().text(\"Seguro de Vida Yape\")",
+        "btnContinue": "Continuar",
+        "lblKnowMore": "new UiSelector().text(\"Conoce más\")",
+        "lblChildrenTextView": "android.widget.TextView"
+
+    },
+    "quoteIos": {
+       "chkTermsConditions": "//android.widget.CheckBox",
+       "btnBuyInsurance": "Pagar s/ 5.99",
+       "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "lblLoading": "//android.widget.TextView[@text=\"Estamos procesando tu afiliación\"]",
+        "lblTitleQuote": "new UiSelector().text(\"Seguro de Vida Yape\")",
+        "btnContinue": "Continuar",
+        "lblKnowMore": "UiSelector().text(\"Conoce más\")",
+        "lblChildrenTextView": "android.widget.TextView"
+    }
+}

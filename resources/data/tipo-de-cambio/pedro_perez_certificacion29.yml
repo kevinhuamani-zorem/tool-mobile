@@ -1,0 +1,41 @@
+-
+  name: 'Pedro Perez CertificacionVeintinueve'
+  description: 'BCP DÉBITO CORRIENTE - NOT DO ONBOARDING - STG'
+  personality: 'tipo_cambio'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '600073501'
+  cic: '11432982'
+  cod_internacional: '+51'
+  phone_number: '978232934'
+  phone_number_consist: '978232934'
+  uuid: '193e6f1d-1d10-4387-811a-576af8859ee2'
+  idyapeaccount_stg: '778fa1b661165462af1f64241f4bd0da'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'auto_test_device_token_600073501_auto'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certificacionveintinueve@mailinator.com'
+  email_consist: 'pedro_certificacion_veintinueve@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557881497951998'
+      pin4: '9999'
+      expiry_date: '09/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4557881497951998'
+      accounts:
+        -
+          number: '1941092727044'
+          currency: 'soles'
+          balance: '0.00'
+          type: 'CUENTA CORRIENTE'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

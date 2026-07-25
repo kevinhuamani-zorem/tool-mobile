@@ -1,0 +1,51 @@
+# real-email
+-
+  name: 'Carla Heredia Remittance'
+  description: 'Usuario BCP DNI con data real STG'
+  personality: 'remittanceusd_ok'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  cod_internacional: '+51'
+  idc: '608506221'
+  cic: '12002080'
+  phone_number: '963457967'
+  uuid: '7a9d3f4b-2c6e-4f1a-9b3e-8d2f7c1a5b6d'
+  platform: 'android'
+  version: "8.0"
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  device_token: '9e8d7c6b5a4f3e2d1c0b9a8e7f6d5c4b3'
+  email: 'carlaheredia@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557886441666345'
+      pin4: '2471'
+      expiry_date: '04/32'
+      status: '00'
+      cvv: '942'
+      card_type_description: 'PHYSICAL'
+      accounts:
+        -
+          number: '51572025016040'
+          currency: 'soles'
+          balance: '5000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'
+    -
+      number: '4557880657050237'
+      pin4: '2471'
+      expiry_date: '04/33'
+      status: '00'
+      cvv: '357'
+      card_type_description: 'PHYSICAL'
+      accounts:
+        -
+          number: '19372039856129'
+          currency: 'dolares'
+          balance: '5000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

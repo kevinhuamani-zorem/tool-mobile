@@ -1,0 +1,48 @@
+-
+  name: 'Pedro Perez CertificacionSetentaydos'
+  description: 'BCP AHORROS - BLOQUEADO PARA TRANSACCION > 100 PEN - NOT DO ONBOARDING'
+  personality: 'tipo_cambio'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '600638511'
+  cic: '11711127'
+  cod_internacional: '+51'
+  phone_number: '993232341'
+  phone_number_consist: '993232341'
+  uuid: 'db1b5b66-acbd-4b18-8c71-85eeffb54823'
+  idyapeaccount_qa: '15020bc3a7785f1ca79c6469671c912a'
+  idyapeaccount_stg: 'd7db7b5b0e2c5d3ca149747082366e96'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'auto_test_device_token_600638511_auto'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certisetentaydos@mailinator.com'
+  email_consist: 'pedro_certisetentaydos@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557881394831434'
+      pin4: '9999'
+      expiry_date: '10/28'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4557881394831434'
+      accounts:
+        -
+          number: '35070626741073'
+          currency: 'soles'
+          balance: '20000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'
+        -
+          number: '48570635528185'
+          currency: 'dolares'
+          balance: '20000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

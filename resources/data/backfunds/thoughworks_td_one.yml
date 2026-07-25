@@ -1,0 +1,35 @@
+---
+-
+  name: 'Thoughworks Td One'
+  description: 'Usuario Tarjeta Digital BCP'
+  personality: 'real_email'
+  data_in_bcp: 'false'
+  card_usage: 'yape_digital'
+  idc: '933899001'
+  cic: '93389900'
+  cod_internacional: '+51'
+  phone_number: '998278374'
+  uuid: 'uuid-user-twtd-one'
+  platform: 'android'
+  version: '1.0'
+  device_token: 'automated_test_device_token_twtd_one'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'twtdone@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881555871344'
+      expiry_date: '07/26'
+      status: '00'
+      card_type_description: 'DIGITAL'
+      accounts:
+        -
+          number: '19470123900022'
+          currency: 'soles'
+          balance: '1000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

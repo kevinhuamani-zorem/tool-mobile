@@ -1,0 +1,25 @@
+{
+    "menuAndroid": {
+        "rdoCreditCard": "new UiSelector().textContains(\"Tarjeta de crédito o débito\")",
+        "rdoYape": "new UiSelector().textContains(\"Pagarás con tu saldo\")",
+        "btnPay": "new UiSelector().resourceId(\"btn_market_purchase_summary_modal\")",
+        "titlePaymentSummary": "new UiSelector().text(\"Resumen de compra\")",
+        "titlePedido": "new UiSelector().text(\"Pedido\")",
+        "btnConfirmPay": "new UiSelector().resourceId(\"btn_market_purchase_summary_modal_checkout\")",
+        "scrollableElement": "new UiSelector().resourceId(\"scrn_market_purchase_summary\")",
+        "termsAndConditions": "new UiSelector().className(\"android.widget.CheckBox\")",
+        "closeTermsAndConditions": "//android.widget.Button[@text='close']"
+        
+    },
+    "menuIos": {
+        "rdoCreditCard": "//XCUIElementTypeStaticText[@name=\"Tarjeta de crédito o débito\"]",
+        "rdoYape": "//XCUIElementTypeStaticText[@name=\"Pagarás con tu saldo\"]",
+        "btnPay": "//XCUIElementTypeButton[contains(@label, 'Yapear S/')]",
+        "titlePaymentSummary": "//XCUIElementTypeStaticText[@name='Resumen de compra']",
+        "titlePedido": "//XCUIElementTypeStaticText[@name='Pedido']",
+        "btnConfirmPay":"//XCUIElementTypeButton[@label='Confirmar']",
+        "scrollableElement": "(//XCUIElementTypeOther[@name=\"Barra de desplazamiento vertical, 3 páginas\"])[2]",
+        "termsAndConditions": "//XCUIElementTypeSwitch[@value='0']",
+        "closeTermsAndConditions": "//XCUIElementTypeButton[@label='Cerrar']"
+    }
+}

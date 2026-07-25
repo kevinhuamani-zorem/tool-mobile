@@ -1,0 +1,35 @@
+-
+  name: 'Comercial Prisma SAC'
+  description: 'Usuario con 1 TARJETA CREDIMAS NEGOCIOS con 1 CUENTA AHORRO SOLES'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '304256286'
+  ruc: '20304256282'
+  tipo_doc_en_yape: '6'
+  tipo_doc_desc_en_yape: 'RUC'
+  cod_internacional: '+51'
+  phone_number: '999920323'
+  uuid: 'uuid-automatest-ye-reales-three'
+  platform: 'android'
+  version: '11.0'
+  device_token: 'automated_test_device_token_ye_three'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'comercialprismasac@yopmail.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881095525467'
+      pin4: '1532'
+      expiry_date: '08/29'
+      status: '00'
+      cvv: '177'
+      accounts:
+        -
+          number: '19372309913014'
+          currency: 'soles'
+          balance: '1000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'

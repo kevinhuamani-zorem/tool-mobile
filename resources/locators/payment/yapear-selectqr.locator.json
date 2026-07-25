@@ -1,0 +1,9 @@
+{
+    "yapearAndroid": {
+        "btnSelectqr": "new UiSelector().className(\"android.view.View\").instance(3)"
+        
+    },
+    "yapearIos": {
+        "btnSelectqr":  "**/XCUIElementTypeWindow[1]/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[2]/XCUIElementTypeOther[3]/XCUIElementTypeOther/XCUIElementTypeOther"
+    }
+}

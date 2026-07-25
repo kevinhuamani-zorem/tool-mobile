@@ -1,0 +1,31 @@
+{
+    "cartAndroid": {
+        "btnCartTopRight": "new UiSelector().resourceId(\"categories-cart\")",
+        "verifyProductsInCart": "new UiSelector().textContains(\"${cantidadProductos}\")",
+        "btnClearCart": "new UiSelector().text(\"Vaciar carrito\")",
+        "btnAddProduct": "new UiSelector().text(\"Añadir\")",
+        "btnBackArrow": "new UiSelector().resourceId(\"go-back\")",
+        "msgEmptyCart": "new UiSelector().text(\"${mensaje}\")",
+        "btnContinuePurchase": "new UiSelector().resourceId(\"btn_market_purchase_summary\")", 
+        "btnCartSearch": "new UiSelector().resourceId(\"MKT_View_Cart\").instance(1)",
+        "btnExitCart": "new UiSelector().resourceId(\"MKT_Cart_Back\")",
+        "btnProductVariant": "new UiSelector().text",
+        "btnAddProd": "//android.widget.Button[@text=\"Añadir\"]",
+        "btnAddToCart" : "new UiSelector().text(\"Añadir al carrito\")"
+    },
+    "cartIos": {
+        "btnCartTopRight": "//XCUIElementTypeButton[@label=\"go to cart\"]",
+        "verifyProductsInCart": "//XCUIElementTypeStaticText[contains(@label, \"${cantidadProductos}\")]",
+        "btnClearCart":"//XCUIElementTypeButton[contains(@label, \"Vaciar\")]",
+        "btnAddProduct": "//XCUIElementTypeButton[@label=\"Añadir\"]",
+        "btnBackArrow": "//XCUIElementTypeButton[@label=\"back navigation\"]",
+        "msgEmptyCart": "//XCUIElementTypeStaticText[contains(@label, \"${mensaje}\")]",
+        "btnContinuePurchase": "//XCUIElementTypeButton[@name='Continuar con la compra']",
+        "btnCartSearch": "(//XCUIElementTypeButton[@name='go to cart'])[2]",
+        "btnExitCart":"//XCUIElementTypeButton[@name='back navigation']",
+        "btnProductVariant": "//XCUIElementTypeImage[@name=",
+        "btnAddToCart" : "//XCUIElementTypeButton[@name=\"Añadir al carrito\"]",
+        "btnAddProd": "//XCUIElementTypeButton[@label=\"Añadir\"]"
+    }
+}
+

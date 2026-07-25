@@ -1,0 +1,10 @@
+{
+    "menuAndroid": {
+        "funcionalityYape": "//android.widget.TextView[@text='{options}']",
+        "modalYape": "new UiSelector().text(\"Yapeos\")"
+    },
+    "menuIos": {
+        "funcionalityYape": "{options}",
+        "modalYape": "**/XCUIElementTypeStaticText[`name == 'Yapeos'`]"
+    }
+}

@@ -1,0 +1,8 @@
+{
+    "yapearAndroid": {
+        "imageSelect": "new UiSelector().resourceId(\"com.google.android.documentsui:id/icon_thumb\").instance(0)"
+    },
+    "yapearIos": {
+        "imageSelect":  "**/XCUIElementTypeImage[`name == 'PXGGridLayout-Info'`][1]"
+    }
+}

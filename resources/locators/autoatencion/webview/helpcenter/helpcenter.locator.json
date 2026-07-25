@@ -1,0 +1,26 @@
+{
+    "helpCenterAndroid": {
+        "lblHelpCenterGlobal": "//android.widget.TextView[@text='${value}']",
+        "btnHelpCenterGlobal": "//android.widget.Button[@text='${value}']",
+        "arrowHelpCenterBackGlobal": "//android.widget.TextView[@text='${value}']/preceding-sibling::*[1]",
+        "cntHelpCenterHeader": "//android.widget.TextView[@text='${value}']/parent::*", 
+        "arrowSearchBack": "//android.widget.EditText/preceding-sibling::*[1]",
+        "iconSearchClear": "//android.widget.EditText/following-sibling::*[1]",
+        "iconSearchResult":"//android.widget.Image[@content-desc='Search empty']/following-sibling::*[@text='${part1}']/following-sibling::*[@text='${part2}']",
+        "lblSearchResult": "//android.view.View[@content-desc='${value}']",
+        "inputSearchWriteText": "//android.widget.EditText",
+        "inputSearchWithText": "//android.widget.EditText[@text='${value}']"
+    },
+    "helpCenterIos": {
+        "lblHelpCenterGlobal": "",
+        "btnHelpCenterGlobal": "",
+        "arrowHelpCenterBackGlobal": "",
+        "cntHelpCenterHeader": "", 
+        "arrowSearchBack": "",
+        "iconSearchClear": "",
+        "iconSearchResult":"",
+        "lblSearchResult": "",
+        "inputSearchWriteText": "",
+        "inputSearchWithText": ""
+    }
+}

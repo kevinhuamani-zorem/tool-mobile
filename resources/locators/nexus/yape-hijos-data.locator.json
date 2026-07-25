@@ -1,0 +1,30 @@
+{
+  "homeAndroid": {
+    "txtTitle": "android=new UiSelector().text(\"Completa el formulario con los datos de tu hijo/a\")",
+    "txtSubtitle": "android=new UiSelector().text(\"Los yapeos saldrán a tu nombre; el alias servirá para que identifiques a cada uno de tus hijos/as.\")",
+    "txtAliasHijo": "~Nombre o alias de tu hijo/a, Máximo 16 caracteres, Campo de texto obligatorio",
+    "txtBirthhijo": "~Fecha de nacimiento de tu hijo/a, Campo de texto obligatorio",
+    "checkBoxDeclaracionJurada": "android=new UiSelector().className(\"android.widget.CheckBox\")",
+    "txtDeclaracionJurada": "android=new UiSelector().text(\"Declaro que el perfil Hijo será usado por mi hijo/a menor de edad.\")",
+    "btnContinuar": "~Continuar",
+    "btnRetroceder": "~Atrás",
+    "btnAceptarCalendar": "android=new UiSelector().resourceId(\"com.yape.qa:id/confirm_button\")",
+    "btnCancelarCalendar": "android=new UiSelector().resourceId(\"com.yape.qa:id/cancel_button\")",
+    "btnPreviousMonthCalendar": "~Cambiar al mes anterior",
+    "btnNextMonthCalendar": "~Cambiar al mes siguiente"
+  },
+  "homeIos": {
+    "txtTitle": "",
+    "txtSubtitle": "",
+    "txtAliasHijo": "",
+    "txtBirthhijo": "",
+    "checkBoxDeclaracionJurada": "",
+    "txtDeclaracionJurada": "",
+    "btnContinuar": "",
+    "btnRetroceder": "",
+    "btnAceptarCalendar": "",
+    "btnCancelarCalendar": "",
+    "btnPreviousMonthCalendar": "",
+    "btnNextMonthCalendar": ""
+  }
+}

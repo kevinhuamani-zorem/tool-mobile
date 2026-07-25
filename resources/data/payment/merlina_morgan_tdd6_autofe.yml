@@ -1,0 +1,34 @@
+-
+  name: 'Merlina Morgan Tdd6 Autofe'
+  description: 'Usuario Tarjeta Digital BCP'
+  personality: 'real_email'
+  data_in_bcp: 'false'
+  card_usage: 'yape_digital'
+  idc: '413972771'
+  cic: '41397277'
+  cod_internacional: '+51'
+  phone_number: '988620351'
+  uuid: 'c5f16514e113c34b'
+  platform: 'android'
+  version: '1.0'
+  device_token: 'fAmzQzV4S4anNalZPfP9Fn:APA91bERoZxakOJfH0tPL1lXbKerxaHVJPPZghGIERYA86qQsDgBEFBgTl41qFkASrYJ0sUp_BPNOpnWXmH_VzpomBEWMMyLud0Qcr2duHiKlKkZH7a7l-E'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'merlina_morgan_tdd6_autofe@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881694348048'
+      expiry_date: '11/30'
+      status: '00'
+      card_type_description: 'DIGITAL'
+      accounts:
+        -
+          number: '19340041064154'
+          currency: 'soles'
+          balance: '10000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

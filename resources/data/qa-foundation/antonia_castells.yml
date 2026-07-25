@@ -1,0 +1,34 @@
+---
+- name: Antonia Castells Foundation
+  description: "Usuarios DNI con tarjeta credimás soles con cuenta ahorros"
+  personality: real_email
+  data_in_bcp: 'true'
+  card_usage: bcp_card
+  idc: '775569731'
+  cod_internacional: '+51'
+  phone_number: '987655879'
+  uuid: uuid-antonia-castells
+  platform: android
+  version: '8.0'
+  device_token: automated_test_token_antonia_castells
+  device_type: PERSONAL
+  phone_model: Samsung Note 4 6.0 MARSHMALLOW
+  phone_manufacturer: Samsung
+  email: ancastells@mailnator.com
+  password: '999999'
+  cards:
+    - number: '4557887094875720'
+      pin4: '1111'
+      expiry_date: 08/26
+      status: '00'
+      cvv: '999'
+      usage: token
+      visa_card_token: '4753498878057'
+      accounts:
+        - number: '19470000928057'
+          currency: soles
+          balance: '10000.00'
+          type: CUENTAS DE AHORROS
+          subtype: PRIMERA CUENTA
+          release_date: new
+          status: active

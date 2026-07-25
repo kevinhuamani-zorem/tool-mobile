@@ -1,0 +1,37 @@
+-
+  name: 'Anali Phelps Yapetest'
+  description: 'Usuario cuenta cashflow ambiente STG'
+  personality: 'ciam_val_facial_enrolado'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '761857031'
+  cic: '12028666'
+  cod_internacional: '+51'
+  phone_number: '998878611'
+  uuid: 'uuid-anali-phelps-yapetest'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_token_anali_phelps'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'anali_phelps_interop@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881092340357'
+      pin4: '1111'
+      expiry_date: '08/26'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4753398668057'
+      accounts:
+        -
+          number: '19272040466046'
+          currency: 'soles'
+          balance: '10000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

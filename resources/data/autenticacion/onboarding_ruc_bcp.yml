@@ -1,0 +1,42 @@
+-
+  name: 'Onboarding Ruc Bcp'
+  description: 'Usuario con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES (PRIMERA CUENTA)'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '481977016'
+  ruc: '20481977019'
+  tipo_doc_en_yape: '6'
+  tipo_doc_desc_en_yape: 'RUC'
+  cod_internacional: '+51'
+  phone_number: '921381841'
+  uuid: '1b60dede-f51c-4633-a0f5-8b30d0e411a7'
+  platform: 'android'
+  version: '1.0'
+  device_token: 'automated_test_device_token_thoughworks_ruc_bcp'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'onboardingbcpruc@mailinator.com'
+  email_consist: 'onboardingbcpruc@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880793428420'
+      pin4: '8604'
+      expiry_date: '05/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      sucursal: '888'
+      visa_card_token: '7022031157578303'
+      accounts:
+        -
+          number: '19489996650212'
+          currency: 'soles'
+          balance: '1500.00'
+          type: 'CUENTA AHORROS'
+          subtype: ''
+          release_date: 'new'
+          status: 'active'

@@ -1,0 +1,31 @@
+-
+    name: 'Luis Retamozo BCP sin mov'
+    description: '[Transfer Cuenta Propia] Usuario con 1 TARJETA DÉBITO (455788) registrado con Saldo S/120000.00'
+    personality: 'real_email'
+    data_in_bcp: 'true'
+    card_usage: 'bcp_card'
+    cod_internacional: '+51'
+    idc: '441476201'
+    phone_number: '992938334'
+    phone_number_consist: '992938334'
+    uuid: 'uuid-luis-retamozo-sin-mov'
+    platform: 'ANDROID'
+    device_token: 'test_device_token_luis_sin_mov'
+    device_type: 'PERSONAL'
+    phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+    phone_manufacturer: "Samsung"
+    email: 'lretamozosinmov@mailinator.com'
+    email_consist: 'lretamozosinmov@mailinator.com'
+    password: '999999'
+    cards:
+        - number: '4557880899009396'
+          pin4: '3529'
+          expiry_date: '09/29'
+          status: '00'
+          cvv: '999'
+          accounts:
+              - number: '1910009007099'
+                currency: 'soles'
+                balance: '1500000.01'
+                type: 'CUENTA CORRIENTE'
+                subtype: 'PRIMERA CUENTA'

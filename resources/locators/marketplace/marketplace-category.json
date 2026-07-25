@@ -1,0 +1,18 @@
+{
+    "categoriesAndroid": {
+        "btnCategoriesBottomMenu": "new UiSelector().className(\"android.view.View\").instance(26)",
+        "btnCategoryByOption": "new UiSelector().textContains(\"${opcion}\")",
+        "selectCategory": "new UiSelector().textContains(\"${categoria}\")",
+        "selectSubCategory": "new UiSelector().textContains(\"${subcategoria}\")",
+        "selectProduct": "new UiSelector().textContains(\"${producto}\")",
+        "txtAllAppliances": "new UiSelector().textContains(\"Todo electrodomésticos\")"
+    },
+    "categoriesIos": {
+        "btnCategoriesBottomMenu": "",
+        "btnCategoryByOption": "//XCUIElementTypeStaticText[@label=\"${opcion}\"]",
+        "selectCategory": "//XCUIElementTypeButton[contains(@label, \"${categoria}\")]",
+        "selectSubCategory": "//XCUIElementTypeButton[contains(@label, \"${subcategoria}\")]",
+        "selectProduct": "//XCUIElementTypeButton[contains(@label, \"${producto}\")]",
+        "txtAllAppliances": "//XCUIElementTypeStaticText[contains(@label, 'Todo electrodomésticos')]"
+    }
+}

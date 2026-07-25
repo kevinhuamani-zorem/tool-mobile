@@ -1,0 +1,18 @@
+{
+     "InternetPurchasesAndroid": {
+        "txtTitle": "//android.widget.TextView[@text='Compras por internet']",
+        "mainCard": "//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View/android.view.View[1]/android.view.View[1]",
+        "txtActivateSubtitle": "//android.widget.TextView[@text='Activar Compras por internet']",
+        "txtDescriptionActivate": "//android.widget.TextView[@text='Permite comprar en apps y páginas web, aplica a tu tarjeta afiliada y a las siguientes funcionalidades de Yape:']",
+        "toggleActivate": "//android.view.View[@content-desc='Activar Compras por internet']"
+    },
+
+    "InternetPurchasesIos": {
+        "txtTitle": "",
+        "mainCard": "",
+        "txtActivateSubtitle": "",
+        "txtDescriptionActivate": "",
+        "toggleActivate": ""
+    }
+   
+}

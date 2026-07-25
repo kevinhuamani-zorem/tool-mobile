@@ -1,0 +1,39 @@
+{
+  "transactionalLimitsAndroid": {
+    "txtMenuOption": "new UiSelector().text(\"Límites Transaccionales\")",
+
+    "txtTitle": "new UiSelector().text(\"Límite de yapeo diario\")",
+    "txtCurrentAmount": "new UiSelector().className(\"android.widget.TextView\").textContains(\"S/\")",
+    "btnCambiar": "new UiSelector().description(\"Cambiar\")",
+
+    "txtChooseNewLimit": "new UiSelector().text(\"Elige tu nuevo límite de yapeo diario\")",
+    "btnConfirmChange": "new UiSelector().description(\"Cambiar límite\")",
+    "txtOtpTitle": "new UiSelector().text(\"Ingresa tu código de validación\")",
+    "btnContinuarOtp": "new UiSelector().description(\"Continuar\")",
+
+    "txtSuccessTitle": "new UiSelector().text(\"¡Cambiaste tu límite de yapeo diario!\")",
+    "btnContinuarSuccess": "new UiSelector().description(\"Continuar\")",
+    "txtLogoutPopupTitle": "new UiSelector().text(\"¡Todo listo!\")",
+    "btnCerrarSesion": "new UiSelector().text(\"CERRAR SESIÓN\")",
+    
+    "txtBiometryPopupTitle": "new UiSelector().text(\"Para cambiar tu límite diario, activa Biometría Digital\")",
+    "btnActivarBiometria": "new UiSelector().description(\"Activar biometría\")",
+    "btnVolverBiometria": "new UiSelector().text(\"VOLVER\")"
+
+  },
+
+  "transactionalLimitsIos": {
+    "txtMenuOption": "",
+    "txtTitle": "",
+    "txtCurrentAmount": "",
+    "btnCambiar": "",
+    "txtChooseNewLimit": "",
+    "btnConfirmChange": "",
+    "txtOtpTitle": "",
+    "btnContinuar": "",
+    "txtSuccessTitle": "",
+    "btnContinuarSuccess": "",
+    "txtLogoutPopupTitle": "",
+    "btnCerrarSesion": ""
+  }
+}

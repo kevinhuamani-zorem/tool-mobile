@@ -1,0 +1,22 @@
+{
+    "helperInvitationAndroid": {
+        "notificationTitle": "//*[@text='ANDREE 29 BCPNEGOCIO te agregó a su negocio como ayudante']",
+        "notificationMessage": "//android.widget.TextView[contains(@text,'Al aceptar, podrás ver las ventas del día del negocio')]",
+        "btnAcceptInvitation": "//android.widget.Button[@content-desc='Aceptar']",
+        "btnRejectInvitation": "//android.widget.Button[@content-desc='Rechazar']",
+        "notificationContainer": "//android.widget.ScrollView/android.view.View",
+        "invitationDetails": "//android.widget.TextView[contains(@text,'Al aceptar, podrás ver las ventas del día del negocio')]",
+        "salesDayBtn": "//android.widget.Button[@content-desc='Ver ventas del día']",
+        "helperBtn": "//android.widget.TextView[contains(@text,'Ayudantes')]"
+    },
+    "helperInvitationIos": {
+        "notificationTitle": "",
+        "notificationMessage": "",
+        "btnAcceptInvitation": "",
+        "btnRejectInvitation": "",
+        "notificationContainer": "",
+        "invitationDetails": "",
+        "salesDayBtn": "",
+        "helperBtn": ""
+    }
+}

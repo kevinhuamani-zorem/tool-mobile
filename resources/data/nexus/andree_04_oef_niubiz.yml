@@ -1,0 +1,27 @@
+-
+  name: 'Andree 004 OEFNiubiz'
+  description: 'Usuario con tarjeta y token VISA'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'visa_token'
+  idc: '780267221'
+  cod_internacional: '+51'
+  phone_number: '994780902'
+  uuid: 'andree-04-oefniubiz'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_nexus_04'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'andree_04_oefniubiz@yape.com.pe'
+  perfil: '04'
+  tipo_doc_en_yape: '1'
+  password: '999999'
+  cards:
+    -
+      number: '4557880791614278'
+      expiry_date: '04/27'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7000010039360281'

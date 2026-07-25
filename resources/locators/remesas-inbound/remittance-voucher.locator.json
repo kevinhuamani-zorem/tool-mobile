@@ -1,0 +1,30 @@
+{
+    "remittanceVoucherLocatorsAndroid": {
+        "firstVoucherItem":    "new UiSelector().textStartsWith(\"Remesa de\").instance(0)",
+        "firstVoucherAmount":  "new UiSelector().textStartsWith(\"S/ \").instance(0)",
+        "firstVoucherAmountUsd": "new UiSelector().textStartsWith(\"$ \").instance(0)",
+        "firstVoucherDateTime": "new UiSelector().textMatches(\"^(Hoy|Ayer|[0-9]+) .*(pm|am).*\").instance(0)",
+        "txtVoucherTitle": "new UiSelector().text(\"¡Recibiste una remesa!\")",
+        "btnVoucherShare": "new UiSelector().description(\"Compartir\")",
+        "txtTransactionData": "new UiSelector().text(\"DATOS DE LA TRANSACCIÓN\")",
+        "txtViaLabel": "new UiSelector().text(\"A través de\")",
+        "txtOperationNumber": "new UiSelector().text(\"Nro. de operación\")",
+        "btnYapearServicios": "new UiSelector().description(\"Yapear Servicios\")",
+        "btnCambiarDolares": "new UiSelector().description(\"Cambiar Dólares\")",
+        "txtDollarAccountLabel": "new UiSelector().text(\"Nro. de cuenta en dólares:\")"
+    },
+    "remittanceVoucherLocatorsiOS": {
+        "firstVoucherItem":    "(//XCUIElementTypeOther[.//XCUIElementTypeStaticText[starts-with(@value, 'Remesa de')]])[1]",
+        "firstVoucherAmount":  "(//XCUIElementTypeStaticText[starts-with(@value, 'S/ ')])[1]",
+        "firstVoucherAmountUsd": "(//XCUIElementTypeStaticText[starts-with(@value, '$ ')])[1]",
+        "firstVoucherDateTime": "(//XCUIElementTypeStaticText[contains(@value, ' – ')])[1]",
+        "txtVoucherTitle": "//XCUIElementTypeStaticText[@name='¡Recibiste una remesa!']",
+        "btnVoucherShare": "//XCUIElementTypeButton[@name='Compartir']",
+        "txtTransactionData": "//XCUIElementTypeStaticText[@name='DATOS DE LA TRANSACCIÓN']",
+        "txtViaLabel": "//XCUIElementTypeStaticText[@name='A través de']",
+        "txtOperationNumber": "//XCUIElementTypeStaticText[@name='Nro. de operación']",
+        "btnYapearServicios": "//XCUIElementTypeButton[@name='Yapear Servicios']",
+        "btnCambiarDolares": "//XCUIElementTypeButton[@name='Cambiar Dólares']",
+        "txtDollarAccountLabel": "//XCUIElementTypeStaticText[@name='Nro. de cuenta en dólares:']"
+    }
+}

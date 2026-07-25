@@ -1,0 +1,33 @@
+---
+- name: Login E2E VISA
+  description: Usuario con tarjeta NO BCP
+  personality: real_email
+  data_in_bcp: 'true'
+  card_usage: visa_token
+  idc: '466957851'
+  cod_internacional: '+51'
+  phone_number: '997826995'
+  phone_number_consist: '997826995'
+  uuid: 9447a9a7-b605-4fa7-9bbb-04937d22497d
+  platform: android
+  version: '6.0'
+  device_token: automated_test_login_e2e_visa
+  device_type: PERSONAL
+  phone_model: Samsung Note 4 6.0 MARSHMALLOW
+  phone_manufacturer: Samsung
+  email: LOGINE2EVISA@MAILINATOR.COM
+  password: '999999'
+  cards:
+    - number: '4557889199405833'
+      pin4: '4279'
+      expiry_date: 07/27
+      status: '00'
+      cvv: '928'
+      usage: token
+      visa_card_token: '7022031146571908'
+      accounts:
+        - number: '19312296532038'
+          currency: soles
+          balance: '45678.00'
+          type: CUENTAS DE AHORROS
+          subtype: PRIMERA CUENTA

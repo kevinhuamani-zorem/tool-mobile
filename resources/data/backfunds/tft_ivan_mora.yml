@@ -1,0 +1,34 @@
+---
+-
+  name: 'Ivan Mora TFT'
+  description: 'Usuario para pruebas automatizadas de TFT'
+  personality: 'real_email'
+  data_in_bcp: 'false'
+  card_usage: 'bcp_card'
+  idc: '902699991'
+  cod_internacional: '+51'
+  phone_number: '904679791'
+  uuid: 'uuid-test-imora-tft'
+  platform: 'android'
+  device_token: 'automated_test_device_token_imora_tft'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 5 7.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'imora_tft@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557884690066079'
+      pin4: '9999'
+      expiry_date: '01/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7000010359293399'
+      accounts:
+        -
+          number: '19380003095099'
+          currency: 'soles'
+          balance: '453580.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'

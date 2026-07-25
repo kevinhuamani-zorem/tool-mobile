@@ -1,0 +1,12 @@
+{
+    "menuAndroid": {
+        "btnGoToActivate": "Ir a activar",
+        "descriptionWarning": "new UiSelector().text(\"Para usar tu código de aprobación debes tener activada la opción Compras por internet\")",
+        "descriptionHelpActivate": "new UiSelector().text(\"Para usar tu código de aprobación debes tener activada la opción Compras por internet\")"
+    },
+    "menuIos": {
+        "btnGoToActivate": "**/XCUIElementTypeButton[`name == 'Ir a activar'`]",
+        "descriptionWarning": "Para usar tu código de aprobación debes tener activada la opción Compras por internet y POS",
+        "descriptionHelpActivate": "Para usar tu código de aprobación debes tener activada la opción Compras por internet y POS"
+    }
+}

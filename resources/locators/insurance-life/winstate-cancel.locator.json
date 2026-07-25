@@ -1,0 +1,14 @@
+{
+  "cancellationAndroid": {
+    "lblCancellationInsurance": "new UiSelector().text(\"Cancelación de seguro realizada\")",
+    "btnGoHome": "new UiSelector().className(\"android.view.View\").instance(2)",
+    "lblFatherTextView": "android.widget.ScrollView",
+    "lblChildrenTextView": "android.widget.TextView"
+  },
+  "cancellationIos": {
+    "lblCancellationInsurance": "new UiSelector().text(\"Cancelación de seguro realizada\")",
+    "btnGoHome": "new UiSelector().text(\"Ir al Inicio\")",
+    "lblFatherTextView": "android.widget.ScrollView",
+    "lblChildrenTextView": "android.widget.TextView"
+  }
+}

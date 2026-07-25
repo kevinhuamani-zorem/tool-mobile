@@ -1,0 +1,17 @@
+{
+    "menuAndroid": {
+        "lblRecibimosTuPedido": "new UiSelector().text(\"¡Recibimos tu pedido!\")",
+        "lblYapeasteTuPedido": "new UiSelector().text(\"¡Recibimos tu pedido!\")",
+        "lblIndicacionesParrafo": "new UiSelector().text(\"Recibirás un correo con la información de tu compra al correo electrónico asociado a tu cuenta de Yape.\")",
+        "lblRecomendacionWinstate": "new UiSelector().text(\"Consulta el estado y la fecha estimada de entrega o recojo en el detalle de tu pedido.\")",
+        "goMarketplace": "//android.widget.Button[@text=\"Ir a Tienda\"]",
+        "closeWinstate": ""
+    },
+    "menuIos": {
+        "lblRecibimosTuPedido": "//XCUIElementTypeOther[@name='¡Recibimos tu pedido!']",
+        "lblYapeasteTuPedido": "//XCUIElementTypeStaticText[contains(@label, '¡Recibimos tu pedido!')]",
+        "lblIndicacionesParrafo": "//XCUIElementTypeStaticText[@label=\"Recibirás un correo con la información de tu compra al correo electrónico asociado a tu cuenta de Yape.\"]",
+        "lblRecomendacionWinstate": "//XCUIElementTypeStaticText[@label=\"Consulta el estado y la fecha estimada de entrega o recojo en el detalle de tu pedido.\"]",
+        "goMarketplace": "//XCUIElementTypeButton[@label='Ir a Tienda']"
+    }
+}

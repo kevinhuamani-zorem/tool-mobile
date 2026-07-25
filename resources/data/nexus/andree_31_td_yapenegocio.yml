@@ -1,0 +1,37 @@
+-
+  name: 'Andree 31 TDYapeNegocio'
+  description: 'Usuario Tarjeta Digital YAPE'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'yape_digital'
+  idc: '770767721'
+  cic: '94990992'
+  cod_internacional: '+51'
+  phone_number: '994990992'
+  uuid: 'uuid-andree-31-bcpbiometria'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_andree_31'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'andree_31_tdyapenegocio@yape.com.pe'
+  perfil: '31'
+  tipo_doc_en_yape: '1'
+  password: '999999'
+  cards:
+    -
+      number: '4557881672133735'
+      pin4: '4279'
+      expiry_date: '10/33'
+      status: '00'
+      card_type_description: 'DIGITAL'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296312129'
+          currency: 'soles'
+          balance: '945678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

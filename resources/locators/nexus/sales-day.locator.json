@@ -1,0 +1,9 @@
+{
+  "ventasDelDiaAndroid": {
+    "txtAyudanteDeNegocio": "new UiSelector().text(\"Ayudante de negocio\")"
+  },
+
+  "ventasDelDiaIos": {
+    "txtAyudanteDeNegocio": ""
+  }
+}

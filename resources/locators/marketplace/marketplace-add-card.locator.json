@@ -1,0 +1,17 @@
+{
+    "menuAndroid": {
+        "lblNumberCard": "new UiSelector().resourceId(\"card-number\")",
+        "lblDate": "new UiSelector().resourceId(\"expiration-date\")",
+        "lblCVV": "new UiSelector().resourceId(\"cvv\")",
+        "lblNameCard": "new UiSelector().resourceId(\"user-name\")",
+        "btnPay": "new UiSelector().resourceId(\"btn-buy\")"
+    },
+    "menuIos": {
+        "lblNumberCard": "",
+        "lblSendNumberCard": "",
+        "lblDate": "",
+        "lblCVV": "",
+        "lblNameCard": "",
+        "btnPay": ""
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "unlockAndroid": {
+        "btnTypeNumber": "new UiSelector().text(\"$\")",
+        "iconoProgressBar": "new UiSelector().className(\"android.widget.ProgressBar\")",
+        "desQrUnlock": "new UiSelector().description(\"Imagen de su código Q R para recibir yapeos.\")",
+        "txtEnterYourPassword": "new UiSelector().text(\"Ingresa tu clave\")",
+        "btnForgotPassword": "new UiSelector().description(\"Olvido o cambio de clave\")"
+    },
+    "unlockIos": {
+        "btnTypeNumber": "**/XCUIElementTypeButton[`name == '{number}'`]",
+        "iconoProgressBar": "**/XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]",
+        "desQrUnlock": "",
+        "txtEnterYourPassword": "",
+        "btnForgotPassword": ""
+    }
+}

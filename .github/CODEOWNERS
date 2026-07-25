@@ -1,0 +1,5 @@
+* @yaperos/automatech @yaperos/qa-leads
+.github/**/* @yaperos/devops
+infra/**/* @yaperos/devops
+config/bs-test-management/squad-folder-map.json @yaperos/automatech @yaperos/qa-leads @yaperos/devops
+config/browserstack/** @yaperos/automatech @yaperos/qa-leads @yaperos/devops

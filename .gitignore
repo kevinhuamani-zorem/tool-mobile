@@ -1,0 +1,39 @@
+# OSX
+.DS_Store
+
+# IntelliJ
+.idea
+
+# node.js
+node_modules/
+npm-debug.log
+
+# custom
+resources/apps/*
+!resources/apps/.gitkeep
+!resources/apps/android/.gitkeep
+!resources/apps/ios/.gitkeep
+
+# Excluir subcarpetas y archivos dentro de android y ios, pero no los archivos .gitkeep
+resources/apps/android/*
+!resources/apps/android/.gitkeep
+resources/apps/ios/*
+!resources/apps/ios/.gitkeep
+
+*.log
+*.err
+logs/
+chromeDriver
+.tmp
+*.mp4
+reports/
+.vscode/launch.json
+.vscode/settings.json
+
+package-lock.json
+
+#cypress screenshot
+cypress/
+
+#allure report directory
+allure-report/

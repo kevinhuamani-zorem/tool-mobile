@@ -1,0 +1,10 @@
+{
+    "helpAndroid": {
+        "backButton": "//android.widget.Button",
+        "txtEnterYourQuery": "//*[@text='Ingresa tu consulta']"
+    },
+    "helpIos": {
+        "backButton": "",
+        "txtEnterYourQuery": ""
+    }
+}

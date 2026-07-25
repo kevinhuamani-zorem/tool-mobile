@@ -1,0 +1,37 @@
+-
+  name: 'Pedro 1 Yapetestdesa'
+  description: 'Usuarios DNI con tarjeta credimás soles con cuenta ahorros - Real Certificacion'
+  personality: 'ciam_val_facial_enrolado'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '762857031'
+  cic: '00099743'
+  cod_internacional: '+51'
+  phone_number: '948676504'
+  uuid: 'uuid-pedro-1-yapetestdesa'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_token_pedro_1'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certicien@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881091780736'
+      pin4: '1111'
+      expiry_date: '03/30'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4753398378057'
+      accounts:
+        -
+          number: '19370045711042'
+          currency: 'soles'
+          balance: '10000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

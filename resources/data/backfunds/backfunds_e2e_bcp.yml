@@ -1,0 +1,41 @@
+---
+-
+  name: 'Backfunds E2E BCP'
+  description: 'Usuario de prueba del tipo YAPE BCP con DNI que no pasa por biometría'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  cod_internacional: '+51'
+  idc: '953550051'
+  phone_number: '993556011'
+  phone_number_consist: '993556011'
+  uuid: '28f771a7-edd5-4bb4-8422-b3128b916d8a'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_backfunds_e2e_bcp'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'BACKFUNDSE2EBCP@MAILINATOR.COM'
+  email_consist: 'BACKFUNDSE2EBCP@MAILINATOR.COM'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880792750360'
+      pin4: '2589'
+      pinblock: '18997956CA0F7C21'
+      expiry_date: '02/28'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7017889900558303'
+      accounts:
+        -
+          number: '19489976550212'
+          currency: 'soles'
+          balance: '15000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

@@ -1,0 +1,34 @@
+-
+  name: 'Nexus 29 BCPNI'
+  description: 'Usuario con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '755188751'
+  cod_internacional: '+51'
+  phone_number: '901277367'
+  uuid: 'uuid-nexus-29-bcpni'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_nexus_29'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'nexus29bcpniempleador@mailinator.com'
+  perfil: '29'
+  tipo_doc_en_yape: '1'
+  password: '999999'
+  cards:
+    -
+      number: '4557880796086712'
+      pin4: '4279'
+      expiry_date: '12/34'
+      status: '00'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296532129'
+          currency: 'soles'
+          balance: '1234567.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'

@@ -1,0 +1,22 @@
+{
+    "Android": {
+        "lblNotYapeo": "//android.widget.TextView[@text='Aún no haz hecho ningún yapeo']",
+        "lblNameScreen": "//android.widget.TextView[@text='¿Con qué movimiento necesitas ayuda?']",
+        "btnRechargeMov": "//android.view.View[@content-desc='Refrescar']",
+        "lblHourMov": "//android.view.View[@content-desc='Salida'][1]/parent::android.view.View//android.widget.TextView[2]",
+        "lblMountMov": "//android.view.View[@content-desc='Salida'][1]/parent::android.view.View//android.widget.TextView[3]",
+        "lblTypeMov":"//android.widget.TextView[@text='Tipo_Movimiento']",
+        "lblNamePauta":"//android.widget.TextView[@text='Nombre_Pauta']",
+        "btnHelpOtheMov":"//android.widget.TextView[@text='NECESITO AYUDA CON OTRO MOVIMIENTO']"
+    },
+    "Ios": {
+        "lblNotYapeo": "",
+        "lblNameScreen":"",
+        "btnRechargeMov": "",
+        "lblHourMov":"",
+        "lblMountMov":"",
+        "lblTypeMov":"",
+        "lblNamePauta":"",
+        "btnHelpOtheMov":""
+    }
+}

@@ -1,0 +1,65 @@
+{
+    "salesAndroid":{
+
+        "btnshowsales": "new UiSelector().className(\"android.view.View\").instance(15)",
+        "titleVentas":"new UiSelector().text(\"Ventas\")",
+        "btnfiltros":"new UiSelector().text(\"FILTROS\")",
+        "btntoday":"new UiSelector().className(\"android.widget.Button\").instance(0)",
+        "btn7days":"new UiSelector().className(\"android.widget.Button\").instance(1)",
+        "btn15days":"new UiSelector().text(\"Últimos 15 días\")",
+        "btn30days":"new UiSelector().className(\"android.widget.Button\").instance(3)",
+        "btn60days":"new UiSelector().className(\"android.widget.Button\").instance(4)",
+        "btn90days":"new UiSelector().className(\"android.widget.Button\").instance(5)",
+        "btnall":"new UiSelector().className(\"android.widget.Button\").instance(6)",
+        "btnsuccessful":"new UiSelector().text(\"Exitosa\")",
+        "btnrejected":"new UiSelector().className(\"android.widget.Button\").instance(8)",
+        "btnreturned":"new UiSelector().className(\"android.widget.Button\").instance(9)",
+        "btnallpayment":"new UiSelector().className(\"android.widget.Button\").instance(10)",
+        "btncellnumber":"new UiSelector().className(\"android.widget.Button\").instance(11)",
+        "btnqr":"new UiSelector().text(\"QR\")",
+        "btnyapelink":"new UiSelector().className(\"android.widget.Button\").instance(13)",
+        "btnyapePOS":"new UiSelector().className(\"android.widget.Button\").instance(14)",
+        "btnfiltrar":"new UiSelector().className(\"android.view.View\").instance(20)",
+        "btnreport":"new UiSelector().text(\"REPORTE\")",
+        "txtemail":"new UiSelector().text(\"nail14711@gmail.com\")",
+        "btnsendreport":"new UiSelector().description(\"Enviar\")",
+        "sendemailmessage":"Recibirás tu reporte en unos minutos",
+        "titlesendreport":"new UiSelector().text(\"Enviar reporte de ventas\")",
+        "msgreportsend":"new UiSelector().text(\"El reporte se enviará a los correos autorizados dentro de los próximos 5 minutos.\")",
+        "btnunderstood":"new UiSelector().text(\"ENTENDIDO\")"
+
+    },
+
+    "salesiOS":{
+ 
+        "btnshowsales":"**/XCUIElementTypeWindow[1]/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeScrollView/XCUIElementTypeOther/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[2]/XCUIElementTypeOther",
+        "titleVentas":"Ventas",
+        "btnfiltros":"**/XCUIElementTypeButton[`name == \"FILTROS\"`]",
+        "btntoday":"Hoy",
+        "btn7days":"Última semana",
+        "btn15days":"Últimos 15 días",
+        "btn30days":"Últimos 30 días",
+        "btn60days":"Últimos 60 días",
+        "btn90days":"Últimos 90 días",
+        "btnall":"**/XCUIElementTypeStaticText[`name == \"Todos\"`][1]",
+        "btnsuccessful":"Exitosa",
+        "btnrejected":"Rechazada",
+        "btnreturned":"Devuelta",
+        "btnallpayment":"**/XCUIElementTypeStaticText[`name == \"Todos\"`][2]",
+        "btncellnumber":"Nro. de celular",
+        "btnqr":"QR",
+        "btnyapelink":"YapeLink",
+        "btnyapePOS":"YapePOS",
+        "btnfiltrar":"**/XCUIElementTypeButton[`name == \"Filtrar\"`]",
+        "btnreport":"**/XCUIElementTypeButton[`name == \"REPORTE\"`]",
+        "txtemail":"**/XCUIElementTypeStaticText[`value == \", \"`]",
+        "btnsendreport":"**/XCUIElementTypeButton[`name == \"Enviar\"`]",
+        "sendemailmessage":"Recibirás tu reporte en unos minutos",
+        "titlesendreport":"**/XCUIElementTypeStaticText[`name == \"Enviar reporte de ventas\"`]",
+        "msgreportsend":"Recibirás tu reporte en unos minutos",
+        "btnunderstood":"Entendido"
+
+    }
+
+
+}

@@ -1,0 +1,37 @@
+---
+-
+  name: 'Rocio Lujan Durand'
+  description: 'Usuarios DNI con tarjeta credimás soles con cuenta ahorros para pruebas reales en Yape Tienda'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '455129811'
+  cod_internacional: '+51'
+  phone_number: '945512981'
+  uuid: 'uuid-rocio-lujan'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_token_rocio_lujan'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'rociolujan@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881194165480'
+      pin4: '8365'
+      expiry_date: '10/28'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4753298778057'
+      accounts:
+        -
+          number: '19370941345022'
+          currency: 'soles'
+          balance: '10000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

@@ -1,0 +1,14 @@
+{
+    "myDataAndroid": {
+        "backButton": "new UiSelector().className(\"android.widget.Button\")",
+        "txtMenuTitle": "new UiSelector().text(\"Datos de la cuenta\")",
+        "eyeButton": "new UiSelector().description(\"Mostrar\")",
+        "txtEmail": "new UiSelector().textContains(\"@\")"
+    },
+    "myDataIos": {
+        "backButton": "",
+        "txtMenuTitle": "",
+        "eyeButton": "",
+        "txtEmail": ""
+    }
+}

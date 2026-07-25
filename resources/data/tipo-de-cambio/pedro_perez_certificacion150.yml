@@ -1,0 +1,38 @@
+-
+  name: 'Pedro Perez Certicientocincuenta'
+  description: 'BCP CORRIENTE - NOT DO ONBOARDING'
+  personality: 'tipo_cambio'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '600638931'
+  cic: '11711169'
+  cod_internacional: '+51'
+  phone_number: '990821377'
+  phone_number_consist: '990821377'
+  uuid: 'd71e90d9-e9d1-4f2c-9b78-6ad9eede4bd1'
+  idyapeaccount_stg: '8b085a138cd15386aff8f280a8826c28'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'auto_test_device_token_600638931'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certicientocincuenta@mailinator.com'
+  email_consist: 'pedro_certicientocincuenta@mailinator.com'
+  password: '999999'
+  cards:
+    - testenv: 'bcpdesa_simulacionqa'
+      number: '4557881497189441'
+      pin4: '2235'
+      expiry_date: '07/29'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4557881497189441'
+      accounts:
+        - number: '35070626783015'
+          currency: 'soles'
+          balance: '20000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

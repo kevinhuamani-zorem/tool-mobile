@@ -1,0 +1,16 @@
+{
+    "winstateYapeasteAndroid": {
+       "yapeasteWinstate":"new UiSelector().text(\"¡Yapeaste!\")",
+       "closeButton": "new UiSelector().description(\"Cerrar\")",
+       "shareButton":"new UiSelector().className(\"android.view.View\").instance(5)",
+        "lblHourYape": "//android.widget.TextView[@text='¡Yapeaste!']/parent::*//android.widget.TextView[5]",
+        "lblMountYape": "//android.widget.TextView[@text='¡Yapeaste!']/parent::*//android.widget.TextView[@index='4']"
+    },
+    "winstateYapeasteIOs": {
+        "yapeasteWinstate":"label == '¡Yapeaste!'",
+        "closeButton":"**/XCUIElementTypeButton[`label == \"Salir\"`]",
+        "shareButton":"COMPARTIR",
+        "lblHourYape":"",
+        "lblMountYape": ""
+    }
+}

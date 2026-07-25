@@ -1,0 +1,31 @@
+{
+    "tappSubhomeAndroid": {
+        "txtTitle": "",
+        "txtAccounts": "",
+        "btnViewAllAccounts": "",
+        "txtWhatWillYouDoToday": "",
+        "iconYapear": "",
+        "iconScanQr": "",
+        "iconApprovePayments": "",
+        "iconViewStatuses": "",
+        "txtConfiguration": "",
+        "txtMyTappId": "",
+        "txtUpdateTappPassword": "",
+        "iconPasswordLock": "",
+        "iconDni": ""
+    },
+    "tappSubhomeIos": {
+        "txtTitle": "//XCUIElementTypeStaticText[@name=\"TAPP\"]",
+        "txtAccounts": "//XCUIElementTypeStaticText[@name=\"Tus cuentas\"]",
+        "btnViewAllAccounts": "//XCUIElementTypeButton[@name=\"Ver todas\"]",
+        "iconYapear": "//XCUIElementTypeImage[@name=\"ic_send_outline\"]",
+        "iconScanQr": "//XCUIElementTypeImage[@name=\"ic_scan_code_outline\"]",
+        "iconApprovePayments": "//XCUIElementTypeImage[@name=\"ic_credit_card_check_outline\"]",
+        "iconViewStatuses": "//XCUIElementTypeImage[@name=\"ic_document_outline\"]",
+        "txtConfiguration": "//XCUIElementTypeStaticText[@name=\"Configuración\"]",
+        "txtMyTappId": "//XCUIElementTypeStaticText[@name=\"Mi Tapp ID\"]",
+        "txtUpdateTappPassword": "//XCUIElementTypeStaticText[@name=\"Actualizar clave Tapp\"]",
+        "iconPasswordLock": "//XCUIElementTypeImage[@name=\"ic_lock_password_outline\"]",
+        "iconDni": "//XCUIElementTypeImage[@name=\"ic_dni_outline\"]"
+    }
+}

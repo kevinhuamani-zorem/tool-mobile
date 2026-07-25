@@ -1,0 +1,37 @@
+-
+  name: 'Pedro Perez Certidoscientosveintiuno'
+  description: 'BCP AHORRO - NOT DO ONBOARDING'
+  personality: 'tipo_cambio'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '608988081'
+  cic: '12249433'
+  cod_internacional: '+51'
+  phone_number: '997771100'
+  phone_number_consist: '997771100'
+  uuid: '73dffeef-76e9-4f74-9c01-cdd94d88fcaf'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'auto_test_device_token_608988081'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'pedro_certidoscientosveintiuno@mailinator.com'
+  email_consist: 'pedro_certidoscientosveintiuno@mailinator.com'
+  password: '999999'
+  cards:
+    - testenv: 'bcpdesa_simulacionqa'
+      number: '4557881999343025'
+      pin4: '5734'
+      expiry_date: '12/28'
+      status: '00'
+      cvv: '913'
+      usage: 'token'
+      visa_card_token: '4557881999343025'
+      accounts:
+        - number: '19372381491015'
+          currency: 'soles'
+          balance: '9999.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

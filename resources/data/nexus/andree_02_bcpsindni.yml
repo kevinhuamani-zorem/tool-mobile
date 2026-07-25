@@ -1,0 +1,35 @@
+-
+  name: 'Andree 02 BCPSinDni'
+  description: 'Usuario BCP PASS con 1 TARJETA DÉBITO (455788) con 1 CUENTA AHORROS SOLES'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '720267223'
+  tipo_doc_en_yape: '3'
+  tipo_doc_desc_en_yape: 'CEXT'
+  cod_internacional: '+51'
+  phone_number: '984790802'
+  uuid: 'uuid-andree-02-bcpsindni'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_andree_bcpsindni'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'andree_02_bcpsindni@yape.com.pe'
+  perfil: '02'
+  password: '999999'
+  cards:
+    - testenv: 'bcpdesa_simulacionqa'
+      number: '4557880797682378'
+      pin4: '4279'
+      expiry_date: '03/33'
+      status: '00'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296530462'
+          currency: 'soles'
+          balance: '145678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'

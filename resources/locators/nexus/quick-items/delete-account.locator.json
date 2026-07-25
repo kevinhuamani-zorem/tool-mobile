@@ -1,0 +1,20 @@
+{
+    "deleteAccountAndroid": {
+        "backButton": "new UiSelector().className(\"android.widget.Button\")",
+        "txtDeleteAccountTitle": "//*[@text='Eliminar cuenta']",
+        "txtAreYouSure": "//*[@text='¿Estás seguro que quieres eliminar tu cuenta?']",
+        "txtTemporaryDeparture": "//*[@text='Ojalá tu partida sea momentánea. Recuerda que puedes volver cuando quieras y solo debes crear una nueva cuenta.']",
+        "descStayButton": "new UiSelector().description(\"Quedarme en Yape\")",
+        "descDeleteButton": "new UiSelector().description(\"Eliminar cuenta\")",
+        "descYapearButton": "new UiSelector().description(\"Yapear\")"
+    },
+    "deleteAccountIos": {
+        "backButton": "",
+        "txtDeleteAccountTitle": "",
+        "txtAreYouSure": "",
+        "txtTemporaryDeparture": "",
+        "descStayButton": "",
+        "descDeleteButton": "",
+        "descYapearButton": ""
+    }
+}

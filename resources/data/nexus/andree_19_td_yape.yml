@@ -1,0 +1,37 @@
+-
+  name: 'Andree 19 TDYape'
+  description: 'Usuario Tarjeta Digital YAPE'
+  personality: 'happy_path'
+  data_in_bcp: 'true'
+  card_usage: 'yape_digital'
+  idc: '740467421'
+  cic: '04090082'
+  cod_internacional: '+51'
+  phone_number: '904090082'
+  uuid: 'uuid-andree-19-TDyape'
+  platform: 'ANDROID'
+  version: '13.0'
+  device_token: 'automated_test_device_token_andree_19'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Galaxy A12"
+  phone_manufacturer: "Samsung"
+  email: 'andree_19_td@yape.com.pe'
+  perfil: '19'
+  tipo_doc_en_yape: '1'
+  password: '999999'
+  cards:
+    -
+      number: '4557881594330377'
+      pin4: '4279'
+      expiry_date: '05/33'
+      status: '00'
+      card_type_description: 'DIGITAL'
+      cvv: '999'
+      accounts:
+        -
+          number: '19311296532209'
+          currency: 'soles'
+          balance: '155678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          status: 'active'

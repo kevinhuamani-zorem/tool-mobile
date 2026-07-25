@@ -1,0 +1,22 @@
+{
+    "otpValidationAndroid": {
+        "btnLendingGetCredit": "//android.widget.Button[@content-desc='Obtener crédito']",
+        "txtYapeCodeTitle": "//android.widget.TextView[@text='YAPE: Código de validación']",
+        "txtYapeCodeMessage": "//android.widget.TextView[starts-with(@text,'EVITA LOS FRAUDES, nunca compartas tu código: ')]",
+        "txtYapeCodeValidation": "//android.widget.TextView[@text='Ingresa tu código de validación']",
+        "txtYapeTimeCode": "//android.widget.TextView[starts-with(@text,'Solicita un nuevo código en ')]",
+        "btnYapeNewCode": "//android.widget.Button[@content-desc='Solicitar nuevo código']",
+        "btnTPLendingDisbursement": "//android.widget.Button[@content-desc='Continuar']",
+        "btnTPLendingCloseSheet": "//android.view.View[@content-desc='Cerrar hoja']"
+    },
+    "otpValidationIos": {
+        "btnLendingGetCredit": "",
+        "txtYapeCodeTitle": "",
+        "txtYapeCodeMessage": "",
+        "txtYapeCodeValidation": "",
+        "txtYapeTimeCode": "",
+        "btnYapeNewCode": "",
+        "btnTPLendingDisbursement": "",
+        "btnTPLendingCloseSheet": ""
+    }
+}

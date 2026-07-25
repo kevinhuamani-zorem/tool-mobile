@@ -1,0 +1,39 @@
+-
+  name: 'Onboarding Pass Bcp'
+  description: 'Usuario de prueba automatizada del tipo YAPE BCP con Pasaporte que no pasa por biometría y balance en la cuenta'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '458020024'
+  tipo_doc_en_yape: '4'
+  tipo_doc_desc_en_yape: 'PASS'
+  cod_internacional: '+51'
+  phone_number: '969569838'
+  uuid: '78fe290c-de3e-4881-bea5-32ff7cee34d4'
+  platform: 'android'
+  version: '9.0'
+  device_token: 'automated_test_onboarding_bcp_passport'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'onboardingbcppass@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      testenv: 'bcpdesa_simulacionqa'
+      number: '4557880795631187'
+      pin4: '9292'
+      expiry_date: '02/27'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '7022031146581767'
+      accounts:
+        -
+          number: '19390007257008'
+          currency: 'soles'
+          balance: '1500000.01'
+          type: 'CUENTAS DE AHORRO'
+          subtype: ''
+          release_date: 'new'
+          status: 'active'

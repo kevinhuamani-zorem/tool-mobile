@@ -1,0 +1,38 @@
+{
+    "remittancePayoutsLocatorsAndroid": {
+        "btnRemittances": "new UiSelector().description(\"Remesas\")",
+        "btnShare": "new UiSelector().description(\"Compartir\")",
+        "txtShareModal": "new UiSelector().resourceId(\"com.android.intentresolver:id/headline\")",
+        "txtRemittancesTitle": "new UiSelector().text(\"Remesas\")",
+        "btnHelp": "new UiSelector().description(\"Ayuda\")",
+        "btnBack": "new UiSelector().description(\"Atrás\")",
+        "btnWantToReceive": "new UiSelector().descriptionContains(\"Quiero\")",
+        "txtDollarAccount": "new UiSelector().text(\"Tu cuenta en dólares\")",
+        "btnMoreInfo": "new UiSelector().description(\"Más información\")",
+        "txtAccountNumber": "new UiSelector().textMatches(\"^[*]+[0-9]{4}$\")",
+        "tagDollars": "new UiSelector().text(\"Dólares\")",
+        "tagSoles": "new UiSelector().text(\"Soles\")",
+        "btnShowDollars": "new UiSelector().text(\"Mostrar dólares\")",
+        "btnHideDollars": "new UiSelector().text(\"Ocultar dólares\")",
+        "txtDollarAmount": "new UiSelector().textStartsWith(\"$ \")",
+        "txtReceiveTitle": "new UiSelector().text(\"Elige cómo recibir tu dinero\")"
+    },
+    "remittancePayoutsLocatorsiOS": {
+        "btnRemittances": "//XCUIElementTypeButton[@name='Remesas']",
+        "btnShare": "//XCUIElementTypeButton[@name='Compartir']",
+        "txtShareModal": "//XCUIElementTypeStaticText[@name='Compartir texto']",
+        "txtRemittancesTitle": "//XCUIElementTypeStaticText[@name='Remesas']",
+        "btnHelp": "//XCUIElementTypeButton[@name='Ayuda']",
+        "btnBack": "//XCUIElementTypeButton[@name='Atrás']",
+        "btnWantToReceive": "//XCUIElementTypeButton[contains(@name,'Quiero')]",
+        "txtDollarAccount": "//XCUIElementTypeStaticText[@name='Tu cuenta en dólares']",
+        "btnMoreInfo": "//XCUIElementTypeButton[@name='Más información']",
+        "txtAccountNumber": "//XCUIElementTypeStaticText[contains(@name,'*')]",
+        "tagDollars": "//XCUIElementTypeButton[@name='Dólares']",
+        "tagSoles": "//XCUIElementTypeButton[@name='Soles']",
+        "btnShowDollars":  "//XCUIElementTypeButton[@name='Mostrar dólares']",
+        "btnHideDollars":  "//XCUIElementTypeButton[@name='Ocultar dólares']",
+        "txtDollarAmount": "//XCUIElementTypeStaticText[contains(@name,'$ ')]",
+        "txtReceiveTitle": "//XCUIElementTypeStaticText[@name='Elige cómo recibir tu dinero']"
+    }
+}

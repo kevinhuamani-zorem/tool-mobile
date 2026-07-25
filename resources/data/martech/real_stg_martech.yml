@@ -1,0 +1,37 @@
+-
+  name: 'Martech Yapetest'
+  description: 'Usuario cuenta empresas ambiente STG'
+  personality: 'ciam_val_facial_enrolado'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '761857031'
+  cic: '12028666'
+  cod_internacional: '+51'
+  phone_number: '998878600'
+  uuid: 'uuid-martech-yapetest'
+  platform: 'android'
+  version: "8.0"
+  device_token: 'automated_test_token_martech'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'test.martech6@yopmail.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881092340357'
+      pin4: '1111'
+      expiry_date: '08/26'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      visa_card_token: '4753398668057'
+      accounts:
+        -
+          number: '19272040466046'
+          currency: 'soles'
+          balance: '10000.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

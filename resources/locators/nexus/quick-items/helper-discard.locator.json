@@ -1,0 +1,24 @@
+{
+    "helperDiscardAndroid": {
+        "businessBtn": "//android.widget.TextView[@text='Empresa']",
+        "myHelpersBtn": "//android.widget.Button[@content-desc='Mis ayudantes']",
+        "mainText": "(//android.widget.TextView[@text='Mis ayudantes'])[1]",
+        "secondaryText": "//android.widget.TextView[@text='Agrega a los ayudantes que podrán verificar las ventas del día de tu negocio.']",
+        "addHelpersBtn": "//android.widget.Button[@content-desc='Agregar ayudantes']",
+        "deleteCollaboratorBtn": "//androidx.compose.ui.platform.ComposeView/android.view.View/android.view.View/android.view.View[3]/android.view.View",
+        "txtQuestion": "//android.widget.TextView[@text='¿Deseas eliminar a tu ayudante?']",
+        "confirmDeleteBtn": "//android.widget.Button[@content-desc='Sí, eliminar']",
+        "cancelDeleteBtn": "//android.widget.Button[@content-desc='Cancelar']"
+    },
+    "helperDiscardIos": {
+        "businessBtn": "",
+        "myHelpersBtn": "",
+        "mainText": "",
+        "secondaryText": "",
+        "addHelpersBtn": "",
+        "deleteCollaboratorBtn": "",
+        "txtQuestion": "",
+        "confirmDeleteBtn": "",
+        "cancelDeleteBtn": ""
+    }
+}

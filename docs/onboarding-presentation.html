@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Framework MOBILE Test Automation - Onboarding</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-image: url('background.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .presentation {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .slide {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            width: 90%;
+            max-width: 1200px;
+            height: 90vh;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 60px;
+            display: none;
+            flex-direction: column;
+            position: relative;
+            overflow-y: auto;
+        }
+        
+        .slide.active {
+            display: flex;
+        }
+        
+        .slide h1 {
+            color: #6B2E8C;
+            font-size: 48px;
+            margin-bottom: 20px;
+            border-bottom: 4px solid #6B2E8C;
+            padding-bottom: 10px;
+        }
+        
+        .slide h2 {
+            color: #8B3FA7;
+            font-size: 36px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        .slide h3 {
+            color: #A55BC4;
+            font-size: 28px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .slide p, .slide li {
+            font-size: 22px;
+            line-height: 1.6;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .slide ul, .slide ol {
+            margin-left: 30px;
+            margin-bottom: 20px;
+        }
+        
+        .slide code {
+            background: #f4f4f4;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            color: #d63384;
+        }
+        
+        .slide pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        table th {
+            background: #6B2E8C;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-size: 20px;
+        }
+        
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            font-size: 18px;
+        }
+        
+        table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 1000;
+        }
+        
+        .controls button {
+            background: #6B2E8C;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .controls button:hover {
+            background: #8B3FA7;
+            transform: scale(1.05);
+        }
+        
+        .controls button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: scale(1);
+        }
+        
+        .slide-number {
+            position: absolute;
+            bottom: 20px;
+            right: 30px;
+            color: #6B2E8C;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            z-index: 2000;
+        }
+        
+        .slide-counter {
+            position: fixed;
+            top: 20px;
+            right: 30px;
+            background: rgba(107, 46, 140, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 1500;
+        }
+        
+        .lead-slide {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        
+        .lead-slide h1 {
+            font-size: 64px;
+            border: none;
+        }
+        
+        .lead-slide p {
+            font-size: 28px;
+            color: #666;
+        }
+        
+        .badge {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 16px;
+            margin: 5px;
+        }
+        
+        .badge.error {
+            background: #dc3545;
+        }
+        
+        .badge.warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .badge.info {
+            background: #17a2b8;
+        }
+        
+        .emoji {
+            font-size: 32px;
+            margin-right: 10px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #6B2E8C;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 20px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- Slide 1: Portada -->
+        <div class="slide active lead-slide">
+            <h1><span class="emoji">🚀</span>MOBILE Test Automation Framework</h1>
+            <h2>fwk-mobile-test</h2>
+            <div class="slide-number">1 / 16</div>
+        </div>
+
+        <!-- Slide 2: Agenda -->
+        <div class="slide">
+            <h1><span class="emoji">📋</span>Agenda</h1>
+            <table>
+                <tr>
+                    <th>Tema</th>
+                </tr>
+                <tr>
+                    <td>Guía para escribir los TEST</td>
+                </tr>
+            </table>
+            <div class="slide-number">2 / 16</div>
+        </div>
+
+
+   <!-- Slide 15: Primera Prueba paso a paso -->
+       <!-- Slide 29: Practical Guide Intro -->
+        <div class="slide lead-slide">
+            <h1><span class="emoji">🚀</span>Guía Práctica</h1>
+            <h2>Crea tu primer test paso a paso</h2>
+            <div class="slide-number">3 / 16</div>
+        </div>
+
+    <!-- Slide 4: Seguir las mejores prácticas -->
+        <div class="slide">
+            <h1><span class="emoji">⚠️</span>Lo más importante:</h1>
+
+            <div class="highlight">
+                <strong>Mantener organizado el framework</strong><br>
+                </strong><br>
+                - Aplicar las convenciones y estándares para nombrar variables, funciones, constantes, carpetas y archivos<br>
+                - Escribir código limpio y legible<br>
+                - Seguir técnica del Boy Scout
+            </div>
+            
+            <div class="highlight">
+                <strong>Enfoque MOBILE</strong><br>
+                Framework especializado en testing de MOBILE usando Appium, WebdriverIO, Cucumber, TypeScript.
+            </div>
+
+            <div class="highlight">
+                <strong>👥 Organización por Equipo</strong><br>
+                Cada equipo (marketplace, empresas,web yape, etc.) mantiene su propia carpeta.
+            </div>       
+            <div class="slide-number">4 / 16</div>
+        </div>
+
+
+        <!-- Slide 5: Estructura de los Test -->
+        <div class="slide">
+            <h1><span class="emoji">📁</span>PASO 1: Revisar la estructura de los Test</h1>
+            <pre>
+                Archivos .feature. ==> Capa de Cucumber
+                ├── Archivos de definiciones de pasos (.ts)
+                │    └── screenObjects
+                │    └── Utils
+                ├── Archivos Json de datos (Locators)
+                │    └── Archivos de usuarios .yml
+                └── Artefactos a probar
+                     └── .ipa, .app, .apk
+            </pre>
+            <div class="highlight">
+                <strong> Plantear el Escenario de Pruebas</strong><br>
+                  - Debe estar escrito en lenguaje Gherkin (Given, When, Then)<br>
+                  * Solo este lenguaje debe ser escrito en español<br><br>
+                  Ejemplo:<br><br>
+                      Scenario Outline: Validar dirección de usuario<br>
+                      <strong>Given</strong> el usuario Carlos Barboza TFT inicia sesión en Yape<br>
+                      <strong>When</strong> el usuario selecciona la opcion tienda<br>
+                      <strong>Then</strong> validar dirección<br>
+                      | Jirón Lima | Barranco | 2 |
+            </div>
+            <div class="slide-number">5 / 16</div>
+        </div>
+
+        <!-- Slide 6: Crear el archivo feature -->
+        <div class="slide">
+            <h1><span class="emoji">📁</span>PASO 2: Crear/Editar un archivo feature</h1>
+            <pre>
+            fwk-mobile-test/
+                ├── features/                        # Test cases folder.
+                │   ├── yape-features/               # Test scenarios written in Cucumber.
+                │   │   └── marketplace/             # Test scenarios related to Marketplace. 
+            </pre>
+            <div class="highlight">
+                <strong> Editar un archivo .feature existente</strong><br>
+                  - Revisar los features existentes si se ajusta y se puede incluir el nuevo escenario en alguno de ellos.<br>
+                  Ejemplo:
+                    Si el nuevo caso de pruebas esta relacionado a dirección, se puede incluir este nuevo caso en el archivo:<br>
+                    <strong>address.feature</strong>
+            </div>   
+            <div class="highlight">
+                <strong> Crear un archivo .feature</strong><br>
+                  - Nuevas funcionalidades que no están cubiertas por los features existentes deben tener su propio archivo .feature.<br>
+                Ejemplo:
+                    Si el nuevo caso de pruebas esta relacionado a la funcionalidad de "Ofertas", se debe crear un nuevo archivo:<br>
+                    <strong>offers.feature</strong>
+            </div>
+            <div class="highlight">
+                <strong> Escribir el caso de pruebas en formato Gherkin (Given, When, Then) </strong><br>
+                  - Se debe considerar el uso de tags para identificar las escenarios que se ejecutarán de acuerdo a la configuracion de los archivos wdio<br>
+                Ejemplo:   
+                    <strong>@marketplace</strong><strong>, @smokeTestMarketplace</strong>
+            </div>
+            <div class="slide-number">6 / 16</div>
+        </div>
+
+         <!-- Slide 7: Determinar los locators -->
+        <div class="slide">
+            <h1><span class="emoji">📁</span>PASO 3: Determinar los locators</h1>
+            <pre>
+             fwk-mobile-test/
+            │   │   └── locators/                # JSON locators to identify UI elements for testing
+            │   │         └── marketplace/       # JSON locators related to marketplace test.
+            </pre>
+            <div class="highlight">
+                <strong> Incluir los locators en el archivo .json</strong><br>
+                  - Obtener los locators necesarios para el nuevo caso de prueba y agregarlos al archivo .json correspondiente.<br>
+                  - Si es una nueva funcionalidad se debe crear un nuevo archivo .json.<br>
+                  - En el archivo .json se deben seguir las convenciones de nombrado y estructura.<br><br>
+                  - Los locators se deben obtener para ambas app  (iOS y Android).<br><br>
+                    Ejemplo:<br><br>
+                    <strong>"MarketPlaceAddressAndroid":</strong> {
+                        "txtChangeAddress":"//android.widget.Button[@text=\"change address\"]",
+                    } <br><br>
+                    <strong>"MarketPlaceAddressIos":</strong>{
+                        "txtChangeAddress":"//XCUIElementTypeButton[@name=\"change address\"]",
+                    }<br>
+            </div>   
+            <div class="slide-number">7 / 16</div>
+        </div>
+
+        <!-- Slide 8: Crear las funciones o métodos necesarios para la prueba -->
+        <div class="slide">
+            <h1><span class="emoji">📁</span>PASO 4: Crear los métodos necesarios para la prueba</h1>
+            <pre>
+                fwk-mobile-test/
+                │   └── screenobjects/               # Screen Object Classes for each mobile screen.
+                │        └── marketplace/       # Screen Object Classes related to Marketplace Test.
+            </pre>
+            <div class="highlight">
+                <strong> Incluir la lógica de la prueba</strong><br>
+                  - Validaciones<br>
+                  - Lógica del negocio<br>
+                  - Evaluación de resultados<br>
+                  - Manejo de errores<br><br>
+                  
+                  Ejemplo:<br><br>
+                    
+                  public async validateAddress(address: string, district: string, stage: string)<br>
+                    await this.txtChangeAddress.waitForDisplayed({ timeout: 3000 });<br>
+                    await this.txtChangeAddress.click();<br>
+                    try <br>
+                    await this.validateNewAddress.waitForDisplayed({ timeout: 3000 });<br>
+                    console.log('ENCONTRO LA DIRECCION, SIN PROBLEMA');<br>
+                    .....<br>
+            </div>   
+        
+            <div class="slide-number">8 / 16</div>
+        </div>
+
+
+
+         <!-- Slide 9: Crear el archivo step definition -->
+        <div class="slide">
+            <h1><span class="emoji">📁</span>PASO 5: Crear/Editar un archivo step definition</h1>
+            <pre>
+            fwk-mobile-test/
+            │   ├── yape-step-definitions/       # Step Definitions code links Gherkin specifications.
+            │   │   └── marketplace/             # Step Definitions related to Marketplace. 
+            </pre>
+            <div class="highlight">
+                <strong> Crear/Editar la linea de definición funcional</strong><br>
+    
+                    - Se incluye la implementación de la lógica de prueba<br>
+                    - Se puede llamar a los métodos creados en el paso anterior.<br><br>
+
+                  Ejemplo:<br>
+                    -  En este caso es la implementación de la lógica de prueba para un paso de Gherkin que usa la palabra clave "Then" <br><br>
+
+                    Then('validar dirección', async (address: DataTable) => {<br>
+                        await addressScreen.txtChangeAddress.waitForDisplayed({ timeout });<br>
+                            if (await addressScreen.txtChangeAddress.isDisplayed()) {<br>
+                                const [direccion, distrito, etapa] = address.raw()[0];<br>
+                                await addressScreen.validateAddress(direccion, distrito, etapa);<br>
+                                }<br>
+                        });<br>
+            </div>   
+            
+            <div class="slide-number">9 / 16</div>
+        </div>
+
+        <!-- Slide 10: Step 6 - Run Test -->
+                <div class="slide">
+                    <h1><span class="emoji">🚀</span>Paso 6: Ejecutar el Test</h1>
+                    <h3>Comandos de ejecución </h3>
+                    <pre>
+| Enviroment  | ANDROID              | iOS               |
+|-------------|----------------------|-------------------|
+| QA          |  npm run android-qa  |  npm run ios-qa   |
+| STAGING     |  npm run android-stg |  npm run ios-stg  |
+                    </pre>
+                    
+                    <h3>En los archivos wdio (android y iOS) configurar:</h3>
+                    <pre>
+specs: [
+//'../features/yape-features/**/*.feature' // Descomenter para ejecutar todos los tests
+'../features/yape-features/**/address.feature' // Ejecutar un test específico
+],
+                    </pre>
+
+
+
+                    <div class="slide-number">10 / 16</div>
+                </div>
+
+       <!-- Slide 11: Desafíos Comunes -->
+        <div class="slide">
+            <h1><span class="emoji">🛠️</span>Desafíos Comunes</h1>
+            <div class="highlight">
+                <strong> Desactualización de Locators</strong>
+                <ul>
+                    <li>Hemos tenido que actualizar selectores en los tests continuamente</li>
+                    <li>Es necesario tomar los locators desde la webview para ello necesitamos la generación del apk  y el ipa en modo Debug y todavia no tenemos estos Artefactos</li>
+                </ul>
+            </div>
+            <div class="slide-number">11 / 16</div>
+        </div>
+
+
+
+        <!-- Slide 36: Debugging Tips -->
+        <div class="slide">
+            <h1><span class="emoji">🐛</span>Tips de Debugging</h1>
+            <table>
+                <tr>
+                    <th>Comando/Técnica</th>
+                    <th>Uso para MOBILE</th>
+                </tr>
+                <tr>
+                    <td><code>Log de códigos de prueba: print, console.log('MENSAJE'), console.error('Error during address validation flow:', error)</code></td>
+                    <td>Logs enviados a consola</td>
+                </tr>
+                <tr>
+                    <td><code>Logs del servidor de Automatización (Appium)</code></td>
+                    <td>Muestra los comandos Json exactos que se envian al dispositivo</td>
+                </tr>
+                <tr>
+                    <td><code>Herramientas de Inspeccion de Elementos (Appium Inspector)</code></td>
+                    <td>El 90% de fallos se produce a que el selector de los elementos es inestable</td>
+                </tr>
+                <tr>
+                    <td><code>Manejo de Esperas y Tiempos</code></td>
+                    <td>Fallos intermitentes por problemas de sincronización de ambientes, por lo que es importante implementar esperas explícitas</td>
+                </tr>
+
+                <tr>
+                    <td><code>Asegurarse que el fallo no se deba al entorno de prueba</code></td>
+                    <td>Con la aplicación en estado limpio, desinstalada con la cache borrada antes de cada escenario</td>
+                </tr>
+
+            </table>
+            <div class="slide-number">12 / 16</div>
+        </div>
+
+        
+
+        <!-- Slide 49: Code Review Checklist -->
+        <div class="slide">
+            <h1><span class="emoji">✅</span>Checklist - Code Review</h1>
+            <table>
+                <tr>
+                    <th>Aspecto</th>
+                    <th>Verificar</th>
+                </tr>
+                <tr>
+                    <td>📝 Naming</td>
+                    <td>kebab-case archivos, camelCase commands</td>
+                </tr>
+                <tr>
+                    <td>🌐 Idioma</td>
+                    <td>Todo en inglés</td>
+                </tr>
+                <tr>
+                    <td>🔧 Métodos</td>
+                    <td>Definidos en la carpeta screenobjects</td>
+                </tr>
+                <tr>
+                    <td>🧪 Tests</td>
+                    <td>Prácticas recomendadas</td>
+                </tr>
+                <tr>
+                    <td>📊 Data</td>
+                    <td>Fixtures, no hardcoded</td>
+                </tr>
+            </table>
+            <div class="slide-number">13 / 16</div>
+        </div>
+
+       
+
+        <!-- Slide 50: Resources Section -->
+        <div class="slide lead-slide">
+            <h1><span class="emoji">📚</span>Recursos</h1>
+            <h2>Documentación y Enlaces</h2>
+            <div class="slide-number">14 / 16</div>
+        </div>
+
+        <!-- Slide 51: Documentation Links -->
+        <div class="slide">
+            <h1><span class="emoji">📖</span>Documentación</h1>
+            <table>
+                <tr>
+                    <th>Recurso</th>
+                    <th>Link</th>
+                </tr>
+                <tr>
+                    <td>README Principal</td>
+                    <td><code>README.md</code></td>
+                </tr>
+                <tr>
+                    <td>Appium Docs</td>
+                    <td>appium.io/docs/en/about-appium/intro/</td>
+                </tr>
+                <tr>
+                    <td>TypeScript</td>
+                    <td>typescriptlang.org</td>
+                </tr>
+                <tr>
+                    <td>GitHub Repo</td>
+                    <td>github.com/yaperos/fwk-mobile-test</td>
+                </tr>
+                <tr>
+                    <td>Canal soporte slack</td>
+                    <td>#squad-automatech</td>
+                </tr>
+                
+            </table>
+            <div class="slide-number">15 / 16</div>
+        </div>
+
+
+        <!-- Slide 52: Next Steps -->
+        <div class="slide lead-slide">
+            <h1><span class="emoji">🎉</span>¡Gracias!</h1>
+            <h2 style="color: #28a745;">Happy Testing! 🚀</h2>
+            <div style="margin-top: 50px;">
+                <p><strong>Recuerda:</strong></p>
+                <ul style="text-align: left; display: inline-block; font-size: 24px;">
+                    <li>✅ Sigue los estándares</li>
+                    <li>✅ Reutiliza código</li>
+                    <li>✅ Pregunta cuando tengas dudas</li>
+                    <li>✅ Comparte conocimiento con el equipo</li>
+                </ul>
+            </div>
+            <div class="slide-number">16 / 16</div>
+        </div>
+    </div>
+
+    <div class="progress-bar" id="progressBar"></div>
+    <div class="slide-counter" id="slideCounter">1 / 16</div>
+    
+    <div class="controls">
+        <button id="prevBtn" onclick="changeSlide(-1)">◀ Anterior</button>
+        <button id="homeBtn" onclick="goToSlide(0)">🏠 Inicio</button>
+        <button id="nextBtn" onclick="changeSlide(1)">Siguiente ▶</button>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+
+        function showSlide(n) {
+            slides.forEach(slide => slide.classList.remove('active'));
+            
+            if (n >= totalSlides) currentSlide = totalSlides - 1;
+            if (n < 0) currentSlide = 0;
+            
+            slides[currentSlide].classList.add('active');
+            
+            // Scroll to top of slide
+            slides[currentSlide].scrollTop = 0;
+            
+            // Update buttons
+            document.getElementById('prevBtn').disabled = currentSlide === 0;
+            document.getElementById('nextBtn').disabled = currentSlide === totalSlides - 1;
+            
+            // Update progress bar
+            const progress = ((currentSlide + 1) / totalSlides) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+            
+            // Update counter
+            document.getElementById('slideCounter').textContent = `${currentSlide + 1} / ${totalSlides}`;
+            
+            // Update URL hash without reload
+            window.history.replaceState(null, null, `#slide-${currentSlide + 1}`);
+        }
+
+        function changeSlide(direction) {
+            currentSlide += direction;
+            showSlide(currentSlide);
+        }
+
+        function goToSlide(slideNumber) {
+            currentSlide = slideNumber;
+            showSlide(currentSlide);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                changeSlide(1);
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                changeSlide(-1);
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                goToSlide(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                goToSlide(totalSlides - 1);
+            }
+        });
+
+        // Initialize from URL hash if present
+        const hash = window.location.hash;
+        if (hash.startsWith('#slide-')) {
+            const slideNum = parseInt(hash.replace('#slide-', '')) - 1;
+            if (slideNum >= 0 && slideNum < totalSlides) {
+                currentSlide = slideNum;
+            }
+        }
+        
+        showSlide(currentSlide);
+        
+        // Log total slides for confirmation
+        console.log(`✅ Presentación cargada: ${totalSlides} slides totales`);
+    </script>
+</body>
+</html>

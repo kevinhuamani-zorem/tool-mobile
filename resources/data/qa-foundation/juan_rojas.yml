@@ -1,0 +1,37 @@
+---
+-
+  name: 'Juan Rojas Lope'
+  description: 'Usuario con tarjeta real STG'
+  personality: 'real_email'
+  data_in_bcp: 'true'
+  card_usage: 'bcp_card'
+  idc: '455349801'
+  cic: '11789829'
+  cod_internacional: '+51'
+  phone_number: '945534980'
+  uuid: 'uuid-jrojas'
+  platform: 'android'
+  version: '1.0'
+  device_token: 'automated_test_device_token_jrojas'
+  device_type: 'PERSONAL'
+  phone_model: "Samsung Note 4 6.0 MARSHMALLOW"
+  phone_manufacturer: "Samsung"
+  email: 'jrojas@mailinator.com'
+  password: '999999'
+  cards:
+    -
+      number: '4557881199219827'
+      pin4: '4844'
+      expiry_date: '02/29'
+      status: '00'
+      cvv: '999'
+      usage: 'token'
+      accounts:
+        -
+          number: '19370796000009'
+          currency: 'soles'
+          balance: '45678.00'
+          type: 'CUENTAS DE AHORROS'
+          subtype: 'PRIMERA CUENTA'
+          release_date: 'new'
+          status: 'active'

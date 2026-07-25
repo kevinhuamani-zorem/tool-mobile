@@ -1,0 +1,163 @@
+name: 🚀 E2E Mobile Tests - BrowserStack
+
+run-name: 📱 ${{ github.event.inputs.squad_name }} | ${{ github.event.inputs.platform == 'android' && '🤖' || '🍎' }} ${{ github.event.inputs.platform }} | ${{ github.event.inputs.environment }} | ${{ github.event.inputs.tag_name }} | @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Test environment'
+        required: true
+        type: choice
+        options:
+          - qa
+          - stg
+      platform:
+        description: 'Mobile platform to run'
+        required: true
+        type: choice
+        options:
+          - android
+          - ios
+      squad_name:
+        description: 'Squad name to map BrowserStack project ID and upload results to TCM'
+        required: true
+        type: choice
+        options:
+          - 'Squad Autenticacion'
+          - 'Squad Autoatencion'
+          - 'Squad ChatBot'
+          - 'Squad Checkout'
+          - 'Squad Core CX'
+          - 'Squad Core Solutions'
+          - 'Squad Cross Commerce'
+          - 'Squad Delivery Commerce'
+          - 'Squad Gestión de Negocio'
+          - 'Squad Insurance'
+          - 'Squad Interoperabilidad'
+          - 'Squad Lending Foundations'
+          - 'Squad Lending Personas'
+          - 'Squad Lending POS'
+          - 'Squad Martech'
+          - 'Squad Microbusiness Solutions'
+          - 'Squad ML Engineering'
+          - 'Squad Mobile Foundation'
+          - 'Squad Pago de Servicios y Recargas'
+          - 'Squad Pagos'
+          - 'Squad Real Estate'
+          - 'Squad Recaudación Yape Empresa'
+          - 'Squad Remesas-Inbound'
+          - 'Squad Remesas-Outbound'
+          - 'Squad RMN & Digital'
+          - 'Squad Third Party Lending'
+          - 'Squad Tipo de Cambio'
+          - 'Squad Web Platform Solutions'
+          - 'Squad Yapecard'
+      tag_name:
+        description: 'Cucumber tag to filter tests. Use "ALL" to run all tests in the squad folder, or specify a tag like @smoke_mobile, @regression, etc.'
+        required: false
+        default: 'ALL'
+      android_device:
+        description: 'Android device in BrowserStack, only if platform=android'
+        required: false
+        default: 'Xiaomi Redmi Note 11'
+      android_version:
+        description: 'Android OS version, only if platform=android'
+        required: false
+        default: '11.0'
+      ios_device:
+        description: 'iOS device in BrowserStack, only if platform=ios'
+        required: false
+        default: 'iPhone 14'
+      ios_version:
+        description: 'iOS OS version, only if platform=ios'
+        required: false
+        default: '16.0'
+      slack_channel_notification_failure:
+        description: 'Slack channel ID to notify test execution results'
+        required: false
+        default: '#automatech-alerts'
+      webview:
+        description: 'Enable for WebView tests (yapetienda, embedded browsers). Only use if your tests interact with web content inside the app.'
+        required: false
+        type: boolean
+        default: false
+      debug_mode:
+        description: 'Enable verbose BrowserStack logging (debug, consoleLogs, appiumLogs)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve_folder:
+    runs-on: ubuntu-latest
+    outputs:
+      cucumber_folder: ${{ steps.compute.outputs.cucumber_folder }}
+      browserstack_project_id: ${{ steps.compute.outputs.browserstack_project_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: compute
+        env:
+          SQUAD: ${{ github.event.inputs.squad_name }}
+          TAG: ${{ github.event.inputs.tag_name || 'ALL' }}
+        run: |
+          echo "::notice::Resolving folder for squad: $SQUAD"
+          FOLDER=$(jq -r --arg s "$SQUAD" '.[$s].folder // ""' config/bs-test-management/bs-folder-map.json)
+          BS_PROJECT_ID=$(jq -r --arg s "$SQUAD" '.[$s].browserstack_project_id // ""' config/bs-test-management/bs-folder-map.json)
+          echo "::notice::Resolved folder: $FOLDER"
+          echo "::notice::Resolved BrowserStack Project ID: $BS_PROJECT_ID"
+
+          if [[ -n "$SQUAD" && -z "$FOLDER" ]]; then
+            echo "::error::Squad '$SQUAD' has no folder mapping defined in bs-folder-map."
+            exit 1
+          fi
+
+          if [[ -n "$FOLDER" && ! -d "$FOLDER" ]]; then
+            echo "::error::Folder '$FOLDER' for squad '$SQUAD' does not exist in the repository."
+            exit 1
+          fi
+
+          # Validate tag only if not "ALL"
+          if [[ "$TAG" != "ALL" ]]; then
+            TAG_MATCHES=$(grep -rl "$TAG" "$FOLDER" --include="*.feature" | wc -l | tr -d ' ')
+            echo "::notice::Tag '$TAG' found in $TAG_MATCHES feature file(s) within '$FOLDER'"
+
+            if [[ "$TAG_MATCHES" -eq 0 ]]; then
+              echo "::error::Tag '$TAG' was NOT found in any feature file inside '$FOLDER'. Aborting execution."
+              echo "::error::Available tags in this folder:"
+              grep -roh '@[a-zA-Z_]*' "$FOLDER" --include="*.feature" | sort -u | while read t; do echo "::error::  $t"; done
+              exit 1
+            fi
+          else
+            TOTAL_FEATURES=$(find "$FOLDER" -name "*.feature" | wc -l | tr -d ' ')
+            echo "::notice::Tag is 'ALL'. Will execute ALL $TOTAL_FEATURES feature file(s) in '$FOLDER'"
+          fi
+
+          echo "cucumber_folder=$FOLDER" >> "$GITHUB_OUTPUT"
+          echo "browserstack_project_id=$BS_PROJECT_ID" >> "$GITHUB_OUTPUT"
+
+  wdio_test:
+    needs: resolve_folder
+    uses: yaperos/reusable-workflows/.github/workflows/tests_mobile.yaml@main
+    with:
+      test_repository: fwk-mobile-test
+      test_path: ./
+      test_branch: ${{ github.ref_name }}
+      environment: ${{ github.event.inputs.environment }}
+      platform: ${{ github.event.inputs.platform }}
+      slack_channel_notification_failure: ${{ github.event.inputs.slack_channel_notification_failure }}
+      tag_name: ${{ github.event.inputs.tag_name }}
+      cucumber_folder: ${{ needs.resolve_folder.outputs.cucumber_folder }}
+      android_device: ${{ github.event.inputs.android_device }}
+      android_version: ${{ github.event.inputs.android_version }}
+      ios_device: ${{ github.event.inputs.ios_device }}
+      ios_version: ${{ github.event.inputs.ios_version }}
+      squad_name: ${{ github.event.inputs.squad_name }}
+      browserstack_project_id: ${{ needs.resolve_folder.outputs.browserstack_project_id }}
+      webview: ${{ github.event.inputs.webview == 'true' }}
+      debug_mode: ${{ github.event.inputs.debug_mode == 'true' }}
+    secrets: inherit
