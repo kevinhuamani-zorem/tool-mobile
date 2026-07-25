@@ -21,6 +21,11 @@ export interface RecordedStep {
     selector?: string;
     value?: string;
     description?: string;
+    locatorSource?: {
+        file: string;
+        module: string;
+        scope: 'squad' | 'commons' | 'home' | 'global';
+    };
 }
 
 export interface VerificationResult {

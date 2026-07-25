@@ -71,11 +71,27 @@ export class OutputValidator {
             if (!blocks.some(block => block.endsWith('Ios'))) {
                 errors.push('Locators sin bloque Ios');
             }
-            const empty = Object.values(document)
-                .flatMap(block => Object.entries(block))
+            const entries = Object.values(document).flatMap(block => Object.entries(block));
+            if (entries.length === 0) {
+                errors.push('El archivo de locators no contiene ningún locator');
+            }
+            const empty = entries
                 .filter(([, value]) => !value.trim()).length;
             if (empty > 0) {
                 warnings.push(`${empty} locator(es) requieren selector de la otra plataforma`);
+            }
+            const genericXpaths = entries
+                .filter(([, value]) =>
+                    /^\/\/(?:android\.(?:widget|view)\.|XCUIElementType)[A-Za-z0-9_.]+$/.test(
+                        value.trim()
+                    )
+                )
+                .map(([name]) => name);
+            if (genericXpaths.length > 0) {
+                warnings.push(
+                    `Locators demasiado genéricos: ${genericXpaths.join(', ')}. ` +
+                    `Usa resource-id, accessibility ID, texto o atributos específicos.`
+                );
             }
         } catch (error: any) {
             errors.push(`JSON de locators inválido: ${error.message}`);
@@ -92,6 +108,12 @@ export class OutputValidator {
         });
         for (const diagnostic of result.diagnostics || []) {
             errors.push(`${label}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}`);
+        }
+        if (
+            label === 'ScreenObject' &&
+            /public\s+async\s+\w+\s*\([^)]*\)\s*:\s*Promise<void>\s*\{\s*\}/m.test(content)
+        ) {
+            errors.push('ScreenObject contiene un método de acción vacío');
         }
     }
 }

@@ -85,12 +85,7 @@ export class MobileStepExecutor {
             ? Math.floor(size.height * 0.3)
             : Math.floor(size.height * 0.7);
 
-        await driver.touchAction([
-            { action: 'press',   x, y: startY },
-            { action: 'wait',    ms: 500 },
-            { action: 'moveTo',  x, y: endY },
-            { action: 'release' }
-        ] as any);
+        await this.performTouchGesture(x, startY, x, endY);
         return { success: true, message: `Scroll ${direction}` };
     }
 
@@ -124,13 +119,30 @@ export class MobileStepExecutor {
         };
 
         const [sx, sy, ex, ey] = coords[direction] || coords.left;
-        await driver.touchAction([
-            { action: 'press',  x: sx, y: sy },
-            { action: 'wait',   ms: 500 },
-            { action: 'moveTo', x: ex, y: ey },
-            { action: 'release' }
-        ] as any);
+        await this.performTouchGesture(sx, sy, ex, ey);
         return { success: true, message: `Swipe ${direction}` };
+    }
+
+    private async performTouchGesture(
+        startX: number,
+        startY: number,
+        endX: number,
+        endY: number
+    ): Promise<void> {
+        const driver = this.dm.getDriver();
+        await driver.performActions([{
+            type: 'pointer',
+            id: 'finger1',
+            parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: startX, y: startY, origin: 'viewport' },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 250 },
+                { type: 'pointerMove', duration: 600, x: endX, y: endY, origin: 'viewport' },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }] as any);
+        await driver.releaseActions().catch(() => undefined);
     }
 
     private async presionLarga(selector: string): Promise<ExecutionResult> {

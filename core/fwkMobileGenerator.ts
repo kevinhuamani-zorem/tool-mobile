@@ -16,6 +16,7 @@ export interface GenerationRequest {
     pathType: TestPathType;
     tag: string;
     dataName?: string;
+    examples?: Record<string, string>;
     platform: MobilePlatform;
     scenarioRows?: {
         keyword: 'Given' | 'When' | 'Then' | 'And' | 'But';
@@ -74,9 +75,13 @@ export class FwkMobileGenerator {
             normalized.squad,
             `${normalized.fileName}.feature`
         );
-        const locatorEntries = this.collectLocators(steps);
         const missingRows = normalized.scenarioRows?.filter(row => row.status === 'missing') || [];
-        const locatorPath = locatorEntries.length > 0 || missingRows.length > 0
+        const generationActions = normalized.scenarioRows
+            ? missingRows.flatMap(row => row.actions || [])
+            : steps;
+        this.validateGenerationActions(missingRows);
+        const locatorEntries = this.collectLocators(generationActions);
+        const locatorPath = locatorEntries.length > 0
             ? path.join(
                 projectPaths.locators,
                 normalized.squad,
@@ -95,10 +100,6 @@ export class FwkMobileGenerator {
             ? path.join(projectPaths.screenobjects, normalized.squad, `${normalized.locatorModule}.screen.ts`)
             : undefined;
 
-        if (missingRows.some(row => !row.actions || row.actions.length === 0)) {
-            throw new Error('Cada step faltante debe tener al menos una acción grabada');
-        }
-
         return {
             featurePath,
             locatorPath,
@@ -109,7 +110,7 @@ export class FwkMobileGenerator {
                 ? this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath)
                 : undefined,
             screenPath,
-            screenContent: screenPath && locatorPath
+            screenContent: screenPath
                 ? this.buildScreenObject(normalized, missingRows, screenPath, locatorPath)
                 : undefined,
             files: [
@@ -121,9 +122,15 @@ export class FwkMobileGenerator {
         };
     }
 
-    generate(request: GenerationRequest, steps: RecordedStep[]): GeneratedPreview {
+    generate(
+        request: GenerationRequest,
+        steps: RecordedStep[],
+        managedOverwriteFiles = new Set<string>()
+    ): GeneratedPreview {
         const preview = this.preview(request, steps);
-        const conflicts = preview.files.filter(file => fs.existsSync(file));
+        const conflicts = preview.files.filter(
+            file => fs.existsSync(file) && !managedOverwriteFiles.has(file)
+        );
         if (conflicts.length > 0) {
             throw new Error(
                 `No se sobrescribieron archivos existentes: ${conflicts
@@ -146,9 +153,13 @@ export class FwkMobileGenerator {
         ];
 
         const temporaryFiles: string[] = [];
+        const originals = new Map<string, Buffer>();
         try {
             for (const output of outputs) {
                 fs.mkdirSync(path.dirname(output.file), { recursive: true });
+                if (fs.existsSync(output.file)) {
+                    originals.set(output.file, fs.readFileSync(output.file));
+                }
                 const temporary = `${output.file}.recorder-${process.pid}.tmp`;
                 fs.writeFileSync(temporary, output.content, { encoding: 'utf-8', flag: 'wx' });
                 temporaryFiles.push(temporary);
@@ -158,6 +169,10 @@ export class FwkMobileGenerator {
             for (const temporary of temporaryFiles) {
                 if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
             }
+            for (const output of outputs) {
+                if (!originals.has(output.file) && fs.existsSync(output.file)) fs.unlinkSync(output.file);
+            }
+            for (const [file, content] of originals) fs.writeFileSync(file, content);
             throw error;
         }
 
@@ -182,6 +197,22 @@ export class FwkMobileGenerator {
         if (!request.featureName.trim()) throw new Error('El nombre del Feature es obligatorio');
         if (!request.scenarioName.trim()) throw new Error('El nombre del Scenario es obligatorio');
         if (!['android', 'ios'].includes(request.platform)) throw new Error('Plataforma inválida');
+        for (const [name, value] of Object.entries(request.examples || {})) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                throw new Error(`Parámetro inválido: ${name}`);
+            }
+            if (!String(value).trim()) throw new Error(`El parámetro "${name}" no tiene valor de ejemplo`);
+        }
+        for (const row of request.scenarioRows || []) {
+            const locatorReference = row.text.match(/\{([^{}]+)\}/)?.[1]?.trim();
+            if (locatorReference) {
+                throw new Error(
+                    `No uses el locator {${locatorReference}} en el Gherkin. ` +
+                    `Enlaza la acción internamente o usa un parámetro sin espacios, por ejemplo ` +
+                    `<${locatorReference.replace(/\s+/g, '_')}>.`
+                );
+            }
+        }
 
         return {
             ...request,
@@ -197,7 +228,9 @@ export class FwkMobileGenerator {
     }
 
     private buildFeature(request: GenerationRequest, steps: RecordedStep[]): string {
-        const outline = Boolean(request.dataName);
+        const examples = { ...(request.examples || {}) };
+        if (request.dataName && !examples.username) examples.username = request.dataName;
+        const outline = Object.keys(examples).length > 0;
         const scenarioLines = request.scenarioRows?.length
             ? request.scenarioRows.map(row => `    ${row.keyword} ${row.text.trim()}`)
             : steps.map((step, index) => `    ${toGherkinLine(step, index)}`);
@@ -213,11 +246,12 @@ export class FwkMobileGenerator {
         ];
 
         if (outline) {
+            const names = Object.keys(examples);
             lines.push(
                 '',
                 '    Examples:',
-                '      | username |',
-                `      | ${request.dataName} |`
+                `      | ${names.join(' | ')} |`,
+                `      | ${names.map(name => examples[name]).join(' | ')} |`
             );
         }
 
@@ -239,6 +273,32 @@ export class FwkMobileGenerator {
             locators.set(name, step.selector.trim());
         }
         return [...locators.entries()];
+    }
+
+    private validateGenerationActions(
+        rows: NonNullable<GenerationRequest['scenarioRows']>
+    ): void {
+        const withoutLocator = new Set<RecordedStep['action']>([
+            'ABRIR_APP', 'SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'VOLVER', 'ESPERAR', 'SCREENSHOT'
+        ]);
+        for (const row of rows) {
+            if (!row.actions || row.actions.length === 0) {
+                throw new Error(`El step faltante "${row.text}" no tiene acciones enlazadas`);
+            }
+            for (const action of row.actions) {
+                if (!withoutLocator.has(action.action) && (!action.variableName || !action.selector)) {
+                    throw new Error(
+                        `La acción ${action.action} del step "${row.text}" requiere nombre y selector`
+                    );
+                }
+                const lines = this.actionLines(action, [], 0);
+                if (lines.length === 0) {
+                    throw new Error(
+                        `La acción ${action.action} del step "${row.text}" no genera código ejecutable`
+                    );
+                }
+            }
+        }
     }
 
     private buildLocators(
@@ -265,11 +325,10 @@ export class FwkMobileGenerator {
         screenPath: string
     ): string {
         const importPath = this.relativeImport(stepPath, screenPath);
-        const imports = [...new Set(rows.map(row =>
-            row.keyword === 'When' ? 'When' : row.keyword === 'Then' ? 'Then' : 'Given'
-        ))].sort();
+        const effectiveKeywords = this.effectiveStepKeywords(rows);
+        const imports = [...new Set(effectiveKeywords)].sort();
         const blocks = rows.map((row, index) => {
-            const keyword = row.keyword === 'When' ? 'When' : row.keyword === 'Then' ? 'Then' : 'Given';
+            const keyword = effectiveKeywords[index];
             const parameters = [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
                 .map(match => match[1]);
             const expression = this.stepExpression(row.text);
@@ -290,11 +349,23 @@ export class FwkMobileGenerator {
         ].join('\n');
     }
 
+    private effectiveStepKeywords(
+        rows: NonNullable<GenerationRequest['scenarioRows']>
+    ): ('Given' | 'When' | 'Then')[] {
+        let previous: 'Given' | 'When' | 'Then' = 'Given';
+        return rows.map(row => {
+            if (row.keyword === 'Given' || row.keyword === 'When' || row.keyword === 'Then') {
+                previous = row.keyword;
+            }
+            return previous;
+        });
+    }
+
     private buildScreenObject(
         request: GenerationRequest,
         rows: NonNullable<GenerationRequest['scenarioRows']>,
         screenPath: string,
-        locatorPath: string
+        locatorPath?: string
     ): string {
         const baseImport = this.relativeImport(
             screenPath,
@@ -308,7 +379,7 @@ export class FwkMobileGenerator {
             screenPath,
             path.join(projectPaths.frameworkRoot, 'support', 'utils', 'Enums.ts')
         );
-        const locatorImport = this.relativeImport(screenPath, locatorPath);
+        const locatorImport = locatorPath ? this.relativeImport(screenPath, locatorPath) : undefined;
         const className = this.pascalName(request.locatorModule) + 'Screen';
         const locators = this.collectLocators(rows.flatMap(row => row.actions || []));
         const androidBlock = locatorBlockName(request.locatorModule, 'android');
@@ -345,9 +416,11 @@ export class FwkMobileGenerator {
         return [
             `import { browser } from '@wdio/globals';`,
             `import BaseScreen from '${baseImport}';`,
-            `import LocatorFactory from '${factoryImport}';`,
-            `import { TypeLocator } from '${enumsImport}';`,
-            `import Locators from '${locatorImport}' with { type: 'json' };`,
+            ...(locators.length > 0 ? [
+                `import LocatorFactory from '${factoryImport}';`,
+                `import { TypeLocator } from '${enumsImport}';`,
+                `import Locators from '${locatorImport}' with { type: 'json' };`
+            ] : []),
             '',
             `class ${className} extends BaseScreen {`,
             ...getters.flatMap(getter => ['', getter]),

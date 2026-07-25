@@ -79,9 +79,16 @@ export class ReuseAnalyzer {
         this.screenMethods = this.indexScreenMethods();
     }
 
-    analyzeSteps(texts: string[], squad?: string): StepReuseResult[] {
+    analyzeSteps(
+        texts: string[],
+        squad?: string,
+        excludedFile?: string
+    ): StepReuseResult[] {
         if (this.stepDefinitions.length === 0) this.refresh();
-        const definitions = this.getStepDefinitions(squad);
+        const normalizedExcluded = excludedFile?.replace(/\\/g, '/');
+        const definitions = this.getStepDefinitions(squad).filter(
+            definition => definition.file.replace(/\\/g, '/') !== normalizedExcluded
+        );
         return texts.map(rawText => {
             const text = rawText.trim().replace(/^(Given|When|Then|And|But)\s+/, '');
             const match = definitions.find(definition => {
