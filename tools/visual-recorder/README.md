@@ -95,7 +95,7 @@ revisar, `GENERAR` se rechaza y exige ejecutar Preview nuevamente.
     Verificar : node --version
     Descargar : https://nodejs.org
 
-    Java 17+
+    Java 17+ (requerido unicamente para Android local; no es necesario para BrowserStack ni iOS local)
     Verificar : java --version
     Descargar : https://adoptium.net
 
