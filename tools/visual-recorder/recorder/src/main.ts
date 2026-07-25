@@ -16,6 +16,7 @@ import { FeatureGenerator } from './featureGenerator';
 import { RecordedStep } from '../../core/models';
 import { projectPaths, validateFrameworkRoot } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
+import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -24,6 +25,7 @@ validateFrameworkRoot();
 const dm             = new AppiumDriverManager();
 const bsDm           = new BrowserStackDriverManager();
 const frameworkScanner = new FrameworkScanner();
+const fwkMobileGenerator = new FwkMobileGenerator();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
 const featureGen     = new FeatureGenerator(
@@ -38,6 +40,7 @@ let inspector:     MobileInspector    | null = null;
 let executor:      MobileStepExecutor | null = null;
 let recordedSteps: RecordedStep[]     = [];
 let sessionActive  = false;
+let recordingPlatform: MobilePlatform = 'android';
 
 const BS_CONFIG_PATH      = path.join(projectPaths.toolConfig, 'bs_config.json');
 const SESSION_CONFIG_PATH = path.join(projectPaths.toolConfig, 'session_config.json');
@@ -116,6 +119,7 @@ ipcMain.handle('get-foreground-app', async (_, udid: string) => {
 ipcMain.handle('start-session', async (_, config: any) => {
     try {
         activeDm = dm;
+        recordingPlatform = 'android';
         await dm.startAppiumServer();
         await dm.init(config);
         locatorManager = new LocatorManager(projectPaths.locators, 'global', 'android');
@@ -387,6 +391,7 @@ ipcMain.handle('bs-upload-app', async (_, username: string, accessKey: string, c
 ipcMain.handle('bs-start-session', async (_, config: BrowserStackConfig) => {
     try {
         activeDm = bsDm;
+        recordingPlatform = config.platform === 'ios' ? 'ios' : 'android';
         await bsDm.init(config);
         locatorManager = new LocatorManager(projectPaths.locators, 'global', config.platform === 'ios' ? 'ios' : 'android');
         inspector  = new MobileInspector(activeDm);
@@ -464,7 +469,7 @@ ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
     if (!executor) return { success: false, message: 'Sin sesion activa' };
     if (stepData.variableName && stepData.selector) {
         if (!locatorManager.exists(stepData.variableName)) {
-            locatorManager.add(stepData.variableName, stepData.selector);
+            locatorManager.add(stepData.variableName, stepData.selector, false);
         }
     }
     const result = await executor.execute(stepData);
@@ -488,6 +493,30 @@ ipcMain.handle('clear-steps', async () => {
 
 ipcMain.handle('preview-gherkin', async (_, featureName: string, scenarioName: string) => {
     return { success: true, preview: featureGen.preview(featureName, scenarioName, recordedSteps) };
+});
+
+ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
+    try {
+        const preview = fwkMobileGenerator.preview(
+            { ...request, platform: recordingPlatform },
+            recordedSteps
+        );
+        return { success: true, preview };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('generate-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
+    try {
+        const generated = fwkMobileGenerator.generate(
+            { ...request, platform: recordingPlatform },
+            recordedSteps
+        );
+        return { success: true, generated };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
 });
 
 ipcMain.handle('generate-files', async (_, featureName: string, scenarioName: string) => {

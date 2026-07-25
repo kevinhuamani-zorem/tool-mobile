@@ -262,6 +262,29 @@
                         <input type="text" id="txtScenario" class="field-input" value="Escenario grabado"/>
                     </div>
                 </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label class="field-label">ID:</label>
+                        <input type="text" id="txtCaseId" class="field-input" value="CP_01"/>
+                    </div>
+                    <div class="input-group">
+                        <label class="field-label">Tipo:</label>
+                        <select id="cmbPathType" class="field-select">
+                            <option value="Happy Path">Happy Path</option>
+                            <option value="Unhappy Path">Unhappy Path</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label class="field-label">Tag:</label>
+                        <input type="text" id="txtFeatureTag" class="field-input" value="miflujo"/>
+                    </div>
+                </div>
+                <label class="field-label">Archivo feature:</label>
+                <input type="text" id="txtFeatureFile" class="field-input" value="flujo-mobile"/>
+                <label class="field-label">Módulo de pantalla/locators:</label>
+                <input type="text" id="txtLocatorModule" class="field-input" value="nueva-pantalla"/>
+                <label class="field-label">Usuario data (opcional):</label>
+                <input type="text" id="txtDataName" class="field-input" placeholder="name usado en Examples"/>
             </section>
 
             <section class="panel panel-right">

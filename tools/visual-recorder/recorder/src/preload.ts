@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('api', {
     deleteStep:          (idx: number)          => ipcRenderer.invoke('delete-step', idx),
     clearSteps:          ()                     => ipcRenderer.invoke('clear-steps'),
     previewGherkin:      (f: string, s: string) => ipcRenderer.invoke('preview-gherkin', f, s),
+    previewFwkFiles:     (request: any)          => ipcRenderer.invoke('preview-fwk-files', request),
+    generateFwkFiles:    (request: any)          => ipcRenderer.invoke('generate-fwk-files', request),
     generateFiles:       (f: string, s: string) => ipcRenderer.invoke('generate-files', f, s),
     getSteps:            ()                     => ipcRenderer.invoke('get-steps'),
     closeSession:        ()                     => ipcRenderer.invoke('close-session'),

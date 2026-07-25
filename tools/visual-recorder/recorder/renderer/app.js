@@ -90,6 +90,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const txtGherkin      = document.getElementById('txtGherkin');
     const txtFeature      = document.getElementById('txtFeature');
     const txtScenario     = document.getElementById('txtScenario');
+    const txtCaseId       = document.getElementById('txtCaseId');
+    const cmbPathType     = document.getElementById('cmbPathType');
+    const txtFeatureTag   = document.getElementById('txtFeatureTag');
+    const txtFeatureFile  = document.getElementById('txtFeatureFile');
+    const txtLocatorModule = document.getElementById('txtLocatorModule');
+    const txtDataName     = document.getElementById('txtDataName');
     const btnPreview      = document.getElementById('btnPreview');
     const btnGenerate     = document.getElementById('btnGenerate');
     const btnDelete       = document.getElementById('btnDeleteStep');
@@ -216,6 +222,20 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (!lblGenerate) return;
         lblGenerate.textContent = msg;
         lblGenerate.className = 'generate-result' + (type ? ' ' + type : '');
+    }
+
+    function buildGenerationRequest() {
+        return {
+            squad: cmbFrameworkSquad.value,
+            featureName: txtFeature.value.trim(),
+            scenarioName: txtScenario.value.trim(),
+            fileName: txtFeatureFile.value.trim(),
+            locatorModule: txtLocatorModule.value.trim(),
+            caseId: txtCaseId.value.trim(),
+            pathType: cmbPathType.value,
+            tag: txtFeatureTag.value.trim(),
+            dataName: txtDataName.value.trim()
+        };
     }
 
     function disableBtn(btn, text) {
@@ -1051,11 +1071,8 @@ window.addEventListener('DOMContentLoaded', async () => {
             clearStepFields();
             const sr = await api.getSteps();
             renderSteps(sr.steps);
-            const pr = await api.previewGherkin(
-                txtFeature.value.trim() || 'Flujo mobile',
-                txtScenario.value.trim() || 'Escenario'
-            );
-            if (pr.success && txtGherkin) txtGherkin.value = pr.preview;
+            const pr = await api.previewFwkFiles(buildGenerationRequest());
+            if (pr.success && txtGherkin) txtGherkin.value = pr.preview.featureContent;
         } else {
             setStatus('✗ ' + result.message, '#CC0000');
         }
@@ -1079,44 +1096,31 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     btnPreview.addEventListener('click', async () => {
-        const r = await api.previewGherkin(
-            txtFeature.value.trim() || 'Flujo mobile',
-            txtScenario.value.trim() || 'Escenario'
-        );
-        if (r.success && txtGherkin) txtGherkin.value = r.preview;
+        const r = await api.previewFwkFiles(buildGenerationRequest());
+        if (r.success && txtGherkin) {
+            txtGherkin.value = r.preview.featureContent;
+            setGenerate(`Preparado: ${r.preview.files.length} archivo(s)`, 'ok');
+        } else {
+            setGenerate('✗ ' + r.error, 'err');
+        }
     });
 
     btnGenerate.addEventListener('click', async () => {
-        const featureName  = txtFeature.value.trim()  || 'Flujo mobile';
-        const scenarioName = txtScenario.value.trim() || 'Escenario';
-
         disableBtn(btnGenerate, '⏳ Generando...');
-
         if (linkedScenarioData) {
-            // Modo enlazado: genera .feature con textos Gherkin custom + scenario_linked.json
-            const r = await api.generateLinkedFiles(
-                featureName, scenarioName,
-                linkedScenarioData.stepRows,
-                linkedScenarioData.linked
-            );
             enableBtn(btnGenerate);
-            if (r.success) {
-                setGenerate('✓ ' + r.featurePath + '  |  linked-steps.ts', 'ok');
-                setStatus('✓ Generado (.feature + linked-steps.ts)', '#00CC00');
-                linkedScenarioData = null; // limpiar para el próximo ciclo
-            } else {
-                setGenerate('✗ ' + r.error, 'err');
-            }
+            setGenerate('✗ El modo Enlazar se adaptará en la fase de reutilización de steps.', 'err');
+            return;
+        }
+
+        const r = await api.generateFwkFiles(buildGenerationRequest());
+        enableBtn(btnGenerate);
+        if (r.success) {
+            const paths = r.generated.files.join(' | ');
+            setGenerate('✓ ' + paths, 'ok');
+            setStatus('✓ Feature y locators generados', '#00CC00');
         } else {
-            // Modo normal: genera .feature desde los steps individuales
-            const r = await api.generateFiles(featureName, scenarioName);
-            enableBtn(btnGenerate);
-            if (r.success) {
-                setGenerate('✓ ' + r.featurePath, 'ok');
-                setStatus('✓ Generado', '#00CC00');
-            } else {
-                setGenerate('✗ ' + r.error, 'err');
-            }
+            setGenerate('✗ ' + r.error, 'err');
         }
     });
 

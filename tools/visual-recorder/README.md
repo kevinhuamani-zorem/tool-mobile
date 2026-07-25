@@ -22,6 +22,22 @@ configuradas. Los valores permanecen en el proceso principal y las claves
 sensibles se clasifican como tales. Esto permite usar el ambiente seleccionado
 en una fase posterior sin exponer secretos en Electron.
 
+## Salida compatible con fwk-mobile-test
+
+La generación normal solicita squad, archivo, módulo de locators, ID `CP_XX`,
+tipo de camino y tag. La salida se escribe directamente en:
+
+    features/yape-features/<squad>/<archivo>.feature
+    resources/locators/<squad>/<módulo>.locator.json
+
+Los locators usan los bloques `<módulo>Android` o `<módulo>Ios` esperados por el
+framework. Si se informa un usuario de data, el feature usa `Scenario Outline`
+y crea su tabla `Examples`.
+
+La generación valida todas las rutas, escribe primero archivos temporales y no
+sobrescribe archivos existentes. Los locators capturados permanecen en memoria
+hasta que el usuario presiona `GENERAR`.
+
 ---
 
 ## Como funciona
