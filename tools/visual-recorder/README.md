@@ -57,6 +57,22 @@ framework para clicks, escritura, espera, validaciones y gestos soportados.
 También se indexan los métodos públicos disponibles por squad y los de
 `commons`, para facilitar su reutilización asistida.
 
+### Preview y validación
+
+Antes de generar es obligatorio presionar `Preview`. La interfaz permite
+alternar y revisar el contenido de cada archivo propuesto. El proceso principal:
+
+- valida el formato Gherkin y `[CP_XX][Path][AUTO-FRONT]`;
+- valida los bloques Android/iOS y la sintaxis JSON;
+- valida sintaxis TypeScript de Steps y Screen Objects;
+- informa selectores pendientes para la otra plataforma;
+- detecta conflictos con archivos existentes;
+- rechaza rutas fuera de las capas permitidas.
+
+Cada Preview crea un token asociado al contenido exacto de la grabación y la
+configuración elegida. Si se modifican steps, rutas o metadatos después de
+revisar, `GENERAR` se rechaza y exige ejecutar Preview nuevamente.
+
 ---
 
 ## Como funciona
