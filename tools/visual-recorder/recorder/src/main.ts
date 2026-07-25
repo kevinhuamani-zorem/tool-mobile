@@ -475,6 +475,47 @@ ipcMain.handle('get-screenshot', async () => {
     }
 });
 
+ipcMain.handle('tap-at', async (_, x: number, y: number) => {
+    if (!sessionActive || !inspector) {
+        return { success: false, error: 'Sin sesion activa' };
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return { success: false, error: 'Coordenadas invalidas' };
+    }
+    try {
+        await activeDm.tapAt(x, y);
+        // Da tiempo a que termine una transición breve antes de actualizar la vista.
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const screenshot = await inspector.captureScreenshot();
+        return { success: true, screenshot };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('swipe-from-to', async (
+    _,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number
+) => {
+    if (!sessionActive || !inspector) {
+        return { success: false, error: 'Sin sesion activa' };
+    }
+    if (![startX, startY, endX, endY].every(Number.isFinite)) {
+        return { success: false, error: 'Coordenadas invalidas' };
+    }
+    try {
+        await activeDm.swipeFromTo(startX, startY, endX, endY);
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const screenshot = await inspector.captureScreenshot();
+        return { success: true, screenshot };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
 ipcMain.handle('activate-inspector', async () => {
     if (!inspector) return { success: false, error: 'Sin sesion activa' };
     await inspector.activate();

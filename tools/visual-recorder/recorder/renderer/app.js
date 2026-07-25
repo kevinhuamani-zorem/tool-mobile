@@ -76,6 +76,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const imgDevice       = document.getElementById('imgDevice');
     const devicePH        = document.getElementById('devicePlaceholder');
     const btnInspect      = document.getElementById('btnInspect');
+    const btnInteract     = document.getElementById('btnInteract');
     const lblInspect      = document.getElementById('lblInspectStatus');
     const txtSelector     = document.getElementById('txtSelector');
     const txtVarName      = document.getElementById('txtVarName');
@@ -983,6 +984,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     btnCloseSession.addEventListener('click', async () => {
+        exitInspectorMode();
+        exitInteractionMode();
         await api.closeSession();
         cmbFrameworkSquad.disabled = false;
         screenRecorder.style.cssText = 'display:none !important';
@@ -1077,6 +1080,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     let inspectorElems       = [];
     let inspectorDimW        = 0;
     let inspectorDimH        = 0;
+    let interactionActive    = false;
+    let interactionBusy      = false;
+    let interactionDownFn    = null;
+    let interactionUpFn      = null;
+    let interactionCancelFn  = null;
+    let interactionStart     = null;
 
     /** Genera candidatos explícitos de Appium a partir de un elemento parseado. */
     function buildCandidatesFromEl(el) {
@@ -1177,9 +1186,138 @@ window.addEventListener('DOMContentLoaded', async () => {
             imgDevice.removeEventListener('click', inspectorClickFn);
             inspectorClickFn = null;
         }
-        btnInspect.textContent = '🖱️ Inspeccionar elemento';
+        btnInspect.textContent = '🔍 Inspeccionar';
         btnInspect.disabled    = false;
     }
+
+    function exitInteractionMode() {
+        interactionActive = false;
+        interactionBusy = false;
+        imgDevice.classList.remove('manual-interaction', 'busy');
+        btnInteract.classList.remove('mode-active');
+        btnInteract.textContent = '👆 Interactuar';
+        btnInspect.disabled = false;
+        interactionStart = null;
+        if (interactionDownFn) imgDevice.removeEventListener('pointerdown', interactionDownFn);
+        if (interactionUpFn) imgDevice.removeEventListener('pointerup', interactionUpFn);
+        if (interactionCancelFn) imgDevice.removeEventListener('pointercancel', interactionCancelFn);
+        interactionDownFn = null;
+        interactionUpFn = null;
+        interactionCancelFn = null;
+    }
+
+    async function loadDeviceCoordinateSpace() {
+        const xmlR = await api.getPageSource();
+        if (!xmlR.success) throw new Error(xmlR.error || 'No se pudo obtener el XML');
+
+        const elements = parseElements(xmlR.xml);
+        const coordinateElements = elements.filter(el =>
+            Number.isFinite(el.x2) && Number.isFinite(el.y2) && el.x2 > 0 && el.y2 > 0
+        );
+        const wm = xmlR.xml.match(/width="(\d+)"/);
+        const hm = xmlR.xml.match(/height="(\d+)"/);
+        inspectorDimW = wm
+            ? parseInt(wm[1])
+            : Math.max(...coordinateElements.map(el => el.x2), deviceW || 1);
+        inspectorDimH = hm
+            ? parseInt(hm[1])
+            : Math.max(...coordinateElements.map(el => el.y2), deviceH || 1);
+
+        if (!inspectorDimW || !inspectorDimH) {
+            throw new Error('No se pudieron determinar las dimensiones del dispositivo');
+        }
+    }
+
+    btnInteract.addEventListener('click', async () => {
+        if (interactionActive) {
+            exitInteractionMode();
+            setInspect('— Interacción manual desactivada', '');
+            setStatus('—', '#888AAA');
+            return;
+        }
+
+        if (inspectorActive) exitInspectorMode();
+        interactionActive = true;
+        btnInteract.disabled = true;
+        btnInteract.textContent = '⏳ Cargando...';
+        setInspect('⏳ Preparando interacción manual...', 'active');
+
+        try {
+            await loadDeviceCoordinateSpace();
+            if (!interactionActive) return;
+            btnInteract.disabled = false;
+            btnInteract.textContent = '✕ Salir';
+            btnInteract.classList.add('mode-active');
+            btnInspect.disabled = true;
+            imgDevice.classList.add('manual-interaction');
+            setInspect('👆 Clic para tap · arrastra para scroll o swipe', 'ok');
+            setStatus('👆 Interacción manual activa', '#21B14B');
+
+            const toDevicePoint = event => {
+                const rect = imgDevice.getBoundingClientRect();
+                return {
+                    x: Math.round(((event.clientX - rect.left) / rect.width) * inspectorDimW),
+                    y: Math.round(((event.clientY - rect.top) / rect.height) * inspectorDimH),
+                };
+            };
+
+            interactionDownFn = event => {
+                if (!interactionActive || interactionBusy) return;
+                event.preventDefault();
+                interactionStart = toDevicePoint(event);
+                imgDevice.setPointerCapture?.(event.pointerId);
+            };
+
+            interactionUpFn = async event => {
+                if (!interactionActive || interactionBusy || !interactionStart) return;
+                event.preventDefault();
+                const start = interactionStart;
+                const end = toDevicePoint(event);
+                interactionStart = null;
+                interactionBusy = true;
+                imgDevice.classList.add('busy');
+
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const distance = Math.hypot(dx, dy);
+                const isDrag = distance >= Math.max(20, Math.min(inspectorDimW, inspectorDimH) * 0.025);
+                const gestureName = Math.abs(dy) >= Math.abs(dx) ? 'scroll' : 'swipe';
+                setInspect(
+                    isDrag
+                        ? '⏳ Ejecutando ' + gestureName + '...'
+                        : '⏳ Tocando (' + end.x + ', ' + end.y + ')...',
+                    'active'
+                );
+
+                const result = isDrag
+                    ? await api.swipeFromTo(start.x, start.y, end.x, end.y)
+                    : await api.tapAt(end.x, end.y);
+                if (!interactionActive) return;
+                if (result.success) {
+                    if (result.screenshot) updateDeviceScreen(result.screenshot);
+                    const completed = isDrag
+                        ? (gestureName === 'scroll' ? 'Scroll' : 'Swipe')
+                        : 'Tap';
+                    setInspect('✓ ' + completed + ' ejecutado — puedes seguir interactuando', 'ok');
+                    setStatus('✓ ' + completed + ' manual ejecutado', '#00CC00');
+                } else {
+                    setInspect('✗ No se pudo ejecutar el gesto: ' + (result.error || 'Error desconocido'), 'err');
+                    setStatus('✗ Error en gesto manual', '#CC0000');
+                }
+                interactionBusy = false;
+                imgDevice.classList.remove('busy');
+            };
+            interactionCancelFn = () => { interactionStart = null; };
+            imgDevice.addEventListener('pointerdown', interactionDownFn);
+            imgDevice.addEventListener('pointerup', interactionUpFn);
+            imgDevice.addEventListener('pointercancel', interactionCancelFn);
+        } catch (error) {
+            exitInteractionMode();
+            btnInteract.disabled = false;
+            setInspect('✗ ' + error.message, 'err');
+            setStatus('✗ No se pudo activar la interacción', '#CC0000');
+        }
+    });
 
     btnInspect.addEventListener('click', async () => {
         // Si ya está activo → cancelar
@@ -1191,6 +1329,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Activar modo inspección
+        if (interactionActive) exitInteractionMode();
         clearSelectorChips();
         selectedCatalogLocator = null;
         txtSelector.value = '';
@@ -2102,6 +2241,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Abrir inspector
     btnXmlInspector.addEventListener('click', async () => {
+        if (inspectorActive) exitInspectorMode();
+        if (interactionActive) exitInteractionMode();
         clearSelectorChips();
         selectedCatalogLocator = null;
         xmlModal.style.display = 'flex';

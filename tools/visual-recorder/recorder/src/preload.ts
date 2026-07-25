@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('api', {
 
     // ── Comunes ───────────────────────────────────────────────────────────────
     getScreenshot:       ()                     => ipcRenderer.invoke('get-screenshot'),
+    tapAt:               (x: number, y: number) => ipcRenderer.invoke('tap-at', x, y),
+    swipeFromTo:         (sx: number, sy: number, ex: number, ey: number) =>
+        ipcRenderer.invoke('swipe-from-to', sx, sy, ex, ey),
     activateInspector:   ()                     => ipcRenderer.invoke('activate-inspector'),
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),
