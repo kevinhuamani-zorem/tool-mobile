@@ -1079,6 +1079,43 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.assigned-action-config {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.action-param-select {
+    max-width: 260px;
+    padding: 4px 7px;
+    background: var(--bg4);
+    color: #D8D8F0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+}
+.scenario-params {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 7px 0;
+    padding: 7px;
+    background: rgba(46, 117, 182, 0.1);
+    border: 1px solid rgba(46, 117, 182, 0.4);
+    border-radius: 5px;
+}
+.scenario-params-title { color: #8EC5FF; font-size: 10px; font-weight: 700; }
+.scenario-params label { color: #C8C9E8; font-size: 10px; }
+.parameter-example-input {
+    width: 170px;
+    margin-left: 4px;
+    padding: 4px 6px;
+    background: var(--bg4);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
 
 .chip-remove {
     cursor: pointer;

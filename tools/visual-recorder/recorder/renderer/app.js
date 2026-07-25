@@ -110,9 +110,27 @@ window.addEventListener('DOMContentLoaded', async () => {
     let previewDocuments  = [];
     let squadCatalog      = { stepDefinitions: [], screenMethods: [], locators: [], features: [] };
     let locatorActiveIndex = -1;
+    let selectedCatalogLocator = null;
     const collapsedLocatorGroups = new Set([
         'Botones', 'Campos', 'Textos', 'Imágenes e íconos', 'Listas y contenedores', 'Otros'
     ]);
+    const GENERATED_FILES_STORAGE_KEY = 'appiumVisualRecorder.generatedFiles.v1';
+
+    function rememberGeneratedFiles(files) {
+        let history = [];
+        try {
+            const stored = JSON.parse(localStorage.getItem(GENERATED_FILES_STORAGE_KEY) || '[]');
+            if (Array.isArray(stored)) history = stored;
+        } catch {
+            history = [];
+        }
+        history.unshift({
+            generatedAt: new Date().toISOString(),
+            squad: cmbFrameworkSquad.value || 'payment',
+            files
+        });
+        localStorage.setItem(GENERATED_FILES_STORAGE_KEY, JSON.stringify(history.slice(0, 20)));
+    }
 
     // ─── ELEMENTOS HIERARCHY VIEWER ──────────────────────────────────────────
     const xmlModal        = document.getElementById('xmlModal');
@@ -316,15 +334,26 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     function selectCatalogLocator(locator) {
         txtVarName.value = locator.name;
-        txtSelector.value = locator.selector;
-        txtLocatorModule.value = locator.module.replace(
-            new RegExp(`^${(cmbFrameworkSquad.value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`),
-            ''
-        );
+        txtSelector.value = executableCatalogSelector(locator);
+        selectedCatalogLocator = locator;
         locatorCatalogDropdown.classList.remove('open');
         txtVarName.setAttribute('aria-expanded', 'false');
         if (lblLocatorCatalog) lblLocatorCatalog.textContent = `♻️ ${locator.scope}: ${locator.file}`;
         setStatus(`✓ Locator reutilizado desde ${locator.file}`, '#00CC00');
+    }
+
+    function executableCatalogSelector(locator) {
+        const selector = String(locator.selector || '').trim();
+        if (
+            locator.platform === 'android' &&
+            (selector.startsWith('new UiSelector(') || selector.startsWith('new UiScrollable('))
+        ) {
+            return `android=${selector}`;
+        }
+        if (locator.platform === 'ios' && selector.startsWith('**/')) {
+            return `iosClassChain=${selector}`;
+        }
+        return selector;
     }
 
     cmbFrameworkSquad.addEventListener('change', () => {
@@ -338,6 +367,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         txtVarName.setAttribute('aria-expanded', 'true');
     });
     txtVarName.addEventListener('input', () => {
+        selectedCatalogLocator = null;
         renderLocatorCatalog();
         locatorCatalogDropdown.classList.add('open');
     });
@@ -409,6 +439,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     function buildPreparedGenerationRequest() {
         const request = buildGenerationRequest();
         if (linkedScenarioData) {
+            request.examples = linkedScenarioData.examples || {};
             request.scenarioRows = linkedScenarioData.stepRows.map(row => ({
                 ...row,
                 actions: linkedScenarioData.linked[row.text] || []
@@ -498,6 +529,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     function clearStepFields() {
         if (txtSelector) txtSelector.value = '';
         if (txtVarName)  txtVarName.value  = '';
+        selectedCatalogLocator = null;
         if (txtValue)    txtValue.value    = '';
         if (txtDesc)     txtDesc.value     = '';
         setVerify('— Ingresa un selector');
@@ -959,6 +991,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     // ── Chips de selector (inspector físico) ─────────────────────────────────
+    function clearSelectorChips() {
+        document.getElementById('selectorChips')?.remove();
+    }
+
     function renderSelectorChips(candidates, suggested) {
         let chipsWrap = document.getElementById('selectorChips');
         if (!chipsWrap) {
@@ -966,7 +1002,8 @@ window.addEventListener('DOMContentLoaded', async () => {
             chipsWrap.id = 'selectorChips';
             chipsWrap.style.cssText =
                 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding:4px 0';
-            txtSelector.parentNode.insertBefore(chipsWrap, txtSelector.nextSibling);
+            const selectorRow = txtSelector.closest('.input-row');
+            selectorRow.insertAdjacentElement('afterend', chipsWrap);
         }
         chipsWrap.innerHTML = '';
 
@@ -1136,6 +1173,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Activar modo inspección
+        clearSelectorChips();
+        selectedCatalogLocator = null;
+        txtSelector.value = '';
+        txtVarName.value = '';
+        setVerify('— Ingresa un selector');
         inspectorActive        = true;
         btnInspect.textContent = '✕ Cancelar';
         setInspect('⏳ Cargando pantalla...', 'active');
@@ -1204,6 +1246,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
 
             const candidates = buildCandidatesFromEl(best);
+            clearSelectorChips();
             if (candidates.length === 0) {
                 setInspect('⚠ Elemento sin identificadores útiles — elige otro', 'err');
                 setStatus('⚠ Sin identificadores', '#FF9900');
@@ -1266,8 +1309,24 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (!noSel.includes(action) && !selector) {
             setStatus('⚠ Ingresa un selector', '#FF6600'); return;
         }
+        if (!noSel.includes(action) && !varName) {
+            setStatus('⚠ Ingresa o selecciona el nombre del locator', '#FF6600'); return;
+        }
 
-        const step = { action, variableName: varName, selector, value, description: desc };
+        const step = {
+            action,
+            variableName: varName,
+            selector,
+            value,
+            description: desc,
+            ...(selectedCatalogLocator ? {
+                locatorSource: {
+                    file: selectedCatalogLocator.file,
+                    module: selectedCatalogLocator.module,
+                    scope: selectedCatalogLocator.scope
+                }
+            } : {})
+        };
         invalidatePreview();
         disableBtn(btnExecute, '⏳ Ejecutando...');
         setStatus('⚡ Ejecutando...', '#FF6600');
@@ -1346,7 +1405,10 @@ window.addEventListener('DOMContentLoaded', async () => {
                 const warnings = r.validation.warnings.length
                     ? ` · ${r.validation.warnings.join(' | ')}`
                     : '';
-                setGenerate(`✓ Revisar ${r.preview.files.length} archivo(s)${warnings}`, 'ok');
+                const updates = r.managedUpdates
+                    ? ` · ${r.managedUpdates} archivo(s) administrado(s) se actualizarán`
+                    : '';
+                setGenerate(`✓ Revisar ${r.preview.files.length} archivo(s)${updates}${warnings}`, 'ok');
             }
         } else {
             setGenerate('✗ ' + r.error, 'err');
@@ -1366,6 +1428,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         enableBtn(btnGenerate);
         if (r.success) {
             const paths = r.generated.files.join(' | ');
+            rememberGeneratedFiles(r.generated.files);
             setGenerate('✓ ' + paths, 'ok');
             setStatus('✓ Feature y locators generados', '#00CC00');
             linkedScenarioData = null;
@@ -2152,15 +2215,32 @@ window.addEventListener('DOMContentLoaded', async () => {
     txtExistingStepSearch?.addEventListener('input', renderExistingSteps);
 
     function scenarioRowHtml(row, rowIdx) {
+        row.examples ||= {};
+        row.bindings ||= {};
+        const parameters = [...new Set(
+            [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)].map(match => match[1])
+        )];
         const assignedHtml = row.stepIndices.length === 0
             ? '<span class="assigned-empty-hint">← Haz click en un step de la izquierda para asignarlo</span>'
             : row.stepIndices.map(si => {
                 const s = enlazarSteps[si];
                 const label = s ? stepSummary(s) : 'Step #' + si;
-                return `<span class="assigned-chip" data-row="${rowIdx}" data-si="${si}">
-                    ${label.slice(0, 50)}${label.length > 50 ? '…' : ''}
-                    <span class="chip-remove" data-row="${rowIdx}" data-si="${si}">✕</span>
-                </span>`;
+                const supportsValue = s && ['ESCRIBIR', 'VERIFICAR_TEXTO'].includes(s.action);
+                const options = [
+                    `<option value="">Literal grabado: ${String(s?.value || '').replace(/</g, '&lt;')}</option>`,
+                    ...parameters.map(parameter =>
+                        `<option value="${parameter}"${row.bindings[si] === parameter ? ' selected' : ''}>Parámetro: &lt;${parameter}&gt;</option>`
+                    )
+                ].join('');
+                return `<div class="assigned-action-config">
+                    <span class="assigned-chip" data-row="${rowIdx}" data-si="${si}">
+                        ${label.slice(0, 50)}${label.length > 50 ? '…' : ''}
+                        <span class="chip-remove" data-row="${rowIdx}" data-si="${si}">✕</span>
+                    </span>
+                    ${supportsValue && parameters.length
+                        ? `<select class="action-param-select" data-row="${rowIdx}" data-si="${si}">${options}</select>`
+                        : ''}
+                </div>`;
             }).join('');
 
         const kwOptions = GHERKIN_KEYWORDS.map(kw =>
@@ -2174,6 +2254,16 @@ window.addEventListener('DOMContentLoaded', async () => {
                 <input type="text" class="scenario-step-input" placeholder="descripción del step..." value="${row.text.replace(/"/g, '&quot;')}" data-row="${rowIdx}"/>
                 <button class="btn-remove-row" data-row="${rowIdx}">✕</button>
             </div>
+            ${parameters.length ? `<div class="scenario-params">
+                <span class="scenario-params-title">Parámetros:</span>
+                ${parameters.map(parameter =>
+                    `<label>&lt;${parameter}&gt;
+                        <input class="parameter-example-input" data-row="${rowIdx}" data-param="${parameter}"
+                               value="${String(row.examples[parameter] || '').replace(/"/g, '&quot;')}"
+                               placeholder="valor de ejemplo"/>
+                    </label>`
+                ).join('')}
+            </div>` : ''}
             <div class="assigned-steps-area${row.stepIndices.length === 0 ? ' empty-area' : ''}" data-row="${rowIdx}">
                 ${assignedHtml}
             </div>
@@ -2217,18 +2307,49 @@ window.addEventListener('DOMContentLoaded', async () => {
                 const ri = parseInt(inp.dataset.row);
                 scenarioRows[ri].text = e.target.value;
             });
+            inp.addEventListener('blur', () => renderScenarioRows());
             inp.addEventListener('click', e => {
                 e.stopPropagation();
                 const ri = parseInt(inp.dataset.row);
                 activeRowIndex = ri;
                 updateEnlazarHint();
-                renderScenarioRows();
-                // Restaurar foco al input
-                setTimeout(() => {
-                    const freshInp = scenarioRowsContainer.querySelector(`.scenario-step-input[data-row="${ri}"]`);
-                    if (freshInp) { freshInp.focus(); freshInp.setSelectionRange(freshInp.value.length, freshInp.value.length); }
-                }, 0);
+                scenarioRowsContainer.querySelectorAll('.scenario-row').forEach(rowElement => {
+                    rowElement.classList.toggle(
+                        'active',
+                        parseInt(rowElement.dataset.row) === ri
+                    );
+                });
             });
+        });
+
+        scenarioRowsContainer.querySelectorAll('.parameter-example-input').forEach(input => {
+            input.addEventListener('input', e => {
+                e.stopPropagation();
+                const ri = parseInt(input.dataset.row);
+                scenarioRows[ri].examples ||= {};
+                scenarioRows[ri].examples[input.dataset.param] = e.target.value;
+            });
+            input.addEventListener('click', e => e.stopPropagation());
+        });
+
+        scenarioRowsContainer.querySelectorAll('.action-param-select').forEach(select => {
+            select.addEventListener('change', e => {
+                e.stopPropagation();
+                const ri = parseInt(select.dataset.row);
+                const si = parseInt(select.dataset.si);
+                scenarioRows[ri].bindings ||= {};
+                if (select.value) {
+                    scenarioRows[ri].bindings[si] = select.value;
+                    scenarioRows[ri].examples ||= {};
+                    if (!scenarioRows[ri].examples[select.value]) {
+                        scenarioRows[ri].examples[select.value] = enlazarSteps[si]?.value || '';
+                    }
+                } else {
+                    delete scenarioRows[ri].bindings[si];
+                }
+                renderScenarioRows();
+            });
+            select.addEventListener('click', e => e.stopPropagation());
         });
 
         // Botón eliminar fila
@@ -2338,21 +2459,48 @@ window.addEventListener('DOMContentLoaded', async () => {
         const linked = {};
         const stepTexts = [];   // solo los textos, para el .feature se pasa el keyword aparte
         const stepRows  = [];   // { keyword, text } para el .feature
+        const examples = {};
+        const parameterErrors = [];
         scenarioRows.forEach(row => {
             const key = row.text.trim() || 'step sin nombre';
+            const locatorReference = key.match(/\{([^{}]+)\}/)?.[1]?.trim();
+            if (locatorReference) {
+                parameterErrors.push(
+                    `No uses {${locatorReference}} en Gherkin; enlaza la acción o usa ` +
+                    `<${locatorReference.replace(/\s+/g, '_')}>`
+                );
+            }
             stepTexts.push(key);
             stepRows.push({ keyword: row.keyword || 'And', text: key });
+            const parameters = [...new Set(
+                [...key.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)].map(match => match[1])
+            )];
+            parameters.forEach(parameter => {
+                const value = String(row.examples?.[parameter] || '').trim();
+                if (!value) parameterErrors.push(`Falta ejemplo para <${parameter}>`);
+                if (examples[parameter] && examples[parameter] !== value) {
+                    parameterErrors.push(`El parámetro <${parameter}> tiene valores diferentes`);
+                }
+                examples[parameter] = value;
+            });
             linked[key] = row.stepIndices.map(si => {
                 const s = enlazarSteps[si];
+                const binding = row.bindings?.[si];
                 return {
                     action:       s.action        || '',
                     variableName: s.variableName  || '',
                     selector:     s.selector      || '',
-                    value:        s.value         || '',
-                    description:  s.description   || ''
+                    value:        binding ? `<${binding}>` : (s.value || ''),
+                    description:  s.description   || '',
+                    ...(s.locatorSource ? { locatorSource: s.locatorSource } : {})
                 };
             });
         });
+        if (parameterErrors.length > 0) {
+            enlazarHint.textContent = '⚠ ' + [...new Set(parameterErrors)].join(' · ');
+            enlazarHint.style.color = '#CC0000';
+            return;
+        }
 
         // Guardar en memoria para cuando el usuario haga click en GENERAR
         const reuse = await api.analyzeStepReuse(stepTexts, cmbFrameworkSquad.value);
@@ -2365,6 +2513,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             linked,
             stepTexts,
             stepRows,
+            examples,
             reuse: reuse.steps,
             screenMethods: reuse.screenMethods
         };

@@ -19,6 +19,7 @@ import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
 import { OutputValidator } from '../../core/outputValidator';
+import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
 import crypto from 'crypto';
 
 let mainWindow: BrowserWindow | null = null;
@@ -31,6 +32,7 @@ const frameworkScanner = new FrameworkScanner();
 const fwkMobileGenerator = new FwkMobileGenerator();
 const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
+const generatedFileRegistry = new GeneratedFileRegistry();
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -543,7 +545,25 @@ function prepareGenerationRequest(
     const prepared: GenerationRequest = { ...request, platform: recordingPlatform };
     if (prepared.scenarioRows?.length) {
         reuseAnalyzer.refresh();
-        const reuse = reuseAnalyzer.analyzeSteps(prepared.scenarioRows.map(row => row.text));
+        const normalizedFileName = (prepared.fileName || prepared.featureName)
+            .trim()
+            .toLowerCase()
+            .replace(/\.feature$/i, '')
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9_-]/g, '');
+        const targetStepFile = path.relative(
+            projectPaths.frameworkRoot,
+            path.join(
+                projectPaths.stepDefinitions,
+                prepared.squad || activeSquad,
+                `${normalizedFileName}.steps.ts`
+            )
+        );
+        const reuse = reuseAnalyzer.analyzeSteps(
+            prepared.scenarioRows.map(row => row.text),
+            prepared.squad || activeSquad,
+            targetStepFile
+        );
         prepared.scenarioRows = prepared.scenarioRows.map((row, index) => ({
             ...row,
             status: reuse[index].status
@@ -560,11 +580,20 @@ ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, '
             recordedSteps
         );
         const validation = outputValidator.validate(preview);
+        const managed = generatedFileRegistry.assess(preview, prepared.squad);
+        validation.conflicts = managed.conflicts;
+        validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
         const fingerprint = generationFingerprint(prepared, recordedSteps);
         const previewToken = crypto.randomUUID();
         approvedPreviews.clear();
         approvedPreviews.set(previewToken, fingerprint);
-        return { success: true, preview, validation, previewToken };
+        return {
+            success: true,
+            preview,
+            validation,
+            previewToken,
+            managedUpdates: managed.writable.size
+        };
     } catch (e: any) {
         return { success: false, error: e.message };
     }
@@ -590,16 +619,26 @@ ipcMain.handle('generate-fwk-files', async (
         }
         const preview = fwkMobileGenerator.preview(prepared, recordedSteps);
         const validation = outputValidator.validate(preview);
+        const managed = generatedFileRegistry.assess(preview, prepared.squad);
+        validation.conflicts = managed.conflicts;
+        validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
         if (!validation.valid) {
             const details = [...validation.errors, ...validation.conflicts].join(', ');
             throw new Error(`La salida no superó la validación: ${details}`);
         }
         const generated = fwkMobileGenerator.generate(
             prepared,
-            recordedSteps
+            recordedSteps,
+            managed.writable
         );
+        const manifest = generatedFileRegistry.register(generated, prepared.squad);
         approvedPreviews.delete(previewToken);
-        return { success: true, generated, validation };
+        return {
+            success: true,
+            generated,
+            validation,
+            managedFiles: Object.keys(manifest.files)
+        };
     } catch (e: any) {
         return { success: false, error: e.message };
     }

@@ -88,6 +88,13 @@ export class AppiumDriverManager {
 
     async findElement(selector: string) {
         const driver = this.getDriver();
+        const trimmedSelector = selector.trim();
+        if (
+            trimmedSelector.startsWith('new UiSelector(') ||
+            trimmedSelector.startsWith('new UiScrollable(')
+        ) {
+            return await driver.$(`android=${trimmedSelector}`);
+        }
         if (selector.startsWith('id=')) {
             const resourceId = selector.slice(3);
             if (!resourceId.includes('/') && !resourceId.includes(':')) {
