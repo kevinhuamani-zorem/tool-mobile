@@ -61,6 +61,26 @@ export class GeneratedFileRegistry {
         return manifest;
     }
 
+    registerUpdatedFile(file: string, squad: string): RegistryDocument {
+        if (!fs.existsSync(file)) throw new Error(`No existe el archivo generado: ${file}`);
+        const manifest = this.read();
+        const relative = this.relative(file);
+        const current = manifest.files[relative];
+        // No convierte archivos del framework creados manualmente en archivos
+        // administrados; solo mantiene vigente un registro que ya existía.
+        if (!current || current.squad !== squad) return manifest;
+        manifest.files[relative] = {
+            contentHash: this.hash(fs.readFileSync(file)),
+            generatedAt: new Date().toISOString(),
+            squad
+        };
+        fs.mkdirSync(path.dirname(this.manifestPath), { recursive: true });
+        const temporary = `${this.manifestPath}.${process.pid}.tmp`;
+        fs.writeFileSync(temporary, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+        fs.renameSync(temporary, this.manifestPath);
+        return manifest;
+    }
+
     private outputs(preview: GeneratedPreview): { file: string; content: string }[] {
         return [
             { file: preview.featurePath, content: preview.featureContent },

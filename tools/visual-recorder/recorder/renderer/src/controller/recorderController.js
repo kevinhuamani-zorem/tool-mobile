@@ -1,4 +1,4 @@
-window.addEventListener('DOMContentLoaded', async () => {
+export async function initializeRecorder() {
 
     const api = window.api;
 
@@ -55,6 +55,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     let activeMode    = 'local'; // 'local' | 'bs'
     let bsPlatform    = 'android'; // 'android' | 'ios'
+    let sessionPlatform = 'android';
 
     // Upload modal
     const uploadModal         = document.getElementById('uploadModal');
@@ -83,6 +84,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const locatorCombobox = document.getElementById('locatorCombobox');
     const locatorCatalogDropdown = document.getElementById('locatorCatalogDropdown');
     const lblLocatorCatalog = document.getElementById('lblLocatorCatalog');
+    const locatorCoverage = document.getElementById('locatorCoverage');
+    const lblLogicalLocator = document.getElementById('lblLogicalLocator');
+    const lblActivePlatform = document.getElementById('lblActivePlatform');
+    const lblAndroidCoverage = document.getElementById('lblAndroidCoverage');
+    const lblIosCoverage = document.getElementById('lblIosCoverage');
+    const btnAssignLocator = document.getElementById('btnAssignLocator');
     const btnCopy         = document.getElementById('btnCopy');
     const btnVerify       = document.getElementById('btnVerify');
     const lblVerify       = document.getElementById('lblVerifyResult');
@@ -103,19 +110,78 @@ window.addEventListener('DOMContentLoaded', async () => {
     const txtDataName     = document.getElementById('txtDataName');
     const btnPreview      = document.getElementById('btnPreview');
     const btnGenerate     = document.getElementById('btnGenerate');
+    const btnOpenFinalReview = document.getElementById('btnOpenFinalReview');
     const btnDelete       = document.getElementById('btnDeleteStep');
     const btnClear        = document.getElementById('btnClearSteps');
     const lblStatus       = document.getElementById('lblStatus');
     const lblGenerate     = document.getElementById('lblGenerateResult');
+    const scenarioCoveragePanel = document.getElementById('scenarioCoveragePanel');
+    const cmbExistingScenario = document.getElementById('cmbExistingScenario');
+    const btnAnalyzeScenario = document.getElementById('btnAnalyzeScenario');
+    const scenarioCoverageSummary = document.getElementById('scenarioCoverageSummary');
+    const scenarioLocatorQueue = document.getElementById('scenarioLocatorQueue');
+    const sessionOnboarding = document.getElementById('sessionOnboarding');
+    const onboardingPlatform = document.getElementById('onboardingPlatform');
+    const btnOnboardingNew = document.getElementById('btnOnboardingNew');
+    const btnOnboardingExisting = document.getElementById('btnOnboardingExisting');
+    const onboardingNewFlow = document.getElementById('onboardingNewFlow');
+    const onboardingFeature = document.getElementById('onboardingFeature');
+    const onboardingScenario = document.getElementById('onboardingScenario');
+    const onboardingCaseId = document.getElementById('onboardingCaseId');
+    const onboardingPathType = document.getElementById('onboardingPathType');
+    const onboardingTag = document.getElementById('onboardingTag');
+    const onboardingFeatureFile = document.getElementById('onboardingFeatureFile');
+    const onboardingLocatorModule = document.getElementById('onboardingLocatorModule');
+    const onboardingDataName = document.getElementById('onboardingDataName');
+    const onboardingNewHint = document.getElementById('onboardingNewHint');
+    const btnOnboardingNewBack = document.getElementById('btnOnboardingNewBack');
+    const btnOnboardingStartNew = document.getElementById('btnOnboardingStartNew');
+    const onboardingExistingFlow = document.getElementById('onboardingExistingFlow');
+    const cmbOnboardingScenario = document.getElementById('cmbOnboardingScenario');
+    const onboardingScenarioHint = document.getElementById('onboardingScenarioHint');
+    const btnOnboardingBack = document.getElementById('btnOnboardingBack');
+    const btnOnboardingAnalyze = document.getElementById('btnOnboardingAnalyze');
+    const assignmentTarget = document.getElementById('assignmentTarget');
+    const assignmentTargetName = document.getElementById('assignmentTargetName');
+    const assignmentTargetPath = document.getElementById('assignmentTargetPath');
+    const btnOpenAssignmentInspector = document.getElementById('btnOpenAssignmentInspector');
+    const btnCancelAssignment = document.getElementById('btnCancelAssignment');
+    const xmlAssignmentTarget = document.getElementById('xmlAssignmentTarget');
     let lastPreviewToken  = '';
     let previewDocuments  = [];
     let squadCatalog      = { stepDefinitions: [], screenMethods: [], locators: [], features: [] };
     let locatorActiveIndex = -1;
     let selectedCatalogLocator = null;
+    let activeScenarioCoverage = null;
+    let currentAssignment = null;
+    let verifiedSelector = '';
+    let advanceAssignmentAfterSave = false;
+    let workflowMode = 'new';
     const collapsedLocatorGroups = new Set([
         'Botones', 'Campos', 'Textos', 'Imágenes e íconos', 'Listas y contenedores', 'Otros'
     ]);
     const GENERATED_FILES_STORAGE_KEY = 'appiumVisualRecorder.generatedFiles.v1';
+    const COVERAGE_PROGRESS_STORAGE_KEY = 'appiumVisualRecorder.coverageProgress.v1';
+
+    scenarioLocatorQueue.tabIndex = 0;
+    scenarioLocatorQueue.addEventListener('wheel', event => {
+        if (scenarioLocatorQueue.scrollHeight <= scenarioLocatorQueue.clientHeight) return;
+        event.preventDefault();
+        event.stopPropagation();
+        scenarioLocatorQueue.scrollTop += event.deltaY;
+    }, { passive: false });
+    scenarioLocatorQueue.addEventListener('keydown', event => {
+        const page = Math.max(120, scenarioLocatorQueue.clientHeight * 0.8);
+        if (event.key === 'PageDown') scenarioLocatorQueue.scrollTop += page;
+        else if (event.key === 'PageUp') scenarioLocatorQueue.scrollTop -= page;
+        else if (event.key === 'Home') scenarioLocatorQueue.scrollTop = 0;
+        else if (event.key === 'End') {
+            scenarioLocatorQueue.scrollTop = scenarioLocatorQueue.scrollHeight;
+        } else {
+            return;
+        }
+        event.preventDefault();
+    });
 
     function rememberGeneratedFiles(files) {
         let history = [];
@@ -233,13 +299,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         lblFrameworkStatus.textContent =
             `✓ ${catalog.environments.length} ambientes · ${catalog.squads.length} squads · ` +
             `${catalog.apps.length} apps · ${catalog.dataSets.length} datasets · ` +
-            `${totals.features} features · ${catalog.reusable.stepDefinitions} definiciones · ` +
-            `${catalog.reusable.screenMethods} métodos reutilizables`;
+            `${totals.features} features · ${catalog.reusable.stepDefinitions} definiciones indexadas · ` +
+            `${catalog.reusable.screenMethods} métodos disponibles`;
         lblFrameworkStatus.className = 'device-info ok';
         await loadSquadCatalog();
+        await loadExistingScenarios();
     }
 
-    async function loadSquadCatalog(platform = bsPlatform || 'android') {
+    async function loadSquadCatalog(platform = sessionPlatform) {
         const squad = cmbFrameworkSquad.value || 'payment';
         if (!api.getSquadCatalog || !squad) return;
         const result = await api.getSquadCatalog(squad, platform);
@@ -250,8 +317,460 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
         squadCatalog = result.catalog;
         renderLocatorCatalog();
-        if (typeof renderExistingSteps === 'function') renderExistingSteps();
     }
+
+    async function loadExistingScenarios() {
+        const squad = cmbFrameworkSquad.value || 'payment';
+        const result = await api.getExistingScenarios(squad);
+        // La consulta puede terminar después de que el usuario ya eligió y analizó
+        // un escenario durante la conexión. Lee la selección al recibir la respuesta,
+        // no antes de esperar el IPC, para que una respuesta tardía no la borre.
+        const selectedScenarioId =
+            activeScenarioCoverage?.scenario?.id ||
+            cmbExistingScenario.value ||
+            cmbOnboardingScenario.value ||
+            '';
+        // Ignora respuestas pertenecientes a un squad que dejó de estar activo.
+        if (squad !== (cmbFrameworkSquad.value || 'payment')) return;
+        cmbExistingScenario.innerHTML = '<option value="">Selecciona un escenario...</option>';
+        cmbOnboardingScenario.innerHTML = '<option value="">Selecciona un escenario...</option>';
+        if (!result.success) {
+            scenarioCoverageSummary.textContent = '✗ ' + result.error;
+            return;
+        }
+        const scenariosByFeature = new Map();
+        result.scenarios.forEach(scenario => {
+            const featureName = scenario.feature || 'Feature sin nombre';
+            if (!scenariosByFeature.has(featureName)) {
+                scenariosByFeature.set(featureName, []);
+            }
+            scenariosByFeature.get(featureName).push(scenario);
+        });
+        scenariosByFeature.forEach((scenarios, featureName) => {
+            const group = document.createElement('optgroup');
+            group.label = `Feature: ${featureName}`;
+            scenarios.forEach(scenario => {
+                const option = document.createElement('option');
+                option.value = scenario.id;
+                option.textContent =
+                    `${scenario.caseId ? scenario.caseId + ' · ' : ''}` +
+                    scenario.name.replace(/^(\[[^\]]+\])+/, '').trim();
+                option.title = `${scenario.file}:${scenario.line}`;
+                group.appendChild(option);
+            });
+            cmbExistingScenario.appendChild(group);
+            cmbOnboardingScenario.appendChild(group.cloneNode(true));
+        });
+        const scenarioStillExists = result.scenarios.some(
+            scenario => scenario.id === selectedScenarioId
+        );
+        if (scenarioStillExists) {
+            cmbExistingScenario.value = selectedScenarioId;
+            cmbOnboardingScenario.value = selectedScenarioId;
+        } else if (activeScenarioCoverage) {
+            activeScenarioCoverage = null;
+            currentAssignment = null;
+            scenarioLocatorQueue.innerHTML = '';
+            renderAssignmentTarget();
+        }
+        scenarioCoverageSummary.textContent =
+            activeScenarioCoverage && scenarioStillExists
+                ? scenarioCoverageSummary.textContent
+                : `${scenariosByFeature.size} features · ` +
+                  `${result.scenarios.length} escenarios encontrados en ${squad}`;
+        onboardingScenarioHint.textContent =
+            `${scenariosByFeature.size} features · ` +
+            `${result.scenarios.length} escenarios encontrados en ${squad}`;
+    }
+
+    async function analyzeSelectedScenario() {
+        const scenarioId = cmbExistingScenario.value;
+        if (!scenarioId) {
+            scenarioCoverageSummary.textContent = '⚠ Selecciona un escenario';
+            return false;
+        }
+        if (
+            activeScenarioCoverage &&
+            activeScenarioCoverage.scenario.id !== scenarioId
+        ) {
+            currentAssignment = null;
+            verifiedSelector = '';
+            txtSelector.value = '';
+            txtVarName.value = '';
+        }
+        disableBtn(btnAnalyzeScenario, '⏳ Analizando...');
+        const result = await api.getScenarioCoverage(
+            scenarioId,
+            cmbFrameworkSquad.value || 'payment'
+        );
+        enableBtn(btnAnalyzeScenario);
+        if (!result.success) {
+            scenarioCoverageSummary.textContent = '✗ ' + result.error;
+            return false;
+        }
+        activeScenarioCoverage = result.coverage;
+        if (advanceAssignmentAfterSave) {
+            advanceAssignmentAfterSave = false;
+            selectNextPendingAssignment();
+        } else {
+            restoreCoverageAssignment();
+        }
+        renderScenarioCoverage();
+        renderAssignmentTarget();
+        return true;
+    }
+
+    function selectNextPendingAssignment() {
+        if (!activeScenarioCoverage) return;
+        const activeKey = sessionPlatform === 'ios' ? 'iosSelector' : 'androidSelector';
+        const orderedLocators = activeScenarioCoverage.steps
+            .flatMap(step => step.locators || [])
+            .filter((locator, index, items) =>
+                items.findIndex(item =>
+                    item.file === locator.file && item.name === locator.name
+                ) === index
+            );
+        const next = orderedLocators.find(locator => !locator[activeKey]);
+        if (!next) {
+            currentAssignment = null;
+            persistCoverageProgress();
+            return;
+        }
+        currentAssignment = {
+            ...next,
+            selector: next[activeKey],
+            platform: sessionPlatform,
+            scope: 'scenario',
+            squad: cmbFrameworkSquad.value || 'payment'
+        };
+        verifiedSelector = '';
+        txtSelector.value = '';
+        txtVarName.value = next.name;
+        selectedCatalogLocator = null;
+        setVerify('— Inspecciona y verifica un selector');
+        persistCoverageProgress();
+    }
+
+    function restoreCoverageAssignment() {
+        if (!activeScenarioCoverage || currentAssignment) return;
+        try {
+            const stored = JSON.parse(
+                localStorage.getItem(COVERAGE_PROGRESS_STORAGE_KEY) || '{}'
+            );
+            if (
+                stored.scenarioId !== activeScenarioCoverage.scenario.id ||
+                stored.platform !== sessionPlatform
+            ) return;
+            const locator = activeScenarioCoverage.locators.find(item =>
+                item.name === stored.currentLocator && item.file === stored.currentFile
+            );
+            if (!locator) return;
+            const activeKey = sessionPlatform === 'ios' ? 'iosSelector' : 'androidSelector';
+            currentAssignment = {
+                ...locator,
+                selector: locator[activeKey],
+                platform: sessionPlatform,
+                scope: 'scenario',
+                squad: cmbFrameworkSquad.value || 'payment'
+            };
+        } catch {
+            // El progreso es auxiliar; un valor corrupto no bloquea el análisis.
+        }
+    }
+
+    function renderScenarioCoverage() {
+        scenarioLocatorQueue.innerHTML = '';
+        if (!activeScenarioCoverage) return;
+        const coverage = activeScenarioCoverage;
+        const activeKey = sessionPlatform === 'ios' ? 'iosSelector' : 'androidSelector';
+        const complete = coverage.locators.filter(locator => Boolean(locator[activeKey])).length;
+        const pending = coverage.locators.length - complete;
+        scenarioCoverageSummary.innerHTML =
+            `<strong>${coverage.scenario.caseId || 'Caso'}</strong> · ` +
+            `${sessionPlatform.toUpperCase()}: ${complete}/${coverage.locators.length} locators` +
+            (pending ? ` · <span class="coverage-missing">${pending} pendientes</span>` : ' · ✓ completo') +
+            (coverage.unresolvedSteps.length
+                ? `<br>⚠ ${coverage.unresolvedSteps.length} steps sin resolver`
+                : '');
+
+        coverage.steps.forEach((gherkinStep, stepIndex) => {
+            const branch = document.createElement('section');
+            branch.className = 'scenario-step-branch' +
+                (!gherkinStep.definition ? ' unresolved' : '');
+
+            const header = document.createElement('div');
+            header.className = 'scenario-step-node';
+            const order = document.createElement('span');
+            order.className = 'scenario-step-order';
+            order.textContent = String(stepIndex + 1);
+            const keyword = document.createElement('span');
+            keyword.className = 'scenario-step-keyword';
+            keyword.textContent = gherkinStep.keyword;
+            const text = document.createElement('span');
+            text.className = 'scenario-step-text';
+            text.textContent = gherkinStep.text;
+            text.title = gherkinStep.text;
+            header.append(order, keyword, text);
+            branch.appendChild(header);
+
+            const stepLocators = Array.isArray(gherkinStep.locators)
+                ? gherkinStep.locators
+                : [];
+            const children = document.createElement('div');
+            children.className = 'scenario-step-locators';
+            if (stepLocators.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'scenario-step-empty';
+                empty.textContent = gherkinStep.definition
+                    ? '└ Sin locator requerido'
+                    : '└ Step sin definición encontrada';
+                children.appendChild(empty);
+            }
+            stepLocators.forEach((locator, locatorIndex) => {
+                const ready = Boolean(locator[activeKey]);
+                const item = document.createElement('div');
+                const selected = currentAssignment &&
+                    currentAssignment.file === locator.file &&
+                    currentAssignment.name === locator.name;
+                item.className = 'scenario-locator-item' +
+                    (ready ? ' ready' : '') +
+                    (selected ? ' selected' : '');
+                const name = document.createElement('span');
+                name.className = 'scenario-locator-name';
+                name.textContent =
+                    `${locatorIndex === stepLocators.length - 1 ? '└' : '├'} ` +
+                    `${ready ? '✓' : '⚠'} ${locator.name}`;
+                const module = document.createElement('span');
+                module.className = 'scenario-locator-module';
+                module.textContent =
+                    `${locator.module} · A:${locator.androidSelector ? '✓' : '—'} ` +
+                    `I:${locator.iosSelector ? '✓' : '—'}`;
+                item.append(name, module);
+                item.addEventListener('click', () => selectCoverageAssignment(locator));
+                children.appendChild(item);
+            });
+            branch.appendChild(children);
+            scenarioLocatorQueue.appendChild(branch);
+        });
+        updateFinalAction();
+    }
+
+    function selectCoverageAssignment(locator) {
+        currentAssignment = {
+            ...locator,
+            selector: sessionPlatform === 'ios'
+                ? locator.iosSelector
+                : locator.androidSelector,
+            platform: sessionPlatform,
+            scope: 'scenario',
+            squad: cmbFrameworkSquad.value || 'payment'
+        };
+        verifiedSelector = '';
+        persistCoverageProgress();
+        txtSelector.value = '';
+        txtVarName.value = locator.name;
+        selectedCatalogLocator = null;
+        setVerify('— Inspecciona y verifica un selector');
+        scenarioCoveragePanel.classList.add('is-open');
+        renderAssignmentTarget();
+        renderScenarioCoverage();
+    }
+
+    function renderAssignmentTarget() {
+        if (!currentAssignment) {
+            assignmentTarget.style.display = 'none';
+            xmlAssignmentTarget.textContent = '';
+            txtVarName.readOnly = false;
+            renderSelectedLocatorCoverage();
+            return;
+        }
+        assignmentTarget.style.display = 'flex';
+        assignmentTargetName.textContent = currentAssignment.name;
+        assignmentTargetPath.textContent =
+            `${currentAssignment.module} · completando ${sessionPlatform.toUpperCase()}`;
+        xmlAssignmentTarget.textContent = `🎯 Asignando a: ${currentAssignment.name}`;
+        txtVarName.value = currentAssignment.name;
+        txtVarName.readOnly = true;
+        renderSelectedLocatorCoverage();
+        updateAssignmentButton();
+    }
+
+    function updateAssignmentButton() {
+        const selector = txtSelector.value.trim();
+        const assignment = currentAssignment || selectedCatalogLocator;
+        if (!btnAssignLocator) return;
+        btnAssignLocator.disabled = !assignment || !selector;
+        if (assignment) {
+            const operation = assignment.selector ? 'actualizar' : 'asignar';
+            btnAssignLocator.textContent =
+                verifiedSelector === selector
+                    ? `${assignment.selector ? 'Actualizar' : 'Asignar'} valor ${sessionPlatform.toUpperCase()}`
+                    : `Verificar y ${operation} ${sessionPlatform.toUpperCase()}`;
+        }
+    }
+
+    function persistCoverageProgress() {
+        if (!activeScenarioCoverage) return;
+        localStorage.setItem(COVERAGE_PROGRESS_STORAGE_KEY, JSON.stringify({
+            scenarioId: activeScenarioCoverage.scenario.id,
+            squad: cmbFrameworkSquad.value || 'payment',
+            platform: sessionPlatform,
+            currentLocator: currentAssignment?.name || '',
+            currentFile: currentAssignment?.file || ''
+        }));
+    }
+
+    btnAnalyzeScenario.addEventListener('click', analyzeSelectedScenario);
+    btnOpenAssignmentInspector.addEventListener('click', () => btnInspect.click());
+    btnCancelAssignment.addEventListener('click', () => {
+        currentAssignment = null;
+        verifiedSelector = '';
+        txtSelector.value = '';
+        txtVarName.value = '';
+        persistCoverageProgress();
+        renderAssignmentTarget();
+        renderScenarioCoverage();
+        setVerify('— Selecciona un locator de la cola');
+    });
+
+    function showSessionOnboarding() {
+        onboardingPlatform.textContent =
+            sessionPlatform === 'ios' ? '🍎 iOS' : '🤖 Android';
+        onboardingNewFlow.style.display = 'none';
+        onboardingExistingFlow.style.display = 'none';
+        document.querySelector('.onboarding-options').style.display = 'grid';
+        if (!activeScenarioCoverage) cmbOnboardingScenario.value = '';
+        sessionOnboarding.style.display = 'flex';
+    }
+
+    function setRecorderConnecting(connecting) {
+        [btnInspect, btnInteract, btnXmlInspector, btnExecute, btnRefreshScr]
+            .filter(Boolean)
+            .forEach(button => { button.disabled = connecting; });
+    }
+
+    btnOnboardingNew.addEventListener('click', () => {
+        document.querySelector('.onboarding-options').style.display = 'none';
+        onboardingNewFlow.style.display = 'flex';
+        onboardingFeature.focus();
+    });
+
+    btnOnboardingNewBack.addEventListener('click', () => {
+        onboardingNewFlow.style.display = 'none';
+        document.querySelector('.onboarding-options').style.display = 'grid';
+    });
+
+    btnOnboardingStartNew.addEventListener('click', () => {
+        const required = [
+            [onboardingFeature, 'Feature'],
+            [onboardingScenario, 'Scenario'],
+            [onboardingCaseId, 'ID'],
+            [onboardingFeatureFile, 'Archivo feature'],
+            [onboardingLocatorModule, 'Módulo de locators']
+        ];
+        const missing = required.find(([input]) => !input.value.trim());
+        if (missing) {
+            onboardingNewHint.textContent = `⚠ Completa el campo ${missing[1]}`;
+            missing[0].focus();
+            return;
+        }
+        txtFeature.value = onboardingFeature.value.trim();
+        txtScenario.value = onboardingScenario.value.trim();
+        txtCaseId.value = onboardingCaseId.value.trim().toUpperCase();
+        cmbPathType.value = onboardingPathType.value;
+        txtFeatureTag.value = onboardingTag.value.trim().replace(/^@/, '');
+        txtFeatureFile.value = onboardingFeatureFile.value.trim();
+        txtLocatorModule.value = onboardingLocatorModule.value.trim();
+        txtDataName.value = onboardingDataName.value.trim();
+        workflowMode = 'new';
+        activeScenarioCoverage = null;
+        currentAssignment = null;
+        selectedCatalogLocator = null;
+        verifiedSelector = '';
+        scenarioLocatorQueue.innerHTML = '';
+        cmbExistingScenario.value = '';
+        cmbOnboardingScenario.value = '';
+        scenarioCoverageSummary.textContent =
+            'Selecciona un escenario para detectar sus locators.';
+        txtSelector.value = '';
+        txtVarName.value = '';
+        txtVarName.readOnly = false;
+        setVerify('— Ingresa un selector');
+        renderAssignmentTarget();
+        screenRecorder.classList.remove('existing-workflow');
+        sessionOnboarding.style.display = 'none';
+        scenarioCoveragePanel.classList.remove('is-open');
+        updateFinalAction();
+        setStatus(
+            `✨ ${txtCaseId.value} · ${txtScenario.value} · ${sessionPlatform.toUpperCase()}`,
+            '#00CC00'
+        );
+    });
+
+    btnOnboardingExisting.addEventListener('click', () => {
+        document.querySelector('.onboarding-options').style.display = 'none';
+        onboardingExistingFlow.style.display = 'flex';
+        cmbOnboardingScenario.focus();
+    });
+
+    btnOnboardingBack.addEventListener('click', () => {
+        onboardingExistingFlow.style.display = 'none';
+        document.querySelector('.onboarding-options').style.display = 'grid';
+    });
+
+    btnOnboardingAnalyze.addEventListener('click', async () => {
+        if (!cmbOnboardingScenario.value) {
+            onboardingScenarioHint.textContent = '⚠ Selecciona un escenario';
+            return;
+        }
+        cmbExistingScenario.value = cmbOnboardingScenario.value;
+        disableBtn(btnOnboardingAnalyze, '⏳ Analizando...');
+        const success = await analyzeSelectedScenario();
+        enableBtn(btnOnboardingAnalyze);
+        if (!success) {
+            onboardingScenarioHint.textContent = scenarioCoverageSummary.textContent;
+            return;
+        }
+        workflowMode = 'existing';
+        screenRecorder.classList.add('existing-workflow');
+        sessionOnboarding.style.display = 'none';
+        scenarioCoveragePanel.classList.add('is-open');
+        scenarioCoveragePanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        setStatus(
+            `🧭 Caso cargado · completando ${sessionPlatform.toUpperCase()}`,
+            '#00CC00'
+        );
+        updateFinalAction();
+    });
+
+    function updateFinalAction() {
+        if (!btnOpenFinalReview) return;
+        if (workflowMode === 'existing') {
+            const activeKey = sessionPlatform === 'ios' ? 'iosSelector' : 'androidSelector';
+            const pending = activeScenarioCoverage
+                ? activeScenarioCoverage.locators.filter(locator => !locator[activeKey]).length
+                : 1;
+            btnOpenFinalReview.textContent = pending
+                ? `Completa ${pending} locator${pending === 1 ? '' : 's'} pendiente${pending === 1 ? '' : 's'}`
+                : '✓ Finalizar cobertura';
+            btnOpenFinalReview.disabled = pending > 0;
+            return;
+        }
+        const hasSteps = lstSteps && lstSteps.querySelectorAll('li:not(.step-empty)').length > 0;
+        btnOpenFinalReview.textContent = 'Revisar y finalizar caso →';
+        btnOpenFinalReview.disabled = !hasSteps;
+    }
+
+    btnOpenFinalReview.addEventListener('click', () => {
+        if (workflowMode === 'existing') {
+            setStatus(
+                `✓ Cobertura ${sessionPlatform.toUpperCase()} completa para el caso seleccionado`,
+                '#00CC00'
+            );
+            return;
+        }
+        document.getElementById('btnEnlazar')?.click();
+    });
 
     function renderLocatorCatalog() {
         if (!locatorCatalogDropdown) return;
@@ -297,9 +816,13 @@ window.addEventListener('DOMContentLoaded', async () => {
                     const option = document.createElement('div');
                     option.className = 'catalog-option';
                     option.dataset.locatorName = locator.name;
+                    option.dataset.locatorFile = locator.file;
                     option.innerHTML =
                         `<span class="catalog-option-name">${locator.name}</span>` +
-                        `<span class="catalog-option-source">${locator.scope}</span>`;
+                        `<span class="catalog-option-source">` +
+                        `${locator.selector ? '✓' : '⚠'} ${locator.scope} · ` +
+                        `A:${locator.androidSelector ? '✓' : '—'} I:${locator.iosSelector ? '✓' : '—'}` +
+                        `</span>`;
                     option.title = locator.file;
                     option.addEventListener('mousedown', event => {
                         event.preventDefault();
@@ -322,7 +845,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     function locatorTypeGroup(locator) {
-        const value = `${locator.name} ${locator.selector}`.toLowerCase();
+        const value =
+            `${locator.name} ${locator.androidSelector || ''} ${locator.iosSelector || ''}`.toLowerCase();
         if (/(^|\\W)(btn|button)|widget\\.button|xcuielementtypebutton/.test(value)) return 'Botones';
         if (/(^|\\W)(input|textfield|search|field)|edittext|xcuielementtypetextfield/.test(value)) return 'Campos';
         if (/(^|\\W)(lbl|label|title|text)|textview|statictext/.test(value)) return 'Textos';
@@ -334,15 +858,120 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     function selectCatalogLocator(locator) {
+        if (currentAssignment) return;
         clearSelectorChips();
+        const capturedSelector = txtSelector.value.trim();
         txtVarName.value = locator.name;
-        txtSelector.value = executableCatalogSelector(locator);
+        if (!capturedSelector && locator.selector) {
+            txtSelector.value = executableCatalogSelector(locator);
+        }
         selectedCatalogLocator = locator;
         locatorCatalogDropdown.classList.remove('open');
         txtVarName.setAttribute('aria-expanded', 'false');
-        if (lblLocatorCatalog) lblLocatorCatalog.textContent = `♻️ ${locator.scope}: ${locator.file}`;
-        setStatus(`✓ Locator reutilizado desde ${locator.file}`, '#00CC00');
+        renderSelectedLocatorCoverage();
+        if (lblLocatorCatalog) lblLocatorCatalog.textContent = `🔗 ${locator.scope}: ${locator.file}`;
+        setStatus(
+            locator.selector
+                ? `✓ Locator encontrado en ${locator.file}`
+                : `⚠ ${locator.name} no tiene valor ${sessionPlatform.toUpperCase()}`,
+            locator.selector ? '#00CC00' : '#FF9900'
+        );
     }
+
+    function renderSelectedLocatorCoverage() {
+        if (!locatorCoverage) return;
+        const locator = currentAssignment || selectedCatalogLocator;
+        if (!locator) {
+            locatorCoverage.style.display = 'none';
+            return;
+        }
+        locatorCoverage.style.display = 'flex';
+        lblLogicalLocator.textContent = locator.name;
+        lblActivePlatform.textContent = sessionPlatform;
+        const renderState = (element, value) => {
+            element.textContent = value ? '✓ Configurado' : '⚠ Sin valor';
+            element.className = value ? 'coverage-ready' : 'coverage-missing';
+            element.title = value || '';
+        };
+        renderState(lblAndroidCoverage, locator.androidSelector);
+        renderState(lblIosCoverage, locator.iosSelector);
+        updateAssignmentButton();
+    }
+
+    btnAssignLocator.addEventListener('click', async () => {
+        const assignment = currentAssignment || selectedCatalogLocator;
+        if (!assignment) return;
+        const selector = txtSelector.value.trim();
+        if (!selector) {
+            setStatus('⚠ Captura o ingresa un selector', '#FF9900');
+            return;
+        }
+        if (verifiedSelector !== selector) {
+            disableBtn(btnAssignLocator, '⏳ Verificando...');
+            const verification = await api.verifySelector(selector);
+            if (!verification.success) {
+                verifiedSelector = '';
+                setVerify(verification.summary, 'err');
+                setStatus('✗ No se actualizó: selector no encontrado', '#CC0000');
+                updateAssignmentButton();
+                return;
+            }
+            if (verification.screenshot) updateDeviceScreen(verification.screenshot);
+            verifiedSelector = selector;
+            setVerify(verification.summary, 'ok');
+            setStatus('✓ Selector verificado', '#00CC00');
+            updateAssignmentButton();
+        }
+        const selectedFile = assignment.file;
+        const selectedName = assignment.name;
+        const currentValue = assignment.selector || '';
+        if (
+            currentValue && currentValue !== selector &&
+            !window.confirm(
+                `Se reemplazará el valor ${sessionPlatform.toUpperCase()} de ` +
+                `${selectedName}.\n\nActual: ${currentValue}\nNuevo: ${selector}`
+            )
+        ) {
+            updateAssignmentButton();
+            return;
+        }
+
+        disableBtn(btnAssignLocator, '⏳ Guardando...');
+        const result = await api.assignLocatorValue({
+            file: selectedFile,
+            name: selectedName,
+            selector,
+            platform: sessionPlatform,
+            androidBlock: assignment.androidBlock,
+            iosBlock: assignment.iosBlock
+        });
+        enableBtn(btnAssignLocator);
+        if (!result.success) {
+            setStatus('✗ ' + result.error, '#CC0000');
+            updateAssignmentButton();
+            return;
+        }
+        squadCatalog = result.catalog;
+        const updatedCatalogLocator = squadCatalog.locators.find(locator =>
+            locator.file === selectedFile && locator.name === selectedName
+        );
+        renderLocatorCatalog();
+        setStatus(`✓ ${selectedName} actualizado en ${result.block}`, '#00CC00');
+        verifiedSelector = '';
+        if (currentAssignment && activeScenarioCoverage) {
+            advanceAssignmentAfterSave = true;
+            await analyzeSelectedScenario();
+        } else {
+            selectedCatalogLocator = updatedCatalogLocator || {
+                ...assignment,
+                selector: result.selector,
+                ...(sessionPlatform === 'ios'
+                    ? { iosSelector: result.selector, iosBlock: result.block }
+                    : { androidSelector: result.selector, androidBlock: result.block })
+            };
+            renderSelectedLocatorCoverage();
+        }
+    });
 
     function executableCatalogSelector(locator) {
         const selector = String(locator.selector || '').trim();
@@ -360,16 +989,27 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     cmbFrameworkSquad.addEventListener('change', () => {
         linkedScenarioData = null;
-        loadSquadCatalog(bsPlatform || 'android');
+        activeScenarioCoverage = null;
+        currentAssignment = null;
+        verifiedSelector = '';
+        scenarioLocatorQueue.innerHTML = '';
+        cmbExistingScenario.value = '';
+        cmbOnboardingScenario.value = '';
+        renderAssignmentTarget();
+        loadSquadCatalog(sessionPlatform);
+        loadExistingScenarios();
     });
 
     txtVarName.addEventListener('focus', () => {
+        if (txtVarName.readOnly) return;
         renderLocatorCatalog();
         locatorCatalogDropdown.classList.add('open');
         txtVarName.setAttribute('aria-expanded', 'true');
     });
     txtVarName.addEventListener('input', () => {
+        if (txtVarName.readOnly) return;
         selectedCatalogLocator = null;
+        renderSelectedLocatorCoverage();
         renderLocatorCatalog();
         locatorCatalogDropdown.classList.add('open');
     });
@@ -384,7 +1024,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         event.preventDefault();
         if (event.key === 'Enter' && locatorActiveIndex >= 0) {
             const locator = squadCatalog.locators.find(
-                item => item.name === options[locatorActiveIndex].dataset.locatorName
+                item =>
+                    item.name === options[locatorActiveIndex].dataset.locatorName &&
+                    item.file === options[locatorActiveIndex].dataset.locatorFile
             );
             if (locator) selectCatalogLocator(locator);
             return;
@@ -422,6 +1064,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (!lblGenerate) return;
         lblGenerate.textContent = msg;
         lblGenerate.className = 'generate-result' + (type ? ' ' + type : '');
+        const wizardResult = document.getElementById('wizardGenerationResult');
+        if (wizardResult) {
+            wizardResult.textContent = msg;
+            wizardResult.className = 'generate-result' + (type ? ' ' + type : '');
+        }
     }
 
     function buildGenerationRequest() {
@@ -490,6 +1137,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         lstSteps.innerHTML = '';
         if (!steps || steps.length === 0) {
             lstSteps.innerHTML = '<li class="step-empty">Sin steps grabados...</li>';
+            updateFinalAction();
             return;
         }
         steps.forEach((s, i) => {
@@ -504,6 +1152,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             });
             lstSteps.appendChild(li);
         });
+        updateFinalAction();
     }
 
     function stepSummary(step) {
@@ -533,6 +1182,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (txtSelector) txtSelector.value = '';
         if (txtVarName)  txtVarName.value  = '';
         selectedCatalogLocator = null;
+        renderSelectedLocatorCoverage();
         if (txtValue)    txtValue.value    = '';
         if (txtDesc)     txtDesc.value     = '';
         setVerify('— Ingresa un selector');
@@ -542,11 +1192,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     function switchTab(mode) {
         activeMode = mode;
         if (mode === 'local') {
+            sessionPlatform = 'android';
             tabLocal.classList.add('active');
             tabBS.classList.remove('active');
             localPanel.style.display = 'flex';
             bsPanel.style.display    = 'none';
         } else {
+            sessionPlatform = bsPlatform;
             tabBS.classList.add('active');
             tabLocal.classList.remove('active');
             bsPanel.style.display    = 'flex';
@@ -560,6 +1212,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // ─── PLATFORM TOGGLE (Android / iOS) ────────────────────────────────────
     function switchBsPlatform(platform) {
         bsPlatform = platform;
+        sessionPlatform = platform;
         const isIos = platform === 'ios';
 
         btnBsPlatAndroid.classList.toggle('active', !isIos);
@@ -849,6 +1502,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         screenRecorder.style.cssText = 'display:flex !important; flex-direction:column';
         lblDevice.textContent        = '☁️ ' + deviceLabel + ' — conectando...';
         setStatus('🔄 Conectando con BrowserStack...', '#FF6600');
+        setRecorderConnecting(true);
+        sessionPlatform = bsPlatform;
+        await loadExistingScenarios();
+        showSessionOnboarding();
 
         await new Promise(r => setTimeout(r, 50));
 
@@ -872,11 +1529,16 @@ window.addEventListener('DOMContentLoaded', async () => {
         try {
             const result = await api.bsStartSession(config);
             if (result.success) {
+                setRecorderConnecting(false);
+                sessionPlatform = bsPlatform;
                 cmbFrameworkSquad.disabled = true;
                 lblDevice.textContent = '☁️ ' + deviceLabel;
                 setStatus('✓ Sesion BrowserStack — ' + deviceLabel, '#00CC00');
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
+                await loadSquadCatalog(sessionPlatform);
             } else {
+                setRecorderConnecting(false);
+                sessionOnboarding.style.display = 'none';
                 screenRecorder.style.cssText = 'display:none !important';
                 screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
                 switchTab('bs');
@@ -884,6 +1546,8 @@ window.addEventListener('DOMContentLoaded', async () => {
                 lblBsStatus.className   = 'config-status err';
             }
         } catch (e) {
+            setRecorderConnecting(false);
+            sessionOnboarding.style.display = 'none';
             screenRecorder.style.cssText = 'display:none !important';
             screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
             switchTab('bs');
@@ -947,6 +1611,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         screenRecorder.style.cssText = 'display:flex !important; flex-direction:column';
         lblDevice.textContent        = deviceName + ' — conectando...';
         setStatus('🔄 Conectando con Appium...', '#FF6600');
+        setRecorderConnecting(true);
+        sessionPlatform = 'android';
+        await loadExistingScenarios();
+        showSessionOnboarding();
 
         await new Promise(r => setTimeout(r, 50));
 
@@ -961,16 +1629,23 @@ window.addEventListener('DOMContentLoaded', async () => {
         try {
             const result = await api.startSession(config);
             if (result.success) {
+                setRecorderConnecting(false);
+                sessionPlatform = 'android';
                 cmbFrameworkSquad.disabled = true;
                 lblDevice.textContent = deviceName;
                 setStatus('✓ Sesion activa — ' + deviceName, '#00CC00');
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
+                await loadSquadCatalog(sessionPlatform);
             } else {
+                setRecorderConnecting(false);
+                sessionOnboarding.style.display = 'none';
                 screenRecorder.style.cssText = 'display:none !important';
                 screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
                 setConfigStatus('✗ ' + result.error, 'err');
             }
         } catch (e) {
+            setRecorderConnecting(false);
+            sessionOnboarding.style.display = 'none';
             screenRecorder.style.cssText = 'display:none !important';
             screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
             setConfigStatus('✗ Error: ' + e.message, 'err');
@@ -986,6 +1661,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     btnCloseSession.addEventListener('click', async () => {
         exitInspectorMode();
         exitInteractionMode();
+        sessionOnboarding.style.display = 'none';
         await api.closeSession();
         cmbFrameworkSquad.disabled = false;
         screenRecorder.style.cssText = 'display:none !important';
@@ -1040,6 +1716,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             chip.addEventListener('click', () => {
                 // Actualizar selector y variable name
                 txtSelector.value = c.selector;
+                verifiedSelector = '';
                 const patterns = [
                     /^id=[^/]+\/(.+)$/,
                     /^id=(.+)$/,
@@ -1049,16 +1726,19 @@ window.addEventListener('DOMContentLoaded', async () => {
                     /@content-desc="([^"]+)"/,
                     /@text="([^"]+)"/,
                 ];
-                for (const re of patterns) {
-                    const m = c.selector.match(re);
-                    if (m) {
-                        txtVarName.value = m[1].toLowerCase()
-                            .replace(/[^a-z0-9]/g, '_')
-                            .replace(/_+/g, '_')
-                            .replace(/^_|_$/g, '');
-                        break;
+                if (!currentAssignment) {
+                    for (const re of patterns) {
+                        const m = c.selector.match(re);
+                        if (m) {
+                            txtVarName.value = m[1].toLowerCase()
+                                .replace(/[^a-z0-9]/g, '_')
+                                .replace(/_+/g, '_')
+                                .replace(/^_|_$/g, '');
+                            break;
+                        }
                     }
                 }
+                updateAssignmentButton();
                 // Resaltar chip activo
                 chipsWrap.querySelectorAll('div').forEach(ch => {
                     ch.style.borderColor = '#444';
@@ -1332,9 +2012,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (interactionActive) exitInteractionMode();
         clearSelectorChips();
         selectedCatalogLocator = null;
+        renderSelectedLocatorCoverage();
         txtSelector.value = '';
-        txtVarName.value = '';
-        setVerify('— Ingresa un selector');
+        txtVarName.value = currentAssignment?.name || '';
+        verifiedSelector = '';
+        setVerify('— Selecciona y verifica un elemento');
+        updateAssignmentButton();
         inspectorActive        = true;
         btnInspect.textContent = '✕ Cancelar';
         setInspect('⏳ Cargando pantalla...', 'active');
@@ -1411,8 +2094,12 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
 
             txtSelector.value = candidates[0].selector;
-            txtVarName.value  = inferVarName(candidates[0].selector, best.tag);
+            txtVarName.value  = currentAssignment?.name ||
+                inferVarName(candidates[0].selector, best.tag);
+            verifiedSelector = '';
             if (candidates.length > 1) renderSelectorChips(candidates, txtVarName.value);
+            renderAssignmentTarget();
+            updateAssignmentButton();
 
             setInspect('✓ ' + candidates.length + ' identificador(es) — elige el mejor', 'ok');
             setStatus('✓ Elemento capturado', '#00CC00');
@@ -1434,12 +2121,20 @@ window.addEventListener('DOMContentLoaded', async () => {
         enableBtn(btnVerify);
         if (result.success) {
             if (result.screenshot) updateDeviceScreen(result.screenshot);
+            verifiedSelector = selector;
             setVerify(result.summary, 'ok');
             setStatus('✓ Verificado', '#00CC00');
         } else {
+            verifiedSelector = '';
             setVerify(result.summary, 'err');
             setStatus('✗ No encontrado', '#CC0000');
         }
+        updateAssignmentButton();
+    });
+
+    txtSelector.addEventListener('input', () => {
+        verifiedSelector = '';
+        updateAssignmentButton();
     });
 
     cmbAction.addEventListener('change', () => {
@@ -1589,8 +2284,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             setGenerate('✓ ' + paths, 'ok');
             linkedScenarioData = null;
             invalidatePreview();
-            await loadSquadCatalog(activeMode === 'bs' ? bsPlatform : 'android');
-            renderExistingSteps();
+            await loadSquadCatalog(sessionPlatform);
             renderLocatorCatalog();
             setStatus('✓ Archivos generados · catálogos de Steps y locators actualizados', '#00CC00');
         } else {
@@ -2245,6 +2939,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (interactionActive) exitInteractionMode();
         clearSelectorChips();
         selectedCatalogLocator = null;
+        renderSelectedLocatorCoverage();
         xmlModal.style.display = 'flex';
         await refreshHierarchy();
     });
@@ -2329,6 +3024,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (!locator) return;
         clearSelectorChips();
         selectedCatalogLocator = null;
+        renderSelectedLocatorCoverage();
         txtSelector.value = locator;
         const patterns = [
             /^id=[^/]+\/(.+)$/,
@@ -2349,6 +3045,10 @@ window.addEventListener('DOMContentLoaded', async () => {
                 break;
             }
         }
+        txtVarName.value = currentAssignment?.name || txtVarName.value;
+        verifiedSelector = '';
+        renderAssignmentTarget();
+        updateAssignmentButton();
         xmlModal.style.display = 'none';
         setStatus('✓ Selector cargado desde Hierarchy Viewer', '#00CC00');
     });
@@ -2363,107 +3063,123 @@ window.addEventListener('DOMContentLoaded', async () => {
     const btnConfirmarEscenario= document.getElementById('btnConfirmarEscenario');
     const btnEnlazar           = document.getElementById('btnEnlazar');
     const enlazarHint          = document.getElementById('enlazarHint');
-    const txtExistingStepSearch= document.getElementById('txtExistingStepSearch');
-    const existingStepsList    = document.getElementById('existingStepsList');
+    const wizardPages          = [...document.querySelectorAll('.wizard-page')];
+    const wizardSteps          = [...document.querySelectorAll('.wizard-step')];
+    const btnWizardBack        = document.getElementById('btnWizardBack');
+    const btnWizardNext        = document.getElementById('btnWizardNext');
+    const wizardLinkActions    = document.getElementById('wizardLinkActions');
+    const wizardLinkRows       = document.getElementById('wizardLinkRows');
+    const wizardGherkinHost    = document.getElementById('wizardGherkinHost');
+    let wizardPage = 1;
+    let impactValidationTimer;
 
     // Estado del constructor de escenario
     let enlazarSteps      = [];   // copia de recordedSteps al abrir el modal
     let scenarioRows      = [];   // [{ text: string, stepIndices: number[] }]
     let activeRowIndex    = -1;   // fila seleccionada en el constructor
     let linkedScenarioData = null; // { linked, stepTexts } — seteado al confirmar, usado al generar
-    const expandedFeatureGroups = new Set();
 
     const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
 
-    function stepExpressionExample(expression) {
-        return expression
-            .replace(/^\^|\$$/g, '')
-            .replace(/\((?:\\.|[^)])+\)/g, '<valor>')
-            .replace(/\\([/()[\]{}.+*?^$|])/g, '$1');
+    function setWizardPage(page) {
+        wizardPage = Math.max(1, Math.min(5, page));
+        wizardPages.forEach(element => {
+            element.classList.toggle('active', Number(element.dataset.wizardPage) === wizardPage);
+        });
+        wizardSteps.forEach((element, index) => {
+            element.classList.toggle('active', index + 1 === wizardPage);
+            element.classList.toggle('complete', index + 1 < wizardPage);
+        });
+        btnWizardBack.disabled = wizardPage === 1;
+        btnWizardNext.style.display = wizardPage === 5 ? 'none' : '';
+        btnConfirmarEscenario.style.display = wizardPage === 3 ? '' : 'none';
+        if (wizardPage === 3) {
+            wizardLinkRows.appendChild(scenarioRowsContainer);
+            renderLinkActions();
+            renderScenarioRows();
+        } else if (wizardGherkinHost && !wizardGherkinHost.contains(scenarioRowsContainer)) {
+            wizardGherkinHost.appendChild(scenarioRowsContainer);
+            renderScenarioRows();
+        }
+        const labels = [
+            'Revisa las acciones grabadas',
+            'Define líneas Gherkin aisladas',
+            'Enlaza cada línea con acciones',
+            'Revisa los archivos',
+            'Genera los archivos'
+        ];
+        enlazarHint.textContent = `Paso ${wizardPage} de 5 · ${labels[wizardPage - 1]}`;
     }
 
-    function renderExistingSteps() {
-        if (!existingStepsList) return;
-        const query = (txtExistingStepSearch?.value || '').trim().toLowerCase();
-        const features = squadCatalog.features || [];
-        const usedExpressions = new Set(
-            features.flatMap(feature => feature.stepDefinitions.map(definition => definition.expression))
-        );
-        const unmatched = (squadCatalog.stepDefinitions || []).filter(
-            definition => !usedExpressions.has(definition.expression)
-        );
-        const groups = [
-            ...features,
-            ...(unmatched.length ? [{
-                name: 'Definiciones sin Feature',
-                file: 'Steps disponibles en el squad/commons',
-                stepDefinitions: unmatched
-            }] : [])
-        ].map(group => ({
-            ...group,
-            stepDefinitions: group.stepDefinitions.filter(definition => {
-                const searchable =
-                    `${group.name} ${group.file} ${definition.expression} ${definition.keyword} ${definition.file}`
-                        .toLowerCase();
-                return !query || searchable.includes(query);
-            })
-        })).filter(group => group.stepDefinitions.length > 0);
+    async function validateStepImpacts() {
+        const texts = scenarioRows.map(row => row.text.trim());
+        if (!texts.length || texts.some(text => !text)) return false;
+        const response = await api.analyzeStepImpact(texts, cmbFrameworkSquad.value);
+        if (!response.success) {
+            enlazarHint.textContent = '✗ No se pudo validar el impacto: ' + response.error;
+            return false;
+        }
+        response.steps.forEach((impact, index) => {
+            const duplicateRows = texts
+                .map((candidate, candidateIndex) => ({ candidate, candidateIndex }))
+                .filter(candidate => candidate.candidate === texts[index] && candidate.candidateIndex !== index);
+            scenarioRows[index].impact = duplicateRows.length
+                ? {
+                    ...impact,
+                    safe: false,
+                    references: [
+                        ...impact.references,
+                        {
+                            squad: cmbFrameworkSquad.value,
+                            file: 'Escenario actual',
+                            keyword: scenarioRows[index].keyword,
+                            expression: texts[index],
+                            matchType: 'exact',
+                            scenarios: duplicateRows.map(candidate => ({
+                                feature: txtFeature.value.trim() || 'Feature actual',
+                                scenario: `Línea ${candidate.candidateIndex + 1}`,
+                                file: 'Borrador sin generar'
+                            }))
+                        }
+                    ]
+                }
+                : impact;
+        });
+        renderScenarioRows();
+        return scenarioRows.every(row => row.impact?.safe);
+    }
 
-        existingStepsList.innerHTML = '';
-        if (groups.length === 0) {
-            existingStepsList.innerHTML = '<li class="step-empty">Sin definiciones para este filtro</li>';
+    function scheduleImpactValidation() {
+        clearTimeout(impactValidationTimer);
+        impactValidationTimer = setTimeout(() => void validateStepImpacts(), 350);
+    }
+
+    function renderLinkActions() {
+        if (!wizardLinkActions) return;
+        wizardLinkActions.innerHTML = '';
+        if (!enlazarSteps.length) {
+            wizardLinkActions.innerHTML = '<li class="step-empty">Sin acciones grabadas</li>';
             return;
         }
-        groups.forEach((group, groupIndex) => {
-            const groupKey = group.file || `${group.name}-${groupIndex}`;
-            const expanded = Boolean(query) || expandedFeatureGroups.has(groupKey);
-            const wrapper = document.createElement('li');
-            wrapper.className = 'feature-step-group';
-
-            const header = document.createElement('div');
-            header.className = 'feature-step-header';
-            header.innerHTML =
-                `<span>${expanded ? '▾' : '▸'} ${group.name} (${group.stepDefinitions.length})</span>` +
-                `<span class="feature-step-file">${group.file}</span>`;
-            header.addEventListener('click', () => {
-                expandedFeatureGroups.has(groupKey)
-                    ? expandedFeatureGroups.delete(groupKey)
-                    : expandedFeatureGroups.add(groupKey);
-                renderExistingSteps();
+        const usedIndices = new Set(scenarioRows.flatMap(row => row.stepIndices));
+        enlazarSteps.forEach((step, index) => {
+            const item = document.createElement('li');
+            item.className = `assignable${usedIndices.has(index) ? ' step-used' : ''}`;
+            item.textContent = `${index + 1}. ${stepSummary(step)}`;
+            item.addEventListener('click', () => {
+                if (activeRowIndex < 0) {
+                    enlazarHint.textContent = 'Selecciona primero una línea Gherkin de la derecha.';
+                    return;
+                }
+                if (!scenarioRows[activeRowIndex].stepIndices.includes(index)) {
+                    scenarioRows[activeRowIndex].stepIndices.push(index);
+                }
+                renderScenarioRows();
+                renderLinkActions();
             });
-            wrapper.appendChild(header);
-
-            if (expanded) {
-                group.stepDefinitions.forEach(definition => {
-                    const item = document.createElement('div');
-                    item.className = 'existing-step-item';
-                    const text = stepExpressionExample(definition.expression);
-                    const label = document.createElement('span');
-                    label.textContent = `${definition.keyword} ${text}`;
-                    const source = document.createElement('span');
-                    source.className = `existing-step-source scope-${definition.scope}`;
-                    source.textContent = `${definition.scope} · ${definition.file}`;
-                    item.append(label, source);
-                    item.title = 'Agregar como step reutilizado';
-                    item.addEventListener('click', () => {
-                        scenarioRows.push({
-                            text,
-                            keyword: definition.keyword,
-                            stepIndices: [],
-                            reusedDefinition: definition
-                        });
-                        activeRowIndex = scenarioRows.length - 1;
-                        renderScenarioRows();
-                        updateEnlazarHint();
-                    });
-                    wrapper.appendChild(item);
-                });
-            }
-            existingStepsList.appendChild(wrapper);
+            wizardLinkActions.appendChild(item);
         });
     }
-
-    txtExistingStepSearch?.addEventListener('input', renderExistingSteps);
 
     function scenarioRowHtml(row, rowIdx) {
         row.examples ||= {};
@@ -2497,6 +3213,23 @@ window.addEventListener('DOMContentLoaded', async () => {
         const kwOptions = GHERKIN_KEYWORDS.map(kw =>
             `<option value="${kw}"${row.keyword === kw ? ' selected' : ''}>${kw}</option>`
         ).join('');
+        const impact = row.impact;
+        const impactHtml = !row.text.trim()
+            ? '<div class="step-impact neutral">Escribe la definición para validar su alcance.</div>'
+            : !impact
+                ? '<div class="step-impact neutral">Validando impacto…</div>'
+                : impact.safe
+                    ? '<div class="step-impact safe">✓ Step aislado: no intercepta definiciones existentes.</div>'
+                    : `<div class="step-impact warning">
+                        <strong>⚠ Puede impactar ${impact.references.length} definición(es)</strong>
+                        ${impact.references.map(reference =>
+                            `<span>${reference.squad} · ${reference.file}<small>${reference.keyword} /${reference.expression}/</small></span>
+                             ${(reference.scenarios || []).map(usage =>
+                                `<span class="impact-scenario">↳ ${usage.feature} · ${usage.scenario}<small>${usage.file}</small></span>`
+                             ).join('')}`
+                        ).join('')}
+                        <em>Cambia la redacción para crear un step nuevo y seguro.</em>
+                    </div>`;
 
         return `<div class="scenario-row${rowIdx === activeRowIndex ? ' active' : ''}" data-row="${rowIdx}">
             <div class="scenario-row-header">
@@ -2505,6 +3238,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 <input type="text" class="scenario-step-input" placeholder="descripción del step..." value="${row.text.replace(/"/g, '&quot;')}" data-row="${rowIdx}"/>
                 <button class="btn-remove-row" data-row="${rowIdx}">✕</button>
             </div>
+            ${impactHtml}
             ${parameters.length ? `<div class="scenario-params">
                 <span class="scenario-params-title">Parámetros:</span>
                 ${parameters.map(parameter =>
@@ -2557,6 +3291,8 @@ window.addEventListener('DOMContentLoaded', async () => {
             inp.addEventListener('input', e => {
                 const ri = parseInt(inp.dataset.row);
                 scenarioRows[ri].text = e.target.value;
+                scenarioRows[ri].impact = null;
+                scheduleImpactValidation();
             });
             inp.addEventListener('blur', () => renderScenarioRows());
             inp.addEventListener('click', e => {
@@ -2612,6 +3348,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 if (activeRowIndex >= scenarioRows.length) activeRowIndex = scenarioRows.length - 1;
                 renderScenarioRows();
                 renderEnlazarSteps();
+                renderLinkActions();
             });
         });
 
@@ -2624,6 +3361,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 scenarioRows[ri].stepIndices = scenarioRows[ri].stepIndices.filter(x => x !== si);
                 renderScenarioRows();
                 renderEnlazarSteps();
+                renderLinkActions();
             });
         });
     }
@@ -2639,24 +3377,8 @@ window.addEventListener('DOMContentLoaded', async () => {
             const li = document.createElement('li');
             li.textContent = (i + 1) + '. ' + stepSummary(s);
             li.dataset.index = i;
-            li.classList.add('assignable');
+            li.classList.add('recorded-action');
             if (usedIndices.has(i)) li.classList.add('step-used');
-            li.addEventListener('click', () => {
-                if (activeRowIndex < 0) {
-                    // Si no hay fila activa, crear una nueva y asignar
-                    const defaultKw = scenarioRows.length === 0 ? 'Given' : 'And';
-                    scenarioRows.push({ text: '', keyword: defaultKw, stepIndices: [i] });
-                    activeRowIndex = scenarioRows.length - 1;
-                } else {
-                    // Asignar a la fila activa (si no está ya)
-                    if (!scenarioRows[activeRowIndex].stepIndices.includes(i)) {
-                        scenarioRows[activeRowIndex].stepIndices.push(i);
-                    }
-                }
-                updateEnlazarHint();
-                renderScenarioRows();
-                renderEnlazarSteps();
-            });
             enlazarStepsList.appendChild(li);
         });
     }
@@ -2677,9 +3399,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         updateEnlazarHint();
         renderEnlazarSteps();
         renderScenarioRows();
-        await loadSquadCatalog(activeMode === 'bs' ? bsPlatform : 'android');
-        renderExistingSteps();
         enlazarModal.style.display = 'flex';
+        setWizardPage(1);
     });
 
     btnCloseEnlazar.addEventListener('click', () => {
@@ -2699,10 +3420,65 @@ window.addEventListener('DOMContentLoaded', async () => {
         }, 0);
     });
 
+    btnWizardBack?.addEventListener('click', () => setWizardPage(wizardPage - 1));
+    btnWizardNext?.addEventListener('click', async () => {
+        if (wizardPage === 1) {
+            if (!enlazarSteps.length) {
+                enlazarHint.textContent = '⚠ Graba al menos una acción antes de continuar.';
+                return;
+            }
+            setWizardPage(2);
+            return;
+        }
+        if (wizardPage === 2) {
+            if (!scenarioRows.length || scenarioRows.some(row => !row.text.trim())) {
+                enlazarHint.textContent = '⚠ Completa al menos una línea Gherkin.';
+                return;
+            }
+            const safe = await validateStepImpacts();
+            if (!safe) {
+                enlazarHint.textContent =
+                    '⚠ Hay definiciones que podrían afectar otros escenarios. Ajusta su redacción.';
+                return;
+            }
+            setWizardPage(3);
+            return;
+        }
+        if (wizardPage === 3) {
+            btnConfirmarEscenario.click();
+            return;
+        }
+        if (wizardPage === 4) {
+            if (!lastPreviewToken) {
+                enlazarHint.textContent = '⚠ Actualiza y revisa el preview antes de continuar.';
+                return;
+            }
+            setWizardPage(5);
+        }
+    });
+
+    wizardSteps.forEach((step, index) => {
+        step.addEventListener('click', () => {
+            if (index + 1 < wizardPage) setWizardPage(index + 1);
+        });
+    });
+
     btnConfirmarEscenario.addEventListener('click', async () => {
         if (scenarioRows.length === 0) {
             enlazarHint.textContent = '⚠ Agrega al menos un step al escenario';
             enlazarHint.style.color = '#CC0000';
+            return;
+        }
+        if (scenarioRows.some(row => row.stepIndices.length === 0)) {
+            enlazarHint.textContent = '⚠ Cada línea Gherkin debe tener al menos una acción enlazada.';
+            enlazarHint.style.color = '#FFB020';
+            return;
+        }
+        const safe = await validateStepImpacts();
+        if (!safe) {
+            enlazarHint.textContent = '⚠ Corrige los steps con impacto antes de preparar los archivos.';
+            enlazarHint.style.color = '#FFB020';
+            setWizardPage(2);
             return;
         }
 
@@ -2754,19 +3530,13 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Guardar en memoria para cuando el usuario haga click en GENERAR
-        const reuse = await api.analyzeStepReuse(stepTexts, cmbFrameworkSquad.value);
-        if (!reuse.success) {
-            enlazarHint.textContent = '✗ No se pudo analizar la reutilización: ' + reuse.error;
-            enlazarHint.style.color = '#CC0000';
-            return;
-        }
         linkedScenarioData = {
             linked,
             stepTexts,
             stepRows,
             examples,
-            reuse: reuse.steps,
-            screenMethods: reuse.screenMethods
+            reuse: stepTexts.map(text => ({ text, status: 'missing' })),
+            screenMethods: []
         };
 
         // Construir preview Gherkin y actualizar el textarea de la pantalla principal
@@ -2787,18 +3557,13 @@ window.addEventListener('DOMContentLoaded', async () => {
         ];
         if (txtGherkin) txtGherkin.value = gherkinLines.join('\n');
 
-        const reused = reuse.steps.filter(step => step.status === 'reused').length;
-        const missing = reuse.steps.length - reused;
-        setStatus(
-            `✓ Análisis: ${reused} steps reutilizados · ${missing} faltantes · ` +
-            `${reuse.screenMethods.length} métodos disponibles`,
-            missing ? '#FF9900' : '#00CC00'
-        );
-        enlazarModal.style.display = 'none';
+        setStatus(`✓ ${stepTexts.length} steps nuevos validados sin impacto`, '#00CC00');
+        setWizardPage(4);
+        btnPreview.click();
     });
 
     // ─── INIT ────────────────────────────────────────────────────────────────
     screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
     screenRecorder.style.cssText = 'display:none !important';
     await Promise.all([loadFrameworkCatalog(), loadDevices(), loadBsCredentials()]);
-});
+}

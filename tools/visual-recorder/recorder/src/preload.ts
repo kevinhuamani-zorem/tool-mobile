@@ -5,8 +5,14 @@ contextBridge.exposeInMainWorld('api', {
     scanFramework:       ()                     => ipcRenderer.invoke('scan-framework'),
     analyzeStepReuse:    (texts: string[], squad?: string) =>
         ipcRenderer.invoke('analyze-step-reuse', texts, squad),
+    analyzeStepImpact:   (texts: string[], squad?: string) =>
+        ipcRenderer.invoke('analyze-step-impact', texts, squad),
     getSquadCatalog:     (squad: string, platform: string) =>
         ipcRenderer.invoke('get-squad-catalog', squad, platform),
+    getExistingScenarios:(squad: string)         => ipcRenderer.invoke('get-existing-scenarios', squad),
+    getScenarioCoverage:(scenarioId: string, squad: string) =>
+        ipcRenderer.invoke('get-scenario-coverage', scenarioId, squad),
+    assignLocatorValue:  (request: any)         => ipcRenderer.invoke('assign-locator-value', request),
 
     // ── Local ────────────────────────────────────────────────────────────────
     getDevices:          ()                     => ipcRenderer.invoke('get-devices'),

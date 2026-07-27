@@ -22,9 +22,29 @@ export interface StepReuseResult {
     match?: StepDefinitionInfo;
 }
 
+export interface StepImpactReference {
+    squad: string;
+    file: string;
+    keyword: StepDefinitionInfo['keyword'];
+    expression: string;
+    scope: StepDefinitionInfo['scope'];
+    matchType: 'exact' | 'regex';
+    scenarios: { feature: string; scenario: string; file: string }[];
+}
+
+export interface StepImpactResult {
+    text: string;
+    safe: boolean;
+    references: StepImpactReference[];
+}
+
 export interface LocatorInfo {
     name: string;
     selector: string;
+    androidSelector: string;
+    iosSelector: string;
+    androidBlock?: string;
+    iosBlock?: string;
     file: string;
     module: string;
     squad: string;
@@ -101,6 +121,82 @@ export class ReuseAnalyzer {
         });
     }
 
+    analyzeStepImpact(texts: string[], squad?: string): StepImpactResult[] {
+        if (this.stepDefinitions.length === 0) this.refresh();
+        const featureUsages = this.indexFeatureUsages();
+        return texts.map(rawText => {
+            const text = rawText.trim().replace(/^(Given|When|Then|And|But)\s+/, '');
+            const references = this.stepDefinitions.flatMap(definition => {
+                const regex = safeRegex(definition.expression);
+                if (!regex) return [];
+                regex.lastIndex = 0;
+                if (!regex.test(text)) return [];
+                const normalizedExpression = definition.expression.replace(/^\^|\$$/g, '');
+                return [{
+                    squad: definition.squad,
+                    file: definition.file,
+                    keyword: definition.keyword,
+                    expression: definition.expression,
+                    scope: definition.scope,
+                    matchType: normalizedExpression === text ? 'exact' as const : 'regex' as const,
+                    scenarios: featureUsages.filter(usage => {
+                        regex.lastIndex = 0;
+                        return regex.test(usage.text);
+                    }).map(({ feature, scenario, file }) => ({ feature, scenario, file }))
+                }];
+            });
+            return {
+                text,
+                safe: references.length === 0,
+                references: references.sort((left, right) => {
+                    const leftExternal = left.squad !== squad ? 0 : 1;
+                    const rightExternal = right.squad !== squad ? 0 : 1;
+                    return leftExternal - rightExternal || left.file.localeCompare(right.file);
+                })
+            };
+        });
+    }
+
+    private indexFeatureUsages(): {
+        feature: string;
+        scenario: string;
+        file: string;
+        text: string;
+    }[] {
+        const usages: { feature: string; scenario: string; file: string; text: string }[] = [];
+        if (!fs.existsSync(projectPaths.features)) return usages;
+        const pending = [projectPaths.features];
+        while (pending.length) {
+            const current = pending.pop()!;
+            for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+                const fullPath = path.join(current, entry.name);
+                if (entry.isDirectory()) {
+                    pending.push(fullPath);
+                    continue;
+                }
+                if (!entry.isFile() || !entry.name.endsWith('.feature')) continue;
+                let feature = entry.name.replace(/\.feature$/, '');
+                let scenario = 'Sin escenario';
+                for (const line of fs.readFileSync(fullPath, 'utf-8').split(/\r?\n/)) {
+                    const featureMatch = line.match(/^\s*Feature:\s*(.+)$/i);
+                    if (featureMatch) feature = featureMatch[1].trim();
+                    const scenarioMatch = line.match(/^\s*Scenario(?: Outline)?:\s*(.+)$/i);
+                    if (scenarioMatch) scenario = scenarioMatch[1].trim();
+                    const stepMatch = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+                    if (stepMatch) {
+                        usages.push({
+                            feature,
+                            scenario,
+                            file: path.relative(projectPaths.frameworkRoot, fullPath),
+                            text: stepMatch[1].trim()
+                        });
+                    }
+                }
+            }
+        }
+        return usages;
+    }
+
     getStepDefinitions(squad?: string): StepDefinitionInfo[] {
         if (this.stepDefinitions.length === 0) this.refresh();
         if (!squad) return this.stepDefinitions;
@@ -162,7 +258,7 @@ export class ReuseAnalyzer {
     }
 
     private indexLocators(squad: string, platform: 'android' | 'ios'): LocatorInfo[] {
-        const ranked = new Map<string, LocatorInfo>();
+        const indexed: LocatorInfo[] = [];
         const sources: { directory: string; squad: string; scope: LocatorInfo['scope'] }[] = [
             { directory: projectPaths.locators, squad: 'global', scope: 'global' },
             { directory: path.join(projectPaths.locators, 'home'), squad: 'home', scope: 'home' },
@@ -186,19 +282,48 @@ export class ReuseAnalyzer {
                 } catch {
                     continue;
                 }
-                for (const [blockName, rawBlock] of Object.entries(document)) {
-                    if (!rawBlock || typeof rawBlock !== 'object' || Array.isArray(rawBlock)) continue;
-                    const normalizedBlock = blockName.toLowerCase();
-                    const matchesPlatform = platform === 'android'
-                        ? normalizedBlock === 'android' || normalizedBlock.endsWith('android')
-                        : normalizedBlock === 'ios' || normalizedBlock.endsWith('ios');
-                    if (!matchesPlatform) continue;
-
-                    for (const [name, selector] of Object.entries(rawBlock as Record<string, unknown>)) {
-                        if (typeof selector !== 'string' || !selector.trim()) continue;
-                        ranked.set(name, {
+                const platformBlocks = Object.entries(document)
+                    .filter(([, rawBlock]) =>
+                        Boolean(rawBlock) && typeof rawBlock === 'object' && !Array.isArray(rawBlock)
+                    )
+                    .map(([blockName, rawBlock]) => {
+                        const match = blockName.match(/^(.*?)(android|ios)$/i);
+                        return match ? {
+                            blockName,
+                            stem: match[1].toLowerCase(),
+                            platform: match[2].toLowerCase() as 'android' | 'ios',
+                            values: rawBlock as Record<string, unknown>
+                        } : undefined;
+                    })
+                    .filter((block): block is NonNullable<typeof block> => Boolean(block));
+                const stems = [...new Set(platformBlocks.map(block => block.stem))];
+                for (const stem of stems) {
+                    const androidBlock = platformBlocks.find(
+                        block => block.stem === stem && block.platform === 'android'
+                    );
+                    const iosBlock = platformBlocks.find(
+                        block => block.stem === stem && block.platform === 'ios'
+                    );
+                    const names = new Set([
+                        ...Object.keys(androidBlock?.values || {}),
+                        ...Object.keys(iosBlock?.values || {})
+                    ]);
+                    for (const name of names) {
+                        const androidValue = androidBlock?.values[name];
+                        const iosValue = iosBlock?.values[name];
+                        const androidSelector = typeof androidValue === 'string'
+                            ? androidValue.trim()
+                            : '';
+                        const iosSelector = typeof iosValue === 'string'
+                            ? iosValue.trim()
+                            : '';
+                        indexed.push({
                             name,
-                            selector: selector.trim(),
+                            selector: platform === 'android' ? androidSelector : iosSelector,
+                            androidSelector,
+                            iosSelector,
+                            androidBlock: androidBlock?.blockName,
+                            iosBlock: iosBlock?.blockName,
                             file: path.relative(projectPaths.frameworkRoot, file),
                             module: path.relative(projectPaths.locators, file)
                                 .replace(/\\/g, '/')
@@ -212,7 +337,11 @@ export class ReuseAnalyzer {
                 }
             }
         }
-        return [...ranked.values()].sort((a, b) => a.name.localeCompare(b.name));
+        return indexed.sort((a, b) =>
+            Number(Boolean(a.selector)) - Number(Boolean(b.selector)) ||
+            a.name.localeCompare(b.name) ||
+            a.file.localeCompare(b.file)
+        );
     }
 
     private walkJson(root: string): string[] {
