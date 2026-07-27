@@ -34,10 +34,24 @@ body {
 
 /* ── CONFIG SCREEN ───────────────────────────────────── */
 #screenConfig {
+    position: fixed;
+    inset: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: scroll !important;
     padding: 16px 0 28px;
     scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+}
+
+#screenConfig::-webkit-scrollbar { width: 10px; }
+#screenConfig::-webkit-scrollbar-track { background: #12121d; }
+#screenConfig::-webkit-scrollbar-thumb {
+    background: #505073;
+    border: 2px solid #12121d;
+    border-radius: 8px;
 }
 
 .config-container {
@@ -1748,4 +1762,161 @@ body {
 @media (max-width: 900px) {
     .wizard-step small { display: none; }
     .wizard-link-layout { grid-template-columns: 1fr; }
+}
+
+/* Pantalla de conexión simplificada */
+.connection-shell {
+    flex: 0 0 auto;
+    width: min(1120px, calc(100vw - 48px));
+    min-height: max-content;
+    margin: 22px auto;
+    background: #151522;
+    border: 1px solid #3d3d60;
+    border-radius: 15px;
+    overflow: visible;
+    box-shadow: 0 22px 70px rgba(0,0,0,.32);
+}
+.connection-header {
+    border-radius: 15px 15px 0 0;
+}
+.connection-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 30px;
+    border-bottom: 1px solid var(--border);
+}
+.connection-brand { display: flex; align-items: center; gap: 14px; }
+.connection-brand .logo { font-size: 28px; }
+.connection-brand h1 { margin: 0; font-size: 22px; }
+.connection-brand p { margin: 3px 0 0; color: var(--text3); font-size: 12px; }
+.connection-main { max-width: 900px; margin: 0 auto; padding: 22px 28px 28px; }
+.saved-context {
+    display: flex; align-items: center; gap: 9px;
+    padding: 13px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #202033;
+    font-size: 12px;
+}
+.saved-context i { color: #6c6c87; }
+.saved-context-ok { margin-left: auto; color: #4ed56f; }
+.link-button {
+    border: 0; background: transparent; color: #62a8ff;
+    cursor: pointer; font-weight: 700;
+}
+.source-cards {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 14px; margin: 16px 0;
+}
+.source-card {
+    position: relative;
+    display: grid; place-items: center;
+    min-height: 128px; padding: 18px;
+    background: #1c1c2c; color: var(--text);
+    border: 1px solid #42425e; border-radius: 10px;
+    cursor: pointer;
+}
+.source-card:hover { border-color: #71518c; }
+.source-card.active {
+    border: 2px solid #9136c4;
+    background: linear-gradient(135deg, rgba(145,54,196,.13), rgba(29,29,45,.9));
+}
+.source-card .source-radio {
+    position: absolute; left: 16px; top: 16px;
+    width: 17px; height: 17px; border: 2px solid #777792; border-radius: 50%;
+}
+.source-card.active .source-radio { border: 5px solid #a744db; background: white; }
+.source-icon { font-size: 24px; margin-bottom: 4px; }
+.source-card strong { font-size: 17px; }
+.source-card small { max-width: 250px; margin-top: 7px; color: var(--text3); line-height: 1.4; }
+.connection-panel {
+    display: flex; flex-direction: column; gap: 13px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #1b1b2a;
+}
+.device-picker { max-width: 100%; }
+.connected-device-card {
+    display: grid;
+    grid-template-columns: 74px 1fr 150px 150px;
+    align-items: center; gap: 18px;
+    padding: 17px;
+    border: 1px solid #454560; border-radius: 9px;
+    background: #222236;
+}
+.device-illustration {
+    display: grid; place-items: center;
+    width: 64px; height: 78px;
+    border: 2px solid #555572; border-radius: 10px;
+    font-size: 30px;
+}
+.device-card-main { display: flex; flex-direction: column; gap: 7px; }
+.device-card-main strong { font-size: 18px; margin-right: 8px; }
+.connected-pill {
+    padding: 3px 7px; border: 1px solid #278b45; border-radius: 5px;
+    color: #57df75; font-size: 10px;
+}
+.device-card-main > span { color: #b5b5d1; }
+.device-card-meta { display: flex; flex-direction: column; gap: 4px; }
+.device-card-meta small { color: var(--text3); }
+.connection-advanced {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+}
+.connection-advanced summary {
+    color: #b9b9d7; text-align: center; cursor: pointer;
+    font-size: 12px; font-weight: 700;
+}
+.connection-advanced-body {
+    max-width: 720px; margin: 14px auto 0; padding: 14px;
+    border-radius: 8px; background: #171725;
+}
+.connection-advanced-body .field-label:not(:first-child) { margin-top: 8px; }
+.bs-daily-grid { display: grid; grid-template-columns: 1fr; gap: 13px; }
+.framework-setup-modal {
+    position: fixed; inset: 0; z-index: 1500;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(8,8,16,.82);
+}
+.framework-setup-card {
+    position: relative; width: min(430px, calc(100vw - 40px));
+    padding: 30px;
+    border: 1px solid #505070; border-radius: 14px;
+    background: #202033;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6);
+}
+.setup-once-pill {
+    position: absolute; top: -13px; right: 22px;
+    padding: 7px 12px; border-radius: 6px;
+    background: #842bb7; color: white; font-size: 10px; font-weight: 800;
+}
+.setup-icon { text-align: center; font-size: 30px; }
+.framework-setup-card h2 { text-align: center; margin: 10px 0 5px; }
+.framework-setup-card > p { text-align: center; color: var(--text3); margin: 0 0 20px; }
+.framework-setup-card > .field-label { margin-top: 12px; }
+.detected-project {
+    display: flex; flex-direction: column; gap: 5px;
+    margin-top: 14px; padding: 12px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: #191928;
+}
+.detected-project small { color: var(--text3); }
+.remember-config {
+    display: flex; align-items: flex-start; gap: 9px;
+    margin: 15px 0; color: #d6d6e8; font-size: 12px;
+}
+.remember-config input { accent-color: #8a2fba; }
+.remember-config span { display: flex; flex-direction: column; gap: 3px; }
+.remember-config small { color: var(--text3); }
+
+@media (max-width: 760px) {
+    .connection-shell { width: calc(100vw - 20px); margin: 10px; }
+    .connection-header { padding: 16px; }
+    .connection-main { padding-inline: 14px; }
+    .source-cards { grid-template-columns: 1fr; }
+    .connected-device-card { grid-template-columns: 64px 1fr; }
+    .device-card-meta { grid-column: 2; }
+    .saved-context-ok { display: none; }
 }

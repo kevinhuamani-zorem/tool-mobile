@@ -12,6 +12,13 @@ export async function initializeRecorder() {
     const cmbFrameworkSquad = document.getElementById('cmbFrameworkSquad');
     const cmbFrameworkApp = document.getElementById('cmbFrameworkApp');
     const lblFrameworkStatus = document.getElementById('lblFrameworkStatus');
+    const frameworkSetupModal = document.getElementById('frameworkSetupModal');
+    const btnSaveFrameworkConfig = document.getElementById('btnSaveFrameworkConfig');
+    const btnChangeFramework = document.getElementById('btnChangeFramework');
+    const btnChangeFrameworkInline = document.getElementById('btnChangeFrameworkInline');
+    const chkRememberFramework = document.getElementById('chkRememberFramework');
+    const lblSavedEnvironment = document.getElementById('lblSavedEnvironment');
+    const lblSavedSquad = document.getElementById('lblSavedSquad');
 
     // Local
     const localPanel      = document.getElementById('localPanel');
@@ -25,6 +32,9 @@ export async function initializeRecorder() {
     const btnDetectApp    = document.getElementById('btnDetectApp');
     const btnStart        = document.getElementById('btnStartSession');
     const lblConfigSt     = document.getElementById('lblConfigStatus');
+    const lblLocalDeviceName = document.getElementById('lblLocalDeviceName');
+    const lblLocalPlatform = document.getElementById('lblLocalPlatform');
+    const lblLocalPackage = document.getElementById('lblLocalPackage');
 
     // BrowserStack
     const bsPanel         = document.getElementById('bsPanel');
@@ -162,6 +172,46 @@ export async function initializeRecorder() {
     ]);
     const GENERATED_FILES_STORAGE_KEY = 'appiumVisualRecorder.generatedFiles.v1';
     const COVERAGE_PROGRESS_STORAGE_KEY = 'appiumVisualRecorder.coverageProgress.v1';
+    const FRAMEWORK_PREFERENCES_STORAGE_KEY = 'appiumVisualRecorder.frameworkPreferences.v1';
+
+    function readFrameworkPreferences() {
+        try {
+            const stored = JSON.parse(localStorage.getItem(FRAMEWORK_PREFERENCES_STORAGE_KEY) || 'null');
+            return stored && typeof stored.environment === 'string' && typeof stored.squad === 'string'
+                ? stored
+                : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function updateSavedFrameworkSummary() {
+        if (lblSavedEnvironment) lblSavedEnvironment.textContent =
+            (cmbFrameworkEnv.value || 'Sin ambiente').toUpperCase();
+        if (lblSavedSquad) lblSavedSquad.textContent = cmbFrameworkSquad.value || 'Sin squad';
+    }
+
+    function openFrameworkSetup() {
+        frameworkSetupModal.style.display = 'flex';
+    }
+
+    function closeFrameworkSetup() {
+        frameworkSetupModal.style.display = 'none';
+        updateSavedFrameworkSummary();
+    }
+
+    function syncLocalDeviceSummary() {
+        const selected = cmbDevices.options[cmbDevices.selectedIndex];
+        if (lblLocalDeviceName) {
+            lblLocalDeviceName.textContent = selected?.textContent?.replace(/\s+\(Android.*$/, '') ||
+                'Dispositivo local';
+        }
+        if (lblLocalPlatform) {
+            const match = selected?.textContent?.match(/\((Android[^)]*)\)/);
+            lblLocalPlatform.textContent = match?.[1] || `Android ${txtPlatformV.value || ''}`.trim();
+        }
+        if (lblLocalPackage) lblLocalPackage.textContent = txtPackage.value.trim() || 'Sin paquete';
+    }
 
     scenarioLocatorQueue.tabIndex = 0;
     scenarioLocatorQueue.addEventListener('wheel', event => {
@@ -287,6 +337,14 @@ export async function initializeRecorder() {
             cmbFrameworkSquad.value = defaultSquad;
         }
 
+        const savedPreferences = readFrameworkPreferences();
+        const hasSavedEnvironment = savedPreferences &&
+            [...cmbFrameworkEnv.options].some(option => option.value === savedPreferences.environment);
+        const hasSavedSquad = savedPreferences &&
+            [...cmbFrameworkSquad.options].some(option => option.value === savedPreferences.squad);
+        if (hasSavedEnvironment) cmbFrameworkEnv.value = savedPreferences.environment;
+        if (hasSavedSquad) cmbFrameworkSquad.value = savedPreferences.squad;
+
         cmbFrameworkApp.innerHTML = '<option value="">— Seleccionar app del framework —</option>';
         catalog.apps.forEach(app => {
             const option = document.createElement('option');
@@ -302,6 +360,9 @@ export async function initializeRecorder() {
             `${totals.features} features · ${catalog.reusable.stepDefinitions} definiciones indexadas · ` +
             `${catalog.reusable.screenMethods} métodos disponibles`;
         lblFrameworkStatus.className = 'device-info ok';
+        updateSavedFrameworkSummary();
+        if (hasSavedEnvironment && hasSavedSquad) closeFrameworkSetup();
+        else openFrameworkSetup();
         await loadSquadCatalog();
         await loadExistingScenarios();
     }
@@ -998,7 +1059,37 @@ export async function initializeRecorder() {
         renderAssignmentTarget();
         loadSquadCatalog(sessionPlatform);
         loadExistingScenarios();
+        updateSavedFrameworkSummary();
     });
+    cmbFrameworkEnv.addEventListener('change', updateSavedFrameworkSummary);
+
+    btnSaveFrameworkConfig.addEventListener('click', async () => {
+        if (!cmbFrameworkEnv.value || !cmbFrameworkSquad.value) {
+            lblFrameworkStatus.textContent = '⚠ Selecciona ambiente y squad';
+            lblFrameworkStatus.className = 'device-info err';
+            return;
+        }
+        if (chkRememberFramework.checked) {
+            localStorage.setItem(FRAMEWORK_PREFERENCES_STORAGE_KEY, JSON.stringify({
+                environment: cmbFrameworkEnv.value,
+                squad: cmbFrameworkSquad.value,
+                savedAt: new Date().toISOString()
+            }));
+        } else {
+            localStorage.removeItem(FRAMEWORK_PREFERENCES_STORAGE_KEY);
+        }
+        linkedScenarioData = null;
+        activeScenarioCoverage = null;
+        await Promise.all([loadSquadCatalog(sessionPlatform), loadExistingScenarios()]);
+        closeFrameworkSetup();
+    });
+
+    const showFrameworkSetup = () => {
+        chkRememberFramework.checked = Boolean(readFrameworkPreferences());
+        openFrameworkSetup();
+    };
+    btnChangeFramework.addEventListener('click', showFrameworkSetup);
+    btnChangeFrameworkInline.addEventListener('click', showFrameworkSetup);
 
     txtVarName.addEventListener('focus', () => {
         if (txtVarName.readOnly) return;
@@ -1378,7 +1469,12 @@ export async function initializeRecorder() {
         const r = await api.bsLoadCredentials();
         if (r.username) txtBsUser.value = r.username;
         if (r.accessKey) txtBsKey.value = r.accessKey;
-        if (r.username) lblBsCreds.textContent = '✓ Credenciales cargadas';
+        if (r.username && r.accessKey) {
+            lblBsCreds.textContent = '✓ Credenciales guardadas y cargadas';
+        } else {
+            document.getElementById('bsAdvanced').open = true;
+            lblBsCreds.textContent = 'Configura tus credenciales una sola vez.';
+        }
     }
 
     btnBsSaveCreds.addEventListener('click', async () => {
@@ -1575,9 +1671,15 @@ export async function initializeRecorder() {
         currentUdid = result.devices[0].udid;
         lblDeviceInfo.textContent = '✓ ' + result.devices.length + ' dispositivo(s)';
         lblDeviceInfo.className = 'device-info ok';
+        syncLocalDeviceSummary();
     }
 
-    cmbDevices.addEventListener('change', () => { currentUdid = cmbDevices.value; });
+    cmbDevices.addEventListener('change', () => {
+        currentUdid = cmbDevices.value;
+        syncLocalDeviceSummary();
+    });
+    txtPackage.addEventListener('input', syncLocalDeviceSummary);
+    txtPlatformV.addEventListener('input', syncLocalDeviceSummary);
     btnRefreshDev.addEventListener('click', loadDevices);
 
     btnDetectApp.addEventListener('click', async () => {
@@ -1588,6 +1690,7 @@ export async function initializeRecorder() {
         if (app.package) {
             txtPackage.value  = app.package;
             txtActivity.value = app.activity;
+            syncLocalDeviceSummary();
             setConfigStatus('✓ App: ' + app.package, 'ok');
         } else {
             setConfigStatus('⚠ No se detecto app', 'err');
