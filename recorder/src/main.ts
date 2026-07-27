@@ -20,6 +20,7 @@ import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../cor
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
 import { OutputValidator } from '../../core/outputValidator';
 import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
+import { ScenarioCoverageAnalyzer } from '../../core/scenarioCoverageAnalyzer';
 import crypto from 'crypto';
 
 let mainWindow: BrowserWindow | null = null;
@@ -33,6 +34,7 @@ const fwkMobileGenerator = new FwkMobileGenerator();
 const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
+const scenarioCoverageAnalyzer = new ScenarioCoverageAnalyzer();
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -82,8 +84,8 @@ function createWindow() {
         }
     });
 
-    // __dirname = dist/recorder/src/ → subir tres niveles hasta la raíz del proyecto
-    mainWindow.loadFile(path.join(__dirname, '../../../recorder/renderer/index.html'));
+    // El renderer React es compilado por Vite dentro de dist/renderer.
+    mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
 
     mainWindow.on('closed', () => { mainWindow = null; });
 
@@ -126,6 +128,18 @@ ipcMain.handle('analyze-step-reuse', async (_, texts: string[], squad?: string) 
     }
 });
 
+ipcMain.handle('analyze-step-impact', async (_, texts: string[], squad?: string) => {
+    try {
+        reuseAnalyzer.refresh();
+        return {
+            success: true,
+            steps: reuseAnalyzer.analyzeStepImpact(texts, squad || activeSquad)
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
 ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobilePlatform) => {
     try {
         const selectedSquad = squad || activeSquad;
@@ -133,6 +147,121 @@ ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobileP
         return {
             success: true,
             catalog: reuseAnalyzer.getCatalog(selectedSquad, selectedPlatform)
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-existing-scenarios', async (_, squad?: string) => {
+    try {
+        return {
+            success: true,
+            scenarios: scenarioCoverageAnalyzer.listScenarios(squad || activeSquad)
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-scenario-coverage', async (_, scenarioId: string, squad?: string) => {
+    try {
+        return {
+            success: true,
+            coverage: scenarioCoverageAnalyzer.analyze(squad || activeSquad, scenarioId),
+            platform: recordingPlatform
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('assign-locator-value', async (_, request: {
+    file: string;
+    name: string;
+    selector: string;
+    platform?: MobilePlatform;
+    androidBlock?: string;
+    iosBlock?: string;
+}) => {
+    try {
+        if (!sessionActive) throw new Error('Sin sesion activa');
+        const platform: MobilePlatform = recordingPlatform;
+        if (request.platform && request.platform !== platform) {
+            throw new Error(`La sesion activa es ${platform}; no se puede escribir en ${request.platform}`);
+        }
+        const name = String(request.name || '').trim();
+        const executableSelector = String(request.selector || '').trim();
+        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
+            throw new Error(`Nombre de locator invalido: ${name}`);
+        }
+        if (!executableSelector) throw new Error('El selector no puede estar vacio');
+        const shortId = executableSelector.match(/^id=([^/:]+)$/)?.[1];
+        const selector = shortId
+            ? `//*[@resource-id="${shortId}"]`
+            : executableSelector
+                .replace(/^android=/, '')
+                .replace(/^iosPredicate=/, '')
+                .replace(/^iosClassChain=/, '')
+                .replace(/^id=/, '')
+                .replace(/^class=/, '')
+                .replace(/^~/, '');
+
+        const relativeFile = String(request.file || '').replace(/\\/g, '/');
+        if (!relativeFile.startsWith('resources/locators/') || !relativeFile.endsWith('.json')) {
+            throw new Error('El archivo no pertenece a resources/locators');
+        }
+        const file = path.resolve(projectPaths.frameworkRoot, relativeFile);
+        const locatorRoot = path.resolve(projectPaths.locators) + path.sep;
+        if (!file.startsWith(locatorRoot) || !fs.existsSync(file)) {
+            throw new Error(`No existe el archivo de locators: ${relativeFile}`);
+        }
+
+        const document = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, any>;
+        const requestedBlock = platform === 'android' ? request.androidBlock : request.iosBlock;
+        let blockName = requestedBlock && document[requestedBlock] &&
+            typeof document[requestedBlock] === 'object' &&
+            requestedBlock.toLowerCase().endsWith(platform)
+            ? requestedBlock
+            : Object.keys(document).find(block => block.toLowerCase().endsWith(platform));
+
+        if (!blockName) {
+            const counterpart = platform === 'android' ? request.iosBlock : request.androidBlock;
+            if (counterpart) {
+                blockName = counterpart.replace(
+                    /(android|ios)$/i,
+                    platform === 'android' ? 'Android' : 'Ios'
+                );
+            } else {
+                const moduleName = path.basename(file).replace(/\.locator\.json$/i, '');
+                const camel = moduleName.replace(/-([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+                blockName = `${camel}${platform === 'android' ? 'Android' : 'Ios'}`;
+            }
+            document[blockName] = {};
+        }
+        if (!document[blockName] || typeof document[blockName] !== 'object' || Array.isArray(document[blockName])) {
+            throw new Error(`El bloque ${blockName} no es valido`);
+        }
+
+        const previous = typeof document[blockName][name] === 'string'
+            ? document[blockName][name]
+            : '';
+        document[blockName][name] = selector;
+        const temporary = `${file}.recorder-${process.pid}.tmp`;
+        fs.writeFileSync(temporary, JSON.stringify(document, null, 4) + '\n', {
+            encoding: 'utf-8',
+            flag: 'wx'
+        });
+        fs.renameSync(temporary, file);
+        generatedFileRegistry.registerUpdatedFile(file, activeSquad);
+
+        return {
+            success: true,
+            platform,
+            block: blockName,
+            previous,
+            selector,
+            catalog: reuseAnalyzer.getCatalog(activeSquad, platform)
         };
     } catch (e: any) {
         return { success: false, error: e.message };

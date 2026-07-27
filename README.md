@@ -258,11 +258,17 @@ El reporte HTML se genera en:
       locatorManager.ts           Lee y escribe el archivo .locators
       featureGenerator.ts         Genera el archivo .feature
       models.ts                   Tipos e interfaces TypeScript
-    renderer/
-      index.html                  Panel visual con dos pantallas
-      app.js                      Logica del panel (config + recorder)
-      css/
-        style.css                 Estilos del panel
+    recorder/
+      renderer/
+        index.html                Entrada mínima de Vite
+        src/
+          App.tsx                 Ciclo de vida del renderer React
+          RecorderLayout.tsx      Composición de pantallas
+          components/             Pantallas, workspace y modales independientes
+          controller/             Orquestación de la API expuesta por preload
+          styles/                 Estilos del recorder
+    vite.config.ts                Build del renderer React
+    tsconfig.renderer.json        TypeScript del renderer
     features/
       step_definitions/
         steps.ts                  Step definitions para Cucumber
