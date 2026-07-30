@@ -14,6 +14,15 @@ resources/apps/*
 !resources/apps/android/.gitkeep
 !resources/apps/ios/.gitkeep
 
+# Configuración local y secretos
+/tools/visual-recorder/.env
+
+# Artefactos locales de pruebas y métricas del recorder
+/tools/visual-recorder/coverage/
+/tools/visual-recorder/test-results/
+/tools/visual-recorder/runtime/quality/
+/tools/visual-recorder/runtime/test-results/
+
 # Excluir subcarpetas y archivos dentro de android y ios, pero no los archivos .gitkeep
 resources/apps/android/*
 !resources/apps/android/.gitkeep

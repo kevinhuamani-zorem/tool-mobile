@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('analyze-step-reuse', texts, squad),
     analyzeStepImpact:   (texts: string[], squad?: string) =>
         ipcRenderer.invoke('analyze-step-impact', texts, squad),
+    getAiStatus:         () => ipcRenderer.invoke('get-ai-status'),
+    generateAiPlan:      (request: any) => ipcRenderer.invoke('generate-ai-plan', request),
     getSquadCatalog:     (squad: string, platform: string) =>
         ipcRenderer.invoke('get-squad-catalog', squad, platform),
     getExistingScenarios:(squad: string)         => ipcRenderer.invoke('get-existing-scenarios', squad),

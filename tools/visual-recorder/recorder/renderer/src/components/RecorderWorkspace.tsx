@@ -100,44 +100,6 @@ export function RecorderWorkspace() {
         <label className="field-label">Descripcion (opcional):</label>
         <input type="text" id="txtDesc" className="field-input" placeholder="describe el step..." />
         <button className="btn btn-green btn-full btn-execute" id="btnExecute">Guardar paso y continuar →</button>
-        <details className="advanced-config">
-          <summary>⚙️ Configuración avanzada del caso</summary>
-          <div className="advanced-config-body">
-            <div className="input-row">
-              <div className="input-group">
-                <label className="field-label">Feature:</label>
-                <input type="text" id="txtFeature" className="field-input" defaultValue="Flujo mobile" />
-              </div>
-              <div className="input-group">
-                <label className="field-label">Scenario:</label>
-                <input type="text" id="txtScenario" className="field-input" defaultValue="Escenario grabado" />
-              </div>
-            </div>
-            <div className="input-row">
-              <div className="input-group">
-                <label className="field-label">ID:</label>
-                <input type="text" id="txtCaseId" className="field-input" defaultValue="CP_01" />
-              </div>
-              <div className="input-group">
-                <label className="field-label">Tipo:</label>
-                <select id="cmbPathType" className="field-select">
-                  <option value="Happy Path">Happy Path</option>
-                  <option value="Unhappy Path">Unhappy Path</option>
-                </select>
-              </div>
-              <div className="input-group">
-                <label className="field-label">Tag:</label>
-                <input type="text" id="txtFeatureTag" className="field-input" defaultValue="miflujo" />
-              </div>
-            </div>
-            <label className="field-label">Archivo feature:</label>
-            <input type="text" id="txtFeatureFile" className="field-input" defaultValue="flujo-mobile" />
-            <label className="field-label">Módulo de pantalla/locators:</label>
-            <input type="text" id="txtLocatorModule" className="field-input" defaultValue="nueva-pantalla" />
-            <label className="field-label">Usuario data (opcional):</label>
-            <input type="text" id="txtDataName" className="field-input" placeholder="name usado en Examples" />
-          </div>
-        </details>
       </section>
       <section className="panel panel-right">
         <div className="workflow-step">

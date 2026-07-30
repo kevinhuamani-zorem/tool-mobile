@@ -40,7 +40,13 @@ export function ScenarioBuilderModal() {
           <section className="wizard-page" data-wizard-page="2">
             <div className="wizard-page-heading">
               <div><span className="eyebrow">PASO 2</span><h3>Escribe el comportamiento en Gherkin</h3></div>
-              <button className="btn btn-blue" id="btnNuevoStep">+ Agregar línea</button>
+              <div className="wizard-heading-actions">
+                <button className="btn btn-purple" id="btnGenerateWithAi">✨ Proponer con Gemini</button>
+                <button className="btn btn-blue" id="btnNuevoStep">+ Agregar línea</button>
+              </div>
+            </div>
+            <div id="aiPlanStatus" className="ai-plan-status">
+              Gemini propone el Gherkin; tú conservas el control antes de continuar.
             </div>
             <div className="impact-legend">
               <span className="impact-safe">● Aislado</span>
@@ -72,8 +78,45 @@ export function ScenarioBuilderModal() {
 
           <section className="wizard-page" data-wizard-page="4">
             <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 4</span><h3>Revisa los archivos antes de guardar</h3></div>
-              <span className="wizard-help">Todavía no se modificó el framework.</span>
+              <div><span className="eyebrow">PASO 4</span><h3>Depura la propuesta y revisa los archivos</h3></div>
+              <span className="wizard-help">Confirma los nombres sugeridos por IA y completa el TC.</span>
+            </div>
+            <div className="wizard-case-config">
+              <div className="input-group">
+                <label className="field-label">Feature:</label>
+                <input type="text" id="txtFeature" className="field-input" defaultValue="Flujo mobile" />
+              </div>
+              <div className="input-group">
+                <label className="field-label">Scenario:</label>
+                <input type="text" id="txtScenario" className="field-input" defaultValue="Escenario grabado" />
+              </div>
+              <div className="input-group">
+                <label className="field-label">ID de ejecución:</label>
+                <input type="text" id="txtCaseId" className="field-input" defaultValue="TC-10239" />
+              </div>
+              <div className="input-group">
+                <label className="field-label">Tipo:</label>
+                <select id="cmbPathType" className="field-select">
+                  <option value="Happy Path">Happy Path</option>
+                  <option value="Unhappy Path">Unhappy Path</option>
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="field-label">Tag:</label>
+                <input type="text" id="txtFeatureTag" className="field-input" defaultValue="miflujo" />
+              </div>
+              <div className="input-group">
+                <label className="field-label">Usuario data (opcional):</label>
+                <input type="text" id="txtDataName" className="field-input" placeholder="name usado en Examples" />
+              </div>
+              <div className="input-group">
+                <label className="field-label">Archivo Feature:</label>
+                <input type="text" id="txtFeatureFile" className="field-input" defaultValue="flujo-mobile" />
+              </div>
+              <div className="input-group">
+                <label className="field-label">Módulo pantalla/locators:</label>
+                <input type="text" id="txtLocatorModule" className="field-input" defaultValue="nueva-pantalla" />
+              </div>
             </div>
             <select id="cmbPreviewFile" className="field-select wizard-file-tabs" style={{display: 'none'}} />
             <textarea id="txtGherkin" className="gherkin-preview wizard-preview" readOnly />

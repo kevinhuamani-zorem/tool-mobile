@@ -23,6 +23,7 @@ export interface GenerationRequest {
         text: string;
         actions?: RecordedStep[];
         status?: 'reused' | 'missing';
+        methodName?: string;
     }[];
 }
 
@@ -188,8 +189,8 @@ export class FwkMobileGenerator {
         }
 
         const caseId = request.caseId.trim().toUpperCase();
-        if (!/^CP_[A-Z0-9-]+$/.test(caseId)) {
-            throw new Error('El ID debe usar el formato CP_XX');
+        if (!/^TC-\d+$/.test(caseId)) {
+            throw new Error('El ID debe usar el formato TC-10239');
         }
 
         const tag = request.tag.trim().replace(/^@/, '');
@@ -334,9 +335,10 @@ export class FwkMobileGenerator {
             const expression = this.stepExpression(row.text);
             const args = parameters.map(name => `${name}: string`).join(', ');
             const callArgs = parameters.join(', ');
+            const methodName = this.rowMethodName(row, index);
             return [
                 `${keyword}(/^${expression}$/, async (${args}) => {`,
-                `    await generatedScreen.executeStep${index + 1}(${callArgs});`,
+                `    await generatedScreen.${methodName}(${callArgs});`,
                 `});`
             ].join('\n');
         });
@@ -406,8 +408,9 @@ export class FwkMobileGenerator {
             const actions = (row.actions || []).flatMap((action, actionIndex) =>
                 this.actionLines(action, parameters, actionIndex)
             );
+            const methodName = this.rowMethodName(row, index);
             return [
-                `    public async executeStep${index + 1}(${args}): Promise<void> {`,
+                `    public async ${methodName}(${args}): Promise<void> {`,
                 ...actions.map(line => `        ${line}`),
                 `    }`
             ].join('\n');
@@ -430,6 +433,23 @@ export class FwkMobileGenerator {
             `export default new ${className}();`,
             ''
         ].join('\n');
+    }
+
+    private rowMethodName(
+        row: NonNullable<GenerationRequest['scenarioRows']>[number],
+        index: number
+    ): string {
+        if (row.methodName && /^[a-z][A-Za-z0-9]*$/.test(row.methodName)) {
+            return row.methodName;
+        }
+        const words = row.text
+            .replace(/<[^>]+>/g, '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Za-z0-9]+/g, ' ')
+            .trim().split(/\s+/).filter(Boolean);
+        if (words.length === 0) return `executeStep${index + 1}`;
+        return words[0].toLowerCase() +
+            words.slice(1).map(word => word[0].toUpperCase() + word.slice(1).toLowerCase()).join('');
     }
 
     private actionLines(

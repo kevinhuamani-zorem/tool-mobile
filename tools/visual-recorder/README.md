@@ -24,7 +24,7 @@ en una fase posterior sin exponer secretos en Electron.
 
 ## Salida compatible con fwk-mobile-test
 
-La generación normal solicita squad, archivo, módulo de locators, ID `CP_XX`,
+La generación normal solicita squad, archivo, módulo de locators, ID `TC-10239`,
 tipo de camino y tag. La salida se escribe directamente en:
 
     features/yape-features/<squad>/<archivo>.feature
@@ -38,31 +38,65 @@ La generación valida todas las rutas, escribe primero archivos temporales y no
 sobrescribe archivos existentes. Los locators capturados permanecen en memoria
 hasta que el usuario presiona `GENERAR`.
 
-### Reutilización de Steps y Screen Objects
+### Generación segura de Steps y Screen Objects
 
-El modo `Enlazar` permite redactar los steps Gherkin del escenario y asociarles
-una o más acciones grabadas. Antes de generar:
+El constructor permite redactar los steps Gherkin y asociarles una o más
+acciones grabadas. Al presionar Continuar desde Gherkin:
 
 1. se indexan las expresiones regulares `Given`, `When` y `Then` existentes;
-2. cada texto Gherkin se prueba contra el índice;
-3. las coincidencias se reutilizan sin crear código duplicado;
-4. para los steps faltantes se generan únicamente:
+2. cada texto se contrasta con escenarios y squads existentes;
+3. se muestra exactamente qué casos serían impactados;
+4. el usuario debe corregir el conflicto y se generan definiciones nuevas:
 
        features/yape-steps-definitions/<squad>/<archivo>.steps.ts
        screenobjects/<squad>/<módulo>.screen.ts
 
-El Steps file solo orquesta y llama al Screen Object. El Screen Object extiende
+No se reutilizan ni modifican steps ajenos automáticamente. El Steps file solo
+orquesta y llama al Screen Object. El Screen Object extiende
 `BaseScreen`, resuelve elementos con `LocatorFactory` y usa los helpers del
 framework para clicks, escritura, espera, validaciones y gestos soportados.
-También se indexan los métodos públicos disponibles por squad y los de
-`commons`, para facilitar su reutilización asistida.
+También se indexan los métodos públicos para validar el impacto antes de
+escribir.
+
+### Asistencia opcional con Gemini
+
+Existe una plantilla versionada en `tools/visual-recorder/.env.example`.
+Cópiala como `tools/visual-recorder/.env` y agrega tu clave:
+
+```dotenv
+GEMINI_API_KEY=tu_clave
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+El `.env` real está excluido de Git. Los reportes generados por pruebas,
+cobertura o métricas bajo `coverage/`, `test-results/` y `runtime/quality/`
+también están excluidos; las pruebas y el procedimiento QA sí se versionan.
+
+Gemini propone el Feature, Scenario y los enlaces del Gherkin usando las
+acciones grabadas y las convenciones indexadas. La propuesta siempre es
+editable y no escribe archivos: el generador local conserva el control de
+rutas, plantillas, validación y conflictos. Antes de enviar contexto se
+redactan credenciales, tokens, correos y números sensibles.
+
+La propuesta incluye nombres semánticos para el archivo Feature, módulo de
+pantalla, métodos y locators. Los nombres se validan antes del Preview y la
+salida de un caso nuevo debe contener las cuatro capas: Feature, Steps,
+Locators y Screen Object.
+
+La configuración del caso no se solicita al iniciar la grabación. En el paso
+final de Revisión se muestran los nombres propuestos para depurarlos y se
+completan el ID `TC-<número>`, tipo, tag y data antes de construir el Preview.
+
+La puerta completa de calidad se ejecuta con `npm run quality`. Los umbrales y
+el procedimiento manual están en
+[`docs/AI_QUALITY_ASSURANCE.md`](docs/AI_QUALITY_ASSURANCE.md).
 
 ### Preview y validación
 
 Antes de generar es obligatorio presionar `Preview`. La interfaz permite
 alternar y revisar el contenido de cada archivo propuesto. El proceso principal:
 
-- valida el formato Gherkin y `[CP_XX][Path][AUTO-FRONT]`;
+- valida el formato Gherkin y `[TC-10239][Path][AUTO-FRONT]`;
 - valida los bloques Android/iOS y la sintaxis JSON;
 - valida sintaxis TypeScript de Steps y Screen Objects;
 - informa selectores pendientes para la otra plataforma;
