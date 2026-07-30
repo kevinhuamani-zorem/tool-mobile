@@ -3549,6 +3549,11 @@ export async function initializeRecorder() {
         const messages = [
             `Calidad ${result.metrics.qualityScore}/100`,
             `cobertura de acciones ${coverage}%`,
+            ...(result.telemetry.codeGraph ? [
+                `CodeGraph ${result.telemetry.codeGraph.selectedNodes}/` +
+                `${result.telemetry.codeGraph.totalNodes} nodos`,
+                `contexto reducido ${Math.round(result.telemetry.codeGraph.contextReduction * 100)}%`
+            ] : []),
             `${result.telemetry.latencyMs} ms`,
             ...(result.plan.warnings || [])
         ];

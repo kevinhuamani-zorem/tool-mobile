@@ -21,6 +21,7 @@ El comando exige:
 - cero líneas duplicadas;
 - score de calidad mínimo de 90/100;
 - cobertura de generación 4/4: Feature, Steps, Locators y Screen Object;
+- reducción mínima del 50 % del contexto mediante el subgrafo;
 - build completo de Electron y React.
 
 ## Procedimiento QA manual
@@ -41,6 +42,8 @@ El comando exige:
    recalcula desde el filesystem, sin conflictos obsoletos.
 8. Probar error HTTP, timeout y JSON inválido de Gemini; el flujo manual debe
    permanecer operativo y no debe escribirse ningún archivo.
+9. Confirmar que `runtime/codegraph.json` es el único cache del grafo y que una
+   segunda consulta reporta cero archivos reindexados si el framework no cambió.
 
 ## Criterios de aceptación
 

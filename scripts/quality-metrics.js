@@ -3,6 +3,7 @@ const {
     calculatePlanMetrics
 } = require('../dist/ai/generationPlan');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
+const { CodeGraph } = require('../dist/core/codeGraph');
 
 const actions = [
     { action: 'CLICK', variableName: 'btnLogin' },
@@ -63,12 +64,18 @@ const generatedPreview = new FwkMobileGenerator().preview({
 }, generationActions);
 const requiredLayers = ['featurePath', 'stepPath', 'locatorPath', 'screenPath'];
 const generatedLayers = requiredLayers.filter(key => Boolean(generatedPreview[key])).length;
+const graphMetrics = new CodeGraph().query({
+    squad: 'payment',
+    actions: generationActions,
+    limit: 80
+}).metrics;
 const thresholds = {
     actionCoverage: 1,
     linkedRowCoverage: 1,
     duplicateRows: 0,
     qualityScore: 90,
-    generatedLayerCoverage: 1
+    generatedLayerCoverage: 1,
+    codeGraphContextReduction: 0.5
 };
 const result = {
     generatedAt: new Date().toISOString(),
@@ -76,7 +83,11 @@ const result = {
         ...metrics,
         linkedRowCoverage: metrics.linkedRows / metrics.totalRows,
         generatedLayers,
-        generatedLayerCoverage: generatedLayers / requiredLayers.length
+        generatedLayerCoverage: generatedLayers / requiredLayers.length,
+        codeGraphContextReduction: graphMetrics.contextReduction,
+        codeGraphSelectedNodes: graphMetrics.selectedNodes,
+        codeGraphTotalNodes: graphMetrics.totalNodes,
+        codeGraphReindexedFiles: graphMetrics.reindexedFiles
     },
     thresholds
 };
@@ -87,7 +98,8 @@ if (
     result.metrics.linkedRowCoverage < thresholds.linkedRowCoverage ||
     result.metrics.duplicateRows > thresholds.duplicateRows ||
     result.metrics.qualityScore < thresholds.qualityScore ||
-    result.metrics.generatedLayerCoverage < thresholds.generatedLayerCoverage
+    result.metrics.generatedLayerCoverage < thresholds.generatedLayerCoverage ||
+    result.metrics.codeGraphContextReduction < thresholds.codeGraphContextReduction
 ) {
     process.exitCode = 1;
 }

@@ -33,6 +33,7 @@ export const projectPaths = {
     frameworkRoot,
     toolConfig: path.join(toolRoot, 'config'),
     screenshots: path.join(toolRoot, 'runtime', 'screenshots'),
+    codeGraphCache: path.join(toolRoot, 'runtime', 'codegraph.json'),
     features: path.join(frameworkRoot, 'features', 'yape-features'),
     stepDefinitions: path.join(frameworkRoot, 'features', 'yape-steps-definitions'),
     locators: path.join(frameworkRoot, 'resources', 'locators'),
