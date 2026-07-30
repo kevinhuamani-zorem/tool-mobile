@@ -126,9 +126,13 @@ export class FwkMobileGenerator {
     generate(
         request: GenerationRequest,
         steps: RecordedStep[],
-        managedOverwriteFiles = new Set<string>()
+        managedOverwriteFiles = new Set<string>(),
+        reviewedContents?: Record<string, string>
     ): GeneratedPreview {
-        const preview = this.preview(request, steps);
+        const preview = this.withReviewedContents(
+            this.preview(request, steps),
+            reviewedContents
+        );
         const conflicts = preview.files.filter(
             file => fs.existsSync(file) && !managedOverwriteFiles.has(file)
         );
@@ -178,6 +182,30 @@ export class FwkMobileGenerator {
         }
 
         return preview;
+    }
+
+    withReviewedContents(
+        preview: GeneratedPreview,
+        reviewedContents?: Record<string, string>
+    ): GeneratedPreview {
+        if (!reviewedContents) return preview;
+        const allowed = new Set(preview.files.map(file => path.resolve(file)));
+        for (const file of Object.keys(reviewedContents)) {
+            if (!allowed.has(path.resolve(file))) {
+                throw new Error(`El editor intentó modificar un archivo fuera del preview: ${file}`);
+            }
+        }
+        const content = (file: string | undefined, fallback: string | undefined) =>
+            file && Object.prototype.hasOwnProperty.call(reviewedContents, file)
+                ? String(reviewedContents[file])
+                : fallback;
+        return {
+            ...preview,
+            featureContent: content(preview.featurePath, preview.featureContent) || '',
+            locatorContent: content(preview.locatorPath, preview.locatorContent),
+            stepContent: content(preview.stepPath, preview.stepContent),
+            screenContent: content(preview.screenPath, preview.screenContent)
+        };
     }
 
     private normalizeRequest(request: GenerationRequest): GenerationRequest {

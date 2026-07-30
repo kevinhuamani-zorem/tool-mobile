@@ -2,10 +2,39 @@
 
 Herramienta de grabacion visual de pruebas automatizadas mobile. Permite grabar flujos de usuario directamente desde un dispositivo Android sin escribir codigo, generando casos de prueba en formato Gherkin y archivos de locators listos para ejecutarse con Cucumber + WebdriverIO.
 
-> Esta copia vive integrada en `fwk-mobile-test/tools/visual-recorder`. La raíz
-> del framework se resuelve automáticamente y se expone al proceso mediante
-> `FWK_MOBILE_ROOT`. Las configuraciones locales quedan en `config/` y las
-> capturas temporales en `runtime/`; ambas están excluidas de Git.
+> Puede vivir integrado o ejecutarse como herramienta independiente. El
+> proyecto destino se resuelve mediante el adaptador activo. Las configuraciones
+> locales quedan en `config/` y las capturas temporales en `runtime/`; ambas
+> están excluidas de Git.
+
+## Modos de workspace
+
+El recorder puede ejecutarse sin estar dentro de `fwk-mobile-test`:
+
+```text
+fwk-mobile  → usa las cuatro capas de un proyecto fwk-mobile externo
+standalone  → crea un workspace WebdriverIO autocontenido
+neutral     → exporta únicamente Gherkin y recording.json
+```
+
+Ejemplos:
+
+```bash
+RECORDER_MODE=fwk-mobile TARGET_PROJECT=/ruta/al/fwk-mobile-test ./run.sh
+RECORDER_MODE=standalone ./run.sh
+RECORDER_MODE=neutral ./run.sh
+```
+
+También puedes copiar `config/workspace.example.json` como
+`config/workspace.json`. El archivo real permanece dentro del recorder y está
+excluido de Git. Sin configuración explícita se detecta `fwk-mobile` cuando
+existe como proyecto padre; en otra ubicación se selecciona `standalone`.
+
+El adaptador `standalone` crea su proyecto por defecto en
+`tools/visual-recorder/workspace`. El modo `neutral` escribe salidas portables
+en `tools/visual-recorder/runtime/exports`. El adaptador `fwk-mobile` acepta
+cualquier ruta mediante `TARGET_PROJECT`, por lo que el recorder ya no necesita
+vivir dentro del repositorio objetivo.
 
 ## Descubrimiento del framework
 
@@ -72,11 +101,13 @@ El `.env` real está excluido de Git. Los reportes generados por pruebas,
 cobertura o métricas bajo `coverage/`, `test-results/` y `runtime/quality/`
 también están excluidos; las pruebas y el procedimiento QA sí se versionan.
 
-Gemini propone el Feature, Scenario y los enlaces del Gherkin usando las
-acciones grabadas y las convenciones indexadas. La propuesta siempre es
-editable y no escribe archivos: el generador local conserva el control de
-rutas, plantillas, validación y conflictos. Antes de enviar contexto se
-redactan credenciales, tokens, correos y números sensibles.
+Gemini se utiliza durante la revisión de archivos, después de que el usuario
+escribió y enlazó el Gherkin. Propone nombres semánticos para Feature,
+Scenario, archivos, métodos y locators usando las acciones grabadas y las
+convenciones indexadas. No puede modificar las líneas Gherkin aprobadas. La
+propuesta siempre es editable y no escribe archivos: el generador local
+conserva el control de rutas, plantillas, validación y conflictos. Antes de
+enviar contexto se redactan credenciales, tokens, correos y números sensibles.
 
 La propuesta incluye nombres semánticos para el archivo Feature, módulo de
 pantalla, métodos y locators. Los nombres se validan antes del Preview y la
@@ -92,8 +123,8 @@ completan el ID `TC-<número>`, tipo, tag y data antes de construir el Preview.
 El recorder indexa localmente las relaciones entre Features, Scenarios, Step
 Definitions, Screen Objects, métodos y locators. Gemini recibe como máximo el
 subgrafo relevante para el squad y las acciones grabadas, no el índice completo.
-El cache incremental se guarda exclusivamente en
-`tools/visual-recorder/runtime/codegraph.json`, excluido de Git. El framework se
+El cache incremental se guarda exclusivamente como
+`tools/visual-recorder/runtime/codegraph-<modo>.json`, excluido de Git. El proyecto se
 usa en modo lectura y los archivos sin cambios no se vuelven a indexar.
 
 Para visualizar un subgrafo en VS Code:
@@ -120,6 +151,40 @@ npm run codegraph:export -- --squad payment --feature login --format dot
 
 El límite permitido es de 10 a 150 nodos. Tanto el nombre de salida como la
 ruta se normalizan y siempre permanecen dentro de `tools/visual-recorder/runtime`.
+
+### CodeGraph del propio recorder
+
+Existe un segundo grafo separado para desarrollar y mantener
+`tools/visual-recorder`. Indexa:
+
+- módulos e imports TypeScript/JavaScript;
+- componentes React;
+- servicios y símbolos;
+- canales IPC `renderer → preload → main`;
+- IDs JSX y bindings mediante `getElementById`;
+- scripts npm y pruebas unitarias.
+
+Consultas:
+
+```bash
+npm run codegraph:recorder -- --search generateFwkFiles
+npm run codegraph:recorder -- --component ScenarioBuilderModal
+npm run codegraph:recorder -- --ipc preview-fwk-files
+```
+
+Por defecto genera JSON, DOT y Mermaid dentro de `runtime/`. Para obtener solo
+el JSON compacto que puede consumirse como contexto:
+
+```bash
+npm run codegraph:recorder -- \
+  --ipc preview-fwk-files \
+  --limit 40 \
+  --format json
+```
+
+El índice incremental vive en `runtime/codegraph-recorder.json`. Este grafo no
+se envía automáticamente a Gemini: sirve para consultar la arquitectura y
+cargar únicamente los módulos relacionados durante mantenimiento del recorder.
 
 La puerta completa de calidad se ejecuta con `npm run quality`. Los umbrales y
 el procedimiento manual están en

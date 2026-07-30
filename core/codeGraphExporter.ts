@@ -7,7 +7,14 @@ const colors: Record<CodeGraphNode['type'], string> = {
     stepDefinition: '#26A69A',
     screenObject: '#FFA726',
     method: '#FFCA28',
-    locator: '#66BB6A'
+    locator: '#66BB6A',
+    module: '#546E7A',
+    component: '#AB47BC',
+    service: '#26C6DA',
+    ipcChannel: '#EF5350',
+    domElement: '#EC407A',
+    script: '#8D6E63',
+    test: '#78909C'
 };
 
 function clean(value: string): string {

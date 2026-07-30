@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { projectPaths, validateFrameworkRoot } from './projectPaths';
+import { getWorkspaceAdapter } from './workspaceAdapter';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 
 type LayerName = 'features' | 'steps' | 'screenobjects' | 'locators' | 'data';
@@ -30,6 +31,7 @@ export interface SquadInfo {
 
 export interface FrameworkCatalog {
     frameworkRoot: string;
+    workspace: ReturnType<ReturnType<typeof getWorkspaceAdapter>['describe']>;
     environments: EnvironmentInfo[];
     squads: SquadInfo[];
     apps: FrameworkFileInfo[];
@@ -134,6 +136,7 @@ export class FrameworkScanner {
 
         return {
             frameworkRoot: projectPaths.frameworkRoot,
+            workspace: getWorkspaceAdapter().describe(),
             environments: this.scanEnvironments(),
             squads,
             apps: this.toFileInfo(

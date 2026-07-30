@@ -1734,6 +1734,135 @@ body {
     resize: none;
 }
 .wizard-file-tabs { margin-bottom: 10px; }
+.code-review-workspace {
+    grid-template-columns: minmax(210px, 26%) minmax(0, 1fr);
+    height: clamp(420px, calc(100vh - 390px), 620px);
+    min-height: 420px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #12121f;
+}
+.code-file-explorer {
+    min-width: 0;
+    overflow: auto;
+    border-right: 1px solid var(--border);
+    background: #181827;
+}
+.code-file-explorer-title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 13px;
+    color: var(--text3);
+    background: #181827;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+}
+.code-file-group { padding: 0 8px 10px; }
+.code-file-group-title {
+    padding: 8px 6px;
+    color: #d5cdec;
+    font-size: 11px;
+    font-weight: 800;
+}
+.code-file-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 6px;
+    width: 100%;
+    margin: 2px 0;
+    padding: 9px 7px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text2);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+.code-file-item:hover { background: rgba(255,255,255,.045); }
+.code-file-item.active {
+    border-color: rgba(143,55,190,.65);
+    background: rgba(132,43,183,.2);
+}
+.code-file-item.modified { border-left-color: #ffb52e; }
+.code-file-item.invalid { border-left-color: #e34a4a; }
+.code-file-item > span:last-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+.code-file-item strong,
+.code-file-item small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.code-file-item small { color: var(--text3); font-size: 9px; }
+.code-file-item-state { color: #bd78df; font-weight: 900; }
+.code-editor-panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 0;
+}
+.code-editor-header,
+.code-editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #1b1b2b;
+}
+.code-editor-header > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+.code-editor-header small {
+    overflow: hidden;
+    color: var(--text3);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.code-file-state {
+    flex: 0 0 auto;
+    color: #b8acd0;
+    font-size: 10px;
+    font-weight: 800;
+}
+.code-file-state.edited { color: #ffbd47; }
+.code-file-state.generated { color: #53d870; }
+.code-editor {
+    box-sizing: border-box;
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+    overflow: auto;
+    padding: 16px;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    outline: none;
+    color: #6dffab;
+    background: #0d0d17;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    resize: none;
+    tab-size: 2;
+}
+.code-editor:focus { box-shadow: inset 0 0 0 1px #7d2bab; }
+.code-editor-toolbar { font-size: 10px; }
+.code-editor-toolbar > div { display: flex; gap: 6px; }
+.code-editor-toolbar .ok { color: #53d870; }
+.code-editor-toolbar .err { color: #ff6868; }
 .generation-summary {
     display: flex;
     align-items: center;
@@ -1762,6 +1891,13 @@ body {
 @media (max-width: 900px) {
     .wizard-step small { display: none; }
     .wizard-link-layout { grid-template-columns: 1fr; }
+    .code-review-workspace { grid-template-columns: 1fr; }
+    .code-file-explorer {
+        max-height: 140px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+    }
+    .code-editor-toolbar { align-items: flex-start; flex-direction: column; }
 }
 
 /* Pantalla de conexión simplificada */
@@ -1903,6 +2039,13 @@ body {
     background: #191928;
 }
 .detected-project small { color: var(--text3); }
+.detected-project span {
+    overflow: hidden;
+    color: var(--text3);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .remember-config {
     display: flex; align-items: flex-start; gap: 9px;
     margin: 15px 0; color: #d6d6e8; font-size: 12px;

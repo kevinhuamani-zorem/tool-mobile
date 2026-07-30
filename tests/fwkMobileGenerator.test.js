@@ -55,3 +55,47 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.match(preview.screenContent, /public async revisarMovimientos/);
     assert.match(preview.screenContent, /public async validarMovimiento/);
 });
+
+test('aplica ediciones revisadas únicamente a archivos incluidos en el preview', () => {
+    const generator = new FwkMobileGenerator();
+    const actions = [{
+        action: 'CLICK',
+        variableName: 'btnContinuar',
+        selector: 'id=continuar'
+    }];
+    const request = {
+        squad: 'default',
+        featureName: 'Acceso',
+        scenarioName: 'Continuar',
+        fileName: 'acceso',
+        locatorModule: 'login',
+        caseId: 'TC-10239',
+        pathType: 'Happy Path',
+        tag: 'acceso',
+        platform: 'android',
+        scenarioRows: [{
+            keyword: 'Given',
+            text: 'el usuario continúa',
+            status: 'missing',
+            methodName: 'continuar',
+            actions
+        }]
+    };
+    const preview = generator.preview(request, actions);
+    const editedFeature = preview.featureContent.replace(
+        'Feature: Acceso',
+        'Feature: Acceso revisado'
+    );
+    const reviewed = generator.withReviewedContents(preview, {
+        [preview.featurePath]: editedFeature
+    });
+
+    assert.match(reviewed.featureContent, /Feature: Acceso revisado/);
+    assert.equal(reviewed.locatorContent, preview.locatorContent);
+    assert.throws(
+        () => generator.withReviewedContents(preview, {
+            '/tmp/fuera-del-preview.feature': 'Feature: No permitido'
+        }),
+        /fuera del preview/
+    );
+});

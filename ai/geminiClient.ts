@@ -87,7 +87,8 @@ export class GeminiClient {
                             role: 'user',
                             parts: [{
                                 text:
-                                    'Construye una propuesta Gherkin y enlaza cada línea con las acciones. ' +
+                                    'Prepara los nombres de los archivos y símbolos para las cuatro capas. ' +
+                                    'Si existen approvedScenarioRows, no alteres su Gherkin ni sus enlaces. ' +
                                     `Contexto:\n${JSON.stringify(context)}`
                             }]
                         }],

@@ -22,6 +22,7 @@ El comando exige:
 - score de calidad mínimo de 90/100;
 - cobertura de generación 4/4: Feature, Steps, Locators y Screen Object;
 - reducción mínima del 50 % del contexto mediante el subgrafo;
+- reducción mínima del 50 % en consultas del grafo interno del recorder;
 - build completo de Electron y React.
 
 ## Procedimiento QA manual
@@ -42,8 +43,12 @@ El comando exige:
    recalcula desde el filesystem, sin conflictos obsoletos.
 8. Probar error HTTP, timeout y JSON inválido de Gemini; el flujo manual debe
    permanecer operativo y no debe escribirse ningún archivo.
-9. Confirmar que `runtime/codegraph.json` es el único cache del grafo y que una
-   segunda consulta reporta cero archivos reindexados si el framework no cambió.
+9. Confirmar que `runtime/codegraph-<modo>.json` es el único cache del grafo y
+   que una segunda consulta reporta cero archivos reindexados si el proyecto no cambió.
+10. Ejecutar las pruebas de adaptadores y comprobar que standalone y neutral
+    escriben exclusivamente en `tools/visual-recorder/workspace` o `runtime/`.
+11. Consultar un componente y un canal IPC en `codegraph-recorder.json`;
+    verificar imports, bindings React/controller y handlers main/preload.
 
 ## Criterios de aceptación
 

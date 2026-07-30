@@ -5,8 +5,12 @@ import { RecordedStep } from './models';
 
 export type CodeNodeType =
     | 'feature' | 'scenario' | 'gherkinStep'
-    | 'stepDefinition' | 'screenObject' | 'method' | 'locator';
-export type CodeEdgeType = 'contains' | 'matches' | 'calls' | 'uses';
+    | 'stepDefinition' | 'screenObject' | 'method' | 'locator'
+    | 'module' | 'component' | 'service' | 'ipcChannel'
+    | 'domElement' | 'script' | 'test';
+export type CodeEdgeType =
+    | 'contains' | 'matches' | 'calls' | 'uses'
+    | 'imports' | 'handles' | 'invokes' | 'binds' | 'covers';
 
 export interface CodeGraphNode {
     id: string;
