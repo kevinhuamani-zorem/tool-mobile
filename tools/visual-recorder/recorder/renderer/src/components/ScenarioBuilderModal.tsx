@@ -40,13 +40,7 @@ export function ScenarioBuilderModal() {
           <section className="wizard-page" data-wizard-page="2">
             <div className="wizard-page-heading">
               <div><span className="eyebrow">PASO 2</span><h3>Escribe el comportamiento en Gherkin</h3></div>
-              <div className="wizard-heading-actions">
-                <button className="btn btn-purple" id="btnGenerateWithAi">✨ Proponer con Gemini</button>
-                <button className="btn btn-blue" id="btnNuevoStep">+ Agregar línea</button>
-              </div>
-            </div>
-            <div id="aiPlanStatus" className="ai-plan-status">
-              Gemini propone el Gherkin; tú conservas el control antes de continuar.
+              <button className="btn btn-blue" id="btnNuevoStep">+ Agregar línea</button>
             </div>
             <div className="impact-legend">
               <span className="impact-safe">● Aislado</span>
@@ -79,7 +73,12 @@ export function ScenarioBuilderModal() {
           <section className="wizard-page" data-wizard-page="4">
             <div className="wizard-page-heading">
               <div><span className="eyebrow">PASO 4</span><h3>Depura la propuesta y revisa los archivos</h3></div>
-              <span className="wizard-help">Confirma los nombres sugeridos por IA y completa el TC.</span>
+              <button className="btn btn-purple" id="btnGenerateWithAi">
+                ✨ Preparar archivos con Gemini
+              </button>
+            </div>
+            <div id="aiPlanStatus" className="ai-plan-status">
+              Gemini propondrá nombres semánticos para las cuatro capas sin modificar tu Gherkin.
             </div>
             <div className="wizard-case-config">
               <div className="input-group">
@@ -119,7 +118,31 @@ export function ScenarioBuilderModal() {
               </div>
             </div>
             <select id="cmbPreviewFile" className="field-select wizard-file-tabs" style={{display: 'none'}} />
-            <textarea id="txtGherkin" className="gherkin-preview wizard-preview" readOnly />
+            <div id="codeReviewWorkspace" className="code-review-workspace" style={{display: 'none'}}>
+              <aside className="code-file-explorer">
+                <div className="code-file-explorer-title">ARCHIVOS PROPUESTOS</div>
+                <div id="codeFileTree" className="code-file-tree" />
+              </aside>
+              <section className="code-editor-panel">
+                <header className="code-editor-header">
+                  <div>
+                    <strong id="lblCodeFileName">Selecciona un archivo</strong>
+                    <small id="lblCodeFilePath" />
+                  </div>
+                  <span id="lblCodeFileState" className="code-file-state">Sin cambios</span>
+                </header>
+                <textarea id="txtGherkin" className="gherkin-preview wizard-preview code-editor"
+                  spellCheck={false} aria-label="Contenido del archivo seleccionado" />
+                <footer className="code-editor-toolbar">
+                  <span id="lblCodeValidation">Selecciona un archivo para revisarlo.</span>
+                  <div>
+                    <button type="button" className="btn btn-dark" id="btnCopyCode">Copiar contenido</button>
+                    <button type="button" className="btn btn-dark" id="btnCopyCodePath">Copiar ruta</button>
+                    <button type="button" className="btn btn-dark" id="btnResetCode">Descartar cambios</button>
+                  </div>
+                </footer>
+              </section>
+            </div>
             <div id="lblGenerateResult" className="generate-result" />
             <button className="btn btn-navy" id="btnPreview">↻ Actualizar preview</button>
           </section>
@@ -131,7 +154,7 @@ export function ScenarioBuilderModal() {
             <div className="generation-summary">
               <span className="generation-icon">✓</span>
               <div><h3>Todo listo para generar</h3>
-                <p>Se escribirán únicamente los archivos mostrados en la revisión.</p></div>
+                <p id="lblGenerationFileCount">Se escribirán únicamente los archivos mostrados en la revisión.</p></div>
             </div>
             <button className="btn btn-green btn-generate-final" id="btnGenerate">💾 Generar archivos</button>
             <div id="wizardGenerationResult" className="generate-result" />

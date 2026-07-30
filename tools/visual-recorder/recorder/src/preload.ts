@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
     analyzeStepImpact:   (texts: string[], squad?: string) =>
         ipcRenderer.invoke('analyze-step-impact', texts, squad),
     getAiStatus:         () => ipcRenderer.invoke('get-ai-status'),
+    getWorkspaceInfo:    () => ipcRenderer.invoke('get-workspace-info'),
     generateAiPlan:      (request: any) => ipcRenderer.invoke('generate-ai-plan', request),
     getSquadCatalog:     (squad: string, platform: string) =>
         ipcRenderer.invoke('get-squad-catalog', squad, platform),
@@ -41,8 +42,8 @@ contextBridge.exposeInMainWorld('api', {
     clearSteps:          ()                     => ipcRenderer.invoke('clear-steps'),
     previewGherkin:      (f: string, s: string) => ipcRenderer.invoke('preview-gherkin', f, s),
     previewFwkFiles:     (request: any)          => ipcRenderer.invoke('preview-fwk-files', request),
-    generateFwkFiles:    (request: any, previewToken: string) =>
-        ipcRenderer.invoke('generate-fwk-files', request, previewToken),
+    generateFwkFiles:    (request: any, previewToken: string, reviewedContents?: Record<string, string>) =>
+        ipcRenderer.invoke('generate-fwk-files', request, previewToken, reviewedContents),
     generateFiles:       (f: string, s: string) => ipcRenderer.invoke('generate-files', f, s),
     getSteps:            ()                     => ipcRenderer.invoke('get-steps'),
     closeSession:        ()                     => ipcRenderer.invoke('close-session'),

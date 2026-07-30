@@ -14,7 +14,7 @@ import { MobileStepExecutor } from '../../core/mobileStepExecutor';
 import { LocatorManager } from '../../core/locatorManager';
 import { FeatureGenerator } from './featureGenerator';
 import { RecordedStep } from '../../core/models';
-import { projectPaths, validateFrameworkRoot } from '../../core/projectPaths';
+import { projectPaths } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
@@ -24,17 +24,24 @@ import { ScenarioCoverageAnalyzer } from '../../core/scenarioCoverageAnalyzer';
 import crypto from 'crypto';
 import { GeminiClient, resolveGeminiConfig } from '../../ai/geminiClient';
 import { GenerationContextBuilder } from '../../ai/generationContextBuilder';
-import { calculatePlanMetrics } from '../../ai/generationPlan';
+import {
+    assertPlanPreservesApprovedRows,
+    calculatePlanMetrics
+} from '../../ai/generationPlan';
 import { CodeGraph } from '../../core/codeGraph';
+import { getWorkspaceAdapter } from '../../core/workspaceAdapter';
+import { NeutralGenerator } from '../../core/neutralGenerator';
 
 let mainWindow: BrowserWindow | null = null;
 
-validateFrameworkRoot();
+const workspaceAdapter = getWorkspaceAdapter();
+workspaceAdapter.initialize();
 
 const dm             = new AppiumDriverManager();
 const bsDm           = new BrowserStackDriverManager();
 const frameworkScanner = new FrameworkScanner();
 const fwkMobileGenerator = new FwkMobileGenerator();
+const neutralGenerator = new NeutralGenerator();
 const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
@@ -156,12 +163,19 @@ ipcMain.handle('get-ai-status', async () => {
     };
 });
 
+ipcMain.handle('get-workspace-info', async () => workspaceAdapter.describe());
+
 ipcMain.handle('generate-ai-plan', async (_, request: {
     squad?: string;
     platform?: MobilePlatform;
     caseId?: string;
     featureName?: string;
     scenarioName?: string;
+    scenarioRows?: {
+        keyword: string;
+        text: string;
+        actionIndices: number[];
+    }[];
 }) => {
     const startedAt = Date.now();
     try {
@@ -176,9 +190,11 @@ ipcMain.handle('generate-ai-plan', async (_, request: {
             caseId,
             featureName: request.featureName,
             scenarioName: request.scenarioName,
+            scenarioRows: request.scenarioRows,
             actions: recordedSteps
         });
         const plan = await geminiClient.generatePlan(context, recordedSteps);
+        assertPlanPreservesApprovedRows(plan, request.scenarioRows || []);
         const metrics = calculatePlanMetrics(plan, recordedSteps.length);
         if (!metrics.passed) {
             const coverage = Math.round(metrics.actionCoverage * 100);
@@ -786,15 +802,39 @@ function prepareGenerationRequest(
     return { ...request, platform: recordingPlatform };
 }
 
+function validateNeutralPreview(preview: ReturnType<NeutralGenerator['preview']>) {
+    const errors: string[] = [];
+    if (!/^Feature:\s+\S+/m.test(preview.featureContent)) {
+        errors.push('Feature neutral sin nombre');
+    }
+    if (!/Scenario(?: Outline)?:\s+\[TC-\d+\]/.test(preview.featureContent)) {
+        errors.push('Scenario neutral sin identificador TC válido');
+    }
+    try {
+        JSON.parse(preview.locatorContent || '');
+    } catch (error: any) {
+        errors.push(`Recording JSON inválido: ${error.message}`);
+    }
+    return {
+        valid: errors.length === 0,
+        errors,
+        warnings: ['Exportación neutral: no se generan capas específicas del framework'],
+        conflicts: preview.files.filter(file => fs.existsSync(file))
+    };
+}
+
 ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
     try {
         const prepared = prepareGenerationRequest(request);
-        const preview = fwkMobileGenerator.preview(
-            prepared,
-            recordedSteps
-        );
-        const validation = outputValidator.validate(preview);
-        const managed = generatedFileRegistry.assess(preview, prepared.squad);
+        const preview = projectPaths.mode === 'neutral'
+            ? neutralGenerator.preview(prepared, recordedSteps)
+            : fwkMobileGenerator.preview(prepared, recordedSteps);
+        const validation = projectPaths.mode === 'neutral'
+            ? validateNeutralPreview(preview)
+            : outputValidator.validate(preview);
+        const managed = projectPaths.mode === 'neutral'
+            ? { conflicts: validation.conflicts, writable: new Set<string>() }
+            : generatedFileRegistry.assess(preview, prepared.squad);
         validation.conflicts = managed.conflicts;
         validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
         const fingerprint = generationFingerprint(prepared, recordedSteps);
@@ -822,7 +862,8 @@ function generationFingerprint(request: GenerationRequest, steps: RecordedStep[]
 ipcMain.handle('generate-fwk-files', async (
     _,
     request: Omit<GenerationRequest, 'platform'>,
-    previewToken: string
+    previewToken: string,
+    reviewedContents?: Record<string, string>
 ) => {
     try {
         const prepared = prepareGenerationRequest(request);
@@ -831,21 +872,37 @@ ipcMain.handle('generate-fwk-files', async (
         if (!previewToken || !expectedFingerprint || expectedFingerprint !== actualFingerprint) {
             throw new Error('La grabación cambió. Ejecuta Preview nuevamente antes de generar.');
         }
-        const preview = fwkMobileGenerator.preview(prepared, recordedSteps);
-        const validation = outputValidator.validate(preview);
-        const managed = generatedFileRegistry.assess(preview, prepared.squad);
+        let preview = projectPaths.mode === 'neutral'
+            ? neutralGenerator.preview(prepared, recordedSteps)
+            : fwkMobileGenerator.preview(prepared, recordedSteps);
+        if (reviewedContents) {
+            preview = projectPaths.mode === 'neutral'
+                ? neutralGenerator.withReviewedContents(preview, reviewedContents)
+                : fwkMobileGenerator.withReviewedContents(preview, reviewedContents);
+        }
+        const validation = projectPaths.mode === 'neutral'
+            ? validateNeutralPreview(preview)
+            : outputValidator.validate(preview);
+        const managed = projectPaths.mode === 'neutral'
+            ? { conflicts: validation.conflicts, writable: new Set<string>() }
+            : generatedFileRegistry.assess(preview, prepared.squad);
         validation.conflicts = managed.conflicts;
         validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
         if (!validation.valid) {
             const details = [...validation.errors, ...validation.conflicts].join(', ');
             throw new Error(`La salida no superó la validación: ${details}`);
         }
-        const generated = fwkMobileGenerator.generate(
-            prepared,
-            recordedSteps,
-            managed.writable
-        );
-        const manifest = generatedFileRegistry.register(generated, prepared.squad);
+        const generated = projectPaths.mode === 'neutral'
+            ? neutralGenerator.generate(prepared, recordedSteps, reviewedContents)
+            : fwkMobileGenerator.generate(
+                prepared,
+                recordedSteps,
+                managed.writable,
+                reviewedContents
+            );
+        const manifest = projectPaths.mode === 'neutral'
+            ? { files: {} }
+            : generatedFileRegistry.register(generated, prepared.squad);
         approvedPreviews.delete(previewToken);
         return {
             success: true,

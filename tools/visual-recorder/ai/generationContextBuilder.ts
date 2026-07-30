@@ -15,6 +15,11 @@ export interface AiGenerationContext {
         value?: string;
         description?: string;
     }[];
+    approvedScenarioRows: {
+        keyword: string;
+        text: string;
+        actionIndices: number[];
+    }[];
     existingDefinitions: {
         squad: string;
         file: string;
@@ -38,6 +43,11 @@ export class GenerationContextBuilder {
         featureName?: string;
         scenarioName?: string;
         actions: RecordedStep[];
+        scenarioRows?: {
+            keyword: string;
+            text: string;
+            actionIndices: number[];
+        }[];
     }): AiGenerationContext {
         const subgraph = this.codeGraph.query({
             squad: input.squad,
@@ -65,6 +75,11 @@ export class GenerationContextBuilder {
                 value: action.value,
                 description: action.description
             })),
+            approvedScenarioRows: (input.scenarioRows || []).map(row => ({
+                keyword: row.keyword,
+                text: row.text,
+                actionIndices: row.actionIndices
+            })),
             existingDefinitions: definitions,
             codeGraph: subgraph,
             rules: [
@@ -74,6 +89,8 @@ export class GenerationContextBuilder {
                 'Evita expresiones que coincidan con existingDefinitions.',
                 'Usa parámetros <nombre> solo para datos variables.',
                 'No reutilices ni modifiques definiciones existentes.',
+                'Si approvedScenarioRows contiene líneas, conserva exactamente su keyword, texto, orden y actionIndices.',
+                'En ese caso usa rows únicamente para asignar methodName semánticos a las líneas aprobadas.',
                 'Propón fileName y locatorModule descriptivos en kebab-case.',
                 'Propón methodName y locatorName semánticos en camelCase; nunca uses view_93 o nombres por índice.'
             ]

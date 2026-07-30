@@ -4,6 +4,7 @@ const {
 } = require('../dist/ai/generationPlan');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { CodeGraph } = require('../dist/core/codeGraph');
+const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
 
 const actions = [
     { action: 'CLICK', variableName: 'btnLogin' },
@@ -69,13 +70,18 @@ const graphMetrics = new CodeGraph().query({
     actions: generationActions,
     limit: 80
 }).metrics;
+const recorderGraphMetrics = new RecorderCodeGraph().query({
+    ipc: 'preview-fwk-files',
+    limit: 60
+}).metrics;
 const thresholds = {
     actionCoverage: 1,
     linkedRowCoverage: 1,
     duplicateRows: 0,
     qualityScore: 90,
     generatedLayerCoverage: 1,
-    codeGraphContextReduction: 0.5
+    codeGraphContextReduction: 0.5,
+    recorderGraphContextReduction: 0.5
 };
 const result = {
     generatedAt: new Date().toISOString(),
@@ -87,7 +93,11 @@ const result = {
         codeGraphContextReduction: graphMetrics.contextReduction,
         codeGraphSelectedNodes: graphMetrics.selectedNodes,
         codeGraphTotalNodes: graphMetrics.totalNodes,
-        codeGraphReindexedFiles: graphMetrics.reindexedFiles
+        codeGraphReindexedFiles: graphMetrics.reindexedFiles,
+        recorderGraphContextReduction: recorderGraphMetrics.contextReduction,
+        recorderGraphSelectedNodes: recorderGraphMetrics.selectedNodes,
+        recorderGraphTotalNodes: recorderGraphMetrics.totalNodes,
+        recorderGraphReindexedFiles: recorderGraphMetrics.reindexedFiles
     },
     thresholds
 };
@@ -99,7 +109,8 @@ if (
     result.metrics.duplicateRows > thresholds.duplicateRows ||
     result.metrics.qualityScore < thresholds.qualityScore ||
     result.metrics.generatedLayerCoverage < thresholds.generatedLayerCoverage ||
-    result.metrics.codeGraphContextReduction < thresholds.codeGraphContextReduction
+    result.metrics.codeGraphContextReduction < thresholds.codeGraphContextReduction ||
+    result.metrics.recorderGraphContextReduction < thresholds.recorderGraphContextReduction
 ) {
     process.exitCode = 1;
 }

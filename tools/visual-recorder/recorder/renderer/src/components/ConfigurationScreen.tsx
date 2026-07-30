@@ -18,7 +18,7 @@ export function ConfigurationScreen() {
             <i>·</i>
             <strong id="lblSavedSquad">payment</strong>
             <i>·</i>
-            <strong>fwk-mobile-test</strong>
+            <strong id="lblWorkspaceName">fwk-mobile-test</strong>
             <span className="saved-context-ok">✓ Usaremos la configuración guardada</span>
             <button id="btnChangeFrameworkInline" className="link-button">Cambiar</button>
           </section>
@@ -140,11 +140,17 @@ export function ConfigurationScreen() {
           <div className="setup-icon">📁</div>
           <h2>Configura tu proyecto</h2>
           <p>Selecciona el contexto que usarás para grabar tus pruebas.</p>
-          <label className="field-label">Ambiente</label>
-          <select id="cmbFrameworkEnvironment" className="field-select"><option value>Cargando ambientes...</option></select>
+          <div id="frameworkEnvironmentField">
+            <label className="field-label">Ambiente</label>
+            <select id="cmbFrameworkEnvironment" className="field-select"><option value>Cargando ambientes...</option></select>
+          </div>
           <label className="field-label">Squad</label>
           <select id="cmbFrameworkSquad" className="field-select"><option value>Cargando squads...</option></select>
-          <div className="detected-project"><small>Proyecto detectado</small><strong>📁 fwk-mobile-test</strong></div>
+          <div className="detected-project">
+            <small id="lblDetectedProjectTitle">Proyecto detectado</small>
+            <strong id="lblDetectedProject">📁 fwk-mobile-test</strong>
+            <span id="lblDetectedProjectPath" />
+          </div>
           <label className="remember-config"><input id="chkRememberFramework" type="checkbox" defaultChecked />
             <span>Recordar esta configuración<small>Podrás cambiarla después desde Ajustes.</small></span>
           </label>

@@ -22,6 +22,7 @@ resources/apps/*
 /tools/visual-recorder/test-results/
 /tools/visual-recorder/runtime/quality/
 /tools/visual-recorder/runtime/test-results/
+/tools/visual-recorder/workspace/
 
 # Excluir subcarpetas y archivos dentro de android y ios, pero no los archivos .gitkeep
 resources/apps/android/*

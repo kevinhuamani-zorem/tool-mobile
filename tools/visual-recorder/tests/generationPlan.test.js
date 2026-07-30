@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+    assertPlanPreservesApprovedRows,
     validateGenerationPlan,
     calculatePlanMetrics
 } = require('../dist/ai/generationPlan');
@@ -90,4 +91,37 @@ test('la métrica falla cuando una acción queda sin enlazar', () => {
     const metrics = calculatePlanMetrics(plan, actions.length);
     assert.equal(metrics.actionCoverage, 0.5);
     assert.equal(metrics.passed, false);
+});
+
+test('Gemini puede nombrar archivos sin modificar el Gherkin aprobado', () => {
+    const plan = validateGenerationPlan({
+        featureName: 'Login',
+        scenarioName: 'Login válido',
+        fileName: 'login-valido',
+        locatorModule: 'login',
+        rows: [{
+            keyword: 'Given',
+            text: 'el usuario inicia sesión',
+            actionIndices: [0, 1],
+            methodName: 'iniciarSesion'
+        }],
+        actionNames: [
+            { actionIndex: 0, locatorName: 'btnLogin' },
+            { actionIndex: 1, locatorName: 'txtEmail' }
+        ]
+    }, actions);
+    const approved = [{
+        keyword: 'Given',
+        text: 'el usuario inicia sesión',
+        actionIndices: [0, 1]
+    }];
+
+    assert.doesNotThrow(() => assertPlanPreservesApprovedRows(plan, approved));
+    assert.throws(
+        () => assertPlanPreservesApprovedRows(plan, [{
+            ...approved[0],
+            text: 'otro texto aprobado'
+        }]),
+        /modificar el Gherkin aprobado/
+    );
 });

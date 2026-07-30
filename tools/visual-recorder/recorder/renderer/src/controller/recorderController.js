@@ -19,6 +19,16 @@ export async function initializeRecorder() {
     const chkRememberFramework = document.getElementById('chkRememberFramework');
     const lblSavedEnvironment = document.getElementById('lblSavedEnvironment');
     const lblSavedSquad = document.getElementById('lblSavedSquad');
+    const frameworkEnvironmentField = document.getElementById('frameworkEnvironmentField');
+    const lblDetectedProjectTitle = document.getElementById('lblDetectedProjectTitle');
+    const lblDetectedProject = document.getElementById('lblDetectedProject');
+    const lblDetectedProjectPath = document.getElementById('lblDetectedProjectPath');
+    let activeWorkspace = {
+        mode: 'fwk-mobile',
+        label: 'fwk-mobile-test',
+        root: '',
+        integrated: true
+    };
 
     // Local
     const localPanel      = document.getElementById('localPanel');
@@ -110,6 +120,16 @@ export async function initializeRecorder() {
     const lstSteps        = document.getElementById('lstSteps');
     const txtGherkin      = document.getElementById('txtGherkin');
     const cmbPreviewFile  = document.getElementById('cmbPreviewFile');
+    const codeReviewWorkspace = document.getElementById('codeReviewWorkspace');
+    const codeFileTree = document.getElementById('codeFileTree');
+    const lblCodeFileName = document.getElementById('lblCodeFileName');
+    const lblCodeFilePath = document.getElementById('lblCodeFilePath');
+    const lblCodeFileState = document.getElementById('lblCodeFileState');
+    const lblCodeValidation = document.getElementById('lblCodeValidation');
+    const btnCopyCode = document.getElementById('btnCopyCode');
+    const btnCopyCodePath = document.getElementById('btnCopyCodePath');
+    const btnResetCode = document.getElementById('btnResetCode');
+    const lblGenerationFileCount = document.getElementById('lblGenerationFileCount');
     const txtFeature      = document.getElementById('txtFeature');
     const txtScenario     = document.getElementById('txtScenario');
     const txtCaseId       = document.getElementById('txtCaseId');
@@ -147,6 +167,7 @@ export async function initializeRecorder() {
     const xmlAssignmentTarget = document.getElementById('xmlAssignmentTarget');
     let lastPreviewToken  = '';
     let previewDocuments  = [];
+    let activePreviewDocumentIndex = -1;
     let squadCatalog      = { stepDefinitions: [], screenMethods: [], locators: [], features: [] };
     let locatorActiveIndex = -1;
     let selectedCatalogLocator = null;
@@ -165,7 +186,10 @@ export async function initializeRecorder() {
     function readFrameworkPreferences() {
         try {
             const stored = JSON.parse(localStorage.getItem(FRAMEWORK_PREFERENCES_STORAGE_KEY) || 'null');
-            return stored && typeof stored.environment === 'string' && typeof stored.squad === 'string'
+            return stored &&
+                stored.mode === activeWorkspace.mode &&
+                typeof stored.environment === 'string' &&
+                typeof stored.squad === 'string'
                 ? stored
                 : null;
         } catch {
@@ -175,8 +199,10 @@ export async function initializeRecorder() {
 
     function updateSavedFrameworkSummary() {
         if (lblSavedEnvironment) lblSavedEnvironment.textContent =
-            (cmbFrameworkEnv.value || 'Sin ambiente').toUpperCase();
-        if (lblSavedSquad) lblSavedSquad.textContent = cmbFrameworkSquad.value || 'Sin squad';
+            activeWorkspace.mode === 'fwk-mobile'
+                ? (cmbFrameworkEnv.value || 'Sin ambiente').toUpperCase()
+                : activeWorkspace.label;
+        if (lblSavedSquad) lblSavedSquad.textContent = cmbFrameworkSquad.value || 'default';
     }
 
     function openFrameworkSetup() {
@@ -295,6 +321,28 @@ export async function initializeRecorder() {
         }
 
         const catalog = result.catalog;
+        activeWorkspace = catalog.workspace || activeWorkspace;
+        const workspaceName = document.getElementById('lblWorkspaceName');
+        if (workspaceName && catalog.workspace) {
+            workspaceName.textContent = catalog.workspace.label;
+            workspaceName.title = catalog.workspace.root;
+        }
+        const requiresEnvironment = activeWorkspace.mode === 'fwk-mobile';
+        if (frameworkEnvironmentField) {
+            frameworkEnvironmentField.style.display = requiresEnvironment ? '' : 'none';
+        }
+        if (lblDetectedProjectTitle) {
+            lblDetectedProjectTitle.textContent = activeWorkspace.integrated
+                ? 'Proyecto integrado detectado'
+                : 'Workspace de salida';
+        }
+        if (lblDetectedProject) {
+            lblDetectedProject.textContent = `📁 ${activeWorkspace.label}`;
+        }
+        if (lblDetectedProjectPath) {
+            lblDetectedProjectPath.textContent = activeWorkspace.root || '';
+            lblDetectedProjectPath.title = activeWorkspace.root || '';
+        }
         cmbFrameworkEnv.innerHTML = '';
         catalog.environments.forEach(environment => {
             const option = document.createElement('option');
@@ -309,25 +357,35 @@ export async function initializeRecorder() {
         }
 
         cmbFrameworkSquad.innerHTML = '';
+        if (!activeWorkspace.integrated) {
+            const defaultOption = document.createElement('option');
+            defaultOption.value = 'default';
+            defaultOption.textContent = 'default';
+            cmbFrameworkSquad.appendChild(defaultOption);
+        }
         catalog.squads.forEach(squad => {
+            if ([...cmbFrameworkSquad.options].some(option => option.value === squad.name)) return;
             const option = document.createElement('option');
             option.value = squad.name;
             option.textContent = squad.name;
             option.dataset.layers = JSON.stringify(squad.layers);
             cmbFrameworkSquad.appendChild(option);
         });
-        if (catalog.squads.length === 0) {
+        if (cmbFrameworkSquad.options.length === 0) {
             cmbFrameworkSquad.innerHTML = '<option value="">Sin squads</option>';
         } else {
-            const defaultSquad = catalog.squads.some(squad => squad.name === 'payment')
+            const availableSquads = [...cmbFrameworkSquad.options].map(option => option.value);
+            const defaultSquad = availableSquads.includes('payment')
                 ? 'payment'
-                : catalog.squads[0].name;
+                : availableSquads.includes('default')
+                    ? 'default'
+                    : availableSquads[0];
             cmbFrameworkSquad.value = defaultSquad;
         }
 
         const savedPreferences = readFrameworkPreferences();
-        const hasSavedEnvironment = savedPreferences &&
-            [...cmbFrameworkEnv.options].some(option => option.value === savedPreferences.environment);
+        const hasSavedEnvironment = !requiresEnvironment || Boolean(savedPreferences &&
+            [...cmbFrameworkEnv.options].some(option => option.value === savedPreferences.environment));
         const hasSavedSquad = savedPreferences &&
             [...cmbFrameworkSquad.options].some(option => option.value === savedPreferences.squad);
         if (hasSavedEnvironment) cmbFrameworkEnv.value = savedPreferences.environment;
@@ -1019,13 +1077,17 @@ export async function initializeRecorder() {
     cmbFrameworkEnv.addEventListener('change', updateSavedFrameworkSummary);
 
     btnSaveFrameworkConfig.addEventListener('click', async () => {
-        if (!cmbFrameworkEnv.value || !cmbFrameworkSquad.value) {
-            lblFrameworkStatus.textContent = '⚠ Selecciona ambiente y squad';
+        const requiresEnvironment = activeWorkspace.mode === 'fwk-mobile';
+        if ((requiresEnvironment && !cmbFrameworkEnv.value) || !cmbFrameworkSquad.value) {
+            lblFrameworkStatus.textContent = requiresEnvironment
+                ? '⚠ Selecciona ambiente y squad'
+                : '⚠ Selecciona un squad de salida';
             lblFrameworkStatus.className = 'device-info err';
             return;
         }
         if (chkRememberFramework.checked) {
             localStorage.setItem(FRAMEWORK_PREFERENCES_STORAGE_KEY, JSON.stringify({
+                mode: activeWorkspace.mode,
                 environment: cmbFrameworkEnv.value,
                 squad: cmbFrameworkSquad.value,
                 savedAt: new Date().toISOString()
@@ -1147,7 +1209,10 @@ export async function initializeRecorder() {
     function invalidatePreview() {
         lastPreviewToken = '';
         previewDocuments = [];
+        activePreviewDocumentIndex = -1;
         if (cmbPreviewFile) cmbPreviewFile.style.display = 'none';
+        if (codeReviewWorkspace) codeReviewWorkspace.style.display = 'none';
+        if (codeFileTree) codeFileTree.innerHTML = '';
     }
 
     [
@@ -1158,13 +1223,167 @@ export async function initializeRecorder() {
         field.addEventListener('change', invalidatePreview);
     });
 
+    function previewLayer(document) {
+        const file = document.path.split(/[\\/]/).pop() || document.path;
+        if (file.endsWith('.feature')) return { key: 'feature', label: '🥒 Feature' };
+        if (file.endsWith('.steps.ts')) return { key: 'steps', label: '🔗 Steps' };
+        if (file.endsWith('.screen.ts')) return { key: 'screen', label: '📱 Screen Object' };
+        if (file.endsWith('.locator.json')) return { key: 'locators', label: '🎯 Locators' };
+        if (file.endsWith('.json')) return { key: 'data', label: '🗃 JSON' };
+        return { key: 'other', label: '📄 Otros' };
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function validatePreviewDocument(document) {
+        const file = document.path.toLowerCase();
+        const content = document.content;
+        if (!content.trim()) return { valid: false, message: '✕ El archivo está vacío' };
+        if (file.endsWith('.json')) {
+            try {
+                JSON.parse(content);
+                return { valid: true, message: '✓ JSON válido' };
+            } catch (error) {
+                return { valid: false, message: `✕ JSON inválido: ${error.message}` };
+            }
+        }
+        if (file.endsWith('.feature')) {
+            if (!/^Feature:\s+\S+/m.test(content)) {
+                return { valid: false, message: '✕ Falta la declaración Feature' };
+            }
+            if (!/Scenario(?: Outline)?:\s+\[TC-\d+\]/.test(content)) {
+                return { valid: false, message: '✕ Scenario sin identificador TC válido' };
+            }
+            return { valid: true, message: '✓ Estructura Gherkin válida' };
+        }
+        if (file.endsWith('.ts')) {
+            const pairs = [['{', '}'], ['(', ')'], ['[', ']']];
+            const unbalanced = pairs.some(([open, close]) =>
+                [...content].filter(char => char === open).length !==
+                [...content].filter(char => char === close).length
+            );
+            return unbalanced
+                ? { valid: false, message: '✕ TypeScript contiene delimitadores incompletos' }
+                : { valid: true, message: '✓ TypeScript listo para validación final' };
+        }
+        return { valid: true, message: '✓ Contenido disponible' };
+    }
+
+    function updatePreviewDocumentState() {
+        const document = previewDocuments[activePreviewDocumentIndex];
+        if (!document) return;
+        const modified = document.content !== document.originalContent;
+        const validation = validatePreviewDocument(document);
+        lblCodeFileState.textContent = modified
+            ? '✎ Editado'
+            : document.generated ? '✓ Generado' : '● Nuevo';
+        lblCodeFileState.className =
+            `code-file-state${modified ? ' edited' : document.generated ? ' generated' : ''}`;
+        lblCodeValidation.textContent = validation.message;
+        lblCodeValidation.className = validation.valid ? 'ok' : 'err';
+        const button = codeFileTree?.querySelector(
+            `[data-preview-index="${activePreviewDocumentIndex}"]`
+        );
+        if (button) {
+            button.classList.toggle('modified', modified);
+            button.classList.toggle('invalid', !validation.valid);
+            const state = button.querySelector('.code-file-item-state');
+            if (state) {
+                state.textContent = !validation.valid
+                    ? '✕'
+                    : modified ? '✎' : document.generated ? '✓' : '●';
+            }
+        }
+    }
+
+    function renderPreviewFileTree() {
+        if (!codeFileTree) return;
+        codeFileTree.innerHTML = '';
+        const groups = new Map();
+        previewDocuments.forEach((document, index) => {
+            const layer = previewLayer(document);
+            if (!groups.has(layer.key)) groups.set(layer.key, { ...layer, documents: [] });
+            groups.get(layer.key).documents.push({ document, index });
+        });
+        groups.forEach(group => {
+            const section = document.createElement('section');
+            section.className = 'code-file-group';
+            const title = document.createElement('div');
+            title.className = 'code-file-group-title';
+            title.textContent = group.label;
+            section.appendChild(title);
+            group.documents.forEach(({ document: previewDocument, index }) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'code-file-item';
+                button.dataset.previewIndex = String(index);
+                const fileName = previewDocument.path.split(/[\\/]/).pop();
+                button.innerHTML =
+                    `<span class="code-file-item-state">●</span>` +
+                    `<span><strong>${escapeHtml(fileName)}</strong>` +
+                    `<small>${escapeHtml(previewDocument.path)}</small></span>`;
+                button.addEventListener('click', () => showPreviewDocument(index));
+                section.appendChild(button);
+            });
+            codeFileTree.appendChild(section);
+        });
+    }
+
     function showPreviewDocument(index) {
         const document = previewDocuments[index];
-        if (document && txtGherkin) txtGherkin.value = document.content;
+        if (!document || !txtGherkin) return;
+        activePreviewDocumentIndex = index;
+        cmbPreviewFile.value = String(index);
+        txtGherkin.value = document.content;
+        lblCodeFileName.textContent = document.path.split(/[\\/]/).pop() || document.path;
+        lblCodeFilePath.textContent = document.path;
+        lblCodeFilePath.title = document.path;
+        codeFileTree?.querySelectorAll('.code-file-item').forEach(item =>
+            item.classList.toggle('active', Number(item.dataset.previewIndex) === index)
+        );
+        updatePreviewDocumentState();
     }
 
     cmbPreviewFile.addEventListener('change', () => {
         showPreviewDocument(Number(cmbPreviewFile.value));
+    });
+
+    txtGherkin.addEventListener('input', () => {
+        const document = previewDocuments[activePreviewDocumentIndex];
+        if (!document) return;
+        document.content = txtGherkin.value;
+        updatePreviewDocumentState();
+    });
+
+    btnCopyCode?.addEventListener('click', async () => {
+        const document = previewDocuments[activePreviewDocumentIndex];
+        if (!document) return;
+        await navigator.clipboard.writeText(document.content);
+        lblCodeValidation.textContent = '✓ Contenido copiado';
+        lblCodeValidation.className = 'ok';
+    });
+
+    btnCopyCodePath?.addEventListener('click', async () => {
+        const document = previewDocuments[activePreviewDocumentIndex];
+        if (!document) return;
+        await navigator.clipboard.writeText(document.path);
+        lblCodeValidation.textContent = '✓ Ruta copiada';
+        lblCodeValidation.className = 'ok';
+    });
+
+    btnResetCode?.addEventListener('click', () => {
+        const document = previewDocuments[activePreviewDocumentIndex];
+        if (!document) return;
+        document.content = document.originalContent;
+        txtGherkin.value = document.content;
+        updatePreviewDocumentState();
     });
 
     function disableBtn(btn, text) {
@@ -2288,11 +2507,14 @@ export async function initializeRecorder() {
         setStatus('🧹 Limpiado', '#666888');
     });
 
-    async function refreshGenerationPreview() {
+    async function refreshGenerationPreview(preserveReviewed = false) {
+        const reviewedByPath = preserveReviewed
+            ? new Map(previewDocuments.map(document => [document.path, document.content]))
+            : new Map();
         const r = await api.previewFwkFiles(buildPreparedGenerationRequest());
         if (r.success && txtGherkin) {
             lastPreviewToken = r.previewToken;
-            previewDocuments = [
+            const proposedDocuments = [
                 { path: r.preview.featurePath, content: r.preview.featureContent },
                 ...(r.preview.locatorPath
                     ? [{ path: r.preview.locatorPath, content: r.preview.locatorContent }]
@@ -2304,6 +2526,13 @@ export async function initializeRecorder() {
                     ? [{ path: r.preview.screenPath, content: r.preview.screenContent }]
                     : [])
             ];
+            previewDocuments = proposedDocuments.map(document => ({
+                ...document,
+                originalContent: document.content,
+                content: reviewedByPath.has(document.path)
+                    ? reviewedByPath.get(document.path)
+                    : document.content
+            }));
             cmbPreviewFile.innerHTML = '';
             previewDocuments.forEach((previewDocument, index) => {
                 const option = document.createElement('option');
@@ -2311,8 +2540,18 @@ export async function initializeRecorder() {
                 option.textContent = previewDocument.path;
                 cmbPreviewFile.appendChild(option);
             });
-            cmbPreviewFile.style.display = 'block';
+            cmbPreviewFile.style.display = 'none';
+            codeReviewWorkspace.style.display = 'grid';
+            renderPreviewFileTree();
             showPreviewDocument(0);
+            if (lblGenerationFileCount) {
+                const edited = previewDocuments.filter(document =>
+                    document.content !== document.originalContent
+                ).length;
+                lblGenerationFileCount.textContent =
+                    `${previewDocuments.length} archivo(s) revisados` +
+                    `${edited ? ` · ${edited} editado(s)` : ''}.`;
+            }
 
             const problems = [
                 ...r.validation.errors,
@@ -2343,7 +2582,7 @@ export async function initializeRecorder() {
         disableBtn(btnGenerate, '⏳ Generando...');
         // El estado del filesystem puede cambiar después de abrir la revisión.
         // Reconstruye el preview para no conservar conflictos de archivos ya eliminados.
-        const currentPreview = await refreshGenerationPreview();
+        const currentPreview = await refreshGenerationPreview(true);
         if (
             !currentPreview.success ||
             currentPreview.validation.errors.length > 0 ||
@@ -2352,16 +2591,43 @@ export async function initializeRecorder() {
             enableBtn(btnGenerate);
             return;
         }
+        const invalidDocuments = previewDocuments
+            .map(document => ({ document, validation: validatePreviewDocument(document) }))
+            .filter(item => !item.validation.valid);
+        if (invalidDocuments.length > 0) {
+            setGenerate(
+                '✕ Corrige los archivos inválidos: ' +
+                invalidDocuments.map(item => item.document.path.split(/[\\/]/).pop()).join(', '),
+                'err'
+            );
+            enableBtn(btnGenerate);
+            return;
+        }
 
         const request = buildPreparedGenerationRequest();
-        const r = await api.generateFwkFiles(request, lastPreviewToken);
+        const reviewedContents = Object.fromEntries(
+            previewDocuments.map(document => [document.path, document.content])
+        );
+        const r = await api.generateFwkFiles(request, lastPreviewToken, reviewedContents);
         enableBtn(btnGenerate);
         if (r.success) {
             const paths = r.generated.files.join(' | ');
             rememberGeneratedFiles(r.generated.files);
             setGenerate('✓ ' + paths, 'ok');
             linkedScenarioData = null;
-            invalidatePreview();
+            previewDocuments.forEach(document => {
+                document.originalContent = document.content;
+                document.generated = true;
+            });
+            renderPreviewFileTree();
+            showPreviewDocument(Math.max(0, activePreviewDocumentIndex));
+            lblCodeFileState.textContent = '✓ Generado';
+            lblCodeFileState.className = 'code-file-state generated';
+            if (lblGenerationFileCount) {
+                lblGenerationFileCount.textContent =
+                    `✓ ${previewDocuments.length} archivo(s) generados. ` +
+                    'Puedes seleccionarlos y copiar su contenido.';
+            }
             await loadSquadCatalog(sessionPlatform);
             renderLocatorCatalog();
             setStatus('✓ Archivos generados · catálogos de Steps y locators actualizados', '#00CC00');
@@ -3479,8 +3745,8 @@ export async function initializeRecorder() {
             btnGenerateWithAi.disabled = !aiStatus.configured;
             aiPlanStatus.className = `ai-plan-status${aiStatus.configured ? ' ready' : ' warning'}`;
             aiPlanStatus.textContent = aiStatus.configured
-                ? `✓ Gemini disponible · ${aiStatus.model}`
-                : 'Configura GEMINI_API_KEY en tools/visual-recorder/.env para habilitar la propuesta con IA.';
+                ? `✓ Gemini disponible · ${aiStatus.model} · se usará durante la revisión de archivos`
+                : 'Configura GEMINI_API_KEY en tools/visual-recorder/.env para preparar los archivos con IA.';
         }
     });
 
@@ -3504,15 +3770,21 @@ export async function initializeRecorder() {
     btnGenerateWithAi?.addEventListener('click', async () => {
         btnGenerateWithAi.disabled = true;
         const previousLabel = btnGenerateWithAi.textContent;
-        btnGenerateWithAi.textContent = '⏳ Generando propuesta...';
+        btnGenerateWithAi.textContent = '⏳ Preparando archivos...';
         aiPlanStatus.className = 'ai-plan-status loading';
-        aiPlanStatus.textContent = 'Gemini está analizando las acciones y convenciones del squad.';
+        aiPlanStatus.textContent =
+            'Gemini está proponiendo nombres para archivos, métodos y locators.';
         const result = await api.generateAiPlan({
             squad: cmbFrameworkSquad.value || 'payment',
             platform: sessionPlatform,
             caseId: txtCaseId.value.trim(),
             featureName: txtFeature.value.trim(),
-            scenarioName: txtScenario.value.trim()
+            scenarioName: txtScenario.value.trim(),
+            scenarioRows: scenarioRows.map(row => ({
+                keyword: row.keyword,
+                text: row.text.trim(),
+                actionIndices: [...row.stepIndices]
+            }))
         });
         btnGenerateWithAi.textContent = previousLabel;
         btnGenerateWithAi.disabled = false;
@@ -3532,19 +3804,40 @@ export async function initializeRecorder() {
             ...step,
             ...(proposedNames.get(index) ? { variableName: proposedNames.get(index) } : {})
         }));
-        scenarioRows = result.plan.rows.map(row => ({
-            keyword: row.keyword,
-            text: row.text,
-            stepIndices: row.actionIndices,
-            methodName: row.methodName,
-            examples: {},
-            bindings: {},
-            impact: null
+        scenarioRows = scenarioRows.map((row, index) => ({
+            ...row,
+            methodName: result.plan.rows[index]?.methodName || row.methodName
         }));
-        activeRowIndex = scenarioRows.length ? 0 : -1;
-        renderScenarioRows();
-        renderLinkActions();
+
+        // El Gherkin ya fue aprobado. Solo reconstruye sus enlaces internos con
+        // los nombres semánticos propuestos para generar las capas técnicas.
+        if (linkedScenarioData) {
+            linkedScenarioData.stepRows = scenarioRows.map(row => ({
+                keyword: row.keyword || 'And',
+                text: row.text.trim(),
+                status: 'missing',
+                ...(row.methodName ? { methodName: row.methodName } : {})
+            }));
+            linkedScenarioData.linked = Object.fromEntries(
+                scenarioRows.map(row => [
+                    row.text.trim(),
+                    row.stepIndices.map(stepIndex => {
+                        const step = enlazarSteps[stepIndex];
+                        const binding = row.bindings?.[stepIndex];
+                        return {
+                            action: step.action || '',
+                            variableName: step.variableName || '',
+                            selector: step.selector || '',
+                            value: binding ? `<${binding}>` : (step.value || ''),
+                            description: step.description || '',
+                            ...(step.locatorSource ? { locatorSource: step.locatorSource } : {})
+                        };
+                    })
+                ])
+            );
+        }
         invalidatePreview();
+        await refreshGenerationPreview();
         const coverage = Math.round(result.metrics.actionCoverage * 100);
         const messages = [
             `Calidad ${result.metrics.qualityScore}/100`,
@@ -3560,7 +3853,9 @@ export async function initializeRecorder() {
         aiPlanStatus.className =
             `ai-plan-status ${result.metrics.passed ? 'ready' : 'warning'}`;
         aiPlanStatus.textContent =
-            `${result.metrics.passed ? '✓' : '⚠'} Propuesta aplicada · ${messages.join(' · ')}`;
+            `${result.metrics.passed ? '✓' : '⚠'} Archivos preparados · ` +
+            `${result.plan.fileName}.feature · ${result.plan.locatorModule}.locator.json · ` +
+            messages.join(' · ');
     });
 
     btnWizardBack?.addEventListener('click', () => setWizardPage(wizardPage - 1));

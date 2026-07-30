@@ -161,6 +161,31 @@ export function calculatePlanMetrics(
     };
 }
 
+export function assertPlanPreservesApprovedRows(
+    plan: AiGenerationPlan,
+    approvedRows: {
+        keyword: string;
+        text: string;
+        actionIndices: number[];
+    }[]
+): void {
+    if (!approvedRows.length) return;
+    const changed =
+        plan.rows.length !== approvedRows.length ||
+        plan.rows.some((row, index) => {
+            const approved = approvedRows[index];
+            return !approved ||
+                row.keyword !== approved.keyword ||
+                row.text !== approved.text ||
+                JSON.stringify(row.actionIndices) !== JSON.stringify(approved.actionIndices);
+        });
+    if (changed) {
+        throw new Error(
+            'Gemini intentó modificar el Gherkin aprobado. Solicita una nueva propuesta.'
+        );
+    }
+}
+
 export const generationPlanResponseSchema = {
     type: 'OBJECT',
     required: [
