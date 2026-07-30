@@ -25,6 +25,11 @@ export class GeneratedFileRegistry {
 
     assess(preview: GeneratedPreview, squad: string): ManagedFileAssessment {
         const manifest = this.read();
+        const removedEntries = Object.keys(manifest.files).filter(relative =>
+            !fs.existsSync(path.resolve(projectPaths.frameworkRoot, relative))
+        );
+        for (const relative of removedEntries) delete manifest.files[relative];
+        if (removedEntries.length > 0) this.write(manifest);
         const writable = new Set<string>();
         const conflicts: string[] = [];
         for (const file of preview.files) {
@@ -54,10 +59,7 @@ export class GeneratedFileRegistry {
                 squad
             };
         }
-        fs.mkdirSync(path.dirname(this.manifestPath), { recursive: true });
-        const temporary = `${this.manifestPath}.${process.pid}.tmp`;
-        fs.writeFileSync(temporary, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-        fs.renameSync(temporary, this.manifestPath);
+        this.write(manifest);
         return manifest;
     }
 
@@ -74,10 +76,7 @@ export class GeneratedFileRegistry {
             generatedAt: new Date().toISOString(),
             squad
         };
-        fs.mkdirSync(path.dirname(this.manifestPath), { recursive: true });
-        const temporary = `${this.manifestPath}.${process.pid}.tmp`;
-        fs.writeFileSync(temporary, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-        fs.renameSync(temporary, this.manifestPath);
+        this.write(manifest);
         return manifest;
     }
 
@@ -106,6 +105,13 @@ export class GeneratedFileRegistry {
         } catch {
             return { version: 1, files: {} };
         }
+    }
+
+    private write(manifest: RegistryDocument): void {
+        fs.mkdirSync(path.dirname(this.manifestPath), { recursive: true });
+        const temporary = `${this.manifestPath}.${process.pid}.tmp`;
+        fs.writeFileSync(temporary, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+        fs.renameSync(temporary, this.manifestPath);
     }
 
     private relative(file: string): string {

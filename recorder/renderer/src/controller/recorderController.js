@@ -134,18 +134,6 @@ export async function initializeRecorder() {
     const onboardingPlatform = document.getElementById('onboardingPlatform');
     const btnOnboardingNew = document.getElementById('btnOnboardingNew');
     const btnOnboardingExisting = document.getElementById('btnOnboardingExisting');
-    const onboardingNewFlow = document.getElementById('onboardingNewFlow');
-    const onboardingFeature = document.getElementById('onboardingFeature');
-    const onboardingScenario = document.getElementById('onboardingScenario');
-    const onboardingCaseId = document.getElementById('onboardingCaseId');
-    const onboardingPathType = document.getElementById('onboardingPathType');
-    const onboardingTag = document.getElementById('onboardingTag');
-    const onboardingFeatureFile = document.getElementById('onboardingFeatureFile');
-    const onboardingLocatorModule = document.getElementById('onboardingLocatorModule');
-    const onboardingDataName = document.getElementById('onboardingDataName');
-    const onboardingNewHint = document.getElementById('onboardingNewHint');
-    const btnOnboardingNewBack = document.getElementById('btnOnboardingNewBack');
-    const btnOnboardingStartNew = document.getElementById('btnOnboardingStartNew');
     const onboardingExistingFlow = document.getElementById('onboardingExistingFlow');
     const cmbOnboardingScenario = document.getElementById('cmbOnboardingScenario');
     const onboardingScenarioHint = document.getElementById('onboardingScenarioHint');
@@ -697,7 +685,6 @@ export async function initializeRecorder() {
     function showSessionOnboarding() {
         onboardingPlatform.textContent =
             sessionPlatform === 'ios' ? '🍎 iOS' : '🤖 Android';
-        onboardingNewFlow.style.display = 'none';
         onboardingExistingFlow.style.display = 'none';
         document.querySelector('.onboarding-options').style.display = 'grid';
         if (!activeScenarioCoverage) cmbOnboardingScenario.value = '';
@@ -711,38 +698,6 @@ export async function initializeRecorder() {
     }
 
     btnOnboardingNew.addEventListener('click', () => {
-        document.querySelector('.onboarding-options').style.display = 'none';
-        onboardingNewFlow.style.display = 'flex';
-        onboardingFeature.focus();
-    });
-
-    btnOnboardingNewBack.addEventListener('click', () => {
-        onboardingNewFlow.style.display = 'none';
-        document.querySelector('.onboarding-options').style.display = 'grid';
-    });
-
-    btnOnboardingStartNew.addEventListener('click', () => {
-        const required = [
-            [onboardingFeature, 'Feature'],
-            [onboardingScenario, 'Scenario'],
-            [onboardingCaseId, 'ID'],
-            [onboardingFeatureFile, 'Archivo feature'],
-            [onboardingLocatorModule, 'Módulo de locators']
-        ];
-        const missing = required.find(([input]) => !input.value.trim());
-        if (missing) {
-            onboardingNewHint.textContent = `⚠ Completa el campo ${missing[1]}`;
-            missing[0].focus();
-            return;
-        }
-        txtFeature.value = onboardingFeature.value.trim();
-        txtScenario.value = onboardingScenario.value.trim();
-        txtCaseId.value = onboardingCaseId.value.trim().toUpperCase();
-        cmbPathType.value = onboardingPathType.value;
-        txtFeatureTag.value = onboardingTag.value.trim().replace(/^@/, '');
-        txtFeatureFile.value = onboardingFeatureFile.value.trim();
-        txtLocatorModule.value = onboardingLocatorModule.value.trim();
-        txtDataName.value = onboardingDataName.value.trim();
         workflowMode = 'new';
         activeScenarioCoverage = null;
         currentAssignment = null;
@@ -763,7 +718,7 @@ export async function initializeRecorder() {
         scenarioCoveragePanel.classList.remove('is-open');
         updateFinalAction();
         setStatus(
-            `✨ ${txtCaseId.value} · ${txtScenario.value} · ${sessionPlatform.toUpperCase()}`,
+            `✨ Caso nuevo · graba las acciones · ${sessionPlatform.toUpperCase()}`,
             '#00CC00'
         );
     });
@@ -1182,6 +1137,7 @@ export async function initializeRecorder() {
             request.examples = linkedScenarioData.examples || {};
             request.scenarioRows = linkedScenarioData.stepRows.map(row => ({
                 ...row,
+                status: row.status || 'missing',
                 actions: linkedScenarioData.linked[row.text] || []
             }));
         }
@@ -1193,6 +1149,14 @@ export async function initializeRecorder() {
         previewDocuments = [];
         if (cmbPreviewFile) cmbPreviewFile.style.display = 'none';
     }
+
+    [
+        txtFeature, txtScenario, txtCaseId, cmbPathType,
+        txtFeatureTag, txtFeatureFile, txtLocatorModule, txtDataName
+    ].filter(Boolean).forEach(field => {
+        field.addEventListener('input', invalidatePreview);
+        field.addEventListener('change', invalidatePreview);
+    });
 
     function showPreviewDocument(index) {
         const document = previewDocuments[index];
@@ -2324,7 +2288,7 @@ export async function initializeRecorder() {
         setStatus('🧹 Limpiado', '#666888');
     });
 
-    btnPreview.addEventListener('click', async () => {
+    async function refreshGenerationPreview() {
         const r = await api.previewFwkFiles(buildPreparedGenerationRequest());
         if (r.success && txtGherkin) {
             lastPreviewToken = r.previewToken;
@@ -2368,13 +2332,24 @@ export async function initializeRecorder() {
         } else {
             setGenerate('✗ ' + r.error, 'err');
         }
+        return r;
+    }
+
+    btnPreview.addEventListener('click', async () => {
+        await refreshGenerationPreview();
     });
 
     btnGenerate.addEventListener('click', async () => {
         disableBtn(btnGenerate, '⏳ Generando...');
-        if (!lastPreviewToken) {
+        // El estado del filesystem puede cambiar después de abrir la revisión.
+        // Reconstruye el preview para no conservar conflictos de archivos ya eliminados.
+        const currentPreview = await refreshGenerationPreview();
+        if (
+            !currentPreview.success ||
+            currentPreview.validation.errors.length > 0 ||
+            currentPreview.validation.conflicts.length > 0
+        ) {
             enableBtn(btnGenerate);
-            setGenerate('✗ Debes ejecutar Preview y revisar los archivos antes de generar.', 'err');
             return;
         }
 
@@ -3173,8 +3148,9 @@ export async function initializeRecorder() {
     const wizardLinkActions    = document.getElementById('wizardLinkActions');
     const wizardLinkRows       = document.getElementById('wizardLinkRows');
     const wizardGherkinHost    = document.getElementById('wizardGherkinHost');
+    const btnGenerateWithAi    = document.getElementById('btnGenerateWithAi');
+    const aiPlanStatus         = document.getElementById('aiPlanStatus');
     let wizardPage = 1;
-    let impactValidationTimer;
 
     // Estado del constructor de escenario
     let enlazarSteps      = [];   // copia de recordedSteps al abrir el modal
@@ -3252,11 +3228,6 @@ export async function initializeRecorder() {
         return scenarioRows.every(row => row.impact?.safe);
     }
 
-    function scheduleImpactValidation() {
-        clearTimeout(impactValidationTimer);
-        impactValidationTimer = setTimeout(() => void validateStepImpacts(), 350);
-    }
-
     function renderLinkActions() {
         if (!wizardLinkActions) return;
         wizardLinkActions.innerHTML = '';
@@ -3320,7 +3291,7 @@ export async function initializeRecorder() {
         const impactHtml = !row.text.trim()
             ? '<div class="step-impact neutral">Escribe la definición para validar su alcance.</div>'
             : !impact
-                ? '<div class="step-impact neutral">Validando impacto…</div>'
+                ? '<div class="step-impact neutral">La definición se validará al presionar Continuar.</div>'
                 : impact.safe
                     ? '<div class="step-impact safe">✓ Step aislado: no intercepta definiciones existentes.</div>'
                     : `<div class="step-impact warning">
@@ -3395,7 +3366,6 @@ export async function initializeRecorder() {
                 const ri = parseInt(inp.dataset.row);
                 scenarioRows[ri].text = e.target.value;
                 scenarioRows[ri].impact = null;
-                scheduleImpactValidation();
             });
             inp.addEventListener('blur', () => renderScenarioRows());
             inp.addEventListener('click', e => {
@@ -3504,6 +3474,14 @@ export async function initializeRecorder() {
         renderScenarioRows();
         enlazarModal.style.display = 'flex';
         setWizardPage(1);
+        if (api.getAiStatus) {
+            const aiStatus = await api.getAiStatus();
+            btnGenerateWithAi.disabled = !aiStatus.configured;
+            aiPlanStatus.className = `ai-plan-status${aiStatus.configured ? ' ready' : ' warning'}`;
+            aiPlanStatus.textContent = aiStatus.configured
+                ? `✓ Gemini disponible · ${aiStatus.model}`
+                : 'Configura GEMINI_API_KEY en tools/visual-recorder/.env para habilitar la propuesta con IA.';
+        }
     });
 
     btnCloseEnlazar.addEventListener('click', () => {
@@ -3521,6 +3499,63 @@ export async function initializeRecorder() {
             const inputs = scenarioRowsContainer.querySelectorAll('.scenario-step-input');
             if (inputs.length > 0) inputs[inputs.length - 1].focus();
         }, 0);
+    });
+
+    btnGenerateWithAi?.addEventListener('click', async () => {
+        btnGenerateWithAi.disabled = true;
+        const previousLabel = btnGenerateWithAi.textContent;
+        btnGenerateWithAi.textContent = '⏳ Generando propuesta...';
+        aiPlanStatus.className = 'ai-plan-status loading';
+        aiPlanStatus.textContent = 'Gemini está analizando las acciones y convenciones del squad.';
+        const result = await api.generateAiPlan({
+            squad: cmbFrameworkSquad.value || 'payment',
+            platform: sessionPlatform,
+            caseId: txtCaseId.value.trim(),
+            featureName: txtFeature.value.trim(),
+            scenarioName: txtScenario.value.trim()
+        });
+        btnGenerateWithAi.textContent = previousLabel;
+        btnGenerateWithAi.disabled = false;
+        if (!result.success) {
+            aiPlanStatus.className = 'ai-plan-status error';
+            aiPlanStatus.textContent = `✗ ${result.error}`;
+            return;
+        }
+        txtFeature.value = result.plan.featureName;
+        txtScenario.value = result.plan.scenarioName;
+        txtFeatureFile.value = result.plan.fileName;
+        txtLocatorModule.value = result.plan.locatorModule;
+        const proposedNames = new Map(
+            result.plan.actionNames.map(item => [item.actionIndex, item.locatorName])
+        );
+        enlazarSteps = enlazarSteps.map((step, index) => ({
+            ...step,
+            ...(proposedNames.get(index) ? { variableName: proposedNames.get(index) } : {})
+        }));
+        scenarioRows = result.plan.rows.map(row => ({
+            keyword: row.keyword,
+            text: row.text,
+            stepIndices: row.actionIndices,
+            methodName: row.methodName,
+            examples: {},
+            bindings: {},
+            impact: null
+        }));
+        activeRowIndex = scenarioRows.length ? 0 : -1;
+        renderScenarioRows();
+        renderLinkActions();
+        invalidatePreview();
+        const coverage = Math.round(result.metrics.actionCoverage * 100);
+        const messages = [
+            `Calidad ${result.metrics.qualityScore}/100`,
+            `cobertura de acciones ${coverage}%`,
+            `${result.telemetry.latencyMs} ms`,
+            ...(result.plan.warnings || [])
+        ];
+        aiPlanStatus.className =
+            `ai-plan-status ${result.metrics.passed ? 'ready' : 'warning'}`;
+        aiPlanStatus.textContent =
+            `${result.metrics.passed ? '✓' : '⚠'} Propuesta aplicada · ${messages.join(' · ')}`;
     });
 
     btnWizardBack?.addEventListener('click', () => setWizardPage(wizardPage - 1));
@@ -3577,14 +3612,6 @@ export async function initializeRecorder() {
             enlazarHint.style.color = '#FFB020';
             return;
         }
-        const safe = await validateStepImpacts();
-        if (!safe) {
-            enlazarHint.textContent = '⚠ Corrige los steps con impacto antes de preparar los archivos.';
-            enlazarHint.style.color = '#FFB020';
-            setWizardPage(2);
-            return;
-        }
-
         // Construir el JSON { "step text": [...steps] }
         const linked = {};
         const stepTexts = [];   // solo los textos, para el .feature se pasa el keyword aparte
@@ -3601,7 +3628,12 @@ export async function initializeRecorder() {
                 );
             }
             stepTexts.push(key);
-            stepRows.push({ keyword: row.keyword || 'And', text: key });
+            stepRows.push({
+                keyword: row.keyword || 'And',
+                text: key,
+                status: 'missing',
+                ...(row.methodName ? { methodName: row.methodName } : {})
+            });
             const parameters = [...new Set(
                 [...key.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)].map(match => match[1])
             )];
@@ -3662,7 +3694,10 @@ export async function initializeRecorder() {
 
         setStatus(`✓ ${stepTexts.length} steps nuevos validados sin impacto`, '#00CC00');
         setWizardPage(4);
-        btnPreview.click();
+        setGenerate(
+            'Revisa los nombres sugeridos, completa el TC y presiona Actualizar preview.',
+            ''
+        );
     });
 
     // ─── INIT ────────────────────────────────────────────────────────────────

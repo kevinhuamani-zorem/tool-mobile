@@ -167,7 +167,7 @@ export class ScenarioCoverageAnalyzer {
             const scenarioMatch = line.match(/^Scenario(?: Outline)?:\s*(.+)$/i);
             if (scenarioMatch) {
                 const name = scenarioMatch[1].trim();
-                const caseId = name.match(/\[(CP_[^\]]+)\]/i)?.[1]?.toUpperCase() || '';
+                const caseId = name.match(/\[((?:TC-\d+)|(?:CP_[^\]]+))\]/i)?.[1]?.toUpperCase() || '';
                 current = {
                     id: `${relative}:${index + 1}`,
                     feature,

@@ -9,7 +9,10 @@
     "build:main": "tsc",
     "build:renderer": "vite build",
     "start": "npm run build && electron .",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json",
+    "test": "npm run build:main && node --test tests/*.test.js",
+    "quality:metrics": "npm run build:main && node scripts/quality-metrics.js",
+    "quality": "npm run typecheck && npm test && npm run quality:metrics && npm run build"
   },
   "author": "Kevin Huamani",
   "license": "MIT",
