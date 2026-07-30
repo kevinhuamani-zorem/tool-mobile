@@ -87,6 +87,40 @@ La configuración del caso no se solicita al iniciar la grabación. En el paso
 final de Revisión se muestran los nombres propuestos para depurarlos y se
 completan el ID `TC-<número>`, tipo, tag y data antes de construir el Preview.
 
+### CodeGraph local
+
+El recorder indexa localmente las relaciones entre Features, Scenarios, Step
+Definitions, Screen Objects, métodos y locators. Gemini recibe como máximo el
+subgrafo relevante para el squad y las acciones grabadas, no el índice completo.
+El cache incremental se guarda exclusivamente en
+`tools/visual-recorder/runtime/codegraph.json`, excluido de Git. El framework se
+usa en modo lectura y los archivos sin cambios no se vuelven a indexar.
+
+Para visualizar un subgrafo en VS Code:
+
+```bash
+cd tools/visual-recorder
+npm run codegraph:export -- --squad payment --feature movimientos
+```
+
+Se generan dentro de `runtime/`:
+
+```text
+codegraph-payment-movimientos.dot
+codegraph-payment-movimientos.mmd
+```
+
+El `.dot` puede abrirse con **Graphviz Interactive Preview** y el `.mmd` con
+una extensión de preview para Mermaid. Opciones adicionales:
+
+```bash
+npm run codegraph:export -- --squad payment --search yapear --limit 60
+npm run codegraph:export -- --squad payment --feature login --format dot
+```
+
+El límite permitido es de 10 a 150 nodos. Tanto el nombre de salida como la
+ruta se normalizan y siempre permanecen dentro de `tools/visual-recorder/runtime`.
+
 La puerta completa de calidad se ejecuta con `npm run quality`. Los umbrales y
 el procedimiento manual están en
 [`docs/AI_QUALITY_ASSURANCE.md`](docs/AI_QUALITY_ASSURANCE.md).

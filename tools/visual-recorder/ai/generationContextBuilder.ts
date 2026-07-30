@@ -1,5 +1,5 @@
 import { RecordedStep } from '../core/models';
-import { ReuseAnalyzer } from '../core/reuseAnalyzer';
+import { CodeGraph, CodeSubgraph } from '../core/codeGraph';
 import { sanitizeForAi } from './secretSanitizer';
 
 export interface AiGenerationContext {
@@ -20,11 +20,16 @@ export interface AiGenerationContext {
         file: string;
         expression: string;
     }[];
+    codeGraph: {
+        nodes: CodeSubgraph['nodes'];
+        edges: CodeSubgraph['edges'];
+        metrics: CodeSubgraph['metrics'];
+    };
     rules: string[];
 }
 
 export class GenerationContextBuilder {
-    constructor(private readonly reuseAnalyzer = new ReuseAnalyzer()) {}
+    constructor(private readonly codeGraph = new CodeGraph()) {}
 
     build(input: {
         squad: string;
@@ -34,18 +39,17 @@ export class GenerationContextBuilder {
         scenarioName?: string;
         actions: RecordedStep[];
     }): AiGenerationContext {
-        this.reuseAnalyzer.refresh();
-        const definitions = this.reuseAnalyzer.getStepDefinitions()
-            .filter(definition =>
-                definition.squad === input.squad ||
-                definition.squad === 'commons' ||
-                definition.squad === 'home'
-            )
-            .slice(0, 250)
-            .map(definition => ({
-                squad: definition.squad,
-                file: definition.file,
-                expression: definition.expression
+        const subgraph = this.codeGraph.query({
+            squad: input.squad,
+            actions: input.actions,
+            limit: 80
+        });
+        const definitions = subgraph.nodes
+            .filter(node => node.type === 'stepDefinition')
+            .map(node => ({
+                squad: node.squad,
+                file: node.file,
+                expression: node.text || node.name
             }));
 
         return sanitizeForAi({
@@ -62,6 +66,7 @@ export class GenerationContextBuilder {
                 description: action.description
             })),
             existingDefinitions: definitions,
+            codeGraph: subgraph,
             rules: [
                 'Escribe Gherkin en español y desde la perspectiva del usuario.',
                 'No incluyas nombres de locators, selectores ni detalles de Appium en el texto.',

@@ -25,6 +25,7 @@ import crypto from 'crypto';
 import { GeminiClient, resolveGeminiConfig } from '../../ai/geminiClient';
 import { GenerationContextBuilder } from '../../ai/generationContextBuilder';
 import { calculatePlanMetrics } from '../../ai/generationPlan';
+import { CodeGraph } from '../../core/codeGraph';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -39,7 +40,8 @@ const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
 const scenarioCoverageAnalyzer = new ScenarioCoverageAnalyzer();
 const geminiClient = new GeminiClient();
-const generationContextBuilder = new GenerationContextBuilder(reuseAnalyzer);
+const codeGraph = new CodeGraph();
+const generationContextBuilder = new GenerationContextBuilder(codeGraph);
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -193,7 +195,8 @@ ipcMain.handle('generate-ai-plan', async (_, request: {
                 provider: 'Gemini',
                 model: resolveGeminiConfig().model,
                 latencyMs: Date.now() - startedAt,
-                actionCount: recordedSteps.length
+                actionCount: recordedSteps.length,
+                codeGraph: context.codeGraph.metrics
             }
         };
     } catch (e: any) {

@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json",
     "test": "npm run build:main && node --test tests/*.test.js",
     "quality:metrics": "npm run build:main && node scripts/quality-metrics.js",
-    "quality": "npm run typecheck && npm test && npm run quality:metrics && npm run build"
+    "quality": "npm run typecheck && npm test && npm run quality:metrics && npm run build",
+    "codegraph:export": "npm run build:main --silent && node scripts/export-codegraph.js"
   },
   "author": "Kevin Huamani",
   "license": "MIT",
