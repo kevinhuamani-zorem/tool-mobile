@@ -73,12 +73,6 @@ export function ScenarioBuilderModal() {
           <section className="wizard-page" data-wizard-page="4">
             <div className="wizard-page-heading">
               <div><span className="eyebrow">PASO 4</span><h3>Depura la propuesta y revisa los archivos</h3></div>
-              <button className="btn btn-purple" id="btnGenerateWithAi">
-                ✨ Preparar archivos con Gemini
-              </button>
-            </div>
-            <div id="aiPlanStatus" className="ai-plan-status">
-              Gemini propondrá nombres semánticos para las cuatro capas sin modificar tu Gherkin.
             </div>
             <div className="wizard-case-config">
               <div className="input-group">

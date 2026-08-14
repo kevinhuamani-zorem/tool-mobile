@@ -13,7 +13,6 @@
   },
   "include": [
     "core/**/*",
-    "ai/**/*",
     "recorder/**/*"
   ],
   "exclude": ["node_modules", "dist", "recorder/renderer"]

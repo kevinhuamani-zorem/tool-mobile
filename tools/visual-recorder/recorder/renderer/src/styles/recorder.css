@@ -2053,25 +2053,6 @@ body {
 .remember-config input { accent-color: #8a2fba; }
 .remember-config span { display: flex; flex-direction: column; gap: 3px; }
 .remember-config small { color: var(--text3); }
-.wizard-heading-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-}
-.ai-plan-status {
-    margin: 12px 0;
-    padding: 10px 12px;
-    border-left: 3px solid #6d6d8a;
-    border-radius: 5px;
-    color: var(--text3);
-    background: #1d1d2d;
-    font-size: 12px;
-}
-.ai-plan-status.ready { border-color: #27ba50; color: #65e280; }
-.ai-plan-status.warning { border-color: #e8a51b; color: #ffc34d; }
-.ai-plan-status.error { border-color: #d83838; color: #ff6666; }
-.ai-plan-status.loading { border-color: #4599dd; color: #75bfff; }
 .wizard-case-config {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -87,42 +87,25 @@ framework para clicks, escritura, espera, validaciones y gestos soportados.
 También se indexan los métodos públicos para validar el impacto antes de
 escribir.
 
-### Asistencia opcional con Gemini
+### Generación local
 
-Existe una plantilla versionada en `tools/visual-recorder/.env.example`.
-Cópiala como `tools/visual-recorder/.env` y agrega tu clave:
-
-```dotenv
-GEMINI_API_KEY=tu_clave
-GEMINI_MODEL=gemini-2.5-flash
-```
+La generación no utiliza servicios de inteligencia artificial ni envía código
+fuera del equipo. Feature, Scenario, nombres de archivo, métodos y locators se
+construyen con reglas locales y permanecen editables durante la revisión.
 
 El `.env` real está excluido de Git. Los reportes generados por pruebas,
 cobertura o métricas bajo `coverage/`, `test-results/` y `runtime/quality/`
 también están excluidos; las pruebas y el procedimiento QA sí se versionan.
 
-Gemini se utiliza durante la revisión de archivos, después de que el usuario
-escribió y enlazó el Gherkin. Propone nombres semánticos para Feature,
-Scenario, archivos, métodos y locators usando las acciones grabadas y las
-convenciones indexadas. No puede modificar las líneas Gherkin aprobadas. La
-propuesta siempre es editable y no escribe archivos: el generador local
-conserva el control de rutas, plantillas, validación y conflictos. Antes de
-enviar contexto se redactan credenciales, tokens, correos y números sensibles.
-
-La propuesta incluye nombres semánticos para el archivo Feature, módulo de
-pantalla, métodos y locators. Los nombres se validan antes del Preview y la
-salida de un caso nuevo debe contener las cuatro capas: Feature, Steps,
-Locators y Screen Object.
-
 La configuración del caso no se solicita al iniciar la grabación. En el paso
-final de Revisión se muestran los nombres propuestos para depurarlos y se
-completan el ID `TC-<número>`, tipo, tag y data antes de construir el Preview.
+final de Revisión se depuran los nombres y se completan el ID `TC-<número>`,
+tipo, tag y data antes de construir el Preview de las cuatro capas.
 
 ### CodeGraph local
 
 El recorder indexa localmente las relaciones entre Features, Scenarios, Step
-Definitions, Screen Objects, métodos y locators. Gemini recibe como máximo el
-subgrafo relevante para el squad y las acciones grabadas, no el índice completo.
+Definitions, Screen Objects, métodos y locators. El grafo se consulta
+localmente para reducir el contexto necesario durante mantenimiento y análisis.
 El cache incremental se guarda exclusivamente como
 `tools/visual-recorder/runtime/codegraph-<modo>.json`, excluido de Git. El proyecto se
 usa en modo lectura y los archivos sin cambios no se vuelven a indexar.
@@ -182,13 +165,13 @@ npm run codegraph:recorder -- \
   --format json
 ```
 
-El índice incremental vive en `runtime/codegraph-recorder.json`. Este grafo no
-se envía automáticamente a Gemini: sirve para consultar la arquitectura y
-cargar únicamente los módulos relacionados durante mantenimiento del recorder.
+El índice incremental vive en `runtime/codegraph-recorder.json`. El grafo
+permanece local y sirve para consultar la arquitectura y cargar únicamente los
+módulos relacionados durante mantenimiento del recorder.
 
 La puerta completa de calidad se ejecuta con `npm run quality`. Los umbrales y
 el procedimiento manual están en
-[`docs/AI_QUALITY_ASSURANCE.md`](docs/AI_QUALITY_ASSURANCE.md).
+[`docs/GENERATION_QUALITY_ASSURANCE.md`](docs/GENERATION_QUALITY_ASSURANCE.md).
 
 ### Preview y validación
 
