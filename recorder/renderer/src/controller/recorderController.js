@@ -3414,8 +3414,6 @@ export async function initializeRecorder() {
     const wizardLinkActions    = document.getElementById('wizardLinkActions');
     const wizardLinkRows       = document.getElementById('wizardLinkRows');
     const wizardGherkinHost    = document.getElementById('wizardGherkinHost');
-    const btnGenerateWithAi    = document.getElementById('btnGenerateWithAi');
-    const aiPlanStatus         = document.getElementById('aiPlanStatus');
     let wizardPage = 1;
 
     // Estado del constructor de escenario
@@ -3740,14 +3738,6 @@ export async function initializeRecorder() {
         renderScenarioRows();
         enlazarModal.style.display = 'flex';
         setWizardPage(1);
-        if (api.getAiStatus) {
-            const aiStatus = await api.getAiStatus();
-            btnGenerateWithAi.disabled = !aiStatus.configured;
-            aiPlanStatus.className = `ai-plan-status${aiStatus.configured ? ' ready' : ' warning'}`;
-            aiPlanStatus.textContent = aiStatus.configured
-                ? `✓ Gemini disponible · ${aiStatus.model} · se usará durante la revisión de archivos`
-                : 'Configura GEMINI_API_KEY en tools/visual-recorder/.env para preparar los archivos con IA.';
-        }
     });
 
     btnCloseEnlazar.addEventListener('click', () => {
@@ -3765,97 +3755,6 @@ export async function initializeRecorder() {
             const inputs = scenarioRowsContainer.querySelectorAll('.scenario-step-input');
             if (inputs.length > 0) inputs[inputs.length - 1].focus();
         }, 0);
-    });
-
-    btnGenerateWithAi?.addEventListener('click', async () => {
-        btnGenerateWithAi.disabled = true;
-        const previousLabel = btnGenerateWithAi.textContent;
-        btnGenerateWithAi.textContent = '⏳ Preparando archivos...';
-        aiPlanStatus.className = 'ai-plan-status loading';
-        aiPlanStatus.textContent =
-            'Gemini está proponiendo nombres para archivos, métodos y locators.';
-        const result = await api.generateAiPlan({
-            squad: cmbFrameworkSquad.value || 'payment',
-            platform: sessionPlatform,
-            caseId: txtCaseId.value.trim(),
-            featureName: txtFeature.value.trim(),
-            scenarioName: txtScenario.value.trim(),
-            scenarioRows: scenarioRows.map(row => ({
-                keyword: row.keyword,
-                text: row.text.trim(),
-                actionIndices: [...row.stepIndices]
-            }))
-        });
-        btnGenerateWithAi.textContent = previousLabel;
-        btnGenerateWithAi.disabled = false;
-        if (!result.success) {
-            aiPlanStatus.className = 'ai-plan-status error';
-            aiPlanStatus.textContent = `✗ ${result.error}`;
-            return;
-        }
-        txtFeature.value = result.plan.featureName;
-        txtScenario.value = result.plan.scenarioName;
-        txtFeatureFile.value = result.plan.fileName;
-        txtLocatorModule.value = result.plan.locatorModule;
-        const proposedNames = new Map(
-            result.plan.actionNames.map(item => [item.actionIndex, item.locatorName])
-        );
-        enlazarSteps = enlazarSteps.map((step, index) => ({
-            ...step,
-            ...(proposedNames.get(index) ? { variableName: proposedNames.get(index) } : {})
-        }));
-        scenarioRows = scenarioRows.map((row, index) => ({
-            ...row,
-            methodName: result.plan.rows[index]?.methodName || row.methodName
-        }));
-
-        // El Gherkin ya fue aprobado. Solo reconstruye sus enlaces internos con
-        // los nombres semánticos propuestos para generar las capas técnicas.
-        if (linkedScenarioData) {
-            linkedScenarioData.stepRows = scenarioRows.map(row => ({
-                keyword: row.keyword || 'And',
-                text: row.text.trim(),
-                status: 'missing',
-                ...(row.methodName ? { methodName: row.methodName } : {})
-            }));
-            linkedScenarioData.linked = Object.fromEntries(
-                scenarioRows.map(row => [
-                    row.text.trim(),
-                    row.stepIndices.map(stepIndex => {
-                        const step = enlazarSteps[stepIndex];
-                        const binding = row.bindings?.[stepIndex];
-                        return {
-                            action: step.action || '',
-                            variableName: step.variableName || '',
-                            selector: step.selector || '',
-                            value: binding ? `<${binding}>` : (step.value || ''),
-                            description: step.description || '',
-                            ...(step.locatorSource ? { locatorSource: step.locatorSource } : {})
-                        };
-                    })
-                ])
-            );
-        }
-        invalidatePreview();
-        await refreshGenerationPreview();
-        const coverage = Math.round(result.metrics.actionCoverage * 100);
-        const messages = [
-            `Calidad ${result.metrics.qualityScore}/100`,
-            `cobertura de acciones ${coverage}%`,
-            ...(result.telemetry.codeGraph ? [
-                `CodeGraph ${result.telemetry.codeGraph.selectedNodes}/` +
-                `${result.telemetry.codeGraph.totalNodes} nodos`,
-                `contexto reducido ${Math.round(result.telemetry.codeGraph.contextReduction * 100)}%`
-            ] : []),
-            `${result.telemetry.latencyMs} ms`,
-            ...(result.plan.warnings || [])
-        ];
-        aiPlanStatus.className =
-            `ai-plan-status ${result.metrics.passed ? 'ready' : 'warning'}`;
-        aiPlanStatus.textContent =
-            `${result.metrics.passed ? '✓' : '⚠'} Archivos preparados · ` +
-            `${result.plan.fileName}.feature · ${result.plan.locatorModule}.locator.json · ` +
-            messages.join(' · ');
     });
 
     btnWizardBack?.addEventListener('click', () => setWizardPage(wizardPage - 1));

@@ -1,7 +1,4 @@
-const {
-    validateGenerationPlan,
-    calculatePlanMetrics
-} = require('../dist/ai/generationPlan');
+const { calculateGenerationQuality } = require('../dist/core/generationQuality');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { CodeGraph } = require('../dist/core/codeGraph');
 const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
@@ -11,7 +8,7 @@ const actions = [
     { action: 'TYPE', variableName: 'txtEmail' },
     { action: 'VERIFY_TEXT', variableName: 'lblWelcome' }
 ];
-const plan = validateGenerationPlan({
+const plan = {
     featureName: 'Inicio de sesión',
     scenarioName: 'Ingreso exitoso',
     fileName: 'inicio-sesion',
@@ -35,10 +32,8 @@ const plan = validateGenerationPlan({
         { actionIndex: 1, locatorName: 'txtEmail' },
         { actionIndex: 2, locatorName: 'lblWelcome' }
     ],
-    assumptions: [],
-    warnings: []
-}, actions);
-const metrics = calculatePlanMetrics(plan, actions.length);
+};
+const metrics = calculateGenerationQuality(plan.rows, actions.length);
 const generationActions = [
     { action: 'CLICK', variableName: 'btnLogin', selector: '~Iniciar sesión' },
     { action: 'ESCRIBIR', variableName: 'txtEmail', selector: '~Correo', value: '<correoUser>' },

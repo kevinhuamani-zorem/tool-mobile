@@ -22,13 +22,6 @@ import { OutputValidator } from '../../core/outputValidator';
 import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
 import { ScenarioCoverageAnalyzer } from '../../core/scenarioCoverageAnalyzer';
 import crypto from 'crypto';
-import { GeminiClient, resolveGeminiConfig } from '../../ai/geminiClient';
-import { GenerationContextBuilder } from '../../ai/generationContextBuilder';
-import {
-    assertPlanPreservesApprovedRows,
-    calculatePlanMetrics
-} from '../../ai/generationPlan';
-import { CodeGraph } from '../../core/codeGraph';
 import { getWorkspaceAdapter } from '../../core/workspaceAdapter';
 import { NeutralGenerator } from '../../core/neutralGenerator';
 
@@ -46,9 +39,6 @@ const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
 const scenarioCoverageAnalyzer = new ScenarioCoverageAnalyzer();
-const geminiClient = new GeminiClient();
-const codeGraph = new CodeGraph();
-const generationContextBuilder = new GenerationContextBuilder(codeGraph);
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -154,75 +144,7 @@ ipcMain.handle('analyze-step-impact', async (_, texts: string[], squad?: string)
     }
 });
 
-ipcMain.handle('get-ai-status', async () => {
-    const config = resolveGeminiConfig();
-    return {
-        configured: geminiClient.isConfigured(),
-        provider: 'Gemini',
-        model: config.model
-    };
-});
-
 ipcMain.handle('get-workspace-info', async () => workspaceAdapter.describe());
-
-ipcMain.handle('generate-ai-plan', async (_, request: {
-    squad?: string;
-    platform?: MobilePlatform;
-    caseId?: string;
-    featureName?: string;
-    scenarioName?: string;
-    scenarioRows?: {
-        keyword: string;
-        text: string;
-        actionIndices: number[];
-    }[];
-}) => {
-    const startedAt = Date.now();
-    try {
-        if (recordedSteps.length === 0) throw new Error('No hay acciones grabadas');
-        const caseId = String(request.caseId || '').trim().toUpperCase();
-        if (!/^TC-\d+$/.test(caseId)) {
-            throw new Error('El ID debe usar el formato TC-10239');
-        }
-        const context = generationContextBuilder.build({
-            squad: request.squad || activeSquad,
-            platform: request.platform || recordingPlatform,
-            caseId,
-            featureName: request.featureName,
-            scenarioName: request.scenarioName,
-            scenarioRows: request.scenarioRows,
-            actions: recordedSteps
-        });
-        const plan = await geminiClient.generatePlan(context, recordedSteps);
-        assertPlanPreservesApprovedRows(plan, request.scenarioRows || []);
-        const metrics = calculatePlanMetrics(plan, recordedSteps.length);
-        if (!metrics.passed) {
-            const coverage = Math.round(metrics.actionCoverage * 100);
-            throw new Error(
-                `La propuesta IA no superó calidad: ${coverage}% de acciones cubiertas, ` +
-                `${metrics.duplicateRows} líneas duplicadas. Intenta nuevamente.`
-            );
-        }
-        return {
-            success: true,
-            plan,
-            metrics,
-            telemetry: {
-                provider: 'Gemini',
-                model: resolveGeminiConfig().model,
-                latencyMs: Date.now() - startedAt,
-                actionCount: recordedSteps.length,
-                codeGraph: context.codeGraph.metrics
-            }
-        };
-    } catch (e: any) {
-        return {
-            success: false,
-            error: e.message,
-            telemetry: { latencyMs: Date.now() - startedAt }
-        };
-    }
-});
 
 ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobilePlatform) => {
     try {
