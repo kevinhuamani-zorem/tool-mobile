@@ -2,6 +2,12 @@
 
 Herramienta de grabacion visual de pruebas automatizadas mobile. Permite grabar flujos de usuario directamente desde un dispositivo Android sin escribir codigo, generando casos de prueba en formato Gherkin y archivos de locators listos para ejecutarse con Cucumber + WebdriverIO.
 
+## Documentación para mantenimiento
+
+La guía técnica para continuar el proyecto está en
+[`docs/README.md`](docs/README.md). Las reglas obligatorias para personas y
+agentes de IA están en [`AGENTS.md`](AGENTS.md).
+
 > Puede vivir integrado o ejecutarse como herramienta independiente. El
 > proyecto destino se resuelve mediante el adaptador activo. Las configuraciones
 > locales quedan en `config/` y las capturas temporales en `runtime/`; ambas

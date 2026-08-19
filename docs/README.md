@@ -1,0 +1,17 @@
+# Documentación técnica
+
+Índice para mantener y operar Appium Visual Recorder:
+
+- [Arquitectura](ARCHITECTURE.md): componentes, límites y flujos principales.
+- [Contrato de generación](GENERATION_CONTRACT.md): archivos, nombres,
+  validaciones y política de escritura.
+- [Desarrollo](DEVELOPMENT.md): preparación, comandos y estrategia de cambios.
+- [Operación y troubleshooting](OPERATIONS_AND_TROUBLESHOOTING.md): modos,
+  sesiones, diagnósticos y fallos frecuentes.
+- [Aseguramiento de calidad](GENERATION_QUALITY_ASSURANCE.md): métricas,
+  pruebas unitarias y controles manuales.
+
+Las reglas vinculantes para agentes están en [`../AGENTS.md`](../AGENTS.md).
+Cuando documentación y código difieran, detén el cambio, confirma el contrato
+con las pruebas y actualiza ambos en el mismo commit.
+
