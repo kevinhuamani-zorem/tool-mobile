@@ -2,6 +2,7 @@ const { calculateGenerationQuality } = require('../dist/core/generationQuality')
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { CodeGraph } = require('../dist/core/codeGraph');
 const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
+const { DeterministicResolver } = require('../dist/core/deterministicResolver');
 
 const actions = [
     { action: 'CLICK', variableName: 'btnLogin' },
@@ -69,6 +70,30 @@ const recorderGraphMetrics = new RecorderCodeGraph().query({
     ipc: 'preview-fwk-files',
     limit: 60
 }).metrics;
+const deterministicPlan = new DeterministicResolver({
+    getCatalog: (squad, platform) => ({ squad, platform, stepDefinitions: [], screenMethods: [], locators: [], features: [] })
+}).resolve({
+    schemaVersion: 1,
+    pipelineVersion: '1.0.0',
+    recordingId: 'quality-recording',
+    revision: 1,
+    fingerprint: 'quality-fingerprint',
+    createdAt: new Date(0).toISOString(),
+    squad: 'payment',
+    platform: 'android',
+    environment: 'qa',
+    objective: 'Validar bienvenida',
+    acceptanceCriteria: 'Se muestra la bienvenida',
+    request: {
+        squad: 'payment', featureName: 'Flujo mobile', scenarioName: 'Escenario grabado',
+        fileName: 'flujo-mobile', locatorModule: 'nueva-pantalla', caseId: 'TC-10239',
+        pathType: 'Happy Path', tag: 'login', dataName: 'usuario_qa', platform: 'android'
+    },
+    actions: [{
+        sequence: 1, action: 'VERIFICAR_EXISTE', selector: '~Bienvenido',
+        selectorVerified: true, elementIntent: 'mensaje de bienvenida'
+    }]
+}).plan;
 const thresholds = {
     actionCoverage: 1,
     linkedRowCoverage: 1,
@@ -76,7 +101,11 @@ const thresholds = {
     qualityScore: 90,
     generatedLayerCoverage: 1,
     codeGraphContextReduction: 0.5,
-    recorderGraphContextReduction: 0.5
+    recorderGraphContextReduction: 0.5,
+    deterministicCoverage: 1,
+    maxContextBytes: 20_000,
+    maxDurationMs: 300_000,
+    maxRepairAttempts: 1
 };
 const result = {
     generatedAt: new Date().toISOString(),
@@ -92,7 +121,11 @@ const result = {
         recorderGraphContextReduction: recorderGraphMetrics.contextReduction,
         recorderGraphSelectedNodes: recorderGraphMetrics.selectedNodes,
         recorderGraphTotalNodes: recorderGraphMetrics.totalNodes,
-        recorderGraphReindexedFiles: recorderGraphMetrics.reindexedFiles
+        recorderGraphReindexedFiles: recorderGraphMetrics.reindexedFiles,
+        deterministicCoverage: deterministicPlan.deterministicCoverage,
+        maxContextBytes: deterministicPlan.budgets.maxContextBytes,
+        maxDurationMs: deterministicPlan.budgets.maxDurationMs,
+        maxRepairAttempts: deterministicPlan.budgets.maxRepairAttempts
     },
     thresholds
 };
@@ -105,7 +138,11 @@ if (
     result.metrics.qualityScore < thresholds.qualityScore ||
     result.metrics.generatedLayerCoverage < thresholds.generatedLayerCoverage ||
     result.metrics.codeGraphContextReduction < thresholds.codeGraphContextReduction ||
-    result.metrics.recorderGraphContextReduction < thresholds.recorderGraphContextReduction
+    result.metrics.recorderGraphContextReduction < thresholds.recorderGraphContextReduction ||
+    result.metrics.deterministicCoverage < thresholds.deterministicCoverage ||
+    result.metrics.maxContextBytes > thresholds.maxContextBytes ||
+    result.metrics.maxDurationMs > thresholds.maxDurationMs ||
+    result.metrics.maxRepairAttempts > thresholds.maxRepairAttempts
 ) {
     process.exitCode = 1;
 }

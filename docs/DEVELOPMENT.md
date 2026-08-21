@@ -37,6 +37,8 @@ Usa variables o un `.env` local en la raíz del recorder:
 ```dotenv
 RECORDER_MODE=fwk-mobile
 TARGET_PROJECT=/ruta/absoluta/al/fwk-mobile-test
+AUTOMATION_AGENT=copilot
+# AUTOMATION_AGENT=claude
 ```
 
 Alternativamente copia `config/workspace.example.json` como
@@ -74,6 +76,15 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
 4. Comprueba preview token, reviewed contents y rollback.
 5. Ejecuta `npm run quality`.
 
+### Cambio del pipeline de agente
+
+1. Mantén los contratos JSON versionados en `automationContracts.ts`.
+2. Resuelve localmente selector, reuse, rutas y trazabilidad antes del agente.
+3. No aumentes los presupuestos de 20 KB, 5 minutos y una reparación sin una
+   decisión explícita y métricas comparables.
+4. Añade pruebas de resolver, paquete, validator y memoria.
+5. Un resultado solo entra a memoria después de escritura revisada y score 100.
+
 ### Cambio de driver o gestos
 
 WebDriver/Appium y BrowserStack no soportan siempre los mismos `mobile:`
@@ -93,6 +104,7 @@ eso `npm test` ejecuta `build:main` primero. Cubre al menos:
 - rutas rechazadas y archivos protegidos;
 - token de preview, edición revisada y escritura atómica;
 - API IPC cuando se cambie el bridge.
+- límites de contexto/SLA, trazabilidad y promoción exclusiva de calidad 100.
 
 El procedimiento completo, umbrales y controles manuales están en
 [`GENERATION_QUALITY_ASSURANCE.md`](GENERATION_QUALITY_ASSURANCE.md).
@@ -109,4 +121,3 @@ npm run quality
 No incluyas `.env`, credenciales, sesiones, screenshots, workspaces, grafos,
 coverage, `dist`, `renderer-dist` ni dependencias. Conserva cambios ajenos en un
 worktree sucio y evita comandos destructivos.
-

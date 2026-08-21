@@ -113,12 +113,29 @@ generado y no modificado externamente puede actualizarse automáticamente. Una
 ausencia real se confirma contra filesystem; la caché no debe inventar un
 conflicto de un archivo eliminado.
 
+## Contrato del pipeline de automatización
+
+El paquete mínimo contiene únicamente `scenario.json`, `generation-plan.json`,
+`resolved-context.json`, `unresolved-context.json`, `instructions.md`, schema y
+verificador. El agente devuelve un solo `agent-response.json` con:
+
+- los mismos `recordingId` y `planId`;
+- exactamente las cuatro rutas fijadas por el plan;
+- resolución de todos los gaps;
+- una traza por cada secuencia grabada;
+- contenido completo de Feature, Steps, Screen Object y Locators.
+
+No puede cambiar rutas, releer el framework, reemplazar selectores verificados
+ni inventar una quinta capa. Un fallo produce `repair-context.json` con errores
+y archivos afectados. Solo se permite una reparación. iOS puede quedar vacío
+con warning cuando la evidencia activa es Android, conservando el nombre lógico.
+
 ## Restricciones de seguridad
 
 - Rechazar rutas absolutas suministradas por UI, `..`, symlinks de escape y
   cualquier destino fuera de las raíces autorizadas.
 - Nunca escribir un archivo que no fue mostrado en revisión.
 - Nunca imprimir secretos ni incluirlos en Feature/Steps/previews.
-- No consultar servicios de IA para construir nombres o contenido.
+- No enviar secretos, datasets ni el repositorio completo al proveedor de IA.
+- La IA solo resuelve gaps del plan y su salida nunca se escribe sin preview.
 - Si una validación falla, no debe quedar una generación parcial.
-

@@ -24,6 +24,12 @@ import { ScenarioCoverageAnalyzer } from '../../core/scenarioCoverageAnalyzer';
 import crypto from 'crypto';
 import { getWorkspaceAdapter } from '../../core/workspaceAdapter';
 import { NeutralGenerator } from '../../core/neutralGenerator';
+import { AutomationRecordingStore } from '../../core/automationRecordingStore';
+import { AutomationPackageBuilder } from '../../core/automationPackageBuilder';
+import { AutomationAgentLauncher } from '../../core/automationAgentLauncher';
+import { AutomationResponseValidator } from '../../core/automationResponseValidator';
+import { AutomationMemory } from '../../core/automationMemory';
+import { AutomationAgentResponse, AutomationScenario, GenerationPlan } from '../../core/automationContracts';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -39,6 +45,16 @@ const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
 const scenarioCoverageAnalyzer = new ScenarioCoverageAnalyzer();
+const automationRecordingStore = new AutomationRecordingStore();
+const automationMemory = new AutomationMemory();
+const automationResponseValidator = new AutomationResponseValidator();
+const automationPackageBuilder = new AutomationPackageBuilder(
+    undefined,
+    automationMemory,
+    fwkMobileGenerator,
+    automationResponseValidator
+);
+const automationAgentLauncher = new AutomationAgentLauncher();
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -57,6 +73,22 @@ let sessionActive  = false;
 let recordingPlatform: MobilePlatform = 'android';
 let activeSquad = 'payment';
 let activeEnvironment = '';
+let activeAutomationPackage = '';
+let automationPreview: {
+    token: string;
+    scenario: AutomationScenario;
+    plan: GenerationPlan;
+    response: AutomationAgentResponse;
+} | null = null;
+
+function syncRecording(): void {
+    if (!sessionActive) return;
+    automationRecordingStore.replaceActions(recordedSteps, {
+        squad: activeSquad,
+        platform: recordingPlatform,
+        environment: activeEnvironment,
+    });
+}
 
 const BS_CONFIG_PATH      = path.join(projectPaths.toolConfig, 'bs_config.json');
 const SESSION_CONFIG_PATH = path.join(projectPaths.toolConfig, 'session_config.json');
@@ -299,6 +331,12 @@ ipcMain.handle('start-session', async (_, config: any) => {
         inspector  = new MobileInspector(activeDm);
         executor   = new MobileStepExecutor(activeDm, locatorManager);
         sessionActive = true;
+        recordedSteps = [];
+        automationRecordingStore.start({
+            squad: activeSquad,
+            platform: recordingPlatform,
+            environment: activeEnvironment,
+        });
         const screenshot = await inspector.captureScreenshot();
         // Persistir configuración para test.sh / steps.ts
         saveSessionConfig({
@@ -574,6 +612,12 @@ ipcMain.handle('bs-start-session', async (_, config: BrowserStackConfig) => {
         inspector  = new MobileInspector(activeDm);
         executor   = new MobileStepExecutor(activeDm, locatorManager);
         sessionActive = true;
+        recordedSteps = [];
+        automationRecordingStore.start({
+            squad: activeSquad,
+            platform: recordingPlatform,
+            environment: activeEnvironment,
+        });
         const screenshot = await inspector.captureScreenshot();
         // Persistir configuración para test.sh / steps.ts
         saveSessionConfig({
@@ -694,7 +738,13 @@ ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
     }
     const result = await executor.execute(stepData);
     if (result.success) {
-        recordedSteps.push(stepData);
+        recordedSteps.push({
+            ...stepData,
+            elementIntent: stepData.elementIntent || stepData.description || stepData.variableName,
+            selectorVerified: Boolean(stepData.selector),
+            platform: recordingPlatform,
+        });
+        syncRecording();
         const screenshot = await inspector?.captureScreenshot().catch(() => undefined);
         return { ...result, totalSteps: recordedSteps.length, screenshot };
     }
@@ -703,11 +753,13 @@ ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
 
 ipcMain.handle('delete-step', async (_, index: number) => {
     if (index >= 0 && index < recordedSteps.length) recordedSteps.splice(index, 1);
+    syncRecording();
     return { success: true, totalSteps: recordedSteps.length };
 });
 
 ipcMain.handle('clear-steps', async () => {
     recordedSteps = [];
+    syncRecording();
     return { success: true };
 });
 
@@ -850,6 +902,157 @@ ipcMain.handle('generate-files', async (_, featureName: string, scenarioName: st
     return { success: true, featurePath: filePath, locatorsPath };
 });
 
+ipcMain.handle('prepare-automation-package', async (_, input: {
+    request: Omit<GenerationRequest, 'platform'>;
+    objective: string;
+    acceptanceCriteria: string;
+    launchAgent?: boolean;
+}) => {
+    try {
+        if (projectPaths.mode === 'neutral') {
+            throw new Error('El agente de cuatro capas requiere modo fwk-mobile o standalone');
+        }
+        if (!recordedSteps.length) throw new Error('No hay acciones grabadas');
+        if (!input.objective?.trim()) throw new Error('Describe el objetivo funcional del caso');
+        if (!input.acceptanceCriteria?.trim()) throw new Error('Define el resultado esperado');
+        const request = prepareGenerationRequest(input.request);
+        const { scenario, directory } = automationRecordingStore.buildScenario({
+            request,
+            actions: recordedSteps,
+            objective: input.objective,
+            acceptanceCriteria: input.acceptanceCriteria,
+            environment: activeEnvironment,
+        });
+        const result = automationPackageBuilder.prepare(scenario, directory);
+        activeAutomationPackage = result.packageDirectory;
+        automationPreview = null;
+        let launch;
+        let launchError;
+        if (result.agentRequired && input.launchAgent !== false) {
+            const configured = projectPaths.automationAgent === 'claude'
+                ? projectPaths.claudeCliPath
+                : projectPaths.copilotCliPath;
+            try {
+                launch = automationAgentLauncher.launch(
+                    projectPaths.automationAgent,
+                    result.packageDirectory,
+                    configured
+                );
+            } catch (error: any) {
+                launchError = error.message;
+            }
+        }
+        return { success: true, result, launch, launchError };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('launch-automation-agent', async () => {
+    try {
+        if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        const configured = projectPaths.automationAgent === 'claude'
+            ? projectPaths.claudeCliPath
+            : projectPaths.copilotCliPath;
+        return {
+            success: true,
+            launch: automationAgentLauncher.launch(
+                projectPaths.automationAgent,
+                activeAutomationPackage,
+                configured
+            ),
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('import-automation-response', async () => {
+    try {
+        if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        const read = <T>(name: string): T => JSON.parse(fs.readFileSync(path.join(activeAutomationPackage, name), 'utf-8')) as T;
+        const scenario = read<AutomationScenario>('scenario.json');
+        const plan = read<GenerationPlan>('generation-plan.json');
+        const response = read<AutomationAgentResponse>('agent-response.json');
+        const statusFile = path.join(activeAutomationPackage, 'status.json');
+        const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
+        const repairAttempts = Number(status.repairAttempts || 0);
+        const validation = automationResponseValidator.validate(scenario, plan, response, repairAttempts);
+        fs.writeFileSync(
+            path.join(activeAutomationPackage, 'validation.json'),
+            JSON.stringify(validation, null, 2) + '\n'
+        );
+        if (!validation.valid) {
+            if (repairAttempts >= plan.budgets.maxRepairAttempts) {
+                return { success: false, validation, error: 'Se agotó la única reparación permitida: ' + validation.errors.map(item => item.message).join(' | ') };
+            }
+            fs.writeFileSync(
+                path.join(activeAutomationPackage, 'repair-context.json'),
+                JSON.stringify(validation.repairContext, null, 2) + '\n'
+            );
+            fs.writeFileSync(statusFile, JSON.stringify({
+                ...status,
+                state: 'targeted-repair',
+                repairAttempts: repairAttempts + 1,
+                updatedAt: new Date().toISOString(),
+            }, null, 2) + '\n');
+            return {
+                success: false,
+                validation,
+                repairAvailable: true,
+                error: validation.errors.map(item => item.message).join(' | '),
+            };
+        }
+        const preview = automationResponseValidator.toPreview(response);
+        const managed = generatedFileRegistry.assess(preview, scenario.squad);
+        const token = crypto.randomUUID();
+        automationPreview = { token, scenario, plan, response };
+        return { success: true, preview, validation, previewToken: token, conflicts: managed.conflicts };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('generate-automation-response', async (
+    _,
+    previewToken: string,
+    reviewedContents?: Record<string, string>
+) => {
+    try {
+        if (!automationPreview || automationPreview.token !== previewToken) {
+            throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
+        }
+        const { scenario, plan } = automationPreview;
+        const response: AutomationAgentResponse = {
+            ...automationPreview.response,
+            files: automationPreview.response.files.map(file => ({
+                ...file,
+                content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content,
+            })),
+        };
+        const validation = automationResponseValidator.validate(scenario, plan, response);
+        if (!validation.valid) throw new Error(validation.errors.map(item => item.message).join(' | '));
+        const preview = automationResponseValidator.toPreview(response);
+        const managed = generatedFileRegistry.assess(preview, scenario.squad);
+        if (managed.conflicts.length) {
+            throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
+        }
+        const generated = fwkMobileGenerator.writePreview(preview, managed.writable);
+        generatedFileRegistry.register(generated, scenario.squad);
+        const memoryEntry = automationMemory.promote(scenario, plan, response, validation);
+        fs.writeFileSync(path.join(activeAutomationPackage, 'agent-response.json'), JSON.stringify(response, null, 2) + '\n');
+        automationPreview = null;
+        return { success: true, generated, validation, memoryVersion: memoryEntry.version };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-automation-memory-stats', async () => ({
+    success: true,
+    stats: automationMemory.stats(),
+}));
+
 ipcMain.handle('get-steps', async () => ({ steps: recordedSteps }));
 
 ipcMain.handle('close-session', async () => {
@@ -859,6 +1062,9 @@ ipcMain.handle('close-session', async () => {
         inspector     = null;
         executor      = null;
         activeDm      = dm; // reset al default
+        automationRecordingStore.reset();
+        activeAutomationPackage = '';
+        automationPreview = null;
     }
     return { success: true };
 });

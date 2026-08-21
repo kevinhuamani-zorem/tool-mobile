@@ -51,7 +51,7 @@ export class OutputValidator {
 
     private validateFeature(content: string, errors: string[]): void {
         if (!/^Feature:\s+\S+/m.test(content)) errors.push('Feature sin nombre');
-        if (!/^\s+@(?!@)[A-Za-z0-9_-]+$/m.test(content)) errors.push('Feature sin tag válido');
+        if (!/^\s*@(?!@)[A-Za-z0-9_-]+\s*$/m.test(content)) errors.push('Feature sin tag válido');
         if (!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.test(content)) {
             errors.push('Scenario sin formato [TC-10239][Path][AUTO-FRONT]');
         }

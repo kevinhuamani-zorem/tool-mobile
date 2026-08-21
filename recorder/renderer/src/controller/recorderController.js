@@ -101,6 +101,7 @@ export async function initializeRecorder() {
     const lblInspect      = document.getElementById('lblInspectStatus');
     const txtSelector     = document.getElementById('txtSelector');
     const txtVarName      = document.getElementById('txtVarName');
+    const txtElementIntent = document.getElementById('txtElementIntent');
     const locatorCombobox = document.getElementById('locatorCombobox');
     const locatorCatalogDropdown = document.getElementById('locatorCatalogDropdown');
     const lblLocatorCatalog = document.getElementById('lblLocatorCatalog');
@@ -1430,7 +1431,7 @@ export async function initializeRecorder() {
     }
 
     function stepSummary(step) {
-        const loc = step.variableName ? '{' + step.variableName + '}' : (step.selector || '');
+        const loc = step.elementIntent || (step.variableName ? '{' + step.variableName + '}' : (step.selector || ''));
         const map = {
             ABRIR_APP:           '📱 ABRIR APP → ' + step.value,
             CLICK:               '👆 CLICK → ' + loc,
@@ -1455,6 +1456,7 @@ export async function initializeRecorder() {
         clearSelectorChips();
         if (txtSelector) txtSelector.value = '';
         if (txtVarName)  txtVarName.value  = '';
+        if (txtElementIntent) txtElementIntent.value = '';
         selectedCatalogLocator = null;
         renderSelectedLocatorCoverage();
         if (txtValue)    txtValue.value    = '';
@@ -2301,6 +2303,7 @@ export async function initializeRecorder() {
         renderSelectedLocatorCoverage();
         txtSelector.value = '';
         txtVarName.value = currentAssignment?.name || '';
+        if (txtElementIntent) txtElementIntent.value = '';
         verifiedSelector = '';
         setVerify('— Selecciona y verifica un elemento');
         updateAssignmentButton();
@@ -2380,8 +2383,7 @@ export async function initializeRecorder() {
             }
 
             txtSelector.value = candidates[0].selector;
-            txtVarName.value  = currentAssignment?.name ||
-                inferVarName(candidates[0].selector, best.tag);
+            txtVarName.value  = currentAssignment?.name || '';
             verifiedSelector = '';
             if (candidates.length > 1) renderSelectorChips(candidates, txtVarName.value);
             renderAssignmentTarget();
@@ -2428,6 +2430,7 @@ export async function initializeRecorder() {
         const noSel   = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
         txtSelector.disabled = noSel.includes(action);
         txtVarName.disabled  = noSel.includes(action);
+        if (txtElementIntent) txtElementIntent.disabled = noSel.includes(action);
         const ph = {
             ABRIR_APP: 'com.example.app', ESCRIBIR: 'texto...',
             SWIPE: 'left/right/up/down', VERIFICAR_TEXTO: 'texto esperado',
@@ -2439,7 +2442,8 @@ export async function initializeRecorder() {
     btnExecute.addEventListener('click', async () => {
         const action   = cmbAction.value;
         const selector = txtSelector.value.trim();
-        const varName  = txtVarName.value.trim();
+        const varName  = currentAssignment?.name || selectedCatalogLocator?.name || '';
+        const elementIntent = txtElementIntent?.value.trim() || '';
         const value    = txtValue.value.trim();
         const desc     = txtDesc.value.trim();
         const noSel    = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
@@ -2447,13 +2451,16 @@ export async function initializeRecorder() {
         if (!noSel.includes(action) && !selector) {
             setStatus('⚠ Ingresa un selector', '#FF6600'); return;
         }
-        if (!noSel.includes(action) && !varName) {
-            setStatus('⚠ Ingresa o selecciona el nombre del locator', '#FF6600'); return;
+        if (!noSel.includes(action) && !elementIntent) {
+            setStatus('⚠ Describe qué función cumple el elemento', '#FF6600');
+            txtElementIntent?.focus();
+            return;
         }
 
         const step = {
             action,
             variableName: varName,
+            elementIntent,
             selector,
             value,
             description: desc,
@@ -2575,11 +2582,42 @@ export async function initializeRecorder() {
     }
 
     btnPreview.addEventListener('click', async () => {
-        await refreshGenerationPreview();
+        if (automationWorkflow) await importAutomationResponse(true);
+        else await refreshGenerationPreview();
     });
 
     btnGenerate.addEventListener('click', async () => {
         disableBtn(btnGenerate, '⏳ Generando...');
+        if (automationWorkflow) {
+            const invalidDocuments = previewDocuments
+                .map(document => ({ document, validation: validatePreviewDocument(document) }))
+                .filter(item => !item.validation.valid);
+            if (invalidDocuments.length) {
+                setGenerate('✕ Corrige los archivos inválidos antes de generar.', 'err');
+                enableBtn(btnGenerate);
+                return;
+            }
+            const reviewedContents = Object.fromEntries(
+                previewDocuments.map(document => [document.path, document.content])
+            );
+            const result = await api.generateAutomationResponse(lastPreviewToken, reviewedContents);
+            enableBtn(btnGenerate);
+            if (!result.success) {
+                setGenerate('✗ ' + result.error, 'err');
+                return;
+            }
+            rememberGeneratedFiles(result.generated.files);
+            setGenerate(
+                `✓ ${result.generated.files.length} archivos generados · memoria v${result.memoryVersion} validada al 100%`,
+                'ok'
+            );
+            previewDocuments.forEach(document => {
+                document.originalContent = document.content;
+                document.generated = true;
+            });
+            renderPreviewFileTree();
+            return;
+        }
         // El estado del filesystem puede cambiar después de abrir la revisión.
         // Reconstruye el preview para no conservar conflictos de archivos ya eliminados.
         const currentPreview = await refreshGenerationPreview(true);
@@ -3414,7 +3452,17 @@ export async function initializeRecorder() {
     const wizardLinkActions    = document.getElementById('wizardLinkActions');
     const wizardLinkRows       = document.getElementById('wizardLinkRows');
     const wizardGherkinHost    = document.getElementById('wizardGherkinHost');
+    const txtAutomationObjective = document.getElementById('txtAutomationObjective');
+    const txtAutomationAcceptance = document.getElementById('txtAutomationAcceptance');
+    const btnPrepareAutomation = document.getElementById('btnPrepareAutomation');
+    const btnLaunchAutomation = document.getElementById('btnLaunchAutomation');
+    const btnImportAutomation = document.getElementById('btnImportAutomation');
+    const automationPackageStatus = document.getElementById('automationPackageStatus');
     let wizardPage = 1;
+    let automationWorkflow = false;
+    [txtAutomationObjective, txtAutomationAcceptance].filter(Boolean).forEach(field => {
+        field.addEventListener('input', invalidatePreview);
+    });
 
     // Estado del constructor de escenario
     let enlazarSteps      = [];   // copia de recordedSteps al abrir el modal
@@ -3435,19 +3483,11 @@ export async function initializeRecorder() {
         });
         btnWizardBack.disabled = wizardPage === 1;
         btnWizardNext.style.display = wizardPage === 5 ? 'none' : '';
-        btnConfirmarEscenario.style.display = wizardPage === 3 ? '' : 'none';
-        if (wizardPage === 3) {
-            wizardLinkRows.appendChild(scenarioRowsContainer);
-            renderLinkActions();
-            renderScenarioRows();
-        } else if (wizardGherkinHost && !wizardGherkinHost.contains(scenarioRowsContainer)) {
-            wizardGherkinHost.appendChild(scenarioRowsContainer);
-            renderScenarioRows();
-        }
+        btnConfirmarEscenario.style.display = 'none';
         const labels = [
             'Revisa las acciones grabadas',
-            'Define líneas Gherkin aisladas',
-            'Enlaza cada línea con acciones',
+            'Define objetivo y resultado esperado',
+            'Prepara el plan e importa la propuesta',
             'Revisa los archivos',
             'Genera los archivos'
         ];
@@ -3732,6 +3772,13 @@ export async function initializeRecorder() {
         // Cargar steps actuales
         const sr = await api.getSteps();
         enlazarSteps = sr.steps || [];
+        automationWorkflow = false;
+        invalidatePreview();
+        if (automationPackageStatus) {
+            automationPackageStatus.textContent = '';
+            automationPackageStatus.className = 'generate-result';
+        }
+        if (btnLaunchAutomation) btnLaunchAutomation.disabled = true;
         activeRowIndex = -1;
         updateEnlazarHint();
         renderEnlazarSteps();
@@ -3757,6 +3804,101 @@ export async function initializeRecorder() {
         }, 0);
     });
 
+    function showAutomationPreview(result, preserveReviewed = false) {
+        const reviewedByPath = preserveReviewed
+            ? new Map(previewDocuments.map(document => [document.path, document.content]))
+            : new Map();
+        lastPreviewToken = result.previewToken;
+        const proposedDocuments = [
+            { path: result.preview.featurePath, content: result.preview.featureContent },
+            ...(result.preview.locatorPath ? [{ path: result.preview.locatorPath, content: result.preview.locatorContent }] : []),
+            ...(result.preview.stepPath ? [{ path: result.preview.stepPath, content: result.preview.stepContent }] : []),
+            ...(result.preview.screenPath ? [{ path: result.preview.screenPath, content: result.preview.screenContent }] : [])
+        ];
+        previewDocuments = proposedDocuments.map(document => ({
+            ...document,
+            originalContent: document.content,
+            content: reviewedByPath.get(document.path) ?? document.content
+        }));
+        cmbPreviewFile.innerHTML = '';
+        previewDocuments.forEach((previewDocument, index) => {
+            const option = document.createElement('option');
+            option.value = String(index);
+            option.textContent = previewDocument.path;
+            cmbPreviewFile.appendChild(option);
+        });
+        codeReviewWorkspace.style.display = 'grid';
+        renderPreviewFileTree();
+        showPreviewDocument(0);
+        lblGenerationFileCount.textContent = `${previewDocuments.length} archivo(s) validados al 100%.`;
+        setGenerate(`✓ Propuesta válida · ${previewDocuments.length} capas · lista para revisión`, 'ok');
+    }
+
+    async function importAutomationResponse(preserveReviewed = false) {
+        disableBtn(btnImportAutomation, '⏳ Validando...');
+        const result = await api.importAutomationResponse();
+        enableBtn(btnImportAutomation);
+        if (!result.success) {
+            if (result.repairAvailable) btnLaunchAutomation.disabled = false;
+            automationPackageStatus.textContent = '✗ ' + (result.error || 'Respuesta inválida');
+            automationPackageStatus.className = 'generate-result err';
+            return result;
+        }
+        automationWorkflow = true;
+        showAutomationPreview(result, preserveReviewed);
+        automationPackageStatus.textContent = '✓ agent-response.json importado y validado al 100%';
+        automationPackageStatus.className = 'generate-result ok';
+        return result;
+    }
+
+    btnPrepareAutomation?.addEventListener('click', async () => {
+        const objective = txtAutomationObjective.value.trim();
+        const acceptanceCriteria = txtAutomationAcceptance.value.trim();
+        if (!objective || !acceptanceCriteria) {
+            automationPackageStatus.textContent = '⚠ Completa el objetivo y el resultado esperado.';
+            automationPackageStatus.className = 'generate-result err';
+            return;
+        }
+        disableBtn(btnPrepareAutomation, '⏳ Resolviendo...');
+        const result = await api.prepareAutomationPackage({
+            request: buildGenerationRequest(),
+            objective,
+            acceptanceCriteria,
+            launchAgent: true
+        });
+        enableBtn(btnPrepareAutomation);
+        if (!result.success) {
+            automationPackageStatus.textContent = '✗ ' + result.error;
+            automationPackageStatus.className = 'generate-result err';
+            return;
+        }
+        automationWorkflow = true;
+        btnLaunchAutomation.disabled = !result.result.agentRequired;
+        const percent = Math.round(result.result.deterministicCoverage * 100);
+        automationPackageStatus.textContent = result.result.responseAvailable
+            ? `✓ Plan ${percent}% determinista · respuesta disponible`
+            : result.launchError
+                ? `⚠ Plan listo · ${result.launchError}`
+                : `✓ Plan ${percent}% determinista · ${result.result.unresolvedGaps} gap(s) enviados al agente`;
+        automationPackageStatus.className = `generate-result ${result.launchError ? 'err' : 'ok'}`;
+        if (result.result.responseAvailable) await importAutomationResponse();
+    });
+
+    btnLaunchAutomation?.addEventListener('click', async () => {
+        disableBtn(btnLaunchAutomation, '⏳ Abriendo...');
+        const result = await api.launchAutomationAgent();
+        enableBtn(btnLaunchAutomation);
+        automationPackageStatus.textContent = result.success
+            ? `✓ ${result.launch.provider} iniciado en el paquete mínimo`
+            : `✗ ${result.error}`;
+        automationPackageStatus.className = `generate-result ${result.success ? 'ok' : 'err'}`;
+    });
+
+    btnImportAutomation?.addEventListener('click', async () => {
+        const result = await importAutomationResponse();
+        if (result.success) setWizardPage(4);
+    });
+
     btnWizardBack?.addEventListener('click', () => setWizardPage(wizardPage - 1));
     btnWizardNext?.addEventListener('click', async () => {
         if (wizardPage === 1) {
@@ -3768,21 +3910,19 @@ export async function initializeRecorder() {
             return;
         }
         if (wizardPage === 2) {
-            if (!scenarioRows.length || scenarioRows.some(row => !row.text.trim())) {
-                enlazarHint.textContent = '⚠ Completa al menos una línea Gherkin.';
-                return;
-            }
-            const safe = await validateStepImpacts();
-            if (!safe) {
-                enlazarHint.textContent =
-                    '⚠ Hay definiciones que podrían afectar otros escenarios. Ajusta su redacción.';
+            if (!txtAutomationObjective.value.trim() || !txtAutomationAcceptance.value.trim()) {
+                enlazarHint.textContent = '⚠ Completa el objetivo y el resultado esperado.';
                 return;
             }
             setWizardPage(3);
             return;
         }
         if (wizardPage === 3) {
-            btnConfirmarEscenario.click();
+            if (!lastPreviewToken) {
+                enlazarHint.textContent = '⚠ Prepara el paquete e importa una propuesta válida.';
+                return;
+            }
+            setWizardPage(4);
             return;
         }
         if (wizardPage === 4) {

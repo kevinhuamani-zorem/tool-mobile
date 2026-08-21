@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 export type RecorderMode = 'fwk-mobile' | 'standalone' | 'neutral';
+export type AutomationAgent = 'copilot' | 'claude';
 
 export interface WorkspaceConfiguration {
     mode: RecorderMode;
@@ -41,7 +42,7 @@ function readLocalEnv(): Record<string, string> {
                 .split(/\r?\n/)
                 .flatMap(line => {
                     const match = line.trim().match(
-                        /^(?:export\s+)?(RECORDER_MODE|TARGET_PROJECT)=(.*)$/
+                        /^(?:export\s+)?(RECORDER_MODE|TARGET_PROJECT|AUTOMATION_AGENT|COPILOT_CLI_PATH|CLAUDE_CLI_PATH)=(.*)$/
                     );
                     if (!match) return [];
                     return [[match[1], match[2].trim().replace(/^(['"])(.*)\1$/, '$2')]];
@@ -89,7 +90,12 @@ export function resolveWorkspaceConfiguration(): WorkspaceConfiguration {
 }
 
 export const workspaceConfiguration = resolveWorkspaceConfiguration();
+const localEnvironment = readLocalEnv();
 const frameworkRoot = workspaceConfiguration.targetProject;
+
+function automationAgent(value: unknown): AutomationAgent {
+    return String(value || '').trim().toLowerCase() === 'claude' ? 'claude' : 'copilot';
+}
 
 export function validateFrameworkRoot(): void {
     if (workspaceConfiguration.mode !== 'fwk-mobile') return;
@@ -196,8 +202,19 @@ export const projectPaths = {
     frameworkRoot,
     workspaceConfigFile,
     mode: workspaceConfiguration.mode,
+    automationAgent: automationAgent(
+        process.env.AUTOMATION_AGENT || localEnvironment.AUTOMATION_AGENT
+    ),
+    copilotCliPath: String(
+        process.env.COPILOT_CLI_PATH || localEnvironment.COPILOT_CLI_PATH || ''
+    ).trim(),
+    claudeCliPath: String(
+        process.env.CLAUDE_CLI_PATH || localEnvironment.CLAUDE_CLI_PATH || ''
+    ).trim(),
     toolConfig: path.join(toolRoot, 'config'),
     screenshots: path.join(toolRoot, 'runtime', 'screenshots'),
+    recordings: path.join(toolRoot, 'runtime', 'recordings'),
+    automationMemory: path.join(toolRoot, 'runtime', 'automation-memory'),
     codeGraphCache: path.join(toolRoot, 'runtime', `codegraph-${workspaceConfiguration.mode}.json`),
     recorderCodeGraphCache: path.join(toolRoot, 'runtime', 'codegraph-recorder.json'),
     neutralExports: path.join(toolRoot, 'runtime', 'exports'),

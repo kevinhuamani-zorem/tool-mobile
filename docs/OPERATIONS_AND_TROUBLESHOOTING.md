@@ -21,6 +21,13 @@ Framework externo:
 RECORDER_MODE=fwk-mobile TARGET_PROJECT=/ruta/al/proyecto ./run.sh
 ```
 
+Proveedor de automatización (opcional):
+
+```bash
+AUTOMATION_AGENT=copilot ./run.sh
+AUTOMATION_AGENT=claude ./run.sh
+```
+
 El modo activo y la raíz deben confirmarse en la pantalla inicial antes de
 grabar. La plataforma queda fija al crear la sesión.
 
@@ -90,6 +97,19 @@ Gherkin tenga acciones enlazadas y que Preview incluya Feature, Steps, Screen
 Object y Locators. En neutral es esperado obtener export portable; en
 fwk-mobile/standalone es un error si el caso requiere capas nuevas.
 
+### El agente consume demasiado contexto o excede cinco minutos
+
+Comprueba que se inició con `cwd` igual al directorio `generation/automation`,
+que `instructions.md` prohíbe explorar el target y que los contextos suman como
+máximo 20 KB. El proceso se termina a los cinco minutos. No amplíes el paquete:
+corrige el resolver para convertir información repetible en decisiones del plan.
+
+### La propuesta falla validación
+
+Importar crea `repair-context.json` con errores concretos. Usa “Abrir agente
+nuevamente”; solo puede corregir archivos afectados y dispone de un intento.
+Después debe volver a ejecutarse la importación. Un fallo no entra a memoria.
+
 ## Logs y secretos
 
 Los logs pueden incluir modo, plataforma, dispositivo, canal y mensajes de
@@ -120,4 +140,3 @@ La escritura normal es atómica. Si una generación falla:
 - selector con estrategia, si aplica;
 - screenshot/XML de la misma captura;
 - resultado de `npm run typecheck`, prueba focalizada y `git status --short`.
-

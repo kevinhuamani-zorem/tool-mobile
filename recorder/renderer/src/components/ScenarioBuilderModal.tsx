@@ -13,9 +13,9 @@ export function ScenarioBuilderModal() {
 
         <nav className="wizard-stepper" aria-label="Progreso">
           {[
-            ['1', 'Acciones'],
-            ['2', 'Gherkin'],
-            ['3', 'Enlaces'],
+            ['1', 'Evidencia'],
+            ['2', 'Contexto'],
+            ['3', 'Agente'],
             ['4', 'Revisión'],
             ['5', 'Generación']
           ].map(([number, label], index) => (
@@ -39,50 +39,22 @@ export function ScenarioBuilderModal() {
 
           <section className="wizard-page" data-wizard-page="2">
             <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 2</span><h3>Escribe el comportamiento en Gherkin</h3></div>
-              <button className="btn btn-blue" id="btnNuevoStep">+ Agregar línea</button>
+              <div><span className="eyebrow">PASO 2</span><h3>Define el objetivo funcional</h3></div>
+              <span className="wizard-help">El resolver construirá el plan; el agente solo resolverá brechas.</span>
             </div>
-            <div className="impact-legend">
-              <span className="impact-safe">● Aislado</span>
-              <span className="impact-warning">● Puede impactar otros escenarios</span>
-            </div>
-            <div id="wizardGherkinHost">
-              <div id="scenarioRows" className="scenario-rows wizard-gherkin-rows">
-                <div className="scenario-empty-hint">Agrega la primera línea Given, When o Then.</div>
-              </div>
-            </div>
-          </section>
-
-          <section className="wizard-page" data-wizard-page="3">
-            <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 3</span><h3>Enlaza cada línea con sus acciones</h3></div>
-              <span className="wizard-help">Selecciona una línea y luego una o más acciones.</span>
-            </div>
-            <div className="wizard-link-layout">
-              <div>
-                <h4>Acciones disponibles</h4>
-                <ul id="wizardLinkActions" className="steps-list wizard-action-list" />
-              </div>
-              <div>
-                <h4>Líneas del escenario</h4>
-                <div id="wizardLinkRows" className="scenario-rows" />
-              </div>
-            </div>
-          </section>
-
-          <section className="wizard-page" data-wizard-page="4">
-            <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 4</span><h3>Depura la propuesta y revisa los archivos</h3></div>
-            </div>
-            <div className="wizard-case-config">
+            <div className="wizard-case-config automation-context-form">
               <div className="input-group">
-                <label className="field-label">Feature:</label>
-                <input type="text" id="txtFeature" className="field-input" defaultValue="Flujo mobile" />
+                <label className="field-label">¿Qué debe lograr el caso?</label>
+                <textarea id="txtAutomationObjective" className="field-input" rows={4}
+                  placeholder="Ej.: consultar el saldo y abrir la lista de movimientos" />
               </div>
               <div className="input-group">
-                <label className="field-label">Scenario:</label>
-                <input type="text" id="txtScenario" className="field-input" defaultValue="Escenario grabado" />
+                <label className="field-label">Resultado esperado</label>
+                <textarea id="txtAutomationAcceptance" className="field-input" rows={4}
+                  placeholder="Ej.: el usuario visualiza movimientos disponibles sin validar un saldo fijo" />
               </div>
+            </div>
+            <div className="wizard-case-config automation-metadata-form">
               <div className="input-group">
                 <label className="field-label">ID de ejecución:</label>
                 <input type="text" id="txtCaseId" className="field-input" defaultValue="TC-10239" />
@@ -99,18 +71,52 @@ export function ScenarioBuilderModal() {
                 <input type="text" id="txtFeatureTag" className="field-input" defaultValue="miflujo" />
               </div>
               <div className="input-group">
-                <label className="field-label">Usuario data (opcional):</label>
-                <input type="text" id="txtDataName" className="field-input" placeholder="name usado en Examples" />
-              </div>
-              <div className="input-group">
-                <label className="field-label">Archivo Feature:</label>
-                <input type="text" id="txtFeatureFile" className="field-input" defaultValue="flujo-mobile" />
-              </div>
-              <div className="input-group">
-                <label className="field-label">Módulo pantalla/locators:</label>
-                <input type="text" id="txtLocatorModule" className="field-input" defaultValue="nueva-pantalla" />
+                <label className="field-label">Usuario data (si se conoce):</label>
+                <input type="text" id="txtDataName" className="field-input" placeholder="El agente lo marcará como gap si falta" />
               </div>
             </div>
+            <div style={{display: 'none'}}>
+              <input type="text" id="txtFeature" defaultValue="Flujo mobile" />
+              <input type="text" id="txtScenario" defaultValue="Escenario grabado" />
+              <input type="text" id="txtFeatureFile" defaultValue="flujo-mobile" />
+              <input type="text" id="txtLocatorModule" defaultValue="nueva-pantalla" />
+            </div>
+            <button id="btnNuevoStep" style={{display: 'none'}} />
+            <div id="wizardGherkinHost" style={{display: 'none'}}>
+              <div id="scenarioRows" className="scenario-rows wizard-gherkin-rows">
+                <div className="scenario-empty-hint" />
+              </div>
+            </div>
+          </section>
+
+          <section className="wizard-page" data-wizard-page="3">
+            <div className="wizard-page-heading">
+              <div><span className="eyebrow">PASO 3</span><h3>Genera la propuesta de automatización</h3></div>
+              <span className="wizard-help">Tiempo objetivo: menos de 5 minutos y contexto máximo de 20 KB.</span>
+            </div>
+            <div className="generation-summary automation-agent-summary">
+              <span className="generation-icon">↗</span>
+              <div>
+                <h3>Preprocesamiento determinista</h3>
+                <p>Reutiliza locators de squad/Home, normaliza selectores y prepara solo los gaps.</p>
+              </div>
+            </div>
+            <div className="automation-agent-actions">
+              <button className="btn btn-navy" id="btnPrepareAutomation">Preparar paquete mínimo</button>
+              <button className="btn btn-dark" id="btnLaunchAutomation" disabled>Abrir agente nuevamente</button>
+              <button className="btn btn-blue" id="btnImportAutomation">Importar y validar respuesta</button>
+            </div>
+            <div id="automationPackageStatus" className="generate-result" />
+            <div className="wizard-link-layout" style={{display: 'none'}}>
+              <ul id="wizardLinkActions" /><div id="wizardLinkRows" />
+            </div>
+          </section>
+
+          <section className="wizard-page" data-wizard-page="4">
+            <div className="wizard-page-heading">
+              <div><span className="eyebrow">PASO 4</span><h3>Depura la propuesta y revisa los archivos</h3></div>
+            </div>
+            <p className="wizard-help">Los nombres propuestos, el TC y el contenido final se editan directamente en los archivos del preview.</p>
             <select id="cmbPreviewFile" className="field-select wizard-file-tabs" style={{display: 'none'}} />
             <div id="codeReviewWorkspace" className="code-review-workspace" style={{display: 'none'}}>
               <aside className="code-file-explorer">
@@ -138,7 +144,7 @@ export function ScenarioBuilderModal() {
               </section>
             </div>
             <div id="lblGenerateResult" className="generate-result" />
-            <button className="btn btn-navy" id="btnPreview">↻ Actualizar preview</button>
+            <button className="btn btn-navy" id="btnPreview">↻ Reimportar y validar</button>
           </section>
 
           <section className="wizard-page" data-wizard-page="5">

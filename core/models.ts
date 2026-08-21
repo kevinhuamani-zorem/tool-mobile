@@ -17,8 +17,12 @@ export type Action =
 
 export interface RecordedStep {
     action: Action;
+    sequence?: number;
     variableName?: string;
+    elementIntent?: string;
     selector?: string;
+    selectorVerified?: boolean;
+    platform?: 'android' | 'ios';
     value?: string;
     description?: string;
     locatorSource?: {

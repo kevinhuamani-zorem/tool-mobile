@@ -61,19 +61,29 @@ generadores, validadores o plantillas.
 6. **No hay sobrescritura arbitraria.** Conserva validación de rutas, escritura
    atómica, hashes y el registro de archivos generados. Un archivo externo o
    alterado fuera del recorder no se reemplaza silenciosamente.
-7. **Un locator lógico sirve a ambas plataformas.** Android e iOS comparten el
-   nombre y actualizan exclusivamente su bloque de plataforma.
+7. **El QA describe intención, no nombres técnicos.** Durante una grabación el
+   formulario captura `elementIntent` (por ejemplo, `abrir movimientos`). El
+   resolver decide de forma determinista si reutiliza un locator de squad/Home
+   o crea un nombre lógico. Un locator lógico sirve a ambas plataformas y cada
+   ejecución actualiza exclusivamente su bloque de plataforma.
 8. **Los Steps solo orquestan.** La interacción Appium vive en Screen Objects y
    helpers. Una definición Given/When/Then llama métodos del Screen Object.
-9. **La validación de impacto ocurre al continuar desde Gherkin.** No se
-   reutilizan ni modifican steps ajenos automáticamente. Un conflicto debe
-   mostrar escenarios y squads impactados para que el usuario cree otro texto.
-10. **Generación local y determinista.** No agregues Gemini, otro proveedor de
-    IA ni envío de código/secretos a servicios externos sin una decisión
-    explícita del usuario y un diseño de seguridad aprobado.
-11. **Local y BrowserStack son caminos soportados.** Un cambio de gestos,
+9. **El preprocesador decide antes que el agente.** Selectores verificados,
+   rutas, orden de acciones y reutilización exacta en squad/Home son decisiones
+   deterministas. El agente solo resuelve los gaps declarados en el plan.
+10. **IA opt-in y contexto mínimo.** Copilot/Claude solo se ejecutan por una
+    decisión explícita del usuario. Reciben el paquete confinado bajo
+    `runtime/recordings`, sin secretos, y no deben explorar el target ni leer
+    XML/capturas salvo que un gap puntual lo exija.
+11. **No borres datos funcionales de entrada.** Teléfonos, montos, correos y
+    textos usados por el caso permanecen en el recording local para convertirlos
+    en parámetros/Examples. Solo contraseña, clave, PIN, OTP, token y secretos
+    se redactan antes de construir el paquete.
+12. **Local y BrowserStack son caminos soportados.** Un cambio de gestos,
     capabilities, selectores o sesión debe considerar Android/iOS y ambos tipos
     de conexión.
+13. **La memoria no aprende de fallos.** Solo una propuesta generada, revisada
+    y validada con score 100 puede promocionarse a `runtime/automation-memory`.
 
 ## Convenciones de generación
 

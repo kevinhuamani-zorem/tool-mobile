@@ -1,6 +1,9 @@
 # Appium Visual Recorder
 
-Herramienta de grabacion visual de pruebas automatizadas mobile. Permite grabar flujos de usuario directamente desde un dispositivo Android sin escribir codigo, generando casos de prueba en formato Gherkin y archivos de locators listos para ejecutarse con Cucumber + WebdriverIO.
+Herramienta de grabación visual de pruebas mobile. Registra acciones y
+selectores comprobados, resuelve determinísticamente la reutilización del
+framework y genera Feature, Steps, Screen Object y Locators con una IA limitada
+exclusivamente a las brechas del plan.
 
 ## Documentación para mantenimiento
 
@@ -93,19 +96,37 @@ framework para clicks, escritura, espera, validaciones y gestos soportados.
 También se indexan los métodos públicos para validar el impacto antes de
 escribir.
 
-### Generación local
+### Pipeline de automatización con contexto mínimo
 
-La generación no utiliza servicios de inteligencia artificial ni envía código
-fuera del equipo. Feature, Scenario, nombres de archivo, métodos y locators se
-construyen con reglas locales y permanecen editables durante la revisión.
+```text
+scenario.json
+  → resolver determinista
+  → generation-plan.json + contexto resuelto/no resuelto
+  → memoria 100% o Copilot/Claude solo para gaps
+  → agent-response.json
+  → validator determinista
+  → preview editable
+  → escritura y memoria versionada
+```
+
+El agente no recibe el repositorio completo. Squad/Home, selectores verificados,
+rutas y orden ya están resueltos. El paquete tiene un límite de 20 KB, el CLI
+se detiene a los cinco minutos y solo existe una reparación dirigida.
+
+Configura el proveedor en `.env`:
+
+```dotenv
+AUTOMATION_AGENT=copilot
+# AUTOMATION_AGENT=claude
+```
 
 El `.env` real está excluido de Git. Los reportes generados por pruebas,
 cobertura o métricas bajo `coverage/`, `test-results/` y `runtime/quality/`
 también están excluidos; las pruebas y el procedimiento QA sí se versionan.
 
-La configuración del caso no se solicita al iniciar la grabación. En el paso
-final de Revisión se depuran los nombres y se completan el ID `TC-<número>`,
-tipo, tag y data antes de construir el Preview de las cuatro capas.
+Al finalizar, el usuario revisa acciones, describe objetivo/aceptación, prepara
+el paquete, importa la respuesta y edita las cuatro capas en el visor. Solo una
+generación validada con score 100 se guarda como memoria reutilizable.
 
 ### CodeGraph local
 

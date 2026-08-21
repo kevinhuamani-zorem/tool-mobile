@@ -133,6 +133,10 @@ export class FwkMobileGenerator {
             this.preview(request, steps),
             reviewedContents
         );
+        return this.writePreview(preview, managedOverwriteFiles);
+    }
+
+    writePreview(preview: GeneratedPreview, managedOverwriteFiles = new Set<string>()): GeneratedPreview {
         const conflicts = preview.files.filter(
             file => fs.existsSync(file) && !managedOverwriteFiles.has(file)
         );
@@ -364,18 +368,23 @@ export class FwkMobileGenerator {
             const args = parameters.map(name => `${name}: string`).join(', ');
             const callArgs = parameters.join(', ');
             const methodName = this.rowMethodName(row, index);
-            return [
+            return {
+                key: `${keyword}:${expression}`,
+                content: [
                 `${keyword}(/^${expression}$/, async (${args}) => {`,
                 `    await generatedScreen.${methodName}(${callArgs});`,
                 `});`
-            ].join('\n');
-        });
+                ].join('\n')
+            };
+        }).filter((block, index, all) =>
+            all.findIndex(candidate => candidate.key === block.key) === index
+        );
 
         return [
             `import { ${imports.join(', ')} } from '@wdio/cucumber-framework';`,
             `import generatedScreen from '${importPath}';`,
             '',
-            ...blocks.flatMap(block => [block, ''])
+            ...blocks.flatMap(block => [block.content, ''])
         ].join('\n');
     }
 
@@ -422,8 +431,8 @@ export class FwkMobileGenerator {
             return [
                 `    private get ${name}(): string {`,
                 `        return LocatorFactory.getElement(`,
-                `            TypeLocator.${iosType}, Locators.${iosBlock}.${name},`,
-                `            TypeLocator.${androidType}, Locators.${androidBlock}.${name}`,
+                `            TypeLocator.${iosType}, Locators[${JSON.stringify(iosBlock)}].${name},`,
+                `            TypeLocator.${androidType}, Locators[${JSON.stringify(androidBlock)}].${name}`,
                 `        );`,
                 `    }`
             ].join('\n');
@@ -437,12 +446,17 @@ export class FwkMobileGenerator {
                 this.actionLines(action, parameters, actionIndex)
             );
             const methodName = this.rowMethodName(row, index);
-            return [
+            return {
+                name: methodName,
+                content: [
                 `    public async ${methodName}(${args}): Promise<void> {`,
                 ...actions.map(line => `        ${line}`),
                 `    }`
-            ].join('\n');
-        });
+                ].join('\n')
+            };
+        }).filter((method, index, all) =>
+            all.findIndex(candidate => candidate.name === method.name) === index
+        );
 
         return [
             `import { browser } from '@wdio/globals';`,
@@ -455,7 +469,7 @@ export class FwkMobileGenerator {
             '',
             `class ${className} extends BaseScreen {`,
             ...getters.flatMap(getter => ['', getter]),
-            ...methods.flatMap(method => ['', method]),
+            ...methods.flatMap(method => ['', method.content]),
             `}`,
             '',
             `export default new ${className}();`,

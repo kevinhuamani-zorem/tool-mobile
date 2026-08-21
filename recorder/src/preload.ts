@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('api', {
     previewFwkFiles:     (request: any)          => ipcRenderer.invoke('preview-fwk-files', request),
     generateFwkFiles:    (request: any, previewToken: string, reviewedContents?: Record<string, string>) =>
         ipcRenderer.invoke('generate-fwk-files', request, previewToken, reviewedContents),
+    prepareAutomationPackage: (input: any) => ipcRenderer.invoke('prepare-automation-package', input),
+    launchAutomationAgent: () => ipcRenderer.invoke('launch-automation-agent'),
+    importAutomationResponse: () => ipcRenderer.invoke('import-automation-response'),
+    generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>) =>
+        ipcRenderer.invoke('generate-automation-response', previewToken, reviewedContents),
+    getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
     generateFiles:       (f: string, s: string) => ipcRenderer.invoke('generate-files', f, s),
     getSteps:            ()                     => ipcRenderer.invoke('get-steps'),
     closeSession:        ()                     => ipcRenderer.invoke('close-session'),

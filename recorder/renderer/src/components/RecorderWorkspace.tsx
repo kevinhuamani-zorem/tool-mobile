@@ -53,13 +53,23 @@ export function RecorderWorkspace() {
           <input type="text" id="txtSelector" className="field-input" placeholder="XPath..." />
           <button className="btn btn-dark" id="btnCopy">📋</button>
         </div>
-        <label className="field-label">Buscar o asignar locator lógico:</label>
-        <div id="locatorCombobox" className="catalog-combobox">
-          <input type="text" id="txtVarName" className="field-input" autoComplete="off" aria-autocomplete="list" aria-expanded="false" placeholder="Buscar locator del squad o crear uno..." />
+        <label className="field-label" htmlFor="txtElementIntent">¿Qué función cumple este elemento?</label>
+        <input
+          type="text"
+          id="txtElementIntent"
+          className="field-input"
+          autoComplete="off"
+          placeholder="Ej.: abrir movimientos, confirmar pago, ingresar correo"
+        />
+        <div className="field-help">
+          Describe su intención funcional. El recorder resolverá si reutiliza o crea el locator y definirá su nombre técnico.
+        </div>
+        <div id="locatorCombobox" className="catalog-combobox compatibility-only" aria-hidden="true">
+          <input type="hidden" id="txtVarName" />
           <div id="locatorCatalogDropdown" className="catalog-dropdown" role="listbox" />
         </div>
-        <div id="lblLocatorCatalog" className="catalog-hint">Cargando locators del squad...</div>
-        <div id="locatorCoverage" className="locator-coverage" style={{display: 'none'}}>
+        <div id="lblLocatorCatalog" className="catalog-hint compatibility-only">Cargando locators del squad...</div>
+        <div id="locatorCoverage" className="locator-coverage compatibility-only" style={{display: 'none'}}>
           <div className="locator-coverage-title">
             <span id="lblLogicalLocator" />
             <span id="lblActivePlatform" className="platform-pill" />

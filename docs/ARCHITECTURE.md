@@ -17,10 +17,12 @@ flowchart LR
     MAIN --> SESSION[Local / BrowserStack managers]
     SESSION --> APPIUM[Appium / WebDriver]
     MAIN --> SCAN[Scanner, CodeGraph, coverage]
-    MAIN --> GEN[Generator and validators]
+    MAIN --> PIPE[Deterministic automation pipeline]
     SCAN --> TARGET[Selected workspace]
-    GEN --> TARGET
-    GEN --> REG[Generated file registry]
+    PIPE --> AGENT[Copilot / Claude gaps only]
+    AGENT --> PIPE
+    PIPE --> TARGET
+    PIPE --> REG[Generated file registry]
     MAIN --> RUNTIME[Recorder runtime]
 ```
 
@@ -60,6 +62,9 @@ debe hacer una segunda migración total ni duplicar listeners.
 |---|---|---|
 | Sesión | `appiumDriverManager`, `browserStackDriverManager`, `mobileStepExecutor` | Conectar, capturar, tocar, gestos y ejecutar acciones |
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver modo, raíz y catálogo del proyecto |
+| Automatización | `automationRecordingStore`, `deterministicResolver`, `automationPackageBuilder` | Recording, plan y contexto mínimo |
+| IA acotada | `automationAgentLauncher`, `automationContracts` | Ejecutar Copilot/Claude solo para gaps |
+| Validación/memoria | `automationResponseValidator`, `automationMemory` | Validar, reparar una vez y versionar score 100 |
 | Generación | `fwkMobileGenerator`, `neutralGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
 | Análisis | `reuseAnalyzer`, `scenarioCoverageAnalyzer` | Impacto de steps y cobertura Android/iOS |
@@ -91,15 +96,19 @@ inicializa o valida el target, sin dispersar condiciones de modo por la UI.
 4. `main` crea el driver correspondiente y fija la plataforma de la sesión.
 5. Screenshot, XML, taps, swipes y ejecución pasan siempre por IPC.
 
-### Caso nuevo
+### Caso nuevo con agente de automatización
 
-1. Se registran acciones con selector lógico y valor opcional.
-2. Se redactan filas Gherkin.
-3. Al continuar se analiza impacto contra definiciones y escenarios existentes.
-4. El usuario enlaza acciones con cada fila.
-5. Se depuran metadatos y nombres durante la revisión.
-6. Preview construye las cuatro capas y devuelve token + contenidos.
-7. Solo el contenido revisado y autorizado puede escribirse.
+1. El recorder persiste acciones ordenadas, la intención funcional escrita por
+   el QA y selectores comprobados. El QA no asigna nombres técnicos de locator.
+2. El usuario define objetivo y aceptación; no redacta Gherkin manualmente.
+3. `DeterministicResolver` decide reuse/create/builtin y fija las cuatro rutas.
+4. Se escriben `generation-plan.json`, contextos resuelto/no resuelto y contrato
+   bajo `runtime/recordings/<id>/generation/automation`.
+5. Si existe memoria de calidad 100 se reutiliza. Si no hay gaps, genera local.
+6. Copilot/Claude recibe solo gaps y un contexto máximo de 20 KB; tiene 5 min.
+7. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`.
+8. Puede emitirse una sola reparación dirigida a archivos afectados.
+9. El usuario revisa el preview, genera y recién entonces se promociona memoria.
 
 ### Completar plataforma de un caso existente
 
@@ -119,7 +128,9 @@ Las familias públicas son:
   `get-scenario-coverage`, `assign-locator-value`;
 - sesión local y BrowserStack: devices, apps, credenciales y start/close;
 - interacción: screenshot, page source, element-at, tap, swipe, verify y execute;
-- generación: preview Gherkin, preview de archivos y generación con token.
+- automatización: preparar paquete, lanzar agente, importar respuesta, generar
+  con token y consultar memoria;
+- generación heredada: preview Gherkin, preview de archivos y generación.
 
 Al añadir un canal, actualiza en conjunto handler de `main.ts`, allowlist de
 `preload.ts`, `renderer/global.d.ts`, consumidor y pruebas. Valida todo payload
@@ -128,10 +139,10 @@ seguridad.
 
 ## Decisiones y deuda conocida
 
-- La generación es local y basada en reglas; no depende de IA externa.
+- La mayor parte de la generación es determinista. La IA externa es opt-in y
+  se limita a gaps explícitos; nunca recibe el repositorio completo.
 - `recorderController.js` sigue siendo grande e imperativo. Las extracciones
   futuras deben mantener un único dueño por estado y evento.
 - `dist/` no se limpia automáticamente antes de `tsc`; nunca se usa para
   inferir la arquitectura vigente.
 - Los archivos de runtime y los targets standalone son estado local, no fuente.
-
