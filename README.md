@@ -110,8 +110,16 @@ scenario.json
 ```
 
 El agente no recibe el repositorio completo. Squad/Home, selectores verificados,
-rutas y orden ya están resueltos. El paquete tiene un límite de 20 KB, el CLI
-se detiene a los cinco minutos y solo existe una reparación dirigida.
+rutas y orden ya están resueltos. El paquete tiene un límite de 20 KB y solo
+existe una reparación dirigida. “Abrir Terminal del agente” abre una terminal
+en la carpeta exacta del paquete, pero no ejecuta Copilot/Claude. La pantalla
+muestra un prompt inicial copiable para que el usuario elija el agente y lo
+inicie manualmente.
+
+El preprocesador añade `reuse-context.json` con hasta cinco casos cercanos y
+`collision-report.json` con coincidencias exactas. Si reconoce un caso ya
+automatizado con sus cuatro capas, conserva esos archivos y evita abrir el
+agente. El validador vuelve a comprobar las colisiones al importar la respuesta.
 
 Configura el proveedor en `.env`:
 
@@ -125,7 +133,8 @@ cobertura o métricas bajo `coverage/`, `test-results/` y `runtime/quality/`
 también están excluidos; las pruebas y el procedimiento QA sí se versionan.
 
 Al finalizar, el usuario revisa acciones, describe objetivo/aceptación, prepara
-el paquete, importa la respuesta y edita las cuatro capas en el visor. Solo una
+el paquete, abre la Terminal si necesita resolver gaps, importa la respuesta y
+edita las cuatro capas en el visor. Solo una
 generación validada con score 100 se guarda como memoria reutilizable.
 
 ### CodeGraph local

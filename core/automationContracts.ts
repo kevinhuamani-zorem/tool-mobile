@@ -56,6 +56,7 @@ export interface GenerationPlan {
     resolutions: ActionResolution[];
     files: PlannedFile[];
     unresolvedGapIds: string[];
+    existingCase?: ExistingAutomationCandidate;
     budgets: {
         maxDurationMs: number;
         maxContextBytes: number;
@@ -63,11 +64,52 @@ export interface GenerationPlan {
     };
 }
 
+export interface ExistingAutomationCandidate {
+    feature: string;
+    scenario: string;
+    caseId?: string;
+    score: number;
+    selectorCoverage: number;
+    paths: {
+        feature: string;
+        steps: string;
+        screen: string;
+        locators: string;
+    };
+}
+
+export interface FrameworkReuseCandidate {
+    feature: string;
+    scenario: string;
+    caseId?: string;
+    file: string;
+    score: number;
+    selectorCoverage: number;
+    matchedSteps: string[];
+    paths?: ExistingAutomationCandidate['paths'];
+}
+
 export interface ResolvedContext {
     schemaVersion: number;
     recordingId: string;
     planId: string;
     reusedLocators: ActionResolution[];
+    frameworkAwareness?: {
+        candidates: FrameworkReuseCandidate[];
+        exactStepDefinitions: Array<{
+            expression: string;
+            file: string;
+            scope: 'squad' | 'commons';
+        }>;
+        selectorCollisions: Array<{
+            sequence: number;
+            locatorName: string;
+            file: string;
+            module: string;
+            scope: 'squad' | 'home';
+        }>;
+        decision: 'create-new' | 'reuse-existing';
+    };
     frameworkContract: {
         stepsOnlyOrchestrate: true;
         screenExtendsBaseScreen: true;

@@ -86,9 +86,10 @@ export function RecorderWorkspace() {
         </div>
         <button className="btn btn-navy btn-full" id="btnVerify">✅ Verificar selector</button>
         <div id="lblVerifyResult" className="verify-result">— Ingresa un selector</div>
-        <div className="guided-divider"><span>Acción del paso</span></div>
-        <label className="field-label">¿Qué debe hacer el usuario?</label>
-        <select id="cmbAction" className="field-select">
+        <div className="step-action-editor">
+          <div className="guided-divider"><span>Acción del paso</span></div>
+          <label className="field-label">¿Qué debe hacer el usuario?</label>
+          <select id="cmbAction" className="field-select">
           <option value="ABRIR_APP">📱 ABRIR APP</option>
           <option value="CLICK" selected>👆 CLICK</option>
           <option value="ESCRIBIR">✏️ ESCRIBIR</option>
@@ -104,12 +105,13 @@ export function RecorderWorkspace() {
           <option value="VOLVER">◀️ VOLVER</option>
           <option value="ESPERAR">⏳ ESPERAR</option>
           <option value="SCREENSHOT">📸 SCREENSHOT</option>
-        </select>
-        <label className="field-label">Valor:</label>
-        <input type="text" id="txtValue" className="field-input" placeholder="texto, segundos..." />
-        <label className="field-label">Descripcion (opcional):</label>
-        <input type="text" id="txtDesc" className="field-input" placeholder="describe el step..." />
-        <button className="btn btn-green btn-full btn-execute" id="btnExecute">Guardar paso y continuar →</button>
+          </select>
+          <label className="field-label">Valor:</label>
+          <input type="text" id="txtValue" className="field-input" placeholder="texto, segundos..." />
+          <label className="field-label">Descripcion (opcional):</label>
+          <input type="text" id="txtDesc" className="field-input" placeholder="describe el step..." />
+          <button className="btn btn-green btn-full btn-execute" id="btnExecute">Guardar paso y continuar →</button>
+        </div>
       </section>
       <section className="panel panel-right">
         <div className="workflow-step">
@@ -117,16 +119,16 @@ export function RecorderWorkspace() {
           <span><strong>Avance del caso</strong><small>Completa los pasos y revisa al finalizar.</small></span>
         </div>
         <section className="scenario-coverage-panel" id="scenarioCoveragePanel">
-          <div className="coverage-panel-title">🧭 Cobertura del caso existente</div>
-          <label className="field-label">Escenario:</label>
+          <div className="coverage-panel-title">🎬 Cobertura de la grabación</div>
+          <label className="field-label">Grabación:</label>
           <select id="cmbExistingScenario" className="field-select">
-            <option value>Selecciona un escenario...</option>
+            <option value>Selecciona una grabación...</option>
           </select>
           <button className="btn btn-blue btn-full" id="btnAnalyzeScenario">
             Analizar cobertura
           </button>
           <div id="scenarioCoverageSummary" className="coverage-summary">
-            Selecciona un escenario para detectar sus locators.
+            Selecciona una grabación para detectar sus locators.
           </div>
           <div id="scenarioLocatorQueue" className="scenario-locator-queue" />
         </section>

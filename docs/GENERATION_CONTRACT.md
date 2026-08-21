@@ -74,9 +74,16 @@ El mismo nombre lógico aparece en bloques de plataforma del módulo:
 ```
 
 Al completar cobertura solo se actualiza el bloque de la plataforma activa. El
-valor debe conservar el prefijo de estrategia que WebdriverIO espera (`id=`,
-`android=`, `~`, XPath, class chain o predicate, según corresponda). La
-normalización nunca debe convertir una estrategia Android en una de iOS.
+selector capturado conserva su semántica de estrategia (`id=`, `android=`, `~`,
+XPath, class chain o predicate, según corresponda): el JSON almacena el valor
+compatible con `LocatorFactory` y el getter sincroniza su `TypeLocator`. La
+normalización nunca convierte una estrategia Android en una de iOS.
+
+Cuando un recording generado solo carece de iOS (o Android), el QA únicamente
+selecciona y verifica los locators pendientes en una sesión de esa plataforma.
+El recorder actualiza el locator del target y la copia de `agent-response.json`,
+sin reconstruir Feature ni Steps. Al terminar, los artefactos administrados del
+framework contienen ambos bloques completos.
 
 Los locators compartidos se indexan en orden squad → commons → home → global.
 Una coincidencia debe conservar módulo, scope y ruta de origen.
@@ -115,9 +122,12 @@ conflicto de un archivo eliminado.
 
 ## Contrato del pipeline de automatización
 
-El paquete mínimo contiene únicamente `scenario.json`, `generation-plan.json`,
-`resolved-context.json`, `unresolved-context.json`, `instructions.md`, schema y
-verificador. El agente devuelve un solo `agent-response.json` con:
+El paquete mínimo contiene `scenario.json`, `generation-plan.json`,
+`reuse-context.json`, `collision-report.json`, `unresolved-context.json`,
+`instructions.md`, schema y verificador. `reuse-context.json` limita el contexto
+a los cinco casos más cercanos; `collision-report.json` expone coincidencias
+exactas de steps y selectores sin entregar archivos completos del framework.
+El agente devuelve un solo `agent-response.json` con:
 
 - los mismos `recordingId` y `planId`;
 - exactamente las cuatro rutas fijadas por el plan;
@@ -129,6 +139,12 @@ No puede cambiar rutas, releer el framework, reemplazar selectores verificados
 ni inventar una quinta capa. Un fallo produce `repair-context.json` con errores
 y archivos afectados. Solo se permite una reparación. iOS puede quedar vacío
 con warning cuando la evidencia activa es Android, conservando el nombre lógico.
+
+Si el resolver encuentra el mismo comportamiento y cobertura total de selectores
+en un caso con cuatro capas, `generation-plan.json` incluye `existingCase`, usa
+operación `update` y conserva el contenido actual sin invocar al agente. La
+validación rechaza expresiones Gherkin, escenarios o selectores duplicados en
+otro archivo del squad/Home.
 
 ## Restricciones de seguridad
 

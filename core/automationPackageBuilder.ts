@@ -50,6 +50,35 @@ function responseFromPreview(
     };
 }
 
+function responseFromExistingFiles(
+    scenario: AutomationScenario,
+    plan: GenerationPlan
+): AutomationAgentResponse {
+    const files = plan.files.map(file => ({
+        layer: file.layer,
+        path: file.path,
+        content: fs.readFileSync(path.join(projectPaths.frameworkRoot, file.path), 'utf-8'),
+    }));
+    return {
+        schemaVersion: 1,
+        recordingId: scenario.recordingId,
+        planId: plan.planId,
+        resolutions: [],
+        actionTrace: scenario.request.scenarioRows?.flatMap(row =>
+            (row.actions || []).map(action => ({
+                sequence: action.sequence!,
+                gherkinStep: `${row.keyword} ${row.text}`,
+                locatorName: plan.resolutions.find(item => item.sequence === action.sequence)?.locatorName,
+            }))
+        ) || [],
+        files,
+        assumptions: [
+            `Caso equivalente reutilizado: ${plan.existingCase?.feature} / ${plan.existingCase?.scenario}.`,
+            'Los cuatro archivos existentes se conservaron sin regeneración.',
+        ],
+    };
+}
+
 function responseSchema(): object {
     return {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -72,10 +101,12 @@ function instructions(result: ResolverResult): string {
     return `# Contrato del agente de automatización\n\n` +
         `Objetivo: resolver únicamente los gaps de \`unresolved-context.json\` y escribir \`agent-response.json\`.\n\n` +
         `Reglas:\n` +
-        `- Lee solo: generation-plan.json, resolved-context.json, unresolved-context.json y scenario.json.\n` +
+        `- Lee solo: generation-plan.json, reuse-context.json, collision-report.json, unresolved-context.json y scenario.json.\n` +
         `- No explores el repositorio ni leas XML/capturas salvo que un gap lo pida explícitamente.\n` +
         `- Conserva exactamente recordingId, planId y las cuatro rutas del plan.\n` +
         `- Los selectores verificados y decisiones reuse/create del plan son definitivos.\n` +
+        `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
+        `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
         `- Steps solo orquestan; Screen Object extiende BaseScreen; un nombre lógico sirve para Android/iOS.\n` +
         `- Incluye trazabilidad para las ${result.scenario.actions.length} acciones en orden.\n` +
         `- El Feature debe tener @tag, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
@@ -105,6 +136,23 @@ export class AutomationPackageBuilder {
         writeJson(path.join(packageDirectory, 'generation-plan.json'), result.plan);
         writeJson(path.join(packageDirectory, 'resolved-context.json'), result.resolvedContext);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), result.unresolvedContext);
+        writeJson(path.join(packageDirectory, 'reuse-context.json'), {
+            schemaVersion: result.resolvedContext.schemaVersion,
+            recordingId: result.scenario.recordingId,
+            decision: result.resolvedContext.frameworkAwareness?.decision || 'create-new',
+            existingCase: result.plan.existingCase,
+            candidates: result.resolvedContext.frameworkAwareness?.candidates || [],
+        });
+        writeJson(path.join(packageDirectory, 'collision-report.json'), {
+            schemaVersion: result.resolvedContext.schemaVersion,
+            recordingId: result.scenario.recordingId,
+            exactStepDefinitions: result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [],
+            selectorCollisions: result.resolvedContext.frameworkAwareness?.selectorCollisions || [],
+            requiresReuse: Boolean(result.resolvedContext.frameworkAwareness?.selectorCollisions.length),
+            blocking: !result.plan.existingCase && Boolean(
+                result.resolvedContext.frameworkAwareness?.exactStepDefinitions.length
+            ),
+        });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions(result));
         fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource());
@@ -122,6 +170,8 @@ export class AutomationPackageBuilder {
                 recordingId: result.scenario.recordingId,
                 planId: result.plan.planId,
             };
+        } else if (result.plan.existingCase) {
+            response = responseFromExistingFiles(result.scenario, result.plan);
         } else if (!result.plan.unresolvedGapIds.length) {
             const preview = this.generator.preview(result.scenario.request, result.scenario.actions);
             response = responseFromPreview(result.scenario, result.plan, preview);
@@ -140,7 +190,10 @@ export class AutomationPackageBuilder {
             preparedAt: new Date().toISOString(),
             budgets: result.plan.budgets,
         });
-        const contextBytes = ['scenario.json', 'generation-plan.json', 'resolved-context.json', 'unresolved-context.json', 'instructions.md']
+        const contextBytes = [
+            'scenario.json', 'generation-plan.json', 'reuse-context.json',
+            'collision-report.json', 'unresolved-context.json', 'instructions.md'
+        ]
             .reduce((total, file) => total + fs.statSync(path.join(packageDirectory, file)).size, 0);
         if (contextBytes > result.plan.budgets.maxContextBytes) {
             throw new Error(`El contexto mínimo excede ${result.plan.budgets.maxContextBytes} bytes (${contextBytes})`);

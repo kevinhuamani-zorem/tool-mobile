@@ -22,20 +22,20 @@ export function SessionOnboarding() {
             </span>
           </button>
           <button id="btnOnboardingExisting" className="onboarding-option">
-            <span className="onboarding-option-icon">🧭</span>
+            <span className="onboarding-option-icon">🎬</span>
             <span>
-              <strong>Completar un caso existente</strong>
-              <small>Detecta y rellena los locators faltantes de esta plataforma.</small>
+              <strong>Completar una grabación</strong>
+              <small>Selecciona solo los locators faltantes de esta plataforma; no vuelve a generar el caso.</small>
             </span>
           </button>
         </div>
         <div id="onboardingExistingFlow" className="onboarding-existing-flow" style={{display: 'none'}}>
-          <label className="field-label">Selecciona el escenario:</label>
+          <label className="field-label">Selecciona la grabación:</label>
           <select id="cmbOnboardingScenario" className="field-select">
-            <option value>Selecciona un escenario...</option>
+            <option value>Selecciona una grabación...</option>
           </select>
           <div id="onboardingScenarioHint" className="coverage-summary">
-            Los escenarios se cargan desde el squad activo.
+            Se muestran únicamente recordings del ambiente y squad activos. Android/iOS ya capturado se conserva.
           </div>
           <div className="onboarding-actions">
             <button id="btnOnboardingBack" className="btn btn-dark">← Volver</button>

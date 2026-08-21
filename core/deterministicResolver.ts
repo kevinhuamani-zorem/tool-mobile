@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import {
     ActionResolution,
     AutomationScenario,
+    FrameworkReuseCandidate,
     GenerationPlan,
     ResolvedContext,
     UnresolvedContext,
@@ -10,7 +11,7 @@ import {
     AUTOMATION_SCHEMA_VERSION,
 } from './automationContracts';
 import { GenerationRequest } from './fwkMobileGenerator';
-import { LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
+import { FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
 import { Action, RecordedStep } from './models';
 
 export interface ResolverResult {
@@ -35,6 +36,18 @@ function normalizeSelector(value = '', platform: 'android' | 'ios'): string {
         normalized = `android=${normalized}`;
     }
     return normalized;
+}
+
+function selectorAliases(value = '', platform: 'android' | 'ios'): Set<string> {
+    const normalized = normalizeSelector(value, platform);
+    if (!normalized) return new Set();
+    const aliases = new Set([normalized]);
+    const withoutPrefix = normalized.replace(/^(?:id=|~)/, '').trim();
+    if (withoutPrefix) aliases.add(withoutPrefix);
+    if (normalized.startsWith('android=new UiSelector()')) {
+        aliases.add(normalized.replace(/^android=/, ''));
+    }
+    return aliases;
 }
 
 function words(value: string): string[] {
@@ -147,10 +160,67 @@ function inputParameterName(intent: string, sequence: number): string {
 }
 
 function exactLocator(catalog: SquadReuseCatalog, selector: string): LocatorInfo | undefined {
+    const target = selectorAliases(selector, catalog.platform);
     return catalog.locators.find(locator =>
         (locator.scope === 'squad' || locator.scope === 'home') &&
-        normalizeSelector(locator.selector, catalog.platform) === selector
+        [...selectorAliases(locator.selector, catalog.platform)].some(alias => target.has(alias))
     );
+}
+
+function normalizeStepText(value: string): string {
+    return value.toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/<[^>]+>/g, '<param>')
+        .replace(/[^a-z0-9<>]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function stepSimilarity(left: string[], right: string[]): number {
+    const a = new Set(left.map(normalizeStepText).filter(Boolean));
+    const b = new Set(right.map(normalizeStepText).filter(Boolean));
+    if (!a.size || !b.size) return 0;
+    const common = [...a].filter(step => b.has(step)).length;
+    return (2 * common) / (a.size + b.size);
+}
+
+function frameworkCandidates(
+    catalog: SquadReuseCatalog,
+    scenario: AutomationScenario,
+    resolutions: ActionResolution[]
+): FrameworkReuseCandidate[] {
+    const generatedSteps = (scenario.request.scenarioRows || []).map(row => row.text);
+    const selectorResolutions = resolutions.filter(resolution => Boolean(resolution.selector));
+    return (catalog.scenarios || []).map((candidate: FeatureScenarioInfo) => {
+        const locatorsPath = candidate.artifacts?.locators;
+        const matchingSelectors = selectorResolutions.filter(resolution =>
+            catalog.locators.some(locator =>
+                (!locatorsPath || locator.file === locatorsPath) &&
+                [...selectorAliases(locator.selector, catalog.platform)]
+                    .some(alias => selectorAliases(resolution.selector, catalog.platform).has(alias))
+            )
+        ).length;
+        const selectorCoverage = selectorResolutions.length
+            ? matchingSelectors / selectorResolutions.length
+            : 0;
+        const candidateSteps = candidate.steps.map(step => step.text);
+        const semanticScore = stepSimilarity(generatedSteps, candidateSteps);
+        const score = Number((semanticScore * 0.6 + selectorCoverage * 0.4).toFixed(3));
+        return {
+            feature: candidate.feature,
+            scenario: candidate.name,
+            caseId: candidate.caseId,
+            file: candidate.file,
+            score,
+            selectorCoverage,
+            matchedSteps: generatedSteps.filter(step =>
+                candidateSteps.some(existing => normalizeStepText(existing) === normalizeStepText(step))
+            ),
+            paths: candidate.artifacts,
+        };
+    }).filter(candidate => candidate.score >= 0.35)
+        .sort((left, right) => right.score - left.score || right.selectorCoverage - left.selectorCoverage)
+        .slice(0, 5);
 }
 
 function likelyDynamicText(value = ''): boolean {
@@ -331,7 +401,24 @@ export class DeterministicResolver {
         normalizedRequest.scenarioRows = scenarioRows;
         normalizedRequest.examples = examples;
         const scenario: AutomationScenario = { ...rawScenario, request: normalizedRequest };
-        const files = [
+        const candidates = frameworkCandidates(catalog, scenario, resolutions);
+        const reusable = gaps.length === 0 ? candidates.find(candidate =>
+            Boolean(candidate.paths) && candidate.selectorCoverage === 1 && candidate.score >= 0.78
+        ) : undefined;
+        const existingCase = reusable?.paths ? {
+            feature: reusable.feature,
+            scenario: reusable.scenario,
+            caseId: reusable.caseId,
+            score: reusable.score,
+            selectorCoverage: reusable.selectorCoverage,
+            paths: reusable.paths,
+        } : undefined;
+        const files = existingCase ? [
+            { layer: 'feature' as const, path: existingCase.paths.feature, operation: 'update' as const },
+            { layer: 'steps' as const, path: existingCase.paths.steps, operation: 'update' as const },
+            { layer: 'screen' as const, path: existingCase.paths.screen, operation: 'update' as const },
+            { layer: 'locators' as const, path: existingCase.paths.locators, operation: 'update' as const },
+        ] : [
             { layer: 'feature' as const, path: `features/yape-features/${scenario.squad}/${normalizedRequest.fileName}.feature`, operation: 'create' as const },
             { layer: 'steps' as const, path: `features/yape-steps-definitions/${scenario.squad}/${normalizedRequest.fileName}.steps.ts`, operation: 'create' as const },
             { layer: 'screen' as const, path: `screenobjects/${scenario.squad}/${normalizedRequest.locatorModule}.screen.ts`, operation: 'create' as const },
@@ -342,6 +429,7 @@ export class DeterministicResolver {
             fingerprint: scenario.fingerprint,
             resolutions,
             files,
+            existingCase,
         })).digest('hex').slice(0, 24)}`;
         const unresolved = resolutions.filter(item => item.resolution === 'unresolved').length;
         const plan: GenerationPlan = {
@@ -356,6 +444,7 @@ export class DeterministicResolver {
             status: gaps.length ? 'needs-agent' : 'deterministic',
             resolutions,
             files,
+            existingCase,
             unresolvedGapIds: gaps.map(gap => gap.id),
             budgets: { maxDurationMs: 300_000, maxContextBytes: 20_000, maxRepairAttempts: 1 },
         };
@@ -367,6 +456,31 @@ export class DeterministicResolver {
                 recordingId: scenario.recordingId,
                 planId,
                 reusedLocators: resolutions.filter(item => item.resolution === 'reuse'),
+                frameworkAwareness: {
+                    candidates,
+                    exactStepDefinitions: catalog.stepDefinitions.filter(definition =>
+                        scenarioRows.some(row => {
+                            try {
+                                return new RegExp(definition.expression).test(row.text);
+                            } catch {
+                                return false;
+                            }
+                        })
+                    ).map(definition => ({
+                        expression: definition.expression,
+                        file: definition.file,
+                        scope: definition.scope,
+                    })),
+                    selectorCollisions: resolutions.filter(item => item.resolution === 'reuse' && item.source)
+                        .map(item => ({
+                            sequence: item.sequence,
+                            locatorName: item.locatorName!,
+                            file: item.source!.file,
+                            module: item.source!.module,
+                            scope: item.source!.scope,
+                        })),
+                    decision: existingCase ? 'reuse-existing' : 'create-new',
+                },
                 frameworkContract: {
                     stepsOnlyOrchestrate: true,
                     screenExtendsBaseScreen: true,
@@ -384,4 +498,10 @@ export class DeterministicResolver {
     }
 }
 
-export const selectorNormalization = { normalizeSelector, slug, camel };
+export const selectorNormalization = {
+    normalizeSelector,
+    selectorAliases,
+    normalizeStepText,
+    slug,
+    camel,
+};

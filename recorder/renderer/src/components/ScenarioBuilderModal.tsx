@@ -103,8 +103,20 @@ export function ScenarioBuilderModal() {
             </div>
             <div className="automation-agent-actions">
               <button className="btn btn-navy" id="btnPrepareAutomation">Preparar paquete mínimo</button>
-              <button className="btn btn-dark" id="btnLaunchAutomation" disabled>Abrir agente nuevamente</button>
+              <button className="btn btn-dark" id="btnLaunchAutomation" disabled>Abrir Terminal del agente</button>
               <button className="btn btn-blue" id="btnImportAutomation">Importar y validar respuesta</button>
+            </div>
+            <div id="automationAgentHandoff" className="automation-agent-handoff" style={{display: 'none'}}>
+              <div className="automation-agent-handoff-header">
+                <div>
+                  <strong>Carpeta de trabajo del agente</strong>
+                  <code id="automationAgentPath" />
+                </div>
+                <button className="btn btn-dark" id="btnCopyAgentPrompt">Copiar prompt</button>
+              </div>
+              <label htmlFor="automationAgentPrompt">Prompt inicial</label>
+              <textarea id="automationAgentPrompt" readOnly />
+              <small>Abre Copilot o Claude en la Terminal y pega este prompt.</small>
             </div>
             <div id="automationPackageStatus" className="generate-result" />
             <div className="wizard-link-layout" style={{display: 'none'}}>

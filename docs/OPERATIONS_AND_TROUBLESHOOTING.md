@@ -97,17 +97,26 @@ Gherkin tenga acciones enlazadas y que Preview incluya Feature, Steps, Screen
 Object y Locators. En neutral es esperado obtener export portable; en
 fwk-mobile/standalone es un error si el caso requiere capas nuevas.
 
+### Completar un recording que solo carece de iOS o Android
+
+Inicia una sesión en la plataforma faltante, elige **Completar una grabación** y
+selecciona el recording del ambiente/squad activo. Captura y verifica únicamente
+los locators pendientes. Cada asignación conserva la otra plataforma y actualiza
+atómicamente Locators, la estrategia correspondiente del Screen Object y la
+propuesta persistida. Feature y Steps no se regeneran ni requieren Cowork.
+
 ### El agente consume demasiado contexto o excede cinco minutos
 
-Comprueba que se inició con `cwd` igual al directorio `generation/automation`,
-que `instructions.md` prohíbe explorar el target y que los contextos suman como
-máximo 20 KB. El proceso se termina a los cinco minutos. No amplíes el paquete:
-corrige el resolver para convertir información repetible en decisiones del plan.
+Comprueba que Terminal se abrió en `generation/automation`, que se usó el prompt
+mostrado, que `instructions.md` prohíbe explorar el target y que los contextos
+suman como máximo 20 KB. El recorder no inicia ni termina el CLI: el usuario
+controla la sesión manual. No amplíes el paquete; corrige el resolver para
+convertir información repetible en decisiones del plan.
 
 ### La propuesta falla validación
 
-Importar crea `repair-context.json` con errores concretos. Usa “Abrir agente
-nuevamente”; solo puede corregir archivos afectados y dispone de un intento.
+Importar crea `repair-context.json` con errores concretos. Usa “Abrir Terminal
+del agente” y pega el prompt actualizado; solo puede corregir archivos afectados y dispone de un intento.
 Después debe volver a ejecutarse la importación. Un fallo no entra a memoria.
 
 ## Logs y secretos

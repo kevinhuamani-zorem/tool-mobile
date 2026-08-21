@@ -440,34 +440,25 @@ export async function initializeRecorder() {
             '';
         // Ignora respuestas pertenecientes a un squad que dejó de estar activo.
         if (squad !== (cmbFrameworkSquad.value || 'payment')) return;
-        cmbExistingScenario.innerHTML = '<option value="">Selecciona un escenario...</option>';
-        cmbOnboardingScenario.innerHTML = '<option value="">Selecciona un escenario...</option>';
+        cmbExistingScenario.innerHTML = '<option value="">Selecciona una grabación...</option>';
+        cmbOnboardingScenario.innerHTML = '<option value="">Selecciona una grabación...</option>';
         if (!result.success) {
             scenarioCoverageSummary.textContent = '✗ ' + result.error;
             return;
         }
-        const scenariosByFeature = new Map();
         result.scenarios.forEach(scenario => {
-            const featureName = scenario.feature || 'Feature sin nombre';
-            if (!scenariosByFeature.has(featureName)) {
-                scenariosByFeature.set(featureName, []);
-            }
-            scenariosByFeature.get(featureName).push(scenario);
-        });
-        scenariosByFeature.forEach((scenarios, featureName) => {
-            const group = document.createElement('optgroup');
-            group.label = `Feature: ${featureName}`;
-            scenarios.forEach(scenario => {
-                const option = document.createElement('option');
-                option.value = scenario.id;
-                option.textContent =
-                    `${scenario.caseId ? scenario.caseId + ' · ' : ''}` +
-                    scenario.name.replace(/^(\[[^\]]+\])+/, '').trim();
-                option.title = `${scenario.file}:${scenario.line}`;
-                group.appendChild(option);
-            });
-            cmbExistingScenario.appendChild(group);
-            cmbOnboardingScenario.appendChild(group.cloneNode(true));
+            const option = document.createElement('option');
+            const recordedAt = scenario.recordedAt
+                ? new Date(scenario.recordedAt).toLocaleString('es-PE')
+                : 'fecha desconocida';
+            option.value = scenario.id;
+            option.textContent =
+                `${scenario.caseId ? scenario.caseId + ' · ' : ''}` +
+                `${scenario.name.replace(/^(\[[^\]]+\])+/, '').trim()} · ` +
+                `${String(scenario.platform || '').toUpperCase()} · ${recordedAt}`;
+            option.title = `${scenario.recordingId || scenario.id} · ${scenario.actionCount || 0} acciones`;
+            cmbExistingScenario.appendChild(option);
+            cmbOnboardingScenario.appendChild(option.cloneNode(true));
         });
         const scenarioStillExists = result.scenarios.some(
             scenario => scenario.id === selectedScenarioId
@@ -484,17 +475,15 @@ export async function initializeRecorder() {
         scenarioCoverageSummary.textContent =
             activeScenarioCoverage && scenarioStillExists
                 ? scenarioCoverageSummary.textContent
-                : `${scenariosByFeature.size} features · ` +
-                  `${result.scenarios.length} escenarios encontrados en ${squad}`;
+                : `${result.scenarios.length} grabación(es) encontradas en ${squad}`;
         onboardingScenarioHint.textContent =
-            `${scenariosByFeature.size} features · ` +
-            `${result.scenarios.length} escenarios encontrados en ${squad}`;
+            `${result.scenarios.length} grabación(es) del ambiente activo en ${squad}`;
     }
 
     async function analyzeSelectedScenario() {
         const scenarioId = cmbExistingScenario.value;
         if (!scenarioId) {
-            scenarioCoverageSummary.textContent = '⚠ Selecciona un escenario';
+            scenarioCoverageSummary.textContent = '⚠ Selecciona una grabación';
             return false;
         }
         if (
@@ -766,7 +755,7 @@ export async function initializeRecorder() {
         cmbExistingScenario.value = '';
         cmbOnboardingScenario.value = '';
         scenarioCoverageSummary.textContent =
-            'Selecciona un escenario para detectar sus locators.';
+            'Selecciona una grabación para detectar sus locators.';
         txtSelector.value = '';
         txtVarName.value = '';
         txtVarName.readOnly = false;
@@ -795,7 +784,7 @@ export async function initializeRecorder() {
 
     btnOnboardingAnalyze.addEventListener('click', async () => {
         if (!cmbOnboardingScenario.value) {
-            onboardingScenarioHint.textContent = '⚠ Selecciona un escenario';
+            onboardingScenarioHint.textContent = '⚠ Selecciona una grabación';
             return;
         }
         cmbExistingScenario.value = cmbOnboardingScenario.value;
@@ -1013,6 +1002,7 @@ export async function initializeRecorder() {
 
         disableBtn(btnAssignLocator, '⏳ Guardando...');
         const result = await api.assignLocatorValue({
+            recordingId: activeScenarioCoverage?.scenario?.recordingId || undefined,
             file: selectedFile,
             name: selectedName,
             selector,
@@ -1031,7 +1021,12 @@ export async function initializeRecorder() {
             locator.file === selectedFile && locator.name === selectedName
         );
         renderLocatorCatalog();
-        setStatus(`✓ ${selectedName} actualizado en ${result.block}`, '#00CC00');
+        setStatus(
+            result.coverageComplete
+                ? `✓ Cobertura ${sessionPlatform.toUpperCase()} completa; archivos del framework actualizados`
+                : `✓ ${selectedName} actualizado en ${result.block}`,
+            '#00CC00'
+        );
         verifiedSelector = '';
         if (currentAssignment && activeScenarioCoverage) {
             advanceAssignmentAfterSave = true;
@@ -3458,6 +3453,10 @@ export async function initializeRecorder() {
     const btnLaunchAutomation = document.getElementById('btnLaunchAutomation');
     const btnImportAutomation = document.getElementById('btnImportAutomation');
     const automationPackageStatus = document.getElementById('automationPackageStatus');
+    const automationAgentHandoff = document.getElementById('automationAgentHandoff');
+    const automationAgentPath = document.getElementById('automationAgentPath');
+    const automationAgentPrompt = document.getElementById('automationAgentPrompt');
+    const btnCopyAgentPrompt = document.getElementById('btnCopyAgentPrompt');
     let wizardPage = 1;
     let automationWorkflow = false;
     [txtAutomationObjective, txtAutomationAcceptance].filter(Boolean).forEach(field => {
@@ -3779,6 +3778,9 @@ export async function initializeRecorder() {
             automationPackageStatus.className = 'generate-result';
         }
         if (btnLaunchAutomation) btnLaunchAutomation.disabled = true;
+        if (automationAgentHandoff) automationAgentHandoff.style.display = 'none';
+        if (automationAgentPath) automationAgentPath.textContent = '';
+        if (automationAgentPrompt) automationAgentPrompt.value = '';
         activeRowIndex = -1;
         updateEnlazarHint();
         renderEnlazarSteps();
@@ -3851,6 +3853,14 @@ export async function initializeRecorder() {
         return result;
     }
 
+    function showAutomationHandoff(handoff) {
+        if (!handoff) return;
+        automationAgentPath.textContent = handoff.packageDirectory || '';
+        automationAgentPrompt.value = handoff.prompt || '';
+        automationAgentHandoff.style.display = 'block';
+        btnLaunchAutomation.disabled = false;
+    }
+
     btnPrepareAutomation?.addEventListener('click', async () => {
         const objective = txtAutomationObjective.value.trim();
         const acceptanceCriteria = txtAutomationAcceptance.value.trim();
@@ -3863,8 +3873,7 @@ export async function initializeRecorder() {
         const result = await api.prepareAutomationPackage({
             request: buildGenerationRequest(),
             objective,
-            acceptanceCriteria,
-            launchAgent: true
+            acceptanceCriteria
         });
         enableBtn(btnPrepareAutomation);
         if (!result.success) {
@@ -3873,14 +3882,12 @@ export async function initializeRecorder() {
             return;
         }
         automationWorkflow = true;
-        btnLaunchAutomation.disabled = !result.result.agentRequired;
+        showAutomationHandoff(result.handoff);
         const percent = Math.round(result.result.deterministicCoverage * 100);
         automationPackageStatus.textContent = result.result.responseAvailable
             ? `✓ Plan ${percent}% determinista · respuesta disponible`
-            : result.launchError
-                ? `⚠ Plan listo · ${result.launchError}`
-                : `✓ Plan ${percent}% determinista · ${result.result.unresolvedGaps} gap(s) enviados al agente`;
-        automationPackageStatus.className = `generate-result ${result.launchError ? 'err' : 'ok'}`;
+            : `✓ Plan ${percent}% determinista · ${result.result.unresolvedGaps} gap(s) preparados para el agente`;
+        automationPackageStatus.className = 'generate-result ok';
         if (result.result.responseAvailable) await importAutomationResponse();
     });
 
@@ -3888,10 +3895,27 @@ export async function initializeRecorder() {
         disableBtn(btnLaunchAutomation, '⏳ Abriendo...');
         const result = await api.launchAutomationAgent();
         enableBtn(btnLaunchAutomation);
+        if (result.success) showAutomationHandoff(result.launch);
         automationPackageStatus.textContent = result.success
-            ? `✓ ${result.launch.provider} iniciado en el paquete mínimo`
+            ? `✓ Terminal abierta en el paquete. Inicia ${result.launch.provider} y pega el prompt mostrado.`
             : `✗ ${result.error}`;
         automationPackageStatus.className = `generate-result ${result.success ? 'ok' : 'err'}`;
+    });
+
+    btnCopyAgentPrompt?.addEventListener('click', async () => {
+        const prompt = automationAgentPrompt.value.trim();
+        if (!prompt) return;
+        try {
+            await navigator.clipboard.writeText(prompt);
+            const previous = btnCopyAgentPrompt.textContent;
+            btnCopyAgentPrompt.textContent = '✓ Prompt copiado';
+            setTimeout(() => { btnCopyAgentPrompt.textContent = previous; }, 1500);
+        } catch {
+            automationAgentPrompt.focus();
+            automationAgentPrompt.select();
+            automationPackageStatus.textContent = 'Selecciona y copia manualmente el prompt.';
+            automationPackageStatus.className = 'generate-result';
+        }
     });
 
     btnImportAutomation?.addEventListener('click', async () => {

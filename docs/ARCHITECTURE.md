@@ -63,7 +63,7 @@ debe hacer una segunda migración total ni duplicar listeners.
 | Sesión | `appiumDriverManager`, `browserStackDriverManager`, `mobileStepExecutor` | Conectar, capturar, tocar, gestos y ejecutar acciones |
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver modo, raíz y catálogo del proyecto |
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationPackageBuilder` | Recording, plan y contexto mínimo |
-| IA acotada | `automationAgentLauncher`, `automationContracts` | Ejecutar Copilot/Claude solo para gaps |
+| IA acotada | `automationAgentLauncher`, `automationContracts` | Abrir Terminal en el paquete y entregar un prompt acotado; el usuario inicia el agente |
 | Validación/memoria | `automationResponseValidator`, `automationMemory` | Validar, reparar una vez y versionar score 100 |
 | Generación | `fwkMobileGenerator`, `neutralGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
@@ -101,22 +101,37 @@ inicializa o valida el target, sin dispersar condiciones de modo por la UI.
 1. El recorder persiste acciones ordenadas, la intención funcional escrita por
    el QA y selectores comprobados. El QA no asigna nombres técnicos de locator.
 2. El usuario define objetivo y aceptación; no redacta Gherkin manualmente.
-3. `DeterministicResolver` decide reuse/create/builtin y fija las cuatro rutas.
-4. Se escriben `generation-plan.json`, contextos resuelto/no resuelto y contrato
+3. `ReuseAnalyzer` construye una vista compacta de escenarios, steps y locators
+   del squad, Home y commons. Normaliza prefijos Appium (`id=`, `~`, `android=`).
+4. `DeterministicResolver` decide reuse/create/builtin, detecta casos equivalentes
+   y fija las cuatro rutas.
+5. Se escriben `generation-plan.json`, `reuse-context.json`,
+   `collision-report.json`, contextos resuelto/no resuelto y contrato
    bajo `runtime/recordings/<id>/generation/automation`.
-5. Si existe memoria de calidad 100 se reutiliza. Si no hay gaps, genera local.
-6. Copilot/Claude recibe solo gaps y un contexto máximo de 20 KB; tiene 5 min.
-7. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`.
-8. Puede emitirse una sola reparación dirigida a archivos afectados.
-9. El usuario revisa el preview, genera y recién entonces se promociona memoria.
+6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
+   no se invoca al agente. La memoria de calidad 100 también se reutiliza.
+7. La UI abre Terminal en el paquete y muestra el prompt inicial. El usuario
+   inicia Copilot/Claude manualmente; el agente recibe solo gaps y un contexto
+   máximo de 20 KB, con objetivo operativo de 5 min.
+8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
+   bloquea colisiones contra el framework aunque el agente ignore el contexto.
+9. Puede emitirse una sola reparación dirigida a archivos afectados.
+10. El usuario revisa el preview, genera y recién entonces se promociona memoria.
 
 ### Completar plataforma de un caso existente
 
-1. Se elige Feature y Scenario.
-2. El analizador recorre Gherkin → Step Definition → método → locator.
-3. La cobertura se muestra en orden Gherkin y como árbol por step.
+1. Se listan únicamente grabaciones de `runtime/recordings` que coincidan con
+   el ambiente y squad activos; no se enumeran Features del target.
+2. `recordingId` identifica el caso y permite retomarlo entre sesiones.
+3. El analizador reconstruye acciones → plan → locators generados y muestra la
+   cobertura en el orden del recording.
 4. El inspector asigna el selector al locator objetivo.
-5. Se actualiza únicamente Android o iOS, según la sesión activa.
+5. Se actualiza únicamente Android o iOS, según la sesión activa. El recorder
+   conserva la otra plataforma, sincroniza la estrategia técnica del getter y
+   reemplaza atómicamente el locator administrado en el target.
+6. La propuesta persistida del recording recibe el mismo valor. Al completar
+   la cola, el caso queda marcado como completo para esa plataforma y no vuelve
+   a requerir Cowork ni regeneración de Feature/Steps.
 
 ## Contrato IPC
 

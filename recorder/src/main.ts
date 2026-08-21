@@ -20,13 +20,14 @@ import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../cor
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
 import { OutputValidator } from '../../core/outputValidator';
 import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
-import { ScenarioCoverageAnalyzer } from '../../core/scenarioCoverageAnalyzer';
 import crypto from 'crypto';
 import { getWorkspaceAdapter } from '../../core/workspaceAdapter';
 import { NeutralGenerator } from '../../core/neutralGenerator';
 import { AutomationRecordingStore } from '../../core/automationRecordingStore';
 import { AutomationPackageBuilder } from '../../core/automationPackageBuilder';
 import { AutomationAgentLauncher } from '../../core/automationAgentLauncher';
+import { RecordingCoverageAnalyzer } from '../../core/recordingCoverageAnalyzer';
+import { RecordingPlatformUpdater } from '../../core/recordingPlatformUpdater';
 import { AutomationResponseValidator } from '../../core/automationResponseValidator';
 import { AutomationMemory } from '../../core/automationMemory';
 import { AutomationAgentResponse, AutomationScenario, GenerationPlan } from '../../core/automationContracts';
@@ -44,7 +45,6 @@ const neutralGenerator = new NeutralGenerator();
 const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
-const scenarioCoverageAnalyzer = new ScenarioCoverageAnalyzer();
 const automationRecordingStore = new AutomationRecordingStore();
 const automationMemory = new AutomationMemory();
 const automationResponseValidator = new AutomationResponseValidator();
@@ -55,6 +55,8 @@ const automationPackageBuilder = new AutomationPackageBuilder(
     automationResponseValidator
 );
 const automationAgentLauncher = new AutomationAgentLauncher();
+const recordingCoverageAnalyzer = new RecordingCoverageAnalyzer();
+const recordingPlatformUpdater = new RecordingPlatformUpdater();
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -195,7 +197,10 @@ ipcMain.handle('get-existing-scenarios', async (_, squad?: string) => {
     try {
         return {
             success: true,
-            scenarios: scenarioCoverageAnalyzer.listScenarios(squad || activeSquad)
+            scenarios: recordingCoverageAnalyzer.listRecordings(
+                squad || activeSquad,
+                activeEnvironment
+            )
         };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -206,7 +211,11 @@ ipcMain.handle('get-scenario-coverage', async (_, scenarioId: string, squad?: st
     try {
         return {
             success: true,
-            coverage: scenarioCoverageAnalyzer.analyze(squad || activeSquad, scenarioId),
+            coverage: recordingCoverageAnalyzer.analyze(
+                squad || activeSquad,
+                scenarioId,
+                activeEnvironment
+            ),
             platform: recordingPlatform
         };
     } catch (e: any) {
@@ -215,6 +224,7 @@ ipcMain.handle('get-scenario-coverage', async (_, scenarioId: string, squad?: st
 });
 
 ipcMain.handle('assign-locator-value', async (_, request: {
+    recordingId?: string;
     file: string;
     name: string;
     selector: string;
@@ -234,16 +244,47 @@ ipcMain.handle('assign-locator-value', async (_, request: {
             throw new Error(`Nombre de locator invalido: ${name}`);
         }
         if (!executableSelector) throw new Error('El selector no puede estar vacio');
-        const shortId = executableSelector.match(/^id=([^/:]+)$/)?.[1];
-        const selector = shortId
-            ? `//*[@resource-id="${shortId}"]`
-            : executableSelector
-                .replace(/^android=/, '')
-                .replace(/^iosPredicate=/, '')
-                .replace(/^iosClassChain=/, '')
-                .replace(/^id=/, '')
-                .replace(/^class=/, '')
-                .replace(/^~/, '');
+        if (request.recordingId) {
+            const updated = recordingPlatformUpdater.update({
+                recordingId: request.recordingId,
+                squad: activeSquad,
+                file: request.file,
+                name,
+                selector: executableSelector,
+                platform,
+                androidBlock: request.androidBlock,
+                iosBlock: request.iosBlock,
+            });
+            for (const relative of updated.updatedFiles) {
+                generatedFileRegistry.registerUpdatedFile(
+                    path.resolve(projectPaths.frameworkRoot, relative),
+                    activeSquad
+                );
+            }
+            const coverage = recordingCoverageAnalyzer.analyze(
+                activeSquad,
+                request.recordingId,
+                activeEnvironment
+            );
+            const activeKey = platform === 'ios' ? 'iosSelector' : 'androidSelector';
+            const complete = coverage.locators.every(locator => Boolean(locator[activeKey]));
+            if (complete) {
+                recordingPlatformUpdater.markComplete(request.recordingId, activeSquad, platform);
+            }
+            return {
+                success: true,
+                ...updated,
+                coverageComplete: complete,
+                catalog: reuseAnalyzer.getCatalog(activeSquad, platform),
+            };
+        }
+        const selector = executableSelector
+            .replace(/^android=/, '')
+            .replace(/^iosPredicate=/, '')
+            .replace(/^iosClassChain=/, '')
+            .replace(/^id=/, '')
+            .replace(/^class=/, '')
+            .replace(/^~/, '');
 
         const relativeFile = String(request.file || '').replace(/\\/g, '/');
         if (!relativeFile.startsWith('resources/locators/') || !relativeFile.endsWith('.json')) {
@@ -906,7 +947,6 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
     request: Omit<GenerationRequest, 'platform'>;
     objective: string;
     acceptanceCriteria: string;
-    launchAgent?: boolean;
 }) => {
     try {
         if (projectPaths.mode === 'neutral') {
@@ -926,23 +966,11 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
         const result = automationPackageBuilder.prepare(scenario, directory);
         activeAutomationPackage = result.packageDirectory;
         automationPreview = null;
-        let launch;
-        let launchError;
-        if (result.agentRequired && input.launchAgent !== false) {
-            const configured = projectPaths.automationAgent === 'claude'
-                ? projectPaths.claudeCliPath
-                : projectPaths.copilotCliPath;
-            try {
-                launch = automationAgentLauncher.launch(
-                    projectPaths.automationAgent,
-                    result.packageDirectory,
-                    configured
-                );
-            } catch (error: any) {
-                launchError = error.message;
-            }
-        }
-        return { success: true, result, launch, launchError };
+        const handoff = automationAgentLauncher.describe(
+            projectPaths.automationAgent,
+            result.packageDirectory
+        );
+        return { success: true, result, handoff };
     } catch (e: any) {
         return { success: false, error: e.message };
     }
@@ -951,15 +979,11 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
 ipcMain.handle('launch-automation-agent', async () => {
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
-        const configured = projectPaths.automationAgent === 'claude'
-            ? projectPaths.claudeCliPath
-            : projectPaths.copilotCliPath;
         return {
             success: true,
-            launch: automationAgentLauncher.launch(
+            launch: automationAgentLauncher.openTerminal(
                 projectPaths.automationAgent,
-                activeAutomationPackage,
-                configured
+                activeAutomationPackage
             ),
         };
     } catch (e: any) {

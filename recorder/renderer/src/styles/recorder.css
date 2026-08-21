@@ -493,6 +493,12 @@ body {
 #screenRecorder.existing-workflow .panel-right .final-review-panel {
     display: none;
 }
+#screenRecorder.existing-workflow .step-action-editor,
+#screenRecorder.existing-workflow .panel-element > label[for="txtElementIntent"],
+#screenRecorder.existing-workflow #txtElementIntent,
+#screenRecorder.existing-workflow #txtElementIntent + .field-help {
+    display: none;
+}
 .scenario-coverage-panel .coverage-panel-title {
     color: #C8C9EF;
     font-size: 11px;
@@ -2097,6 +2103,46 @@ body {
 #automationPackageStatus {
     max-width: 980px;
     margin: 0 auto;
+}
+.automation-agent-handoff {
+    max-width: 980px;
+    margin: 0 auto 20px;
+    padding: 18px;
+    border: 1px solid #41415f;
+    border-radius: 12px;
+    background: #171727;
+}
+.automation-agent-handoff-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+}
+.automation-agent-handoff-header > div {
+    min-width: 0;
+}
+.automation-agent-handoff code {
+    display: block;
+    margin-top: 6px;
+    color: #75d995;
+    overflow-wrap: anywhere;
+}
+.automation-agent-handoff label {
+    display: block;
+    margin-bottom: 6px;
+    color: #aaa9c6;
+}
+.automation-agent-handoff textarea {
+    width: 100%;
+    min-height: 112px;
+    resize: vertical;
+    line-height: 1.45;
+}
+.automation-agent-handoff small {
+    display: block;
+    margin-top: 8px;
+    color: #83829e;
 }
 
 @media (max-width: 760px) {

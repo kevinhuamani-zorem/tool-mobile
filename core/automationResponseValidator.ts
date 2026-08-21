@@ -8,9 +8,44 @@ import {
 import { GeneratedPreview } from './fwkMobileGenerator';
 import { OutputValidator } from './outputValidator';
 import { projectPaths } from './projectPaths';
+import { ReuseAnalyzer } from './reuseAnalyzer';
+import { selectorNormalization } from './deterministicResolver';
+
+function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
+    try {
+        const document = JSON.parse(content) as Record<string, unknown>;
+        return Object.values(document).flatMap(block =>
+            block && typeof block === 'object' && !Array.isArray(block)
+                ? Object.entries(block as Record<string, unknown>)
+                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1].trim()))
+                    .map(([name, selector]) => ({ name, selector }))
+                : []
+        );
+    } catch {
+        return [];
+    }
+}
+
+function responseScenarioSteps(content: string): string[][] {
+    const scenarios: string[][] = [];
+    let current: string[] | undefined;
+    for (const line of content.split(/\r?\n/)) {
+        if (/^\s*Scenario(?: Outline)?:/i.test(line)) {
+            current = [];
+            scenarios.push(current);
+            continue;
+        }
+        const match = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+        if (current && match) current.push(selectorNormalization.normalizeStepText(match[1]));
+    }
+    return scenarios;
+}
 
 export class AutomationResponseValidator {
-    constructor(private readonly outputValidator = new OutputValidator()) {}
+    constructor(
+        private readonly outputValidator = new OutputValidator(),
+        private readonly reuseAnalyzer = new ReuseAnalyzer()
+    ) {}
 
     toPreview(response: AutomationAgentResponse): GeneratedPreview {
         const byLayer = new Map(response.files.map(file => [file.layer, file]));
@@ -124,6 +159,53 @@ export class AutomationResponseValidator {
                         message: 'El Screen Object usa acceso inválido a un bloque locator con guiones',
                         file: response.files.find(file => file.layer === 'screen')?.path,
                     });
+                }
+                const catalog = this.reuseAnalyzer.getCatalog(scenario.squad, scenario.platform);
+                const stepsPath = response.files.find(file => file.layer === 'steps')?.path;
+                for (const definition of definitions) {
+                    const collision = catalog.stepDefinitions.find(existing =>
+                        existing.expression === definition && existing.file !== stepsPath
+                    );
+                    if (collision) {
+                        errors.push({
+                            code: 'framework-step-collision',
+                            message: `Definición Gherkin ya existente en ${collision.file}: ${definition}`,
+                            file: stepsPath,
+                        });
+                    }
+                }
+                const featurePath = response.files.find(file => file.layer === 'feature')?.path;
+                for (const proposed of responseScenarioSteps(preview.featureContent)) {
+                    const collision = (catalog.scenarios || []).find(existing =>
+                        existing.file !== featurePath &&
+                        existing.steps.length === proposed.length &&
+                        existing.steps.every((step, index) =>
+                            selectorNormalization.normalizeStepText(step.text) === proposed[index]
+                        )
+                    );
+                    if (collision) {
+                        errors.push({
+                            code: 'framework-scenario-collision',
+                            message: `Escenario equivalente ya existente en ${collision.file}: ${collision.name}`,
+                            file: featurePath,
+                        });
+                    }
+                }
+                const locatorFile = response.files.find(file => file.layer === 'locators');
+                for (const proposed of responseLocatorValues(locatorFile?.content || '')) {
+                    const aliases = selectorNormalization.selectorAliases(proposed.selector, scenario.platform);
+                    const collision = catalog.locators.find(existing =>
+                        existing.file !== locatorFile?.path && Boolean(existing.selector) &&
+                        [...selectorNormalization.selectorAliases(existing.selector, scenario.platform)]
+                            .some(alias => aliases.has(alias))
+                    );
+                    if (collision) {
+                        errors.push({
+                            code: 'framework-locator-collision',
+                            message: `Selector de ${proposed.name} ya existe como ${collision.name} en ${collision.file}`,
+                            file: locatorFile?.path,
+                        });
+                    }
                 }
             } catch (error: any) {
                 errors.push({ code: 'preview', message: error.message });

@@ -59,6 +59,21 @@ export interface SquadReuseCatalog {
     screenMethods: ScreenMethodInfo[];
     locators: LocatorInfo[];
     features: FeatureStepGroup[];
+    scenarios: FeatureScenarioInfo[];
+}
+
+export interface FeatureScenarioInfo {
+    feature: string;
+    name: string;
+    caseId?: string;
+    file: string;
+    steps: Array<{ keyword: string; text: string }>;
+    artifacts?: {
+        feature: string;
+        steps: string;
+        screen: string;
+        locators: string;
+    };
 }
 
 export interface FeatureStepGroup {
@@ -214,8 +229,59 @@ export class ReuseAnalyzer {
             stepDefinitions,
             screenMethods: this.getScreenMethods(squad),
             locators: this.indexLocators(squad, platform),
-            features: this.indexFeatureSteps(squad, stepDefinitions)
+            features: this.indexFeatureSteps(squad, stepDefinitions),
+            scenarios: this.indexFeatureScenarios(squad)
         };
+    }
+
+    private indexFeatureScenarios(squad: string): FeatureScenarioInfo[] {
+        const root = path.join(projectPaths.features, squad);
+        if (!fs.existsSync(root)) return [];
+        const files = this.walkFiles(root, '.feature');
+        const scenarios: FeatureScenarioInfo[] = [];
+        for (const file of files) {
+            const relativeFeature = path.relative(projectPaths.frameworkRoot, file).replace(/\\/g, '/');
+            const basename = path.basename(file, '.feature');
+            const content = fs.readFileSync(file, 'utf-8');
+            const feature = content.match(/^\s*Feature:\s*(.+)$/mi)?.[1]?.trim() || basename;
+            const lines = content.split(/\r?\n/);
+            let current: FeatureScenarioInfo | undefined;
+            const flush = (): void => {
+                if (!current) return;
+                const artifacts = {
+                    feature: relativeFeature,
+                    steps: `features/yape-steps-definitions/${squad}/${basename}.steps.ts`,
+                    screen: `screenobjects/${squad}/${basename}.screen.ts`,
+                    locators: `resources/locators/${squad}/${basename}.locator.json`,
+                };
+                current.artifacts = Object.values(artifacts).every(candidate =>
+                    fs.existsSync(path.join(projectPaths.frameworkRoot, candidate))
+                ) ? artifacts : undefined;
+                scenarios.push(current);
+                current = undefined;
+            };
+            for (const line of lines) {
+                const scenarioMatch = line.match(/^\s*Scenario(?: Outline)?:\s*(.+)$/i);
+                if (scenarioMatch) {
+                    flush();
+                    const name = scenarioMatch[1].trim();
+                    current = {
+                        feature,
+                        name,
+                        caseId: name.match(/\[(TC-\d+)\]/i)?.[1]?.toUpperCase(),
+                        file: relativeFeature,
+                        steps: [],
+                    };
+                    continue;
+                }
+                const stepMatch = line.match(/^\s*(Given|When|Then|And|But)\s+(.+)$/i);
+                if (current && stepMatch) {
+                    current.steps.push({ keyword: stepMatch[1], text: stepMatch[2].trim() });
+                }
+            }
+            flush();
+        }
+        return scenarios;
     }
 
     getScreenMethods(squad?: string): ScreenMethodInfo[] {
@@ -345,6 +411,10 @@ export class ReuseAnalyzer {
     }
 
     private walkJson(root: string): string[] {
+        return this.walkFiles(root, '.json');
+    }
+
+    private walkFiles(root: string, extension: string): string[] {
         if (!fs.existsSync(root)) return [];
         const output: string[] = [];
         const pending = [root];
@@ -353,7 +423,7 @@ export class ReuseAnalyzer {
             for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
                 const fullPath = path.join(current, entry.name);
                 if (entry.isDirectory()) pending.push(fullPath);
-                else if (entry.isFile() && entry.name.endsWith('.json')) output.push(fullPath);
+                else if (entry.isFile() && entry.name.endsWith(extension)) output.push(fullPath);
             }
         }
         return output.sort();
