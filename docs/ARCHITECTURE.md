@@ -133,6 +133,24 @@ inicializa o valida el target, sin dispersar condiciones de modo por la UI.
    la cola, el caso queda marcado como completo para esa plataforma y no vuelve
    a requerir Cowork ni regeneración de Feature/Steps.
 
+### Regenerar una automatización importada
+
+1. La UI lista únicamente recordings con propuesta validada al 100% y las
+   cuatro capas ya presentes en el workspace.
+2. El QA selecciona el recording y describe el refinamiento funcional.
+3. El recorder guarda la versión anterior bajo
+   `generation/automation/history/regeneration-NNN`, conserva `recordingId` y
+   fija un nuevo `planId` para impedir importar accidentalmente la respuesta
+   anterior.
+4. El agente recibe `baseline-response.json`, el plan y el contexto mínimo; no
+   vuelve a explorar el framework ni puede cambiar rutas o selectores
+   verificados.
+5. La nueva propuesta atraviesa el mismo validator, preview y revisión. Solo
+   archivos administrados, sin cambios externos, pueden reemplazarse
+   atómicamente en el target.
+6. Una generación válida crea una nueva versión de memoria y deja el estado
+   del recording en `generated`, permitiendo futuras iteraciones.
+
 ## Contrato IPC
 
 Las familias públicas son:
@@ -144,7 +162,7 @@ Las familias públicas son:
 - sesión local y BrowserStack: devices, apps, credenciales y start/close;
 - interacción: screenshot, page source, element-at, tap, swipe, verify y execute;
 - automatización: preparar paquete, lanzar agente, importar respuesta, generar
-  con token y consultar memoria;
+  con token, preparar regeneración y consultar memoria;
 - generación heredada: preview Gherkin, preview de archivos y generación.
 
 Al añadir un canal, actualiza en conjunto handler de `main.ts`, allowlist de

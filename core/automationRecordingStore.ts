@@ -128,6 +128,8 @@ export class AutomationRecordingStore {
         };
         const manifest = this.replaceActions(input.actions, context);
         const actions = input.actions.map((step, index) => safeStep(step, index + 1, input.request.platform));
+        const createdAt = new Date().toISOString();
+        const request = { ...input.request, createdAt };
         const scenario: AutomationScenario = {
             schemaVersion: AUTOMATION_SCHEMA_VERSION,
             pipelineVersion: AUTOMATION_PIPELINE_VERSION,
@@ -138,15 +140,15 @@ export class AutomationRecordingStore {
                 platform: input.request.platform,
                 actions,
                 objective: input.objective,
-                request: input.request,
+                request,
             }),
-            createdAt: new Date().toISOString(),
+            createdAt,
             squad: input.request.squad,
             platform: input.request.platform,
             environment: input.environment,
             objective: input.objective.trim(),
             acceptanceCriteria: input.acceptanceCriteria.trim(),
-            request: input.request,
+            request,
             actions,
         };
         atomicJson(path.join(this.activeDirectory, 'scenario.json'), scenario);

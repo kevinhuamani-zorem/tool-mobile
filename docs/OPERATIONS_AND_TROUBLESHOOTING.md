@@ -105,6 +105,15 @@ los locators pendientes. Cada asignación conserva la otra plataforma y actualiz
 atómicamente Locators, la estrategia correspondiente del Screen Object y la
 propuesta persistida. Feature y Steps no se regeneran ni requieren Cowork.
 
+### Refinar y volver a generar un caso ya importado
+
+Elige **Regenerar una automatización**, selecciona un recording elegible y
+describe el cambio. El recorder crea una iteración histórica y abre el wizard
+en el paquete del agente. Tras importar y revisar la nueva propuesta, las cuatro
+capas se reemplazan únicamente si siguen registradas y no fueron modificadas
+fuera del recorder. Si el caso no aparece, comprueba que la generación anterior
+tenga validación 100 y que sus cuatro archivos todavía existan.
+
 ### El agente consume demasiado contexto o excede cinco minutos
 
 Comprueba que Terminal se abrió en `generation/automation`, que se usó el prompt

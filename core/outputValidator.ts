@@ -22,8 +22,14 @@ export class OutputValidator {
         this.validatePaths(preview, errors);
         this.validateFeature(preview.featureContent, errors);
         if (preview.locatorContent) this.validateJson(preview.locatorContent, errors, warnings);
-        if (preview.stepContent) this.validateTypeScript(preview.stepContent, 'Steps', errors);
-        if (preview.screenContent) this.validateTypeScript(preview.screenContent, 'ScreenObject', errors);
+        if (preview.stepContent) {
+            this.validateTypeScript(preview.stepContent, 'Steps', errors);
+            this.validateImports(preview.stepContent, 'Steps', errors);
+        }
+        if (preview.screenContent) {
+            this.validateTypeScript(preview.screenContent, 'ScreenObject', errors);
+            this.validateImports(preview.screenContent, 'ScreenObject', errors);
+        }
 
         return {
             valid: errors.length === 0 && conflicts.length === 0,
@@ -51,7 +57,7 @@ export class OutputValidator {
 
     private validateFeature(content: string, errors: string[]): void {
         if (!/^Feature:\s+\S+/m.test(content)) errors.push('Feature sin nombre');
-        if (!/^\s*@(?!@)[A-Za-z0-9_-]+\s*$/m.test(content)) errors.push('Feature sin tag válido');
+        if (!/^\s*(?:@[A-Za-z0-9_-]+\s*)+$/m.test(content)) errors.push('Feature sin tag válido');
         if (!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.test(content)) {
             errors.push('Scenario sin formato [TC-10239][Path][AUTO-FRONT]');
         }
@@ -71,7 +77,9 @@ export class OutputValidator {
             if (!blocks.some(block => block.endsWith('Ios'))) {
                 errors.push('Locators sin bloque Ios');
             }
-            const entries = Object.values(document).flatMap(block => Object.entries(block));
+            const entries = Object.entries(document)
+                .filter(([name]) => name !== '_metadata')
+                .flatMap(([, block]) => Object.entries(block));
             if (entries.length === 0) {
                 errors.push('El archivo de locators no contiene ningún locator');
             }
@@ -114,6 +122,27 @@ export class OutputValidator {
             /public\s+async\s+\w+\s*\([^)]*\)\s*:\s*Promise<void>\s*\{\s*\}/m.test(content)
         ) {
             errors.push('ScreenObject contiene un método de acción vacío');
+        }
+    }
+
+    private validateImports(content: string, label: string, errors: string[]): void {
+        const imports = [...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)]
+            .map(match => match[1]);
+        const relative = imports.filter(source => source.startsWith('.'));
+        if (relative.length > 0) {
+            errors.push(
+                `${label} usa imports relativos no permitidos: ${relative.join(', ')}. ` +
+                'Usa @screenobjects, @utils o @locators.'
+            );
+        }
+
+        const importsBrowser = /import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(content);
+        const usesBrowser = /\bbrowser\./.test(content);
+        if (importsBrowser && !usesBrowser) {
+            errors.push(`${label} importa browser desde @wdio/globals pero no lo utiliza`);
+        }
+        if (usesBrowser && !importsBrowser) {
+            errors.push(`${label} utiliza browser pero no lo importa desde @wdio/globals`);
         }
     }
 }

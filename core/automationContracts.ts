@@ -52,7 +52,7 @@ export interface GenerationPlan {
     recordingId: string;
     fingerprint: string;
     deterministicCoverage: number;
-    status: 'deterministic' | 'needs-agent' | 'memory-hit';
+    status: 'deterministic' | 'needs-agent' | 'memory-hit' | 'regeneration';
     resolutions: ActionResolution[];
     files: PlannedFile[];
     unresolvedGapIds: string[];
@@ -121,7 +121,7 @@ export interface ResolvedContext {
 export interface UnresolvedGap {
     id: string;
     sequence?: number;
-    type: 'missing-selector' | 'missing-intent' | 'test-data' | 'test-input' | 'semantic-naming' | 'verification-semantics';
+    type: 'missing-selector' | 'missing-intent' | 'test-data' | 'test-input' | 'semantic-naming' | 'verification-semantics' | 'refinement';
     description: string;
     requiredOutput: string;
 }

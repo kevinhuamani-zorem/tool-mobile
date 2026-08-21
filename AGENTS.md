@@ -84,6 +84,10 @@ generadores, validadores o plantillas.
     de conexión.
 13. **La memoria no aprende de fallos.** Solo una propuesta generada, revisada
     y validada con score 100 puede promocionarse a `runtime/automation-memory`.
+14. **Regenerar conserva identidad y rutas.** Un refinamiento parte del último
+    `agent-response.json` validado, crea una versión histórica, mantiene
+    `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry
+    sigue reconociendo como administrados y no modificados externamente.
 
 ## Convenciones de generación
 
@@ -91,10 +95,30 @@ generadores, validadores o plantillas.
 - Nombre: `[TC-10239][Happy Path|Unhappy Path][AUTO-FRONT] descripción`.
 - Capas: Feature, Steps, Screen Object y Locators según
   `docs/GENERATION_CONTRACT.md`.
+- El Gherkin es declarativo: expresa intención, capacidad y resultado de
+  negocio. No replica el historial como una línea por click, botón, campo,
+  scroll, swipe o espera.
+- Las acciones técnicas consecutivas se engloban en un único step funcional.
+  `actionTrace` conserva el orden completo permitiendo que varias secuencias
+  apunten al mismo `gherkinStep`.
 - Los nombres de archivos, módulos, métodos y variables deben ser estables,
   legibles y normalizados; no dependas de índices visuales como `view_93` si
   existe semántica suficiente.
+- La clase y el alias de un Screen Object se derivan de su archivo: por ejemplo,
+  `cuentas-tapp.screen.ts` usa `CuentasTappScreen` y `cuentasTappScreen`. Están
+  prohibidos aliases genéricos como `generatedScreen`, `screen`, `page`,
+  `screenObject` y `obj`.
+- Steps y Screen Objects usan los aliases del target: `@screenobjects`,
+  `@utils` y `@locators`; no generan rutas relativas hacia módulos del
+  framework. `browser` se importa desde `@wdio/globals` solo cuando el archivo
+  contiene una llamada `browser.`.
+- El recorder, no el agente, agrega metadata uniforme a las cuatro capas:
+  generador, `Author: Kevinarnold.zorem` y fecha ISO de creación. Locators usa
+  `_metadata` porque JSON no admite comentarios; los indexadores deben ignorar
+  ese bloque.
 - La búsqueda compartida conserva el orden squad → commons → home → global.
+- Los tags de plataforma reflejan cobertura completa: `@android` para Android
+  y `@ios` solo cuando todos los locators requeridos de iOS estén disponibles.
 - Nunca registres valores de `.env`, username/access key de BrowserStack ni
   datos sensibles en logs, previews o errores.
 

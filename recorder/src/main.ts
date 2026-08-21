@@ -17,6 +17,7 @@ import { RecordedStep } from '../../core/models';
 import { projectPaths } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
+import { withGeneratedResponseMetadata } from '../../core/generatedFileMetadata';
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
 import { OutputValidator } from '../../core/outputValidator';
 import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
@@ -269,7 +270,17 @@ ipcMain.handle('assign-locator-value', async (_, request: {
             const activeKey = platform === 'ios' ? 'iosSelector' : 'androidSelector';
             const complete = coverage.locators.every(locator => Boolean(locator[activeKey]));
             if (complete) {
-                recordingPlatformUpdater.markComplete(request.recordingId, activeSquad, platform);
+                const platformFiles = recordingPlatformUpdater.markComplete(
+                    request.recordingId,
+                    activeSquad,
+                    platform
+                );
+                for (const relative of platformFiles) {
+                    generatedFileRegistry.registerUpdatedFile(
+                        path.resolve(projectPaths.frameworkRoot, relative),
+                        activeSquad
+                    );
+                }
             }
             return {
                 success: true,
@@ -976,6 +987,37 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
     }
 });
 
+ipcMain.handle('prepare-automation-regeneration', async (_, input: {
+    recordingId: string;
+    squad?: string;
+    refinement: string;
+}) => {
+    try {
+        if (projectPaths.mode === 'neutral') {
+            throw new Error('La regeneración de cuatro capas requiere modo fwk-mobile o standalone');
+        }
+        const squad = input.squad || activeSquad;
+        const directory = recordingCoverageAnalyzer.findRecordingDirectory(
+            squad,
+            input.recordingId,
+            activeEnvironment
+        );
+        const result = automationPackageBuilder.prepareRegeneration(
+            directory,
+            input.refinement
+        );
+        activeAutomationPackage = result.packageDirectory;
+        automationPreview = null;
+        const handoff = automationAgentLauncher.describe(
+            projectPaths.automationAgent,
+            result.packageDirectory
+        );
+        return { success: true, result, handoff };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
 ipcMain.handle('launch-automation-agent', async () => {
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
@@ -997,7 +1039,14 @@ ipcMain.handle('import-automation-response', async () => {
         const read = <T>(name: string): T => JSON.parse(fs.readFileSync(path.join(activeAutomationPackage, name), 'utf-8')) as T;
         const scenario = read<AutomationScenario>('scenario.json');
         const plan = read<GenerationPlan>('generation-plan.json');
-        const response = read<AutomationAgentResponse>('agent-response.json');
+        const response = withGeneratedResponseMetadata(
+            read<AutomationAgentResponse>('agent-response.json'),
+            scenario.createdAt
+        );
+        fs.writeFileSync(
+            path.join(activeAutomationPackage, 'agent-response.json'),
+            JSON.stringify(response, null, 2) + '\n'
+        );
         const statusFile = path.join(activeAutomationPackage, 'status.json');
         const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
         const repairAttempts = Number(status.repairAttempts || 0);
@@ -1065,6 +1114,18 @@ ipcMain.handle('generate-automation-response', async (
         generatedFileRegistry.register(generated, scenario.squad);
         const memoryEntry = automationMemory.promote(scenario, plan, response, validation);
         fs.writeFileSync(path.join(activeAutomationPackage, 'agent-response.json'), JSON.stringify(response, null, 2) + '\n');
+        fs.writeFileSync(path.join(activeAutomationPackage, 'validation.json'), JSON.stringify(validation, null, 2) + '\n');
+        const statusFile = path.join(activeAutomationPackage, 'status.json');
+        let status: Record<string, any> = {};
+        try { status = JSON.parse(fs.readFileSync(statusFile, 'utf-8')); } catch { status = {}; }
+        fs.writeFileSync(statusFile, JSON.stringify({
+            ...status,
+            recordingId: scenario.recordingId,
+            planId: plan.planId,
+            state: 'generated',
+            generatedAt: new Date().toISOString(),
+            memoryVersion: memoryEntry.version,
+        }, null, 2) + '\n');
         automationPreview = null;
         return { success: true, generated, validation, memoryVersion: memoryEntry.version };
     } catch (e: any) {

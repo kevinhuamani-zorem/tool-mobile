@@ -10,11 +10,13 @@ import { OutputValidator } from './outputValidator';
 import { projectPaths } from './projectPaths';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
+import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
 
 function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
     try {
         const document = JSON.parse(content) as Record<string, unknown>;
-        return Object.values(document).flatMap(block =>
+        return Object.entries(document).flatMap(([blockName, block]) =>
+            blockName !== '_metadata' &&
             block && typeof block === 'object' && !Array.isArray(block)
                 ? Object.entries(block as Record<string, unknown>)
                     .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1].trim()))
@@ -39,6 +41,64 @@ function responseScenarioSteps(content: string): string[][] {
         if (current && match) current.push(selectorNormalization.normalizeStepText(match[1]));
     }
     return scenarios;
+}
+
+const IMPERATIVE_GHERKIN_PATTERNS = [
+    /\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b/,
+    /\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:boton|elemento|campo)\b/,
+    /\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b/,
+    /\b(?:espera|esperar)\s+\d+\s*(?:segundo|segundos)\b/,
+    /\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b/,
+];
+
+const TECHNICAL_ACTIONS = new Set([
+    'SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'ESPERAR', 'SCREENSHOT',
+]);
+
+function imperativeGherkinSteps(content: string): string[] {
+    return content.split(/\r?\n/).flatMap(line => {
+        const match = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+        if (!match) return [];
+        const normalized = selectorNormalization.normalizeStepText(match[1]);
+        return IMPERATIVE_GHERKIN_PATTERNS.some(pattern => pattern.test(normalized))
+            ? [match[1].trim()]
+            : [];
+    });
+}
+
+function hasPlatformTag(content: string, platform: 'android' | 'ios'): boolean {
+    return new RegExp(`^\\s*@[^\\n]*@${platform}(?:\\s|$)`, 'mi').test(content);
+}
+
+function completeLocatorPlatforms(content: string): Array<'android' | 'ios'> {
+    try {
+        const document = JSON.parse(content) as Record<string, unknown>;
+        return (['android', 'ios'] as const).filter(platform => {
+            const blocks = Object.entries(document)
+                .filter(([name, value]) =>
+                    name.toLowerCase().endsWith(platform) &&
+                    value && typeof value === 'object' && !Array.isArray(value)
+                )
+                .map(([, value]) => Object.values(value as Record<string, unknown>));
+            const values = blocks.flat();
+            return values.length > 0 && values.every(value =>
+                typeof value === 'string' && Boolean(value.trim())
+            );
+        });
+    } catch {
+        return [];
+    }
+}
+
+function plannedAlias(file: string, root: string, alias: string): string | undefined {
+    const normalized = file.replace(/\\/g, '/').replace(/^\.\//, '');
+    const prefix = `${root.replace(/^\/+|\/+$/g, '')}/`;
+    return normalized.startsWith(prefix) ? `${alias}/${normalized.slice(prefix.length)}` : undefined;
+}
+
+function importsFrom(content: string, source: string): boolean {
+    return [...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)]
+        .some(match => match[1] === source);
 }
 
 export class AutomationResponseValidator {
@@ -129,6 +189,41 @@ export class AutomationResponseValidator {
                         file: response.files.find(file => file.layer === 'feature')?.path,
                     });
                 }
+                const platformLocatorFile = response.files.find(file => file.layer === 'locators');
+                const requiredPlatforms = new Set<'android' | 'ios'>([scenario.platform]);
+                if (platformLocatorFile) {
+                    completeLocatorPlatforms(platformLocatorFile.content)
+                        .forEach(platform => requiredPlatforms.add(platform));
+                }
+                for (const platform of requiredPlatforms) {
+                    if (!hasPlatformTag(preview.featureContent, platform)) {
+                        errors.push({
+                            code: 'platform-tag',
+                            message: `El Feature requiere @${platform} porque esa plataforma tiene cobertura.`,
+                            file: response.files.find(file => file.layer === 'feature')?.path,
+                        });
+                    }
+                }
+                for (const step of imperativeGherkinSteps(preview.featureContent)) {
+                    errors.push({
+                        code: 'imperative-gherkin',
+                        message: `Gherkin técnico/imperativo: ${step}. Describe la intención de negocio y agrupa las acciones.`,
+                        file: response.files.find(file => file.layer === 'feature')?.path,
+                    });
+                }
+                const traceBySequence = new Map(response.actionTrace.map(trace => [trace.sequence, trace.gherkinStep]));
+                for (const action of scenario.actions.filter(item => TECHNICAL_ACTIONS.has(item.action))) {
+                    const current = traceBySequence.get(action.sequence);
+                    const groupedWithAdjacent = Boolean(current) && [action.sequence - 1, action.sequence + 1]
+                        .some(sequence => traceBySequence.get(sequence) === current);
+                    if (!groupedWithAdjacent) {
+                        errors.push({
+                            code: 'ungrouped-technical-action',
+                            message: `La acción técnica ${action.sequence} (${action.action}) debe quedar dentro de un step funcional adyacente.`,
+                            file: response.files.find(file => file.layer === 'feature')?.path,
+                        });
+                    }
+                }
                 const definitions = [...(preview.stepContent || '').matchAll(
                     /(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g
                 )].map(match => match[1]);
@@ -152,6 +247,82 @@ export class AutomationResponseValidator {
                         message: `Método de Screen Object duplicado: ${duplicateMethod}`,
                         file: response.files.find(file => file.layer === 'screen')?.path,
                     });
+                }
+                const screenPlan = plan.files.find(file => file.layer === 'screen');
+                const stepsPlan = plan.files.find(file => file.layer === 'steps');
+                if (screenPlan && stepsPlan) {
+                    const expected = screenObjectNames(screenPlan.path);
+                    const screenImport = (preview.stepContent || '').match(
+                        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/m
+                    );
+                    const alias = screenImport?.[1];
+                    const source = screenImport?.[2];
+                    const expectedSource = plannedAlias(
+                        screenPlan.path,
+                        'screenobjects',
+                        '@screenobjects'
+                    );
+                    if (!alias) {
+                        errors.push({
+                            code: 'screen-alias',
+                            message: `Steps debe importar el Screen Object como ${expected.instanceName}.`,
+                            file: stepsPlan.path,
+                        });
+                    } else if (isGenericScreenAlias(alias) || alias !== expected.instanceName) {
+                        errors.push({
+                            code: 'screen-alias',
+                            message: `Alias de Screen Object inválido: ${alias}. Esperado: ${expected.instanceName}.`,
+                            file: stepsPlan.path,
+                        });
+                    }
+                    if (alias && !(preview.stepContent || '').includes(`${alias}.`)) {
+                        errors.push({
+                            code: 'screen-alias-usage',
+                            message: `El alias ${alias} se importa pero no se utiliza en Steps.`,
+                            file: stepsPlan.path,
+                        });
+                    }
+                    if (!expectedSource || source !== expectedSource) {
+                        errors.push({
+                            code: 'screen-import-alias',
+                            message: `Import de Screen Object inválido: ${source || 'ausente'}. Esperado: ${expectedSource || '@screenobjects/<squad>/<archivo>.screen.ts'}.`,
+                            file: stepsPlan.path,
+                        });
+                    }
+                    const screenContent = preview.screenContent || '';
+                    const locatorPlan = plan.files.find(file => file.layer === 'locators');
+                    const expectedLocatorSource = locatorPlan
+                        ? plannedAlias(locatorPlan.path, 'resources/locators', '@locators')
+                        : undefined;
+                    const requiredSources = [
+                        '@screenobjects/commons/base.screen.ts',
+                        ...(expectedLocatorSource
+                            ? ['@utils/LocatorFactory.ts', '@utils/Enums.ts', expectedLocatorSource]
+                            : []),
+                    ];
+                    for (const requiredSource of requiredSources) {
+                        if (!importsFrom(screenContent, requiredSource)) {
+                            errors.push({
+                                code: 'framework-import-alias',
+                                message: `Screen Object debe importar ${requiredSource}.`,
+                                file: screenPlan.path,
+                            });
+                        }
+                    }
+                    if (!new RegExp(`class\\s+${expected.className}\\s+extends\\s+BaseScreen\\b`).test(screenContent)) {
+                        errors.push({
+                            code: 'screen-class-name',
+                            message: `Clase Screen Object inválida. Esperado: ${expected.className}.`,
+                            file: screenPlan.path,
+                        });
+                    }
+                    if (!new RegExp(`export\\s+default\\s+new\\s+${expected.className}\\s*\\(`).test(screenContent)) {
+                        errors.push({
+                            code: 'screen-singleton-name',
+                            message: `El singleton debe exportar new ${expected.className}().`,
+                            file: screenPlan.path,
+                        });
+                    }
                 }
                 if (/Locators\.[A-Za-z_$][\w$]*-/.test(preview.screenContent || '')) {
                     errors.push({

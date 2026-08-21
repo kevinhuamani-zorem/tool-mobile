@@ -109,12 +109,28 @@ scenario.json
   → escritura y memoria versionada
 ```
 
+Al iniciar una sesión existen tres flujos separados:
+
+- **Crear un caso nuevo:** registra acciones y genera las cuatro capas.
+- **Completar una grabación:** captura únicamente los locators faltantes de la
+  plataforma activa; no regenera Steps. Al completar la cobertura actualiza el
+  Feature con `@android` o `@ios` sin eliminar los tags ya disponibles.
+- **Regenerar una automatización:** parte de un caso validado e importado,
+  conserva sus rutas, guarda la versión anterior y permite refinar las cuatro
+  capas con el agente antes de reemplazar los archivos administrados. La
+  indicación de mejora es opcional; vacía solicita una revisión general.
+
 El agente no recibe el repositorio completo. Squad/Home, selectores verificados,
 rutas y orden ya están resueltos. El paquete tiene un límite de 20 KB y solo
 existe una reparación dirigida. “Abrir Terminal del agente” abre una terminal
 en la carpeta exacta del paquete, pero no ejecuta Copilot/Claude. La pantalla
 muestra un prompt inicial copiable para que el usuario elija el agente y lo
 inicie manualmente.
+
+Los Screen Objects usan nombres derivados de su archivo. Por ejemplo,
+`cuentas-tapp-ingresar-opcion.screen.ts` genera la clase
+`CuentasTappIngresarOpcionScreen` y el alias importado
+`cuentasTappIngresarOpcionScreen`; el validador rechaza nombres genéricos.
 
 El preprocesador añade `reuse-context.json` con hasta cinco casos cercanos y
 `collision-report.json` con coincidencias exactas. Si reconoce un caso ya
@@ -367,13 +383,16 @@ deben indicar su estrategia explícitamente, por ejemplo `~Allow`,
     Text       : //*[@text="Iniciar sesion"]
     ContentDesc: //*[@content-desc="Login button"]
 
-    Formato .feature:
-    Feature: Login Yape
-      Scenario: Login exitoso con usuario registrado
-        Given el usuario hace click en "{btn_ingresar}"
-        When el usuario escribe "999999999" en "{input_celular}"
-        When el usuario hace click en "{btn_continuar}"
-        Then el elemento "{lbl_bienvenido}" es visible
+    Formato .feature (declarativo, sin narrar acciones de UI):
+    Feature: Autenticación en Yape
+      Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Iniciar sesión
+        Given el usuario <username> inicia sesión en Yape
+        When autentica su identidad
+        Then accede a su cuenta
+
+        Examples:
+          | username   |
+          | usuario_qa |
 
 ---
 

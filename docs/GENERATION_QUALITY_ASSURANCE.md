@@ -18,6 +18,10 @@ La puerta exige:
 - todas las pruebas unitarias aprobadas;
 - cobertura del 100 % de acciones enlazadas;
 - ausencia de líneas Gherkin duplicadas;
+- Gherkin declarativo, sin narrar clicks, botones, campos, scrolls, swipes ni
+  esperas como pasos del escenario;
+- acciones técnicas consecutivas agrupadas en steps funcionales, manteniendo
+  trazabilidad de todas las secuencias;
 - generación de las cuatro capas cuando el caso las necesita;
 - build completo de Electron y React;
 - reducción de contexto mínima para los grafos locales.
@@ -27,6 +31,8 @@ La puerta exige:
 - bloqueo de expresiones Gherkin, escenarios y selectores duplicados contra
   squad/Home;
 - equivalencia de selectores con o sin prefijos `id=`, `~` y `android=`.
+- imports internos por `@screenobjects`, `@utils` y `@locators`, sin rutas
+  relativas ni imports de `browser` sin uso.
 
 ## Control manual
 
@@ -43,6 +49,23 @@ La puerta exige:
 8. Modificar un archivo y confirmar que el estado cambie a `Editado`.
 9. Probar `Copiar contenido`, `Copiar ruta` y `Descartar cambios`.
 10. Introducir JSON o Gherkin inválido y comprobar que la generación se bloquee.
-11. Generar y confirmar que todos los archivos permanezcan dentro del workspace
+11. Introducir un step como `And el usuario desplaza la pantalla hacia abajo`
+    y comprobar que se rechace; enlazar el scroll al step funcional adyacente y
+    comprobar que la traza completa sea válida.
+12. Generar y confirmar que todos los archivos permanezcan dentro del workspace
    activo.
-12. Confirmar que solo la generación validada al 100% aparece en memoria.
+13. Confirmar que solo la generación validada al 100% aparece en memoria.
+14. Regenerar un caso importado, confirmar la copia en `history`, un `planId`
+    nuevo y las mismas cuatro rutas.
+15. Modificar externamente uno de sus archivos y comprobar que el refinamiento
+    validado no lo sobrescriba y reporte el conflicto del registry.
+16. Generar un caso Android y comprobar `@android` sin `@ios`; completar todos
+    los locators iOS y comprobar que el Feature y la respuesta guardada añadan
+    `@ios` conservando `@android`.
+17. Generar un módulo `cuentas-tapp` y comprobar clase `CuentasTappScreen`,
+    singleton e import `cuentasTappScreen`; reemplazarlo por `generatedScreen`
+    y comprobar que la validación bloquee la importación.
+18. Generar un caso solo con click y comprobar que no importe `browser`;
+    añadir una acción que use `browser.` y comprobar que lo importe una vez.
+19. Sustituir un alias por una ruta relativa en Steps o Screen Object y
+    comprobar que tanto `verify-package.js` como la importación lo rechacen.

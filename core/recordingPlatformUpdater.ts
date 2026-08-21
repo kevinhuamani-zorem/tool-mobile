@@ -51,7 +51,8 @@ export class RecordingPlatformUpdater {
         private readonly recordingsRoot = projectPaths.recordings,
         private readonly frameworkRoot = projectPaths.frameworkRoot,
         private readonly locatorsRoot = projectPaths.locators,
-        private readonly screenobjectsRoot = projectPaths.screenobjects
+        private readonly screenobjectsRoot = projectPaths.screenobjects,
+        private readonly featuresRoot = projectPaths.features
     ) {}
 
     update(request: PlatformLocatorUpdate): PlatformLocatorUpdateResult {
@@ -163,11 +164,41 @@ export class RecordingPlatformUpdater {
         };
     }
 
-    markComplete(recordingId: string, squad: string, platform: MobilePlatform): void {
+    markComplete(recordingId: string, squad: string, platform: MobilePlatform): string[] {
         const directory = this.findRecording(recordingId, squad);
-        const statusFile = path.join(directory, 'generation', 'automation', 'status.json');
+        const packageDirectory = path.join(directory, 'generation', 'automation');
+        const statusFile = path.join(packageDirectory, 'status.json');
+        const plan = readJson<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
+        const responseFile = path.join(packageDirectory, 'agent-response.json');
+        const response = fs.existsSync(responseFile)
+            ? readJson<AutomationAgentResponse>(responseFile)
+            : undefined;
         const status = fs.existsSync(statusFile) ? readJson<Record<string, any>>(statusFile) : {};
-        this.writeTransaction(new Map([[statusFile, JSON.stringify({
+        const writes = new Map<string, string>();
+        const updatedFiles: string[] = [];
+        const featurePlan = plan.files.find(file => file.layer === 'feature');
+        if (!featurePlan) throw new Error('El plan no contiene un Feature para actualizar');
+        const featureFile = this.safeFrameworkFile(featurePlan.path, this.featuresRoot);
+        const proposedFeature = response?.files.find(file =>
+            file.layer === 'feature' && file.path === featurePlan.path
+        );
+        if (!fs.existsSync(featureFile) && !proposedFeature) {
+            throw new Error(`No existe el Feature generado: ${featurePlan.path}`);
+        }
+        const featureContent = fs.existsSync(featureFile)
+            ? fs.readFileSync(featureFile, 'utf-8')
+            : proposedFeature!.content;
+        writes.set(featureFile, this.synchronizePlatformTag(featureContent, platform));
+        updatedFiles.push(featurePlan.path);
+
+        if (response) {
+            response.files = response.files.map(file => file.layer === 'feature' && file.path === featurePlan.path
+                ? { ...file, content: this.synchronizePlatformTag(file.content, platform) }
+                : file
+            );
+            writes.set(responseFile, JSON.stringify(response, null, 2) + '\n');
+        }
+        writes.set(statusFile, JSON.stringify({
             ...status,
             platformCompletion: {
                 ...(status.platformCompletion || {}),
@@ -177,7 +208,9 @@ export class RecordingPlatformUpdater {
                 },
             },
             updatedAt: new Date().toISOString(),
-        }, null, 2) + '\n']]));
+        }, null, 2) + '\n');
+        this.writeTransaction(writes);
+        return updatedFiles;
     }
 
     private findRecording(recordingId: string, squad: string): string {
@@ -287,6 +320,27 @@ export class RecordingPlatformUpdater {
             throw new Error(`El Screen Object no referencia ${block}.${locatorName}`);
         }
         return content.replace(pattern, `TypeLocator.${strategy}$1`);
+    }
+
+    private synchronizePlatformTag(content: string, platform: MobilePlatform): string {
+        const tag = `@${platform}`;
+        if (new RegExp(`^\\s*@[^\\n]*${escaped(tag)}(?:\\s|$)`, 'mi').test(content)) {
+            return content;
+        }
+        const hadFinalNewline = /\r?\n$/.test(content);
+        const lines = content.replace(/\r\n/g, '\n').split('\n');
+        const scenarioIndex = lines.findIndex(line => /^\s*Scenario(?: Outline)?:/i.test(line));
+        if (scenarioIndex < 0) throw new Error('El Feature no contiene un Scenario válido');
+        let tagIndex = scenarioIndex - 1;
+        while (tagIndex >= 0 && !lines[tagIndex].trim()) tagIndex -= 1;
+        if (tagIndex >= 0 && /^\s*@/.test(lines[tagIndex])) {
+            lines[tagIndex] = `${lines[tagIndex].trimEnd()} ${tag}`;
+        } else {
+            const indentation = lines[scenarioIndex].match(/^\s*/)?.[0] || '  ';
+            lines.splice(scenarioIndex, 0, `${indentation}${tag}`);
+        }
+        const normalized = lines.join('\n');
+        return hadFinalNewline || normalized.endsWith('\n') ? normalized : `${normalized}\n`;
     }
 
     private writeTransaction(writes: Map<string, string>): void {

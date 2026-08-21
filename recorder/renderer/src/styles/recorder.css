@@ -662,7 +662,7 @@ body {
 }
 .onboarding-options {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
 }
 .onboarding-option {
@@ -2155,4 +2155,5 @@ body {
     .saved-context-ok { display: none; }
     .wizard-case-config { grid-template-columns: 1fr; }
     .automation-agent-actions { grid-template-columns: 1fr; }
+    .onboarding-options { grid-template-columns: 1fr; }
 }

@@ -19,6 +19,10 @@ export interface RecordingScenarioInfo extends ExistingScenarioInfo {
     environment: string;
     platform: string;
     actionCount: number;
+    automationState: string;
+    generated: boolean;
+    canRegenerate: boolean;
+    regenerationIteration: number;
 }
 
 interface RecordingEntry {
@@ -57,6 +61,13 @@ export class RecordingCoverageAnalyzer {
         return this.entries(squad, environment)
             .map(entry => entry.info)
             .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+    }
+
+    findRecordingDirectory(squad: string, recordingId: string, environment = ''): string {
+        const entry = this.entries(squad, environment)
+            .find(candidate => candidate.scenario.recordingId === recordingId);
+        if (!entry) throw new Error(`No se encontró la grabación: ${recordingId}`);
+        return entry.directory;
     }
 
     analyze(squad: string, recordingId: string, environment = ''): ScenarioCoverageResult {
@@ -180,6 +191,17 @@ export class RecordingCoverageAnalyzer {
                     : rawScenario;
                 if (!scenario || scenario.squad !== squad) return [];
                 if (environment && scenario.environment !== environment) return [];
+                const packageDirectory = path.join(directory, 'generation', 'automation');
+                const plan = readJson<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
+                const response = readJson<AutomationAgentResponse>(path.join(packageDirectory, 'agent-response.json'));
+                const validation = readJson<any>(path.join(packageDirectory, 'validation.json'));
+                const status = readJson<any>(path.join(packageDirectory, 'status.json')) || {};
+                const generated = Boolean(plan && plan.files.length === 4 && plan.files.every(file =>
+                    fs.existsSync(path.join(this.frameworkRoot, file.path))
+                ));
+                const canRegenerate = Boolean(
+                    generated && response && validation?.valid && validation?.qualityScore === 100
+                );
                 const name = scenario.request.scenarioName || scenario.objective || 'Grabación sin nombre';
                 const info: RecordingScenarioInfo = {
                     id: scenario.recordingId,
@@ -195,6 +217,10 @@ export class RecordingCoverageAnalyzer {
                     environment: scenario.environment,
                     platform: scenario.platform,
                     actionCount: scenario.actions.length,
+                    automationState: String(status.state || 'recorded'),
+                    generated,
+                    canRegenerate,
+                    regenerationIteration: Number(status.regenerationIteration || 0),
                 };
                 return [{ directory, scenario, info }];
             });

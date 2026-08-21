@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import {
     AgentGeneratedFile,
     AutomationAgentResponse,
@@ -12,6 +13,7 @@ import { AutomationResponseValidator } from './automationResponseValidator';
 import { DeterministicResolver, ResolverResult } from './deterministicResolver';
 import { FwkMobileGenerator, GeneratedPreview } from './fwkMobileGenerator';
 import { projectPaths } from './projectPaths';
+import { withGeneratedResponseMetadata } from './generatedFileMetadata';
 
 function writeJson(file: string, value: unknown): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -108,14 +110,87 @@ function instructions(result: ResolverResult): string {
         `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
         `- Steps solo orquestan; Screen Object extiende BaseScreen; un nombre lógico sirve para Android/iOS.\n` +
+        `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
+        `- Usa aliases del framework: @screenobjects para Screen Objects/BaseScreen, @utils para helpers y @locators para JSON. No uses rutas relativas en Steps ni Screen Objects.\n` +
+        `- Importa browser desde @wdio/globals únicamente si el Screen Object contiene una llamada browser.; no dejes imports sin uso.\n` +
         `- Incluye trazabilidad para las ${result.scenario.actions.length} acciones en orden.\n` +
-        `- El Feature debe tener @tag, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
+        `- El Feature debe tener @tag, @${result.scenario.platform}, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
+        `- Redacta Gherkin declarativo: describe intención, capacidad y resultado de negocio; no narres clicks, botones, campos, scrolls, swipes ni esperas.\n` +
+        `- Agrupa acciones técnicas consecutivas dentro de un único step funcional. Varias secuencias pueden apuntar al mismo gherkinStep en actionTrace.\n` +
         `- Finaliza en menos de 5 minutos. No escribas fuera de esta carpeta.\n` +
         `- Ejecuta \`node verify-package.js\`. Si falla, realiza una sola reparación dirigida.\n`;
 }
 
+function regenerationInstructions(
+    scenario: AutomationScenario,
+    plan: GenerationPlan,
+    refinement: string
+): string {
+    return `# Refinamiento de una automatización existente\n\n` +
+        `Objetivo: mejorar el caso ya generado usando \`baseline-response.json\` y escribir una nueva versión completa en \`agent-response.json\`.\n\n` +
+        `Solicitud del QA: ${refinement}\n\n` +
+        `Reglas:\n` +
+        `- Lee solo: baseline-response.json, generation-plan.json, scenario.json, reuse-context.json, collision-report.json y unresolved-context.json.\n` +
+        `- Conserva exactamente recordingId=${scenario.recordingId}, planId=${plan.planId} y las cuatro rutas del plan.\n` +
+        `- Parte del contenido de baseline-response.json; modifica únicamente lo necesario para el refinamiento.\n` +
+        `- Usa un alias de dominio derivado del archivo Screen Object; están prohibidos generatedScreen, screen, page, screenObject y obj.\n` +
+        `- Conserva imports por alias (@screenobjects, @utils, @locators), nunca rutas relativas. browser solo se importa cuando se utiliza.\n` +
+        `- No explores el repositorio ni cambies selectores verificados o decisiones deterministas.\n` +
+        `- Redacta Gherkin declarativo y agrupa clicks, scrolls, swipes y esperas dentro de steps funcionales.\n` +
+        `- Conserva los tags de plataforma: @android si Android está completo y @ios si iOS está completo.\n` +
+        `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
+        `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
+        `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
+}
+
 function verifierSource(): string {
-    return `'use strict';\nconst fs=require('fs');\nconst plan=require('./generation-plan.json');\nconst scenario=require('./scenario.json');\nlet response;\ntry{response=require('./agent-response.json')}catch(e){console.error('Falta agent-response.json');process.exit(1)}\nconst errors=[];\nif(response.recordingId!==scenario.recordingId)errors.push('recordingId no coincide');\nif(response.planId!==plan.planId)errors.push('planId no coincide');\nfor(const f of plan.files){const got=(response.files||[]).find(x=>x.layer===f.layer);if(!got)errors.push('Falta '+f.layer);else if(got.path!==f.path)errors.push('Ruta inválida '+got.path)}\nfor(const id of plan.unresolvedGapIds){if(!(response.resolutions||[]).some(x=>x.gapId===id))errors.push('Gap no resuelto '+id)}\nfor(const a of scenario.actions){if(!(response.actionTrace||[]).some(x=>x.sequence===a.sequence))errors.push('Acción sin traza '+a.sequence)}\nconst feature=(response.files||[]).find(x=>x.layer==='feature')?.content||'';\nconst steps=(response.files||[]).find(x=>x.layer==='steps')?.content||'';\nconst screen=(response.files||[]).find(x=>x.layer==='screen')?.content||'';\nif(!/^\\s*@[-A-Za-z0-9_]+/m.test(feature))errors.push('Feature sin tag válido');\nif(!/Scenario(?: Outline)?: \\[TC-\\d+\\]\\[(?:Happy|Unhappy) Path\\]\\[AUTO-FRONT\\]/.test(feature))errors.push('Formato Scenario inválido');\nif(!/^\\s*Then\\s+\\S+/m.test(feature))errors.push('Scenario sin Then');\nconst defs=[...steps.matchAll(/(?:Given|When|Then)\\(\\/\\^([^\\n]+?)\\$\\//g)].map(x=>x[1]);\nif(defs.some((x,i)=>defs.indexOf(x)!==i))errors.push('Definición Gherkin duplicada');\nconst methods=[...screen.matchAll(/public\\s+async\\s+([A-Za-z_$][\\w$]*)\\s*\\(/g)].map(x=>x[1]);\nif(methods.some((x,i)=>methods.indexOf(x)!==i))errors.push('Método Screen Object duplicado');\nif(/Locators\\.[A-Za-z_$][\\w$]*-/.test(screen))errors.push('Acceso inválido a bloque locator con guiones');\nif(errors.length){console.error(errors.join('\\n'));process.exit(1)}console.log('PASS: contrato del paquete válido');\n`;
+    return String.raw`'use strict';
+const plan=require('./generation-plan.json');
+const scenario=require('./scenario.json');
+let response;
+try{response=require('./agent-response.json')}catch(e){console.error('Falta agent-response.json');process.exit(1)}
+const errors=[];
+if(response.recordingId!==scenario.recordingId)errors.push('recordingId no coincide');
+if(response.planId!==plan.planId)errors.push('planId no coincide');
+for(const f of plan.files){const got=(response.files||[]).find(x=>x.layer===f.layer);if(!got)errors.push('Falta '+f.layer);else if(got.path!==f.path)errors.push('Ruta inválida '+got.path)}
+for(const id of plan.unresolvedGapIds){if(!(response.resolutions||[]).some(x=>x.gapId===id))errors.push('Gap no resuelto '+id)}
+for(const a of scenario.actions){if(!(response.actionTrace||[]).some(x=>x.sequence===a.sequence))errors.push('Acción sin traza '+a.sequence)}
+const feature=(response.files||[]).find(x=>x.layer==='feature')?.content||'';
+const steps=(response.files||[]).find(x=>x.layer==='steps')?.content||'';
+const screen=(response.files||[]).find(x=>x.layer==='screen')?.content||'';
+const locator=(response.files||[]).find(x=>x.layer==='locators')?.content||'';
+if(!/^\s*@[-A-Za-z0-9_]+/m.test(feature))errors.push('Feature sin tag válido');
+const requiredPlatforms=new Set([scenario.platform]);
+try{const document=JSON.parse(locator);for(const platform of ['android','ios']){const values=Object.entries(document).filter(([name,value])=>name.toLowerCase().endsWith(platform)&&value&&typeof value==='object'&&!Array.isArray(value)).flatMap(([,value])=>Object.values(value));if(values.length&&values.every(value=>typeof value==='string'&&value.trim()))requiredPlatforms.add(platform)}}catch(e){}
+for(const platform of requiredPlatforms){if(!new RegExp('^\\s*@[^\\n]*@'+platform+'(?:\\s|$)','mi').test(feature))errors.push('Falta tag @'+platform)}
+if(!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.test(feature))errors.push('Formato Scenario inválido');
+if(!/^\s*Then\s+\S+/m.test(feature))errors.push('Scenario sin Then');
+const imperative=/^\s*(?:Given|When|Then|And|But)\s+.*(?:\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b|\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:bot[oó]n|elemento|campo)\b|\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b|\b(?:espera|esperar)\s+\d+\s*segundos?\b|\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b)/gmi;
+for(const match of feature.matchAll(imperative))errors.push('Gherkin técnico/imperativo: '+match[0].trim());
+const traceBySequence=new Map((response.actionTrace||[]).map(x=>[x.sequence,x.gherkinStep]));
+const technical=new Set(['SCROLL_DOWN','SCROLL_UP','SWIPE','ESPERAR','SCREENSHOT']);
+for(const action of scenario.actions.filter(x=>technical.has(x.action))){const current=traceBySequence.get(action.sequence);const grouped=current&&[action.sequence-1,action.sequence+1].some(x=>traceBySequence.get(x)===current);if(!grouped)errors.push('Acción técnica sin agrupar '+action.sequence+' ('+action.action+')')}
+const defs=[...steps.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(x=>x[1]);
+if(defs.some((x,i)=>defs.indexOf(x)!==i))errors.push('Definición Gherkin duplicada');
+const methods=[...screen.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(x=>x[1]);
+if(methods.some((x,i)=>methods.indexOf(x)!==i))errors.push('Método Screen Object duplicado');
+const screenPath=(plan.files||[]).find(x=>x.layer==='screen')?.path||'';
+const screenBase=screenPath.split('/').pop().replace(/\.screen\.(?:ts|js)$/i,'');
+const screenClass=screenBase.split(/[^A-Za-z0-9]+/).filter(Boolean).map(x=>x[0].toUpperCase()+x.slice(1)).join('')+'Screen';
+const screenAlias=screenClass[0].toLowerCase()+screenClass.slice(1);
+const imported=steps.match(/import\s+([A-Za-z_$][\w$]*)\s+from\s+['"][^'"]+\.screen\.(?:ts|js)['"]/m)?.[1];
+if(imported!==screenAlias)errors.push('Alias Screen Object inválido: '+(imported||'ausente')+'. Esperado: '+screenAlias);
+if(!new RegExp('class\\s+'+screenClass+'\\s+extends\\s+BaseScreen\\b').test(screen))errors.push('Clase Screen Object inválida: esperado '+screenClass);
+if(!new RegExp('export\\s+default\\s+new\\s+'+screenClass+'\\s*\\(').test(screen))errors.push('Singleton Screen Object inválido: esperado '+screenClass);
+if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bloque locator con guiones');
+const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
+for(const [label,content] of [['Steps',steps],['ScreenObject',screen]]){const relative=importSources(content).filter(source=>source.startsWith('.'));if(relative.length)errors.push(label+' usa imports relativos: '+relative.join(', '))}
+const importsBrowser=/import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(screen);
+const usesBrowser=/\bbrowser\./.test(screen);
+if(importsBrowser&&!usesBrowser)errors.push('ScreenObject importa browser pero no lo utiliza');
+if(usesBrowser&&!importsBrowser)errors.push('ScreenObject utiliza browser sin importarlo desde @wdio/globals');
+if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('PASS: contrato del paquete válido');
+`;
 }
 
 export class AutomationPackageBuilder {
@@ -124,7 +199,127 @@ export class AutomationPackageBuilder {
         private readonly memory = new AutomationMemory(),
         private readonly generator = new FwkMobileGenerator(),
         private readonly validator = new AutomationResponseValidator(),
+        private readonly frameworkRoot = projectPaths.frameworkRoot,
     ) {}
+
+    prepareRegeneration(
+        recordingDirectory: string,
+        refinement: string
+    ): AutomationPackageResult {
+        const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
+        const read = <T>(name: string): T => JSON.parse(
+            fs.readFileSync(path.join(packageDirectory, name), 'utf-8')
+        ) as T;
+        const normalizedRefinement = refinement.trim() ||
+            'Realizar una revisión general del caso y mejorar claridad, mantenibilidad y consistencia sin cambiar su comportamiento.';
+        if (!fs.existsSync(path.join(packageDirectory, 'agent-response.json'))) {
+            throw new Error('La grabación no tiene una propuesta validada para regenerar');
+        }
+        const scenario = read<AutomationScenario>('scenario.json');
+        const previousPlan = read<GenerationPlan>('generation-plan.json');
+        const baseline = read<AutomationAgentResponse>('agent-response.json');
+        const previousValidation = fs.existsSync(path.join(packageDirectory, 'validation.json'))
+            ? read<any>('validation.json')
+            : this.validator.validate(scenario, previousPlan, baseline);
+        if (!previousValidation.valid || previousValidation.qualityScore !== 100) {
+            throw new Error('Solo se puede regenerar una propuesta previamente validada al 100%');
+        }
+        if (previousPlan.files.length !== 4 || previousPlan.files.some(file =>
+            !fs.existsSync(path.join(this.frameworkRoot, file.path))
+        )) {
+            throw new Error('Las cuatro capas todavía no fueron importadas en el workspace');
+        }
+
+        const statusFile = path.join(packageDirectory, 'status.json');
+        const previousStatus = fs.existsSync(statusFile) ? read<any>('status.json') : {};
+        const iteration = Number(previousStatus.regenerationIteration || 0) + 1;
+        const plan: GenerationPlan = {
+            ...previousPlan,
+            planId: `plan-${crypto.randomUUID()}`,
+            status: 'regeneration',
+            files: previousPlan.files.map(file => ({ ...file, operation: 'update' })),
+            unresolvedGapIds: ['gap-regeneration-refinement'],
+        };
+        const revisedScenario: AutomationScenario = {
+            ...scenario,
+            revision: scenario.revision + 1,
+        };
+        const unresolvedContext = {
+            schemaVersion: revisedScenario.schemaVersion,
+            recordingId: revisedScenario.recordingId,
+            planId: plan.planId,
+            gaps: [{
+                id: 'gap-regeneration-refinement',
+                type: 'refinement',
+                description: normalizedRefinement,
+                requiredOutput: 'Actualizar las cuatro capas conservando rutas, selectores verificados y trazabilidad.',
+            }],
+        };
+        const instructions = regenerationInstructions(revisedScenario, plan, normalizedRefinement);
+        const serializedContext = [baseline, revisedScenario, plan, unresolvedContext]
+            .reduce((total, value) => total + Buffer.byteLength(
+                `${JSON.stringify(value, null, 2)}\n`,
+                'utf-8'
+            ), Buffer.byteLength(instructions, 'utf-8'));
+        const retainedContext = ['reuse-context.json', 'collision-report.json']
+            .reduce((total, name) => {
+                const file = path.join(packageDirectory, name);
+                return total + (fs.existsSync(file) ? fs.statSync(file).size : 0);
+            }, 0);
+        const contextBytes = serializedContext + retainedContext;
+        if (contextBytes > plan.budgets.maxContextBytes) {
+            throw new Error(
+                `El refinamiento excede el contexto máximo de ${plan.budgets.maxContextBytes} bytes (${contextBytes})`
+            );
+        }
+
+        const historyDirectory = path.join(
+            packageDirectory,
+            'history',
+            `regeneration-${String(iteration).padStart(3, '0')}`
+        );
+        if (fs.existsSync(historyDirectory)) {
+            throw new Error(`La iteración de regeneración ${iteration} ya existe`);
+        }
+        fs.mkdirSync(historyDirectory, { recursive: true });
+        for (const name of ['scenario.json', 'generation-plan.json', 'agent-response.json', 'validation.json', 'status.json']) {
+            const source = path.join(packageDirectory, name);
+            if (fs.existsSync(source)) fs.copyFileSync(source, path.join(historyDirectory, name));
+        }
+
+        writeJson(path.join(packageDirectory, 'scenario.json'), revisedScenario);
+        writeJson(path.join(packageDirectory, 'generation-plan.json'), plan);
+        writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
+        writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
+        writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
+        fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions);
+        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource());
+        for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {
+            const file = path.join(packageDirectory, stale);
+            if (fs.existsSync(file)) fs.unlinkSync(file);
+        }
+        writeJson(statusFile, {
+            ...previousStatus,
+            recordingId: revisedScenario.recordingId,
+            planId: plan.planId,
+            state: 'ready-for-agent',
+            mode: 'regeneration',
+            regenerationIteration: iteration,
+            refinement: normalizedRefinement,
+            preparedAt: new Date().toISOString(),
+            budgets: plan.budgets,
+        });
+        return {
+            packageDirectory,
+            recordingId: revisedScenario.recordingId,
+            planId: plan.planId,
+            status: plan.status,
+            deterministicCoverage: plan.deterministicCoverage,
+            unresolvedGaps: 1,
+            agentRequired: true,
+            responseAvailable: false,
+        };
+    }
 
     prepare(scenario: AutomationScenario, recordingDirectory: string): AutomationPackageResult {
         const result = this.resolver.resolve(scenario);
@@ -179,6 +374,9 @@ export class AutomationPackageBuilder {
 
         let validation;
         if (response) {
+            if (!result.plan.existingCase) {
+                response = withGeneratedResponseMetadata(response, result.scenario.createdAt);
+            }
             writeJson(path.join(packageDirectory, 'agent-response.json'), response);
             validation = this.validator.validate(result.scenario, result.plan, response);
             writeJson(path.join(packageDirectory, 'validation.json'), validation);

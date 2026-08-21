@@ -11,6 +11,12 @@ screenobjects/<squad>/<modulo>.screen.ts
 resources/locators/<squad>/<modulo>.locator.json
 ```
 
+Las cuatro capas llevan metadata de procedencia agregada por el recorder:
+`Generado por Appium Visual Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
+de creación. Feature usa comentarios `#`, Steps y Screen Object usan `//`, y
+Locators conserva JSON válido mediante un objeto raíz `_metadata`. Este objeto
+no forma parte del catálogo de locators.
+
 En `neutral` se exportan Feature y recording portable bajo `runtime/exports`;
 no se debe presentar como generación de las cuatro capas.
 
@@ -22,6 +28,14 @@ no se debe presentar como generación de las cuatro capas.
   `Unhappy Path`.
 - Usa `Scenario Outline` y `Examples` cuando existan parámetros/data.
 - Cada placeholder del escenario debe estar representado en Examples.
+- Redacta comportamiento declarativo: cada step describe la intención o el
+  resultado observable, no la mecánica de la interfaz.
+- No conviertas cada acción grabada en una línea Gherkin. Clicks, botones,
+  escritura en campos, scrolls, swipes y esperas son detalles del Screen
+  Object y sus helpers.
+- Agrupa acciones técnicas consecutivas que sirven al mismo objetivo en un
+  solo step funcional. La trazabilidad conserva cada secuencia original y
+  permite enlazarlas al mismo texto Gherkin.
 
 Ejemplo:
 
@@ -46,6 +60,8 @@ Examples:
 - Antes de avanzar desde Gherkin se contrasta cada texto con todas las
   definiciones y escenarios indexados. Los impactos se muestran; no se altera
   código ajeno ni se decide reutilización automáticamente.
+- El Screen Object se importa con
+  `@screenobjects/<squad>/<modulo>.screen.ts`; no se admiten rutas relativas.
 
 ## Screen Object
 
@@ -57,6 +73,9 @@ Examples:
 - Se exporta siguiendo la convención vigente del target.
 - Los nombres de métodos derivan de intención de negocio, no de coordenadas o
   índices efímeros.
+- Los imports internos usan exclusivamente `@screenobjects`, `@utils` y
+  `@locators`. `browser` solo se importa desde `@wdio/globals` si el código
+  generado invoca directamente `browser.`; un import sin uso bloquea la salida.
 
 ## Locators
 
@@ -120,6 +139,24 @@ generado y no modificado externamente puede actualizarse automáticamente. Una
 ausencia real se confirma contra filesystem; la caché no debe inventar un
 conflicto de un archivo eliminado.
 
+## Regeneración y refinamiento
+
+La descripción del refinamiento es opcional. Cuando el QA no proporciona una,
+el paquete crea un objetivo de revisión general orientado a claridad,
+mantenibilidad y consistencia sin alterar el comportamiento grabado.
+
+- Solo se ofrece para recordings con score 100 y cuatro capas ya importadas.
+- `recordingId` y las cuatro rutas permanecen estables; cada iteración recibe
+  un `planId` nuevo.
+- La respuesta anterior se conserva como `baseline-response.json` y se
+  versiona junto con escenario, plan, validación y estado.
+- El agente resuelve exclusivamente `gap-regeneration-refinement`; no reconstruye
+  selectores verificados ni cambia el alcance del workspace.
+- La respuesta refinada pasa nuevamente por importación, preview, edición y
+  validación al 100%.
+- El reemplazo usa el registry: un archivo modificado fuera del recorder se
+  reporta como conflicto y nunca se sobrescribe silenciosamente.
+
 ## Contrato del pipeline de automatización
 
 El paquete mínimo contiene `scenario.json`, `generation-plan.json`,
@@ -134,6 +171,31 @@ El agente devuelve un solo `agent-response.json` con:
 - resolución de todos los gaps;
 - una traza por cada secuencia grabada;
 - contenido completo de Feature, Steps, Screen Object y Locators.
+
+El nombre del Screen Object es parte del contrato. Se deriva del basename de la
+ruta planificada en kebab-case: `movements-view.screen.ts` corresponde a la
+clase `MovementsViewScreen`, al singleton `new MovementsViewScreen()` y al alias
+`movementsViewScreen` usado por Steps. El import, todas las llamadas y el export
+deben conservar esa relación. Se rechazan `generatedScreen`, `screen`, `page`,
+`screenObject`, `obj` y cualquier alias distinto al esperado.
+
+Los imports también forman parte del contrato verificable. Steps y Screen
+Objects no pueden usar rutas relativas para recursos del framework. El paquete
+local rechaza aliases distintos de los planificados, el uso de `browser.` sin
+su import y la importación de `browser` cuando no se utiliza.
+
+La traza no impone un step por acción: varias secuencias pueden compartir el
+mismo `gherkinStep` cuando juntas implementan un comportamiento. El verificador
+rechaza Gherkin procedimental y acciones técnicas aisladas que no estén
+englobadas por un step funcional adyacente.
+
+Los tags de plataforma se derivan de la cobertura. Una generación Android
+incluye `@android` y una generación iOS incluye `@ios`. Si luego se completa la
+otra plataforma, el recorder agrega su tag al Feature y a la respuesta guardada
+sin eliminar el anterior. Nunca se agrega el tag de una plataforma con locators
+requeridos vacíos; por ejemplo, un caso parcial permanece como
+`@miflujo @android` hasta completar iOS y recién entonces pasa a
+`@miflujo @android @ios`.
 
 No puede cambiar rutas, releer el framework, reemplazar selectores verificados
 ni inventar una quinta capa. Un fallo produce `repair-context.json` con errores

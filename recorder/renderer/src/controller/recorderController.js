@@ -155,11 +155,18 @@ export async function initializeRecorder() {
     const onboardingPlatform = document.getElementById('onboardingPlatform');
     const btnOnboardingNew = document.getElementById('btnOnboardingNew');
     const btnOnboardingExisting = document.getElementById('btnOnboardingExisting');
+    const btnOnboardingRegenerate = document.getElementById('btnOnboardingRegenerate');
     const onboardingExistingFlow = document.getElementById('onboardingExistingFlow');
+    const onboardingRegenerateFlow = document.getElementById('onboardingRegenerateFlow');
     const cmbOnboardingScenario = document.getElementById('cmbOnboardingScenario');
+    const cmbOnboardingRegeneration = document.getElementById('cmbOnboardingRegeneration');
+    const txtRegenerationRefinement = document.getElementById('txtRegenerationRefinement');
     const onboardingScenarioHint = document.getElementById('onboardingScenarioHint');
+    const onboardingRegenerationHint = document.getElementById('onboardingRegenerationHint');
     const btnOnboardingBack = document.getElementById('btnOnboardingBack');
     const btnOnboardingAnalyze = document.getElementById('btnOnboardingAnalyze');
+    const btnOnboardingRegenerateBack = document.getElementById('btnOnboardingRegenerateBack');
+    const btnOnboardingRegeneratePrepare = document.getElementById('btnOnboardingRegeneratePrepare');
     const assignmentTarget = document.getElementById('assignmentTarget');
     const assignmentTargetName = document.getElementById('assignmentTargetName');
     const assignmentTargetPath = document.getElementById('assignmentTargetPath');
@@ -438,10 +445,12 @@ export async function initializeRecorder() {
             cmbExistingScenario.value ||
             cmbOnboardingScenario.value ||
             '';
+        const selectedRegenerationId = cmbOnboardingRegeneration.value || '';
         // Ignora respuestas pertenecientes a un squad que dejó de estar activo.
         if (squad !== (cmbFrameworkSquad.value || 'payment')) return;
         cmbExistingScenario.innerHTML = '<option value="">Selecciona una grabación...</option>';
         cmbOnboardingScenario.innerHTML = '<option value="">Selecciona una grabación...</option>';
+        cmbOnboardingRegeneration.innerHTML = '<option value="">Selecciona una grabación procesada...</option>';
         if (!result.success) {
             scenarioCoverageSummary.textContent = '✗ ' + result.error;
             return;
@@ -459,6 +468,13 @@ export async function initializeRecorder() {
             option.title = `${scenario.recordingId || scenario.id} · ${scenario.actionCount || 0} acciones`;
             cmbExistingScenario.appendChild(option);
             cmbOnboardingScenario.appendChild(option.cloneNode(true));
+            if (scenario.canRegenerate) {
+                const regenerationOption = option.cloneNode(true);
+                regenerationOption.textContent += scenario.regenerationIteration
+                    ? ` · refinamiento v${scenario.regenerationIteration}`
+                    : ' · generado';
+                cmbOnboardingRegeneration.appendChild(regenerationOption);
+            }
         });
         const scenarioStillExists = result.scenarios.some(
             scenario => scenario.id === selectedScenarioId
@@ -472,12 +488,21 @@ export async function initializeRecorder() {
             scenarioLocatorQueue.innerHTML = '';
             renderAssignmentTarget();
         }
+        if (result.scenarios.some(scenario =>
+            scenario.id === selectedRegenerationId && scenario.canRegenerate
+        )) {
+            cmbOnboardingRegeneration.value = selectedRegenerationId;
+        }
         scenarioCoverageSummary.textContent =
             activeScenarioCoverage && scenarioStillExists
                 ? scenarioCoverageSummary.textContent
                 : `${result.scenarios.length} grabación(es) encontradas en ${squad}`;
         onboardingScenarioHint.textContent =
             `${result.scenarios.length} grabación(es) del ambiente activo en ${squad}`;
+        const regenerable = result.scenarios.filter(scenario => scenario.canRegenerate).length;
+        onboardingRegenerationHint.textContent = regenerable
+            ? `${regenerable} automatización(es) validadas e importadas disponibles para refinar.`
+            : 'No hay automatizaciones importadas y validadas al 100% para regenerar.';
     }
 
     async function analyzeSelectedScenario() {
@@ -734,6 +759,7 @@ export async function initializeRecorder() {
         onboardingPlatform.textContent =
             sessionPlatform === 'ios' ? '🍎 iOS' : '🤖 Android';
         onboardingExistingFlow.style.display = 'none';
+        onboardingRegenerateFlow.style.display = 'none';
         document.querySelector('.onboarding-options').style.display = 'grid';
         if (!activeScenarioCoverage) cmbOnboardingScenario.value = '';
         sessionOnboarding.style.display = 'flex';
@@ -754,6 +780,7 @@ export async function initializeRecorder() {
         scenarioLocatorQueue.innerHTML = '';
         cmbExistingScenario.value = '';
         cmbOnboardingScenario.value = '';
+        cmbOnboardingRegeneration.value = '';
         scenarioCoverageSummary.textContent =
             'Selecciona una grabación para detectar sus locators.';
         txtSelector.value = '';
@@ -773,13 +800,60 @@ export async function initializeRecorder() {
 
     btnOnboardingExisting.addEventListener('click', () => {
         document.querySelector('.onboarding-options').style.display = 'none';
+        onboardingRegenerateFlow.style.display = 'none';
         onboardingExistingFlow.style.display = 'flex';
         cmbOnboardingScenario.focus();
+    });
+
+    btnOnboardingRegenerate.addEventListener('click', () => {
+        document.querySelector('.onboarding-options').style.display = 'none';
+        onboardingExistingFlow.style.display = 'none';
+        onboardingRegenerateFlow.style.display = 'flex';
+        cmbOnboardingRegeneration.focus();
     });
 
     btnOnboardingBack.addEventListener('click', () => {
         onboardingExistingFlow.style.display = 'none';
         document.querySelector('.onboarding-options').style.display = 'grid';
+    });
+
+    btnOnboardingRegenerateBack.addEventListener('click', () => {
+        onboardingRegenerateFlow.style.display = 'none';
+        document.querySelector('.onboarding-options').style.display = 'grid';
+    });
+
+    btnOnboardingRegeneratePrepare.addEventListener('click', async () => {
+        const recordingId = cmbOnboardingRegeneration.value;
+        const refinement = txtRegenerationRefinement.value.trim();
+        if (!recordingId) {
+            onboardingRegenerationHint.textContent = '⚠ Selecciona una automatización generada.';
+            return;
+        }
+        disableBtn(btnOnboardingRegeneratePrepare, '⏳ Preparando...');
+        const result = await api.prepareAutomationRegeneration({
+            recordingId,
+            squad: cmbFrameworkSquad.value || 'payment',
+            refinement
+        });
+        enableBtn(btnOnboardingRegeneratePrepare);
+        if (!result.success) {
+            onboardingRegenerationHint.textContent = '✗ ' + result.error;
+            return;
+        }
+        workflowMode = 'regenerate';
+        automationWorkflow = true;
+        invalidatePreview();
+        previewDocuments = [];
+        if (automationPackageStatus) {
+            automationPackageStatus.textContent =
+                '✓ Iteración preparada. Abre el agente, refina la propuesta e impórtala nuevamente.';
+            automationPackageStatus.className = 'generate-result ok';
+        }
+        showAutomationHandoff(result.handoff);
+        enlazarModal.style.display = 'flex';
+        setWizardPage(3);
+        sessionOnboarding.style.display = 'none';
+        setStatus('♻️ Refinando una automatización existente', '#00CC00');
     });
 
     btnOnboardingAnalyze.addEventListener('click', async () => {

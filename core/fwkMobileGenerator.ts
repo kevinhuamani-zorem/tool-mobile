@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, toGherkinLine } from './models';
+import { screenObjectNames } from './semanticNaming';
+import { withGeneratedFileMetadata } from './generatedFileMetadata';
 
 export type TestPathType = 'Happy Path' | 'Unhappy Path';
 export type MobilePlatform = 'android' | 'ios';
@@ -18,6 +20,7 @@ export interface GenerationRequest {
     dataName?: string;
     examples?: Record<string, string>;
     platform: MobilePlatform;
+    createdAt?: string;
     scenarioRows?: {
         keyword: 'Given' | 'When' | 'Then' | 'And' | 'But';
         text: string;
@@ -82,6 +85,7 @@ export class FwkMobileGenerator {
             : steps;
         this.validateGenerationActions(missingRows);
         const locatorEntries = this.collectLocators(generationActions);
+        const createdAt = normalized.createdAt || new Date().toISOString();
         const locatorPath = locatorEntries.length > 0
             ? path.join(
                 projectPaths.locators,
@@ -90,9 +94,17 @@ export class FwkMobileGenerator {
             )
             : undefined;
 
-        const featureContent = this.buildFeature(normalized, steps);
+        const featureContent = withGeneratedFileMetadata(
+            'feature',
+            this.buildFeature(normalized, steps),
+            createdAt
+        );
         const locatorContent = locatorPath
-            ? this.buildLocators(normalized, locatorEntries)
+            ? withGeneratedFileMetadata(
+                'locators',
+                this.buildLocators(normalized, locatorEntries),
+                createdAt
+            )
             : undefined;
         const stepPath = missingRows.length > 0
             ? path.join(projectPaths.stepDefinitions, normalized.squad, `${normalized.fileName}.steps.ts`)
@@ -108,11 +120,19 @@ export class FwkMobileGenerator {
             locatorContent,
             stepPath,
             stepContent: stepPath && screenPath
-                ? this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath)
+                ? withGeneratedFileMetadata(
+                    'steps',
+                    this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath),
+                    createdAt
+                )
                 : undefined,
             screenPath,
             screenContent: screenPath
-                ? this.buildScreenObject(normalized, missingRows, screenPath, locatorPath)
+                ? withGeneratedFileMetadata(
+                    'screen',
+                    this.buildScreenObject(normalized, missingRows, screenPath, locatorPath),
+                    createdAt
+                )
                 : undefined,
             files: [
                 featurePath,
@@ -268,12 +288,11 @@ export class FwkMobileGenerator {
             ? request.scenarioRows.map(row => `    ${row.keyword} ${row.text.trim()}`)
             : steps.map((step, index) => `    ${toGherkinLine(step, index)}`);
         const lines = [
-            `# Generado por Appium Visual Recorder`,
             `# locator-module: ${request.squad}/${request.locatorModule}`,
             '',
             `Feature: ${request.featureName}`,
             '',
-            `  @${request.tag}`,
+            `  @${request.tag} @${request.platform}`,
             `  Scenario${outline ? ' Outline' : ''}: [${request.caseId}][${request.pathType}][AUTO-FRONT] ${request.scenarioName}`,
             ...scenarioLines
         ];
@@ -357,7 +376,12 @@ export class FwkMobileGenerator {
         stepPath: string,
         screenPath: string
     ): string {
-        const importPath = this.relativeImport(stepPath, screenPath);
+        const importPath = this.frameworkAlias(
+            screenPath,
+            projectPaths.screenobjects,
+            '@screenobjects'
+        );
+        const screenInstanceName = screenObjectNames(screenPath).instanceName;
         const effectiveKeywords = this.effectiveStepKeywords(rows);
         const imports = [...new Set(effectiveKeywords)].sort();
         const blocks = rows.map((row, index) => {
@@ -372,7 +396,7 @@ export class FwkMobileGenerator {
                 key: `${keyword}:${expression}`,
                 content: [
                 `${keyword}(/^${expression}$/, async (${args}) => {`,
-                `    await generatedScreen.${methodName}(${callArgs});`,
+                `    await ${screenInstanceName}.${methodName}(${callArgs});`,
                 `});`
                 ].join('\n')
             };
@@ -382,7 +406,7 @@ export class FwkMobileGenerator {
 
         return [
             `import { ${imports.join(', ')} } from '@wdio/cucumber-framework';`,
-            `import generatedScreen from '${importPath}';`,
+            `import ${screenInstanceName} from '${importPath}';`,
             '',
             ...blocks.flatMap(block => [block.content, ''])
         ].join('\n');
@@ -406,20 +430,13 @@ export class FwkMobileGenerator {
         screenPath: string,
         locatorPath?: string
     ): string {
-        const baseImport = this.relativeImport(
-            screenPath,
-            path.join(projectPaths.screenobjects, 'commons', 'base.screen.ts')
-        );
-        const factoryImport = this.relativeImport(
-            screenPath,
-            path.join(projectPaths.frameworkRoot, 'support', 'utils', 'LocatorFactory.ts')
-        );
-        const enumsImport = this.relativeImport(
-            screenPath,
-            path.join(projectPaths.frameworkRoot, 'support', 'utils', 'Enums.ts')
-        );
-        const locatorImport = locatorPath ? this.relativeImport(screenPath, locatorPath) : undefined;
-        const className = this.pascalName(request.locatorModule) + 'Screen';
+        const baseImport = '@screenobjects/commons/base.screen.ts';
+        const factoryImport = '@utils/LocatorFactory.ts';
+        const enumsImport = '@utils/Enums.ts';
+        const locatorImport = locatorPath
+            ? this.frameworkAlias(locatorPath, projectPaths.locators, '@locators')
+            : undefined;
+        const className = screenObjectNames(screenPath).className;
         const locators = this.collectLocators(rows.flatMap(row => row.actions || []));
         const androidBlock = locatorBlockName(request.locatorModule, 'android');
         const iosBlock = locatorBlockName(request.locatorModule, 'ios');
@@ -457,9 +474,10 @@ export class FwkMobileGenerator {
         }).filter((method, index, all) =>
             all.findIndex(candidate => candidate.name === method.name) === index
         );
+        const usesBrowser = methods.some(method => /\bbrowser\./.test(method.content));
 
         return [
-            `import { browser } from '@wdio/globals';`,
+            ...(usesBrowser ? [`import { browser } from '@wdio/globals';`] : []),
             `import BaseScreen from '${baseImport}';`,
             ...(locators.length > 0 ? [
                 `import LocatorFactory from '${factoryImport}';`,
@@ -584,10 +602,12 @@ export class FwkMobileGenerator {
         return 'XPATH';
     }
 
-    private relativeImport(fromFile: string, targetFile: string): string {
-        let relative = path.relative(path.dirname(fromFile), targetFile).replace(/\\/g, '/');
-        if (!relative.startsWith('.')) relative = `./${relative}`;
-        return relative.replace(/\.ts$/, '.ts').replace(/\.json$/, '.json');
+    private frameworkAlias(targetFile: string, root: string, alias: string): string {
+        const relative = path.relative(root, targetFile).replace(/\\/g, '/');
+        if (!relative || relative === '..' || relative.startsWith('../')) {
+            throw new Error(`No se puede crear alias fuera de ${root}: ${targetFile}`);
+        }
+        return `${alias}/${relative}`;
     }
 
     private stepExpression(text: string): string {
@@ -604,10 +624,4 @@ export class FwkMobileGenerator {
         return JSON.stringify(value);
     }
 
-    private pascalName(value: string): string {
-        return value.split(/[/_-]+/)
-            .filter(Boolean)
-            .map(segment => segment[0].toUpperCase() + segment.slice(1))
-            .join('');
-    }
 }

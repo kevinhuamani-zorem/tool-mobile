@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { AutomationRecordingStore } = require('../dist/core/automationRecordingStore');
 const { DeterministicResolver } = require('../dist/core/deterministicResolver');
 const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
@@ -22,6 +23,13 @@ test('la captura solicita intención funcional y no un nombre técnico de locato
     assert.match(workspace, /id="txtElementIntent"/);
     assert.doesNotMatch(workspace, /Buscar o asignar locator lógico/);
     assert.doesNotMatch(workspace, /Buscar locator del squad o crear uno/);
+    const onboarding = fs.readFileSync(path.join(
+        __dirname,
+        '../recorder/renderer/src/components/SessionOnboarding.tsx'
+    ), 'utf8');
+    assert.match(onboarding, /Regenerar una automatización/);
+    assert.match(onboarding, /id="cmbOnboardingRegeneration"/);
+    assert.match(onboarding, /id="txtRegenerationRefinement"/);
 });
 
 function request() {
@@ -176,7 +184,7 @@ test('completar iOS conserva Android y sincroniza únicamente locator y estrateg
         schemaVersion: 1, recordingId: recordedScenario.recordingId, planId: plan.planId,
         resolutions: [], actionTrace: [{ sequence: 1, gherkinStep: 'When abre movimientos' }],
         files: [
-            { layer: 'feature', path: featureRelative, content: 'FEATURE ORIGINAL' },
+            { layer: 'feature', path: featureRelative, content: 'Feature: Movimientos\n\n  @miflujo @android\n  Scenario: [TC-10239][Happy Path][AUTO-FRONT] Movimientos\n    Then visualiza sus movimientos\n' },
             { layer: 'steps', path: stepsRelative, content: 'STEPS ORIGINAL' },
             { layer: 'screen', path: screenRelative, content: screenContent },
             { layer: 'locators', path: locatorRelative, content: locatorContent }
@@ -188,11 +196,13 @@ test('completar iOS conserva Android y sincroniza únicamente locator y estrateg
     fs.writeFileSync(path.join(automation, 'agent-response.json'), JSON.stringify(response));
     fs.writeFileSync(locatorFile, locatorContent);
     fs.writeFileSync(screenFile, screenContent);
-    fs.writeFileSync(featureFile, 'FEATURE ORIGINAL');
+    const originalFeature = response.files.find(file => file.layer === 'feature').content;
+    fs.writeFileSync(featureFile, originalFeature);
     fs.writeFileSync(stepsFile, 'STEPS ORIGINAL');
 
     const updater = new RecordingPlatformUpdater(
-        recordings, framework, locatorsRoot, screensRoot
+        recordings, framework, locatorsRoot, screensRoot,
+        path.join(framework, 'features', 'yape-features')
     );
     const result = updater.update({
         recordingId: recordedScenario.recordingId,
@@ -209,7 +219,7 @@ test('completar iOS conserva Android y sincroniza únicamente locator y estrateg
     assert.equal(locators.movementsAndroid.mostrarMovimientos, 'showMovements');
     assert.equal(locators.movementsIos.mostrarMovimientos, 'Mostrar movimientos');
     assert.match(fs.readFileSync(screenFile, 'utf8'), /TypeLocator\.ID, Locators\["movementsIos"\]\.mostrarMovimientos/);
-    assert.equal(fs.readFileSync(featureFile, 'utf8'), 'FEATURE ORIGINAL');
+    assert.equal(fs.readFileSync(featureFile, 'utf8'), originalFeature);
     assert.equal(fs.readFileSync(stepsFile, 'utf8'), 'STEPS ORIGINAL');
     const savedResponse = JSON.parse(fs.readFileSync(path.join(automation, 'agent-response.json')));
     assert.match(savedResponse.files.find(file => file.layer === 'screen').content, /TypeLocator\.ID/);
@@ -218,12 +228,16 @@ test('completar iOS conserva Android y sincroniza únicamente locator y estrateg
             .movementsIos.mostrarMovimientos,
         'Mostrar movimientos'
     );
-    assert.equal(savedResponse.files.find(file => file.layer === 'feature').content, 'FEATURE ORIGINAL');
+    assert.equal(savedResponse.files.find(file => file.layer === 'feature').content, originalFeature);
     assert.equal(savedResponse.files.find(file => file.layer === 'steps').content, 'STEPS ORIGINAL');
     assert.deepEqual(result.updatedFiles.sort(), [locatorRelative, screenRelative].sort());
-    updater.markComplete(recordedScenario.recordingId, 'payment', 'ios');
+    const completedFiles = updater.markComplete(recordedScenario.recordingId, 'payment', 'ios');
     const status = JSON.parse(fs.readFileSync(path.join(automation, 'status.json')));
     assert.equal(status.platformCompletion.ios.state, 'complete');
+    assert.deepEqual(completedFiles, [featureRelative]);
+    assert.match(fs.readFileSync(featureFile, 'utf8'), /@miflujo @android @ios/);
+    const completedResponse = JSON.parse(fs.readFileSync(path.join(automation, 'agent-response.json')));
+    assert.match(completedResponse.files.find(file => file.layer === 'feature').content, /@android @ios/);
 });
 
 test('resolver propone dataName editable cuando el recording no lo especifica', () => {
@@ -376,10 +390,18 @@ test('resolver reutiliza las cuatro capas cuando encuentra un caso equivalente d
 });
 
 function validResponse(plan, recordingId = 'rec-test') {
+    const screenPath = plan.files.find(file => file.layer === 'screen').path;
+    const locatorPath = plan.files.find(file => file.layer === 'locators').path;
+    const screenBase = path.basename(screenPath).replace(/\.screen\.(?:ts|js)$/i, '');
+    const screenClass = screenBase.split(/[^A-Za-z0-9]+/).filter(Boolean)
+        .map(segment => segment[0].toUpperCase() + segment.slice(1)).join('') + 'Screen';
+    const screenAlias = screenClass[0].toLowerCase() + screenClass.slice(1);
+    const screenImport = '@screenobjects/' + screenPath.replace(/^screenobjects\//, '');
+    const locatorImport = '@locators/' + locatorPath.replace(/^resources\/locators\//, '');
     const content = {
-        feature: 'Feature: Consulta de movimientos\n\n@miflujo\n  Scenario: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario Usuario QA inicia sesión en Yape\n    Then se muestra la lista de movimientos\n',
-        steps: "import { Then } from '@wdio/cucumber-framework';\nThen(/^se muestra la lista de movimientos$/, async () => { await Promise.resolve(); });\n",
-        screen: 'export class ConsultaScreen { public async validar(): Promise<void> { await Promise.resolve(); } }\n',
+        feature: 'Feature: Consulta de movimientos\n\n@miflujo @android\n  Scenario: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario Usuario QA inicia sesión en Yape\n    Then se muestra la lista de movimientos\n',
+        steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.validar(); });\n`,
+        screen: `import BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorFactory from '@utils/LocatorFactory.ts';\nimport { TypeLocator } from '@utils/Enums.ts';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends BaseScreen { private get lista(): string { return LocatorFactory.getElement(TypeLocator.XPATH, Locators.consultaIos.listaDeMovimientos, TypeLocator.ID, Locators.consultaAndroid.listaDeMovimientos); } public async validar(): Promise<void> { await this.uiHelper.waitForDisplayed(this.lista); } }\nexport default new ${screenClass}();\n`,
         locators: JSON.stringify({ consultaAndroid: { listaDeMovimientos: 'id=movimientos' }, consultaIos: { listaDeMovimientos: '' } }, null, 2)
     };
     return {
@@ -401,6 +423,99 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     const broken = validResponse(resolved.plan);
     broken.actionTrace = [];
     assert.equal(validator.validate(resolved.scenario, resolved.plan, broken).valid, false);
+
+    const withoutAndroidTag = validResponse(resolved.plan);
+    withoutAndroidTag.files.find(file => file.layer === 'feature').content =
+        withoutAndroidTag.files.find(file => file.layer === 'feature').content.replace(' @android', '');
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, withoutAndroidTag)
+            .errors.some(error => error.code === 'platform-tag'),
+        true
+    );
+
+    const completedIos = validResponse(resolved.plan);
+    const iosLocators = JSON.parse(completedIos.files.find(file => file.layer === 'locators').content);
+    iosLocators.consultaIos.listaDeMovimientos = 'Movimientos';
+    completedIos.files.find(file => file.layer === 'locators').content = JSON.stringify(iosLocators);
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, completedIos)
+            .errors.some(error => error.code === 'platform-tag' && error.message.includes('@ios')),
+        true
+    );
+    completedIos.files.find(file => file.layer === 'feature').content =
+        completedIos.files.find(file => file.layer === 'feature').content.replace('@android', '@android @ios');
+    assert.equal(validator.validate(resolved.scenario, resolved.plan, completedIos).valid, true);
+
+    const genericAlias = validResponse(resolved.plan);
+    const genericSteps = genericAlias.files.find(file => file.layer === 'steps');
+    const semanticAlias = genericSteps.content.match(
+        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"][^'"]+\.screen\.ts['"]/
+    )[1];
+    genericSteps.content = genericSteps.content.replaceAll(semanticAlias, 'generatedScreen');
+    const genericValidation = validator.validate(resolved.scenario, resolved.plan, genericAlias);
+    assert.equal(genericValidation.valid, false);
+    assert.equal(genericValidation.errors.some(error =>
+        error.code === 'screen-alias' && error.message.includes('generatedScreen')
+    ), true);
+
+    const relativeImports = validResponse(resolved.plan);
+    relativeImports.files.find(file => file.layer === 'screen').content =
+        relativeImports.files.find(file => file.layer === 'screen').content
+            .replace("'@screenobjects/commons/base.screen.ts'", "'../commons/base.screen.ts'");
+    const relativeValidation = validator.validate(resolved.scenario, resolved.plan, relativeImports);
+    assert.equal(relativeValidation.valid, false);
+    assert.equal(relativeValidation.errors.some(error =>
+        error.code === 'output' && error.message.includes('imports relativos')
+    ), true);
+
+    const unusedBrowser = validResponse(resolved.plan);
+    unusedBrowser.files.find(file => file.layer === 'screen').content =
+        "import { browser } from '@wdio/globals';\n" +
+        unusedBrowser.files.find(file => file.layer === 'screen').content;
+    const browserValidation = validator.validate(resolved.scenario, resolved.plan, unusedBrowser);
+    assert.equal(browserValidation.valid, false);
+    assert.equal(browserValidation.errors.some(error =>
+        error.code === 'output' && error.message.includes('no lo utiliza')
+    ), true);
+});
+
+test('validator rechaza Gherkin procedimental que narra acciones de interfaz', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'CLICK', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'consultar movimientos'
+    }]));
+    const response = validResponse(resolved.plan);
+    response.files.find(file => file.layer === 'feature').content =
+        'Feature: Consulta de movimientos\n\n@miflujo @android\n' +
+        '  Scenario: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n' +
+        '    Given el usuario Usuario QA inicia sesión en Yape\n' +
+        '    When el usuario hace click en el botón movimientos\n' +
+        '    Then consulta sus movimientos\n';
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.errors.some(error => error.code === 'imperative-gherkin'), true);
+});
+
+test('validator exige englobar acciones técnicas en un step funcional', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([
+        { action: 'CLICK', selector: 'id=movimientos', selectorVerified: true, elementIntent: 'consultar movimientos' },
+        { action: 'SCROLL_DOWN', selector: '', selectorVerified: false, elementIntent: 'recorrer movimientos' },
+        { action: 'VERIFICAR_EXISTE', selector: 'id=filtro', selectorVerified: true, elementIntent: 'filtro de movimientos' }
+    ]));
+    const response = validResponse(resolved.plan);
+    response.actionTrace = [
+        { sequence: 1, gherkinStep: 'When el usuario consulta todos sus movimientos' },
+        { sequence: 2, gherkinStep: 'And el usuario navega por la lista' },
+        { sequence: 3, gherkinStep: 'Then puede filtrar sus movimientos' }
+    ];
+    const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+    const ungrouped = validator.validate(resolved.scenario, resolved.plan, response);
+    assert.equal(ungrouped.errors.some(error => error.code === 'ungrouped-technical-action'), true);
+
+    response.actionTrace[1].gherkinStep = response.actionTrace[0].gherkinStep;
+    const grouped = validator.validate(resolved.scenario, resolved.plan, response);
+    assert.equal(grouped.errors.some(error => error.code === 'ungrouped-technical-action'), false);
 });
 
 test('validator bloquea steps y locators que duplican artefactos del framework', () => {
@@ -466,6 +581,120 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'collision-report.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'verify-package.js')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'agent-response.json')));
+    const generatedResponse = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'agent-response.json'),
+        'utf8'
+    ));
+    assert.match(
+        generatedResponse.files.find(file => file.layer === 'feature').content,
+        /^# Generado por Appium Visual Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación:/
+    );
+    assert.equal(
+        JSON.parse(generatedResponse.files.find(file => file.layer === 'locators').content)
+            ._metadata.author,
+        'Kevinarnold.zorem'
+    );
+    const instructions = fs.readFileSync(path.join(result.packageDirectory, 'instructions.md'), 'utf8');
+    const verifier = fs.readFileSync(path.join(result.packageDirectory, 'verify-package.js'), 'utf8');
+    assert.match(instructions, /Gherkin declarativo/);
+    assert.match(instructions, /Agrupa acciones técnicas consecutivas/);
+    assert.match(instructions, /@screenobjects.*@utils.*@locators/);
+    assert.match(instructions, /Importa browser.*únicamente si/);
+    assert.match(verifier, /Gherkin técnico\/imperativo/);
+    assert.match(verifier, /Acción técnica sin agrupar/);
+    assert.match(verifier, /usa imports relativos/);
+    assert.match(verifier, /importa browser pero no lo utiliza/);
+    assert.doesNotThrow(() => execFileSync(process.execPath, ['verify-package.js'], {
+        cwd: result.packageDirectory,
+        stdio: 'pipe'
+    }));
+
+    const responseFile = path.join(result.packageDirectory, 'agent-response.json');
+    const response = JSON.parse(fs.readFileSync(responseFile, 'utf8'));
+    const screen = response.files.find(file => file.layer === 'screen');
+    screen.content = screen.content.replace(
+        "'@screenobjects/commons/base.screen.ts'",
+        "'../commons/base.screen.ts'"
+    );
+    fs.writeFileSync(responseFile, JSON.stringify(response));
+    assert.throws(() => execFileSync(process.execPath, ['verify-package.js'], {
+        cwd: result.packageDirectory,
+        stdio: 'pipe'
+    }));
+});
+
+test('regeneración versiona la propuesta anterior y conserva las cuatro rutas importadas', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-regeneration-'));
+    const framework = path.join(root, 'framework');
+    const recording = path.join(root, 'recordings', 'session-one');
+    const automation = path.join(recording, 'generation', 'automation');
+    fs.mkdirSync(automation, { recursive: true });
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]));
+    const response = validResponse(resolved.plan);
+    const validation = { valid: true, qualityScore: 100, errors: [], warnings: [] };
+    fs.writeFileSync(path.join(recording, 'scenario.json'), JSON.stringify(resolved.scenario));
+    fs.writeFileSync(path.join(automation, 'scenario.json'), JSON.stringify(resolved.scenario));
+    fs.writeFileSync(path.join(automation, 'generation-plan.json'), JSON.stringify(resolved.plan));
+    fs.writeFileSync(path.join(automation, 'agent-response.json'), JSON.stringify(response));
+    fs.writeFileSync(path.join(automation, 'validation.json'), JSON.stringify(validation));
+    fs.writeFileSync(path.join(automation, 'status.json'), JSON.stringify({
+        state: 'generated', regenerationIteration: 0
+    }));
+    response.files.forEach(file => {
+        const target = path.join(framework, file.path);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, file.content);
+    });
+
+    const analyzer = new RecordingCoverageAnalyzer(
+        path.join(root, 'recordings'), framework, path.join(framework, 'resources', 'locators')
+    );
+    assert.equal(analyzer.listRecordings('payment')[0].canRegenerate, true);
+    assert.equal(
+        analyzer.findRecordingDirectory('payment', resolved.scenario.recordingId),
+        recording
+    );
+
+    const builder = new AutomationPackageBuilder(
+        undefined, undefined, undefined, undefined, framework
+    );
+    const originalPlan = fs.readFileSync(path.join(automation, 'generation-plan.json'), 'utf8');
+    assert.throws(
+        () => builder.prepareRegeneration(recording, 'x'.repeat(30_000)),
+        /excede el contexto máximo/
+    );
+    assert.equal(
+        fs.readFileSync(path.join(automation, 'generation-plan.json'), 'utf8'),
+        originalPlan
+    );
+    assert.equal(fs.existsSync(path.join(automation, 'agent-response.json')), true);
+    assert.equal(fs.existsSync(path.join(automation, 'history')), false);
+
+    const result = builder.prepareRegeneration(
+        recording,
+        ''
+    );
+    const revisedPlan = JSON.parse(fs.readFileSync(path.join(automation, 'generation-plan.json')));
+    const baseline = JSON.parse(fs.readFileSync(path.join(automation, 'baseline-response.json')));
+    const unresolved = JSON.parse(fs.readFileSync(path.join(automation, 'unresolved-context.json')));
+    assert.equal(result.agentRequired, true);
+    assert.equal(result.status, 'regeneration');
+    assert.notEqual(revisedPlan.planId, resolved.plan.planId);
+    assert.equal(revisedPlan.files.every(file => file.operation === 'update'), true);
+    assert.deepEqual(revisedPlan.unresolvedGapIds, ['gap-regeneration-refinement']);
+    assert.equal(baseline.planId, resolved.plan.planId);
+    assert.match(unresolved.gaps[0].description, /revisión general/);
+    assert.equal(fs.existsSync(path.join(automation, 'agent-response.json')), false);
+    assert.equal(fs.existsSync(path.join(
+        automation, 'history', 'regeneration-001', 'agent-response.json'
+    )), true);
+    assert.match(fs.readFileSync(path.join(automation, 'instructions.md'), 'utf8'), /baseline-response\.json/);
+    response.files.forEach(file => {
+        assert.equal(fs.readFileSync(path.join(framework, file.path), 'utf8'), file.content);
+    });
 });
 
 test('launcher abre una terminal en el paquete sin ejecutar automáticamente el agente', () => {
@@ -489,13 +718,14 @@ test('el flujo de automatización cruza renderer, preload y main por IPC explíc
     const preload = fs.readFileSync(path.join(root, 'recorder/src/preload.ts'), 'utf-8');
     const controller = fs.readFileSync(path.join(root, 'recorder/renderer/src/controller/recorderController.js'), 'utf-8');
     for (const channel of [
-        'prepare-automation-package', 'launch-automation-agent',
+        'prepare-automation-package', 'prepare-automation-regeneration', 'launch-automation-agent',
         'import-automation-response', 'generate-automation-response'
     ]) {
         assert.match(main, new RegExp(`ipcMain\\.handle\\('${channel}'`));
         assert.match(preload, new RegExp(channel));
     }
     assert.match(controller, /prepareAutomationPackage/);
+    assert.match(controller, /prepareAutomationRegeneration/);
     assert.match(controller, /generateAutomationResponse/);
     assert.match(controller, /showAutomationHandoff\(result\.handoff\)/);
     assert.match(controller, /btnLaunchAutomation\.disabled = false/);
