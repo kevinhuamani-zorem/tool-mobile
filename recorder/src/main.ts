@@ -16,7 +16,7 @@ import { FeatureGenerator } from './featureGenerator';
 import { RecordedStep } from '../../core/models';
 import { projectPaths } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
-import { FwkMobileGenerator, GenerationRequest, MobilePlatform } from '../../core/fwkMobileGenerator';
+import { FwkMobileGenerator, GenerationRequest, MobilePlatform, GeneratedPreview } from '../../core/fwkMobileGenerator';
 import { withGeneratedResponseMetadata } from '../../core/generatedFileMetadata';
 import { ReuseAnalyzer } from '../../core/reuseAnalyzer';
 import { OutputValidator } from '../../core/outputValidator';
@@ -31,6 +31,13 @@ import { RecordingCoverageAnalyzer } from '../../core/recordingCoverageAnalyzer'
 import { RecordingPlatformUpdater } from '../../core/recordingPlatformUpdater';
 import { AutomationResponseValidator } from '../../core/automationResponseValidator';
 import { AutomationMemory } from '../../core/automationMemory';
+import {
+    AutomationPatchWriter,
+    featureAdditions,
+    locatorAdditions,
+    screenAdditions,
+    stepsAdditions,
+} from '../../core/automationPatchWriter';
 import { AutomationAgentResponse, AutomationScenario, GenerationPlan } from '../../core/automationContracts';
 
 let mainWindow: BrowserWindow | null = null;
@@ -48,6 +55,7 @@ const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
 const automationRecordingStore = new AutomationRecordingStore();
 const automationMemory = new AutomationMemory();
+const automationPatchWriter = new AutomationPatchWriter();
 const automationResponseValidator = new AutomationResponseValidator();
 const automationPackageBuilder = new AutomationPackageBuilder(
     undefined,
@@ -1094,6 +1102,54 @@ ipcMain.handle('import-automation-response', async () => {
     }
 });
 
+/**
+ * Convierte las capas planificadas como `update` en un patch aditivo.
+ *
+ * El contenido propuesto (por el resolver o por el agente) trae el archivo
+ * completo; aquí se compara contra el que está en disco y solo se insertan los
+ * símbolos nuevos, con su comentario de trazabilidad. Devuelve además las rutas
+ * absolutas ya atendidas para que la escritura de archivos completos las omita.
+ */
+function applyAdditiveUpdates(
+    scenario: AutomationScenario,
+    response: AutomationAgentResponse,
+    updates: Map<string, string>
+): { outcomes: ReturnType<AutomationPatchWriter['apply']>; absolute: Set<string> } {
+    const absolute = new Set<string>();
+    if (!updates.size) return { outcomes: [], absolute };
+    const contentOf = (layer: string) => response.files.find(file => file.layer === layer)?.content;
+    const read = (relative: string) => fs.readFileSync(path.join(projectPaths.frameworkRoot, relative), 'utf-8');
+    const createdAt = new Date().toISOString();
+    const input: any = { recordingId: scenario.recordingId, createdAt };
+
+    const locatorsPath = updates.get('locators');
+    const locatorsProposed = contentOf('locators');
+    if (locatorsPath && locatorsProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, locatorsPath))) {
+        input.locators = { file: locatorsPath, additions: locatorAdditions(read(locatorsPath), locatorsProposed) };
+    }
+    const screenPath = updates.get('screen');
+    const screenProposed = contentOf('screen');
+    if (screenPath && screenProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, screenPath))) {
+        input.screen = { file: screenPath, ...screenAdditions(read(screenPath), screenProposed) };
+    }
+    const stepsPath = updates.get('steps');
+    const stepsProposed = contentOf('steps');
+    if (stepsPath && stepsProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, stepsPath))) {
+        const { definitions, imports } = stepsAdditions(read(stepsPath), stepsProposed);
+        input.steps = { file: stepsPath, definitions, screenImport: imports[0] };
+    }
+    const featurePath = updates.get('feature');
+    const featureProposed = contentOf('feature');
+    if (featurePath && featureProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, featurePath))) {
+        const scenarioBlock = featureAdditions(read(featurePath), featureProposed);
+        if (scenarioBlock) input.feature = { file: featurePath, scenario: scenarioBlock };
+    }
+
+    const outcomes = automationPatchWriter.apply(input, projectPaths.frameworkRoot);
+    for (const outcome of outcomes) absolute.add(path.join(projectPaths.frameworkRoot, outcome.file));
+    return { outcomes, absolute };
+}
+
 ipcMain.handle('generate-automation-response', async (
     _,
     previewToken: string,
@@ -1118,8 +1174,30 @@ ipcMain.handle('generate-automation-response', async (
         if (managed.conflicts.length) {
             throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
         }
-        const generated = fwkMobileGenerator.writePreview(preview, managed.writable);
-        generatedFileRegistry.register(generated, scenario.squad);
+        // Los `update` se amplían con un patch aditivo en vez de reescribirse: el
+        // archivo puede ser ajeno y solo debe recibir los símbolos nuevos.
+        const updates = new Map(plan.files
+            .filter(file => file.operation === 'update')
+            .map(file => [file.layer, file.path]));
+        const patched = applyAdditiveUpdates(scenario, response, updates);
+        const createOnly: GeneratedPreview = {
+            ...preview,
+            files: preview.files.filter(file => !patched.absolute.has(file)),
+        };
+        const generated = fwkMobileGenerator.writePreview(
+            createOnly,
+            new Set([...managed.writable].filter(file => !patched.absolute.has(file)))
+        );
+        generatedFileRegistry.register(generated, scenario.squad, plan.files);
+        for (const outcome of patched.outcomes) {
+            if (!outcome.added.length) continue;
+            generatedFileRegistry.registerPatch(
+                path.join(projectPaths.frameworkRoot, outcome.file),
+                scenario.squad,
+                scenario.recordingId,
+                outcome.added
+            );
+        }
         const memoryEntry = automationMemory.promote(scenario, plan, response, validation);
         fs.writeFileSync(path.join(activeAutomationPackage, 'agent-response.json'), JSON.stringify(response, null, 2) + '\n');
         fs.writeFileSync(path.join(activeAutomationPackage, 'validation.json'), JSON.stringify(validation, null, 2) + '\n');
@@ -1135,7 +1213,7 @@ ipcMain.handle('generate-automation-response', async (
             memoryVersion: memoryEntry.version,
         }, null, 2) + '\n');
         automationPreview = null;
-        return { success: true, generated, validation, memoryVersion: memoryEntry.version };
+        return { success: true, generated, validation, memoryVersion: memoryEntry.version, patched: patched.outcomes };
     } catch (e: any) {
         return { success: false, error: e.message };
     }

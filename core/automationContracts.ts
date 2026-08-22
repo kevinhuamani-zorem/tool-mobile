@@ -37,6 +37,14 @@ export interface ActionResolution {
     confidence: number;
     gapId?: string;
     reason: string;
+    /** Método del módulo target que ya cubre esta intención, si lo hay. */
+    existingMethod?: {
+        name: string;
+        signature: string;
+        file: string;
+        locatorKeys: string[];
+        score: number;
+    };
 }
 
 export interface PlannedFile {

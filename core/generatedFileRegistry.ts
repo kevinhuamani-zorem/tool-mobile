@@ -11,9 +11,23 @@ interface RegistryEntry {
     squad: string;
 }
 
+interface PatchLedgerEntry {
+    recordingId: string;
+    symbols: string[];
+    patchedAt: string;
+    squad: string;
+}
+
 interface RegistryDocument {
     version: 1;
     files: Record<string, RegistryEntry>;
+    /**
+     * Archivos ajenos que el recorder solo amplió. No llevan `contentHash`
+     * a propósito: registrar uno los convertiría en administrados y cualquier
+     * edición humana posterior bloquearía el siguiente patch con un conflicto
+     * falso. Aquí solo queda la traza de qué símbolos aportó cada recording.
+     */
+    patches?: Record<string, PatchLedgerEntry[]>;
 }
 
 export interface ManagedFileAssessment {
@@ -67,10 +81,21 @@ export class GeneratedFileRegistry {
         return { writable, conflicts };
     }
 
-    register(preview: GeneratedPreview, squad: string): RegistryDocument {
+    /**
+     * Reclama como administrados únicamente los archivos que el recorder creó.
+     * Un `update` sobre un archivo ajeno se amplió con un patch aditivo: no se
+     * adopta, se anota en el ledger. Sin `plannedFiles` se conserva el
+     * comportamiento anterior para los flujos que generan las cuatro capas.
+     */
+    register(preview: GeneratedPreview, squad: string, plannedFiles: PlannedFile[] = []): RegistryDocument {
         const manifest = this.read();
+        const updated = new Set(plannedFiles
+            .filter(planned => planned.operation === 'update')
+            .map(planned => planned.path));
         for (const output of this.outputs(preview)) {
-            manifest.files[this.relative(output.file)] = {
+            const relative = this.relative(output.file);
+            if (updated.has(relative) && !manifest.files[relative]) continue;
+            manifest.files[relative] = {
                 contentHash: this.hash(Buffer.from(output.content, 'utf-8')),
                 generatedAt: new Date().toISOString(),
                 squad
@@ -78,6 +103,26 @@ export class GeneratedFileRegistry {
         }
         this.write(manifest);
         return manifest;
+    }
+
+    /** Traza de una ampliación aditiva sobre un archivo que el recorder no administra. */
+    registerPatch(
+        file: string,
+        squad: string,
+        recordingId: string,
+        symbols: string[]
+    ): RegistryDocument {
+        const manifest = this.read();
+        const relative = this.relative(file);
+        const patches = manifest.patches || (manifest.patches = {});
+        const entries = patches[relative] || (patches[relative] = []);
+        entries.push({ recordingId, symbols, patchedAt: new Date().toISOString(), squad });
+        this.write(manifest);
+        return manifest;
+    }
+
+    listPatches(file: string): PatchLedgerEntry[] {
+        return this.read().patches?.[this.relative(file)] || [];
     }
 
     registerUpdatedFile(file: string, squad: string): RegistryDocument {
@@ -117,8 +162,8 @@ export class GeneratedFileRegistry {
         try {
             const parsed = JSON.parse(fs.readFileSync(this.manifestPath, 'utf-8'));
             return parsed?.version === 1 && parsed.files
-                ? parsed as RegistryDocument
-                : { version: 1, files: {} };
+                ? { patches: {}, ...parsed } as RegistryDocument
+                : { version: 1, files: {}, patches: {} };
         } catch {
             return { version: 1, files: {} };
         }

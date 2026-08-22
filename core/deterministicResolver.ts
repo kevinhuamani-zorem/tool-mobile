@@ -234,6 +234,90 @@ function likelyDynamicText(value = ''): boolean {
     return /(?:S\/|\$|€|£)\s*\d|\b\d+[.,]\d{2}\b|\b\d{6,}\b/.test(text);
 }
 
+/** Literales entre comillas dentro de un selector. */
+function selectorLiterals(selector = ''): string[] {
+    return [...selector.matchAll(/["']([^"']+)["']/g)].map(match => match[1].trim());
+}
+
+/**
+ * El selector fija el mismo texto que la acción valida.
+ *
+ * Es el patrón que produce un locator inservible: el dato observado deja de ser
+ * lo que se verifica y pasa a ser la forma de encontrar el elemento, así que el
+ * `Then` solo pasa mientras el dato no cambie. Un nombre propio no lo detecta
+ * `likelyDynamicText`, que solo mira montos y números largos.
+ */
+function selectorPinsAssertedValue(step: RecordedStep): boolean {
+    const value = String(step.value || '').trim().toLowerCase();
+    if (value.length < 3) return false;
+    return selectorLiterals(step.selector).some(literal => {
+        const bare = literal.replace(/[*%]+$/, '').trim().toLowerCase();
+        if (!bare) return false;
+        return bare === value || (bare.length >= 4 && (bare.includes(value) || value.includes(bare)));
+    });
+}
+
+/** `UiSelector().text()` es coincidencia exacta: un `*` final nunca actúa como comodín. */
+function selectorUsesFakeWildcard(selector = ''): boolean {
+    return /\.(?:text|description)\(\s*["'][^"']*[*%]["']\s*\)/.test(selector);
+}
+
+/**
+ * Métodos del módulo target que ya cubren la intención de una acción.
+ *
+ * Detectar el módulo correcto no basta: el caso que se generó reutilizó el
+ * archivo y aun así creó `validarNombreDelUsuarioYapero` junto al ya existente
+ * `validarNombreDelYapero`. Se compara la intención contra el nombre del método
+ * y contra las claves de locator que consume, con un bono si ambos son del
+ * mismo tipo de acción.
+ */
+/**
+ * Similitud entre conceptos, ignorando el relleno del idioma.
+ *
+ * `similarity` a secas cuenta palabras como "por" o "del", suficientes para que
+ * "compartir constancia por correo" pareciera "buscar yapero por numero".
+ */
+function conceptSimilarity(left: string, right: string): number {
+    const meaningful = (value: string) =>
+        new Set(words(value).filter(word => !TECHNICAL_STOP_WORDS.has(word)));
+    const a = meaningful(left);
+    const b = meaningful(right);
+    if (!a.size || !b.size) return 0;
+    const common = [...a].filter(word => b.has(word)).length;
+    return common / Math.max(a.size, b.size);
+}
+
+function similarExistingMethods(
+    catalog: SquadReuseCatalog,
+    screenFile: string,
+    resolution: ActionResolution
+): NonNullable<ActionResolution['existingMethod']>[] {
+    const assertion = /^VERIFICAR_/.test(resolution.action);
+    return (catalog.screenMethods || [])
+        .filter(method => method.file === screenFile)
+        .map(method => {
+            const byName = conceptSimilarity(resolution.intent, method.name);
+            const byLocator = Math.max(0, ...(method.locatorKeys || [])
+                .map(key => conceptSimilarity(resolution.intent, key)));
+            // El bono solo aplica entre aserciones: que dos acciones cualesquiera
+            // "no sean aserción" no dice nada sobre si hacen lo mismo.
+            const bothAssert = assertion && /^(?:validar|verificar|valida|verifica)/i.test(method.name);
+            const score = Math.min(1, Math.max(byName, byLocator) + (bothAssert ? 0.15 : 0));
+            return {
+                name: method.name,
+                signature: method.signature,
+                file: method.file,
+                locatorKeys: method.locatorKeys || [],
+                score: Number(score.toFixed(3)),
+            };
+        })
+        .filter(candidate => candidate.score > 0)
+        .sort((left, right) => right.score - left.score);
+}
+
+const REUSE_METHOD_THRESHOLD = 0.7;
+const REVIEW_METHOD_THRESHOLD = 0.35;
+
 function bestArtifactBundle(
     catalog: SquadReuseCatalog,
     scenario: AutomationScenario,
@@ -374,13 +458,30 @@ export class DeterministicResolver {
         });
 
         rawScenario.actions.forEach((step, index) => {
-            if (step.action !== 'VERIFICAR_TEXTO' || !likelyDynamicText(step.value)) return;
+            if (!/^VERIFICAR_/.test(step.action)) return;
+            const pinned = selectorPinsAssertedValue(step);
+            if (!likelyDynamicText(step.value) && !pinned) return;
             gaps.push({
                 id: `gap-verification-${index + 1}`,
                 sequence: index + 1,
                 type: 'verification-semantics',
-                description: `El texto grabado "${step.value}" parece dinámico.`,
-                requiredOutput: 'Validar existencia o contenido no vacío; usar igualdad exacta solo si el criterio de aceptación lo exige.',
+                description: pinned
+                    ? `El selector de la acción ${index + 1} fija el mismo texto que valida ("${step.value}"): el locator dejaría de servir en cuanto cambie el dato.`
+                    : `El texto grabado "${step.value}" parece dinámico.`,
+                requiredOutput: pinned
+                    ? 'Apunta el locator al contenedor del valor (id, accessibility id o relación estructural) y compara el texto contra el parámetro del Examples.'
+                    : 'Validar existencia o contenido no vacío; usar igualdad exacta solo si el criterio de aceptación lo exige.',
+            });
+        });
+
+        rawScenario.actions.forEach((step, index) => {
+            if (!selectorUsesFakeWildcard(step.selector)) return;
+            gaps.push({
+                id: `gap-selector-wildcard-${index + 1}`,
+                sequence: index + 1,
+                type: 'missing-selector',
+                description: `El selector de la acción ${index + 1} usa un comodín que UiSelector no interpreta: "${step.selector}" busca ese asterisco de forma literal y nunca coincide.`,
+                requiredOutput: 'Usa el texto exacto del nodo, o cambia a textContains/descriptionContains si de verdad hace falta una coincidencia parcial.',
             });
         });
 
@@ -496,6 +597,32 @@ export class DeterministicResolver {
             plannedFile('screen', reuseTarget?.screen || `screenobjects/${scenario.squad}/${normalizedRequest.locatorModule}.screen.ts`, reuseTarget?.screen ? 'update' : 'create'),
             plannedFile('locators', reuseTarget?.locators || `resources/locators/${scenario.squad}/${normalizedRequest.locatorModule}.locator.json`, reuseTarget?.locators ? 'update' : 'create'),
         ];
+        // El módulo target ya puede cubrir la intención: reutilizar el método
+        // existente evita el duplicado semántico dentro del mismo Screen Object.
+        if (reuseTarget?.screen) {
+            for (const resolution of resolutions) {
+                if (resolution.resolution !== 'create') continue;
+                const [best] = similarExistingMethods(catalog, reuseTarget.screen, resolution);
+                if (!best || best.score < REVIEW_METHOD_THRESHOLD) continue;
+                resolution.existingMethod = best;
+                if (best.score >= REUSE_METHOD_THRESHOLD) {
+                    resolution.resolution = 'reuse';
+                    resolution.confidence = best.score;
+                    resolution.locatorName = best.locatorKeys[0] || resolution.locatorName;
+                    resolution.reason = `${reuseTarget.screen} ya expone ${best.signature} para esta intención.`;
+                    continue;
+                }
+                const gapId = `gap-duplicate-${resolution.sequence}`;
+                resolution.gapId = gapId;
+                gaps.push({
+                    id: gapId,
+                    sequence: resolution.sequence,
+                    type: 'semantic-naming',
+                    description: `${reuseTarget.screen} ya expone ${best.signature}, parecido a "${resolution.intent}" (${best.score}).`,
+                    requiredOutput: `Reutiliza ${best.name} si valida lo mismo; si no, explica en qué se diferencia y usa un nombre que lo distinga.`,
+                });
+            }
+        }
         const planId = `plan-${crypto.createHash('sha256').update(JSON.stringify({
             recordingId: scenario.recordingId,
             fingerprint: scenario.fingerprint,
