@@ -8,7 +8,7 @@ const { AutomationRecordingStore } = require('../dist/core/automationRecordingSt
 const { DeterministicResolver } = require('../dist/core/deterministicResolver');
 const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
 const { AutomationMemory } = require('../dist/core/automationMemory');
-const { AutomationPackageBuilder } = require('../dist/core/automationPackageBuilder');
+const { AutomationPackageBuilder, BlockingGapError } = require('../dist/core/automationPackageBuilder');
 const { AutomationAgentLauncher } = require('../dist/core/automationAgentLauncher');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { RecordingCoverageAnalyzer } = require('../dist/core/recordingCoverageAnalyzer');
@@ -34,6 +34,27 @@ test('la captura solicita contexto funcional y no un nombre técnico de locator'
     assert.match(onboarding, /id="cmbOnboardingRegeneration"/);
     assert.match(onboarding, /id="txtRegenerationRefinement"/);
     assert.match(onboarding, /id="chkRegenerationClean"/);
+});
+
+// Completar tiene que ofrecer las dos salidas, y el reenganche tiene que
+// esperar a que la sesión arranque: start-session crea una grabación nueva.
+test('completar una grabación ofrece seguir grabando o completar locators', () => {
+    const onboarding = fs.readFileSync(path.join(
+        __dirname,
+        '../recorder/renderer/src/components/SessionOnboarding.tsx'
+    ), 'utf8');
+    const controller = fs.readFileSync(path.join(
+        __dirname,
+        '../recorder/renderer/src/controller/recorderController.js'
+    ), 'utf8');
+    const preload = fs.readFileSync(path.join(__dirname, '../recorder/src/preload.ts'), 'utf8');
+
+    assert.match(onboarding, /id="rdbCompleteSteps"/);
+    assert.match(onboarding, /id="rdbCompleteLocators"/);
+    assert.match(controller, /rdbCompleteSteps\?\.checked/);
+    assert.match(controller, /await sessionReady;[\s\S]{0,200}api\.resumeRecording/);
+    assert.match(controller, /rdbCompleteLocators\.disabled = Boolean\(selected && !selected\.hasPlan\)/);
+    assert.match(preload, /resumeRecording:.*'resume-recording'/);
 });
 
 test('configuración separa squad de la ruta anidada de Features', () => {
@@ -101,6 +122,85 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     assert.equal(actions[1].value, '<password>');
     assert.equal(actions[0].selectorVerified, true);
     assert.equal(actions[0].contextHint, 'numero a yapear');
+});
+
+// Las dos casuisticas de "Completar una grabacion" dependen de estos flags:
+// sin plan no hay locators que asignar, y una grabacion sin Then nunca va a
+// tener plan porque el builder la corta antes.
+test('el listado dice si la grabación tiene plan y si tiene Then', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-flags-'));
+    const recordings = path.join(root, 'runtime', 'recordings');
+    const framework = path.join(root, 'framework');
+
+    const write = (name, actions) => {
+        const directory = path.join(recordings, name);
+        fs.mkdirSync(directory, { recursive: true });
+        const recorded = scenario(actions);
+        recorded.recordingId = name;
+        fs.writeFileSync(path.join(directory, 'scenario.json'), JSON.stringify(recorded));
+        return directory;
+    };
+
+    write('rec-sin-then', [{ action: 'CLICK', selector: '~Yapear', selectorVerified: true }]);
+    write('rec-con-then', [
+        { action: 'CLICK', selector: '~Yapear', selectorVerified: true },
+        { action: 'VERIFICAR_EXISTE', selector: '~Listo', selectorVerified: true },
+    ]);
+
+    const listed = new RecordingCoverageAnalyzer(recordings, framework, framework)
+        .listRecordings('payment', 'qa');
+    const byId = Object.fromEntries(listed.map(item => [item.id, item]));
+
+    assert.equal(byId['rec-sin-then'].hasAssertion, false);
+    assert.equal(byId['rec-sin-then'].hasPlan, false);
+    assert.equal(byId['rec-con-then'].hasAssertion, true);
+    assert.equal(byId['rec-con-then'].hasPlan, false);
+});
+
+// Continuar una grabacion tiene que caer en la MISMA carpeta: si creara una
+// nueva, el QA terminaria con dos grabaciones a medias del mismo caso.
+test('continuar una grabación reengancha su carpeta y conserva las acciones', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-resume-'));
+    const store = new AutomationRecordingStore(root);
+    const context = { squad: 'payment', platform: 'android', environment: 'qa' };
+    store.start(context);
+    store.replaceActions([
+        { action: 'CLICK', selector: '~Yapear', contextHint: 'yapear' },
+    ], context);
+    const original = store.getActiveDirectory();
+    const originalId = JSON.parse(fs.readFileSync(path.join(original, 'manifest.json'))).recordingId;
+
+    // Simula el arranque de una sesión nueva, que crea otra grabación vacía.
+    const fresh = new AutomationRecordingStore(root);
+    fresh.start(context);
+    assert.notEqual(fresh.getActiveDirectory(), original);
+
+    const resumed = fresh.resume(original);
+    assert.equal(fresh.getActiveDirectory(), original);
+    assert.equal(resumed.manifest.recordingId, originalId);
+    assert.deepEqual(resumed.actions.map(step => step.selector), ['~Yapear']);
+
+    // El Then que faltaba se suma a las acciones previas, en la misma carpeta.
+    fresh.replaceActions([
+        ...resumed.actions,
+        { action: 'VERIFICAR_EXISTE', selector: '~Listo', contextHint: 'confirmación' },
+    ], context);
+    const actions = JSON.parse(fs.readFileSync(path.join(original, 'actions.json')));
+    assert.deepEqual(actions.map(step => step.action), ['CLICK', 'VERIFICAR_EXISTE']);
+    assert.deepEqual(actions.map(step => step.sequence), [1, 2]);
+    assert.equal(
+        JSON.parse(fs.readFileSync(path.join(original, 'manifest.json'))).recordingId,
+        originalId
+    );
+});
+
+test('una grabación sin manifest ni scenario no se puede continuar', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-resume-bad-'));
+    fs.mkdirSync(path.join(root, 'vacia'), { recursive: true });
+    assert.throws(
+        () => new AutomationRecordingStore(root).resume(path.join(root, 'vacia')),
+        /no se puede continuar/
+    );
 });
 
 test('completar caso lista solo recordings del ambiente y reconstruye su cobertura', () => {
@@ -505,7 +605,9 @@ function validResponse(plan, recordingId = 'rec-test') {
     const screenImport = '@screenobjects/' + screenPath.replace(/^screenobjects\//, '');
     const locatorImport = '@locators/' + locatorPath.replace(/^resources\/locators\//, '');
     const content = {
-        feature: 'Feature: Consulta de movimientos\n\n@miflujo @android\n  Scenario: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario Usuario QA inicia sesión en Yape\n    Then se muestra la lista de movimientos\n',
+        // El Given viene de login.steps.ts: se copia literal y su usuario
+        // viaja por Examples, nunca inlinado dentro del step.
+        feature: 'Feature: Consulta de movimientos\n\n@miflujo @android\n  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario <username> inicia sesión en Yape\n    Then se muestra la lista de movimientos\n\n    Examples:\n      | username   |\n      | Usuario QA |\n',
         steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.validar(); });\n`,
         screen: `import BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorFactory from '@utils/LocatorFactory.ts';\nimport { TypeLocator } from '@utils/Enums.ts';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends BaseScreen { private get lista(): string { return LocatorFactory.getElement(TypeLocator.XPATH, Locators.consultaIos.listaDeMovimientos, TypeLocator.ID, Locators.consultaAndroid.listaDeMovimientos); } public async validar(): Promise<void> { await this.uiHelper.waitForDisplayed(this.lista); } }\nexport default new ${screenClass}();\n`,
         locators: JSON.stringify({ consultaAndroid: { listaDeMovimientos: 'id=movimientos' }, consultaIos: { listaDeMovimientos: '' } }, null, 2)
@@ -684,6 +786,23 @@ test('memoria solo promociona calidad 100 y recupera la versión más reciente',
     assert.deepEqual(memory.stats(), { successfulCases: 1, versions: 1 });
 });
 
+// Regla ISTQB: sin resultado esperado no hay caso de prueba. El corte tiene que
+// ser antes de escribir el paquete, o el agente arranca y gasta tokens igual.
+test('una grabación sin verificación no llega a armar el paquete', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-sin-then-'));
+    const builder = new AutomationPackageBuilder(
+        new DeterministicResolver(emptyCatalog),
+        new AutomationMemory(path.join(root, 'memory'))
+    );
+    assert.throws(
+        () => builder.prepare(scenario([
+            { action: 'CLICK', selector: 'id=movimientos', selectorVerified: true, elementIntent: 'ver movimientos' }
+        ]), root),
+        error => error instanceof BlockingGapError && /VERIFICAR_TEXTO/.test(error.message)
+    );
+    assert.equal(fs.existsSync(path.join(root, 'generation', 'automation')), false);
+});
+
 test('package builder limita el contexto y deja verificador autocontenido', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-package-'));
     const resolved = new DeterministicResolver(emptyCatalog);
@@ -742,6 +861,95 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         cwd: result.packageDirectory,
         stdio: 'pipe'
     }));
+});
+
+// Caso real: el agente inlinó el usuario dentro del Given y perdió la tilde de
+// "sesión", así que el step dejó de enlazar con login.steps.ts. Cucumber lo
+// habría reportado como undefined recién al ejecutar el caso.
+test('rechaza el Given reutilizado reescrito y el parámetro sin Examples', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-reused-'));
+    const builder = new AutomationPackageBuilder(
+        new DeterministicResolver(emptyCatalog),
+        new AutomationMemory(path.join(root, 'memory'))
+    );
+    const result = builder.prepare(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]), root);
+    const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+    const plan = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'generation-plan.json'), 'utf8'
+    ));
+    const resolvedScenario = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'scenario.json'), 'utf8'
+    ));
+
+    const inlined = validResponse(plan);
+    const featureFile = inlined.files.find(file => file.layer === 'feature');
+    featureFile.content = featureFile.content
+        .replace('Given el usuario <username> inicia sesión en Yape',
+                 'Given el usuario Usuario QA Temporal inicia sesion en Yape')
+        .replace(/\n\n    Examples:[\s\S]*$/, '\n')
+        .replace('Scenario Outline:', 'Scenario:');
+    const inlinedErrors = validator.validate(resolvedScenario, plan, inlined).errors;
+    assert.equal(inlinedErrors.some(error => error.code === 'reused-step-rewritten'), true);
+
+    // Mantener <username> pero sin Examples es el otro lado del mismo error.
+    const sinExamples = validResponse(plan);
+    const sinExamplesFile = sinExamples.files.find(file => file.layer === 'feature');
+    sinExamplesFile.content = sinExamplesFile.content
+        .replace(/\n\n    Examples:[\s\S]*$/, '\n')
+        .replace('Scenario Outline:', 'Scenario:');
+    const sinExamplesErrors = validator.validate(resolvedScenario, plan, sinExamples).errors;
+    assert.equal(sinExamplesErrors.some(error => error.code === 'missing-examples'), true);
+    assert.equal(
+        sinExamplesErrors.some(error => /Scenario Outline/.test(error.message)),
+        true
+    );
+    assert.equal(sinExamplesErrors.some(error => error.code === 'reused-step-rewritten'), false);
+
+    // Perder solo la tilde de "sesión" ya rompe el enlace con login.steps.ts,
+    // asi que la comparacion no puede normalizar tildes ni mayusculas.
+    const sinTilde = validResponse(plan);
+    const sinTildeFile = sinTilde.files.find(file => file.layer === 'feature');
+    sinTildeFile.content = sinTildeFile.content.replace('inicia sesión en Yape', 'inicia sesion en Yape');
+    assert.equal(
+        validator.validate(resolvedScenario, plan, sinTilde).errors
+            .some(error => error.code === 'reused-step-rewritten'),
+        true
+    );
+
+    // El mismo corte tiene que existir dentro del sandbox del agente, o gasta
+    // una iteración completa antes de enterarse.
+    fs.writeFileSync(
+        path.join(result.packageDirectory, 'agent-response.json'),
+        JSON.stringify(inlined)
+    );
+    assert.throws(() => execFileSync(process.execPath, ['verify-package.js'], {
+        cwd: result.packageDirectory,
+        stdio: 'pipe'
+    }), error => /Step reutilizado reescrito/.test(String(error.stdout) + String(error.stderr)));
+
+    const instructions = fs.readFileSync(
+        path.join(result.packageDirectory, 'instructions.md'), 'utf8'
+    );
+    assert.match(instructions, /se copian LITERALES/);
+    assert.match(instructions, /Scenario Outline/);
+
+    // Un step definition que ningun Scenario invoca es codigo muerto.
+    const conMuerto = validResponse(plan);
+    const stepsFile = conMuerto.files.find(file => file.layer === 'steps');
+    stepsFile.content += 'Then(/^se muestra el boton de filtro$/, async () => { return; });\n';
+    assert.equal(
+        validator.validate(resolvedScenario, plan, conMuerto).warnings
+            .some(warning => /Step definition sin uso: "se muestra el boton de filtro"/.test(warning)),
+        true
+    );
+    assert.equal(
+        validator.validate(resolvedScenario, plan, validResponse(plan)).warnings
+            .some(warning => /Step definition sin uso/.test(warning)),
+        false
+    );
 });
 
 test('package builder mantiene baselines grandes fuera del contexto mínimo', () => {
@@ -872,17 +1080,22 @@ test('regeneración versiona la propuesta anterior y conserva las cuatro rutas i
     const builder = new AutomationPackageBuilder(
         undefined, undefined, undefined, undefined, framework
     );
-    const originalPlan = fs.readFileSync(path.join(automation, 'generation-plan.json'), 'utf8');
-    assert.throws(
-        () => builder.prepareRegeneration(recording, 'x'.repeat(30_000)),
-        /excede el contexto máximo/
-    );
-    assert.equal(
-        fs.readFileSync(path.join(automation, 'generation-plan.json'), 'utf8'),
-        originalPlan
-    );
-    assert.equal(fs.existsSync(path.join(automation, 'agent-response.json')), true);
-    assert.equal(fs.existsSync(path.join(automation, 'history')), false);
+    // El alcance del caso lo decide el QA: un refinamiento largo encarece la
+    // corrida pero no se rechaza, solo se informa el sobrecosto. Como sí procede,
+    // consume el paquete: se restaura para seguir probando el flujo normal.
+    const snapshot = fs.readdirSync(automation, { withFileTypes: true })
+        .filter(entry => entry.isFile())
+        .map(entry => [entry.name, fs.readFileSync(path.join(automation, entry.name), 'utf8')]);
+    const oversized = builder.prepareRegeneration(recording, 'x'.repeat(30_000));
+    assert.ok(oversized.contextBytes > 20_000);
+    assert.match(oversized.contextWarning, /supera el objetivo/);
+    for (const entry of fs.readdirSync(automation, { withFileTypes: true })) {
+        if (entry.isFile() && !snapshot.some(([name]) => name === entry.name)) {
+            fs.rmSync(path.join(automation, entry.name));
+        }
+    }
+    snapshot.forEach(([name, content]) => fs.writeFileSync(path.join(automation, name), content));
+    fs.rmSync(path.join(automation, 'history'), { recursive: true, force: true });
 
     const result = builder.prepareRegeneration(
         recording,

@@ -962,6 +962,60 @@ ipcMain.handle('generate-files', async (_, featureName: string, scenarioName: st
     return { success: true, featurePath: filePath, locatorsPath };
 });
 
+/**
+ * [visual-recorder] Continuar una grabacion existente.
+ *
+ * Es la otra mitad de "Completar una grabacion": la que ya existia solo asigna
+ * locators de la plataforma que falta, y para eso necesita un plan. Esta carga
+ * las acciones ya grabadas de vuelta al recorder para que el QA siga grabando
+ * encima — el caso tipico es una grabacion sin Then, que el builder rechaza y
+ * que por tanto nunca va a tener plan.
+ *
+ * Reengancha la carpeta original, asi los pasos nuevos caen en la misma
+ * grabacion en vez de crear una segunda a medias.
+ */
+ipcMain.handle('resume-recording', async (_, input: {
+    recordingId: string;
+    squad?: string;
+}) => {
+    try {
+        if (projectPaths.mode === 'neutral') {
+            throw new Error('Continuar una grabación requiere modo fwk-mobile o standalone');
+        }
+        if (!sessionActive) throw new Error('Conecta el dispositivo antes de continuar la grabación');
+        const squad = input.squad || activeSquad;
+        const directory = recordingCoverageAnalyzer.findRecordingDirectory(
+            squad,
+            input.recordingId,
+            activeEnvironment
+        );
+        const resumed = automationRecordingStore.resume(directory);
+        if (resumed.manifest.platform !== recordingPlatform) {
+            throw new Error(
+                `La grabación es de ${resumed.manifest.platform.toUpperCase()} y la sesión actual es ` +
+                `${recordingPlatform.toUpperCase()}: conecta un dispositivo ${resumed.manifest.platform.toUpperCase()} ` +
+                'para seguir grabando pasos, o usa la opción de completar locators.'
+            );
+        }
+        activeSquad = squad;
+        recordedSteps = resumed.actions.map(step => ({ ...step }));
+        activeAutomationPackage = '';
+        automationPreview = null;
+        // Deja el manifest consistente con lo que acabamos de cargar: si el
+        // proceso muere aqui, la grabacion sigue siendo la misma, no una vacia.
+        syncRecording();
+        return {
+            success: true,
+            steps: recordedSteps,
+            recordingId: resumed.manifest.recordingId,
+            scenario: resumed.scenario,
+            hasAssertion: recordedSteps.some(step => /^VERIFICAR_/.test(String(step.action))),
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
 ipcMain.handle('prepare-automation-package', async (_, input: {
     request: Omit<GenerationRequest, 'platform'>;
     objective: string;

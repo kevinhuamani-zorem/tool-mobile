@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('generate-automation-response', previewToken, reviewedContents),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
     generateFiles:       (f: string, s: string) => ipcRenderer.invoke('generate-files', f, s),
+    // [visual-recorder] Continuar una grabacion existente (p. ej. para agregar el Then que falta).
+    resumeRecording:     (i: any)                => ipcRenderer.invoke('resume-recording', i),
     getSteps:            ()                     => ipcRenderer.invoke('get-steps'),
     closeSession:        ()                     => ipcRenderer.invoke('close-session'),
     getPageSource:       ()                     => ipcRenderer.invoke('get-page-source'),

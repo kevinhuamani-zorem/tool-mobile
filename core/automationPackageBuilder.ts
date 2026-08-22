@@ -7,6 +7,7 @@ import {
     AutomationPackageResult,
     AutomationScenario,
     GenerationPlan,
+    UnresolvedGap,
 } from './automationContracts';
 import { AutomationMemory } from './automationMemory';
 import { AutomationResponseValidator } from './automationResponseValidator';
@@ -141,6 +142,8 @@ function instructions(result: ResolverResult): string {
         `- Importa browser desde @wdio/globals únicamente si el Screen Object contiene una llamada browser.; no dejes imports sin uso.\n` +
         `- Incluye trazabilidad para las ${result.scenario.actions.length} acciones en orden.\n` +
         `- El Feature debe tener @tag, @${result.scenario.platform}, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
+        `- Las filas de scenarioRows con status "reused" se copian LITERALES, caracter por caracter (tildes incluidas). Ya existen como step definition en el framework: si las reescribes o reemplazas su parametro por un literal, Cucumber las reporta como undefined al ejecutar. Ejemplo: \`Given el usuario <username> inicia sesión en Yape\` se copia tal cual, nunca con el nombre del usuario dentro.\n` +
+        `- Todo <parametro> que dejes en un step obliga a \`Scenario Outline:\` y a una tabla \`Examples:\` con esa columna. Toma los valores de request.examples de scenario.json; si falta la columna, el parametro llega literal al step y no enlaza.\n` +
         `- Redacta Gherkin declarativo: describe intención, capacidad y resultado de negocio; no narres clicks, botones, campos, scrolls, swipes ni esperas.\n` +
         `- Agrupa acciones técnicas consecutivas dentro de un único step funcional. Varias secuencias pueden apuntar al mismo gherkinStep en actionTrace.\n` +
         `- Finaliza en menos de 5 minutos. No escribas fuera de esta carpeta.\n` +
@@ -165,6 +168,7 @@ function regenerationInstructions(
         `- contextHint/elementIntent es contexto no vinculante del QA: no lo copies literalmente como Step; conserva o mejora la síntesis declarativa del comportamiento completo.\n` +
         `- Redacta Gherkin declarativo y agrupa clicks, scrolls, swipes y esperas dentro de steps funcionales.\n` +
         `- Conserva los tags de plataforma: @android si Android está completo y @ios si iOS está completo.\n` +
+        `- Conserva literales las filas reused (login incluido) y su tabla Examples: son steps que ya existen en el framework.\n` +
         `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
         `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
         `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
@@ -195,6 +199,12 @@ try{const document=JSON.parse(locator);for(const platform of ['android','ios']){
 for(const platform of requiredPlatforms){if(!new RegExp('^\\s*@[^\\n]*@'+platform+'(?:\\s|$)','mi').test(feature))errors.push('Falta tag @'+platform)}
 if(!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.test(feature))errors.push('Formato Scenario inválido');
 if(!/^\s*Then\s+\S+/m.test(feature))errors.push('Scenario sin Then');
+const normStep=v=>String(v||'').replace(/\s+/g,' ').trim();
+const featureLines=[...feature.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gmi)].map(x=>x[1].trim());
+const presentSteps=new Set(featureLines.map(normStep));
+for(const row of (scenario.request&&scenario.request.scenarioRows)||[]){if(row.status!=='reused')continue;if(!presentSteps.has(normStep(row.text)))errors.push('Step reutilizado reescrito: "'+row.text+'". Copialo literal: lo resuelve un step definition que ya existe')}
+const params=[...new Set(featureLines.flatMap(x=>[...x.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)].map(y=>y[1])))];
+if(params.length){if(!/^\s*Scenario\s+Outline\s*:/mi.test(feature))errors.push('El Feature usa <'+params.join('>, <')+'> pero declara "Scenario:": debe ser "Scenario Outline:" con su tabla Examples');const cols=new Set();const flines=feature.split(/\r?\n/);for(let i=0;i<flines.length;i++){if(!/^\s*Examples\s*:/i.test(flines[i]))continue;const head=flines.slice(i+1).find(x=>x.trim().startsWith('|'));if(!head)continue;head.split('|').slice(1,-1).map(x=>x.trim()).filter(Boolean).forEach(x=>cols.add(x))}const missingCols=params.filter(x=>!cols.has(x));if(missingCols.length)errors.push('Faltan columnas en Examples para: <'+missingCols.join('>, <')+'>')}
 const imperative=/^\s*(?:Given|When|Then|And|But)\s+.*(?:\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b|\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:bot[oó]n|elemento|campo)\b|\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b|\b(?:espera|esperar)\s+\d+\s*segundos?\b|\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b)/gmi;
 for(const match of feature.matchAll(imperative))errors.push('Gherkin técnico/imperativo: '+match[0].trim());
 const normalizeText=value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/<[^>]+>/g,'<param>').replace(/[^a-z0-9<>]+/g,' ').replace(/\s+/g,' ').trim();
@@ -224,6 +234,42 @@ if(importsBrowser&&!usesBrowser)errors.push('ScreenObject importa browser pero n
 if(usesBrowser&&!importsBrowser)errors.push('ScreenObject utiliza browser sin importarlo desde @wdio/globals');
 if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('PASS: contrato del paquete válido');
 `;
+}
+
+/**
+ * Copia del escenario para el paquete, sin la triplicación de acciones.
+ *
+ * `scenario.actions` ya describe cada acción completa; `request.scenarioRows`
+ * las repetía enteras y `plan.resolutions` otra vez. En una grabación de 14
+ * acciones eso eran ~3,8 KB de puro duplicado. Las filas solo necesitan
+ * referenciar la secuencia. La copia del recording conserva todo: esta poda
+ * aplica únicamente al paquete que lee el agente.
+ */
+function packagedScenario(scenario: AutomationScenario): AutomationScenario {
+    const rows = scenario.request.scenarioRows;
+    if (!rows?.length) return scenario;
+    return {
+        ...scenario,
+        request: {
+            ...scenario.request,
+            scenarioRows: rows.map(row => ({
+                ...row,
+                actions: (row.actions || []).map(action => ({ sequence: action.sequence } as any)),
+            })),
+        },
+    };
+}
+
+/**
+ * [visual-recorder] Se lanza cuando el resolver marca un gap `blocking`.
+ * A diferencia del resto de gaps, este no viaja al agente: el paquete no llega
+ * a escribirse y el QA tiene que corregir la grabacion primero.
+ */
+export class BlockingGapError extends Error {
+    constructor(readonly gaps: UnresolvedGap[]) {
+        super(gaps.map(gap => `${gap.description} ${gap.requiredOutput}`).join(' | '));
+        this.name = 'BlockingGapError';
+    }
 }
 
 export class AutomationPackageBuilder {
@@ -317,11 +363,13 @@ export class AutomationPackageBuilder {
                 return total + (fs.existsSync(file) ? fs.statSync(file).size : 0);
             }, 0);
         const contextBytes = serializedContext + retainedContext;
-        if (contextBytes > plan.budgets.maxContextBytes) {
-            throw new Error(
-                `El refinamiento excede el contexto máximo de ${plan.budgets.maxContextBytes} bytes (${contextBytes})`
-            );
-        }
+        // El límite es un objetivo de coste, no una regla: el alcance del caso lo
+        // decide el QA y una grabación larga necesita más contexto. Se informa el
+        // sobrecosto y se continúa.
+        const contextWarning = contextBytes > plan.budgets.maxContextBytes
+            ? `El contexto del refinamiento es de ${contextBytes} bytes y supera el objetivo de ` +
+              `${plan.budgets.maxContextBytes}. El agente costará más tokens.`
+            : undefined;
 
         const historyDirectory = path.join(
             packageDirectory,
@@ -337,7 +385,7 @@ export class AutomationPackageBuilder {
             if (fs.existsSync(source)) fs.copyFileSync(source, path.join(historyDirectory, name));
         }
 
-        writeJson(path.join(packageDirectory, 'scenario.json'), revisedScenario);
+        writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario(revisedScenario));
         writeJson(path.join(packageDirectory, 'generation-plan.json'), plan);
         writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
@@ -368,16 +416,23 @@ export class AutomationPackageBuilder {
             unresolvedGaps: 1,
             agentRequired: true,
             responseAvailable: false,
+            contextBytes,
+            contextWarning,
         };
     }
 
     prepare(scenario: AutomationScenario, recordingDirectory: string): AutomationPackageResult {
         const result = this.resolver.resolve(scenario);
+        // [visual-recorder] Un gap bloqueante corta antes de crear el paquete:
+        // si se escribiera, el agente arrancaria igual y gastaria tokens en un
+        // caso que el verificador va a rechazar mas adelante de todos modos.
+        const blocking = result.unresolvedContext.gaps.filter(gap => gap.blocking);
+        if (blocking.length) throw new BlockingGapError(blocking);
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
         fs.mkdirSync(packageDirectory, { recursive: true });
         const memoryHit = this.memory.find(result.scenario.fingerprint);
         if (memoryHit) result.plan.status = 'memory-hit';
-        writeJson(path.join(packageDirectory, 'scenario.json'), result.scenario);
+        writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario(result.scenario));
         writeJson(path.join(packageDirectory, 'generation-plan.json'), result.plan);
         writeJson(path.join(packageDirectory, 'resolved-context.json'), result.resolvedContext);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), result.unresolvedContext);
@@ -481,9 +536,14 @@ export class AutomationPackageBuilder {
             'collision-report.json', 'unresolved-context.json', 'instructions.md'
         ]
             .reduce((total, file) => total + fs.statSync(path.join(packageDirectory, file)).size, 0);
-        if (contextBytes > result.plan.budgets.maxContextBytes) {
-            throw new Error(`El contexto mínimo excede ${result.plan.budgets.maxContextBytes} bytes (${contextBytes})`);
-        }
+        // El presupuesto es un objetivo de coste, no una condición de correctitud:
+        // una grabación larga necesita legítimamente más contexto. Lanzar dejaba el
+        // paquete escrito a medias y bloqueaba al QA sin alternativa.
+        const contextWarning = contextBytes > result.plan.budgets.maxContextBytes
+            ? `El contexto del paquete es de ${contextBytes} bytes y supera el objetivo de ` +
+              `${result.plan.budgets.maxContextBytes}. El agente costará más tokens; ` +
+              `considera dividir la grabación en casos más cortos.`
+            : undefined;
         return {
             packageDirectory,
             recordingId: result.scenario.recordingId,
@@ -495,6 +555,8 @@ export class AutomationPackageBuilder {
             agentRequired: !response,
             responseAvailable: Boolean(response),
             validation,
+            contextBytes,
+            contextWarning,
         };
     }
 }

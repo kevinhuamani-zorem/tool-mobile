@@ -25,7 +25,7 @@ export function SessionOnboarding() {
             <span className="onboarding-option-icon">🎬</span>
             <span>
               <strong>Completar una grabación</strong>
-              <small>Selecciona solo los locators faltantes de esta plataforma; no vuelve a generar el caso.</small>
+              <small>Sigue grabando pasos que faltan (por ejemplo el Then), o asigna los locators pendientes de esta plataforma.</small>
             </span>
           </button>
           <button id="btnOnboardingRegenerate" className="onboarding-option">
@@ -41,6 +41,27 @@ export function SessionOnboarding() {
           <select id="cmbOnboardingScenario" className="field-select">
             <option value>Selecciona una grabación...</option>
           </select>
+          {/* [visual-recorder] Completar tiene dos casuisticas distintas: seguir
+              grabando acciones sobre la misma grabacion, o solo asignar los
+              locators que faltan de esta plataforma. La segunda necesita un
+              plan de generacion; la primera es justamente la salida cuando no
+              lo hay porque la grabacion no tiene Then. */}
+          <div className="onboarding-submodes">
+            <label className="onboarding-submode" htmlFor="rdbCompleteSteps">
+              <input type="radio" id="rdbCompleteSteps" name="onboardingCompleteMode" value="steps" defaultChecked />
+              <span>
+                <strong>Seguir grabando pasos</strong>
+                <small id="onboardingStepsHint">Recupera las acciones ya grabadas y continúa sobre la misma grabación.</small>
+              </span>
+            </label>
+            <label className="onboarding-submode" htmlFor="rdbCompleteLocators">
+              <input type="radio" id="rdbCompleteLocators" name="onboardingCompleteMode" value="locators" />
+              <span>
+                <strong>Completar locators pendientes</strong>
+                <small id="onboardingLocatorsHint">Asigna solo los locators de esta plataforma; no vuelve a generar el caso.</small>
+              </span>
+            </label>
+          </div>
           <div id="onboardingScenarioHint" className="coverage-summary">
             Se muestran únicamente recordings del ambiente y squad activos. Android/iOS ya capturado se conserva.
           </div>

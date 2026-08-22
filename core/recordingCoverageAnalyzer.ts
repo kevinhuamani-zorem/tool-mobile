@@ -21,6 +21,17 @@ export interface RecordingScenarioInfo extends ExistingScenarioInfo {
     platform: string;
     actionCount: number;
     automationState: string;
+    /**
+     * [visual-recorder] El paquete del agente ya existe: sin esto no hay
+     * resoluciones y por tanto no hay cobertura de locators que completar.
+     */
+    hasPlan: boolean;
+    /**
+     * [visual-recorder] La grabacion tiene al menos una verificacion. Sin Then
+     * no es un caso de prueba (ISTQB) y el builder la rechaza, asi que lo unico
+     * que se puede hacer con ella es seguir grabando.
+     */
+    hasAssertion: boolean;
     generated: boolean;
     canRegenerate: boolean;
     regenerationIteration: number;
@@ -226,6 +237,8 @@ export class RecordingCoverageAnalyzer {
                     platform: scenario.platform,
                     actionCount: scenario.actions.length,
                     automationState: String(status.state || 'recorded'),
+                    hasPlan: Boolean(plan),
+                    hasAssertion: scenario.actions.some(action => /^VERIFICAR_/.test(action.action)),
                     generated,
                     canRegenerate,
                     regenerationIteration: Number(status.regenerationIteration || 0),

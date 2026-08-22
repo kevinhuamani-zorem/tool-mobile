@@ -13,6 +13,7 @@ import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
 import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
 import { recordedStepContext } from './models';
+import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 
 function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
     try {
@@ -191,6 +192,25 @@ export class AutomationResponseValidator {
                         file: response.files.find(file => file.layer === 'feature')?.path,
                     });
                 }
+                // Las filas `reused` ya existen en el framework con esa
+                // expresión exacta. Si el agente las reescribe (inlinar el
+                // usuario, perder una tilde) el step queda undefined y eso solo
+                // se descubre ejecutando el caso.
+                for (const text of rewrittenReusedSteps(scenario, preview.featureContent)) {
+                    errors.push({
+                        code: 'reused-step-rewritten',
+                        message: `El step reutilizado "${text}" fue reescrito. Cópialo literal: ` +
+                            'lo resuelve un step definition que ya existe y cualquier cambio lo deja sin enlazar.',
+                        file: response.files.find(file => file.layer === 'feature')?.path,
+                    });
+                }
+                for (const message of missingExamples(preview.featureContent)) {
+                    errors.push({
+                        code: 'missing-examples',
+                        message,
+                        file: response.files.find(file => file.layer === 'feature')?.path,
+                    });
+                }
                 const platformLocatorFile = response.files.find(file => file.layer === 'locators');
                 const requiredPlatforms = new Set<'android' | 'ios'>([scenario.platform]);
                 if (platformLocatorFile) {
@@ -248,6 +268,38 @@ export class AutomationResponseValidator {
                         message: `Definición Gherkin duplicada: ${duplicateDefinition}`,
                         file: response.files.find(file => file.layer === 'steps')?.path,
                     });
+                }
+                // Un step definition que ningun Scenario usa es codigo muerto en un
+                // namespace global: nadie lo llama y estorba a la siguiente
+                // generacion. Solo aplica cuando el archivo se crea; en un update el
+                // baseline trae definitions de otros features que si se usan.
+                {
+                    const stepsPlanned = plan.files.find(file => file.layer === 'steps');
+                    // En un update, las definitions del baseline pertenecen a otros
+                    // Scenarios y si se usan; solo se juzga lo que el agente agrega.
+                    const inherited = new Set<string>();
+                    if (stepsPlanned?.operation === 'update') {
+                        const absolute = path.join(projectPaths.frameworkRoot, stepsPlanned.path);
+                        if (fs.existsSync(absolute)) {
+                            [...fs.readFileSync(absolute, 'utf-8').matchAll(
+                                /(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g
+                            )].forEach(match => inherited.add(match[1]));
+                        }
+                    }
+                    const featureLines = featureStepLines(preview.featureContent);
+                    for (const definition of definitions.filter(item => !inherited.has(item))) {
+                        let expression: RegExp;
+                        try {
+                            expression = new RegExp(`^${definition}$`);
+                        } catch {
+                            continue;
+                        }
+                        if (featureLines.some(line => expression.test(line))) continue;
+                        warnings.push(
+                            `Step definition sin uso: "${definition}". Ningun Scenario del Feature lo invoca; ` +
+                            'eliminalo o cubre ese comportamiento en el Gherkin.'
+                        );
+                    }
                 }
                 const methods = [...(preview.screenContent || '').matchAll(
                     /public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g

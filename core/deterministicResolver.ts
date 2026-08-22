@@ -16,6 +16,8 @@ import { GenerationRequest } from './fwkMobileGenerator';
 import { ArtifactBundle, FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
 import { Action, RecordedStep, recordedStepContext } from './models';
 import { normalizeFeatureScope } from './featureScope';
+import { TECHNICAL_STOP_WORDS } from './selectorNormalization';
+import { detectRepetition } from './repetitionDetector';
 import { projectPaths } from './projectPaths';
 
 export interface ResolverResult {
@@ -98,14 +100,6 @@ function actionIntent(step: RecordedStep, sequence: number): string {
         : intent;
     return semanticIntent || `${step.action.toLowerCase()} elemento ${sequence}`;
 }
-
-const TECHNICAL_STOP_WORDS = new Set([
-    'usuario', 'debe', 'poder', 'pueda', 'sus', 'todos', 'todas', 'ubicar',
-    'boton', 'botones', 'ver', 'verificar', 'validar', 'existe', 'mostrar', 'muestra',
-    'seleccionar', 'selecciona', 'hacer', 'hace', 'click', 'pantalla', 'elemento',
-    'para', 'desde', 'hacia', 'sobre', 'entre', 'esta', 'este', 'estos', 'estas',
-    'del', 'las', 'los', 'una', 'uno', 'con', 'que', 'por', 'como', 'and', 'the',
-]);
 
 function compactTechnicalName(scenario: AutomationScenario): string {
     const candidates = [
@@ -257,6 +251,20 @@ function selectorPinsAssertedValue(step: RecordedStep): boolean {
     });
 }
 
+/**
+ * Un XPath solo de tipos de nodo, sin ningun predicado, no identifica nada:
+ * `//android.view.View` engancha la primera View generica del arbol, que existe
+ * en practicamente cualquier pantalla. Como asercion siempre pasa, y el caso
+ * queda verde sin haber comprobado nada.
+ */
+function selectorCannotIdentifyElement(selector = ''): boolean {
+    const value = String(selector).trim();
+    if (!/^\/{1,2}[^/]/.test(value) && value !== '//*') return false;
+    // Cualquier predicado, atributo o funcion ya lo hace especifico.
+    if (/[\[\]@=]|contains\(|text\(\)|starts-with\(/.test(value)) return false;
+    return true;
+}
+
 /** `UiSelector().text()` es coincidencia exacta: un `*` final nunca actúa como comodín. */
 function selectorUsesFakeWildcard(selector = ''): boolean {
     return /\.(?:text|description)\(\s*["'][^"']*[*%]["']\s*\)/.test(selector);
@@ -396,6 +404,24 @@ export class DeterministicResolver {
             dataName: rawScenario.request.dataName?.trim() || 'Usuario QA Temporal',
         };
         const gaps: UnresolvedGap[] = [];
+
+        // [visual-recorder] Regla ISTQB: un caso sin resultado esperado no es un
+        // caso de prueba. Se emite como gap bloqueante y va primero para que el
+        // builder lo vea antes de escribir nada: sin Then no hay nada que el
+        // agente pueda proponer, solo tokens gastados en un caso invalido.
+        if (!rawScenario.actions.some(step => /^VERIFICAR_/.test(step.action))) {
+            gaps.push({
+                id: 'gap-missing-assertion',
+                type: 'missing-assertion',
+                blocking: true,
+                description:
+                    'La grabacion no contiene ninguna verificacion, asi que el caso no tiene Then. ' +
+                    'Sin resultado esperado solo se comprueba que los controles son tapeables, no que la funcionalidad haga lo que debe.',
+                requiredOutput:
+                    'Vuelve a grabar (o continua la grabacion) marcando la verificacion del resultado esperado ' +
+                    'con VERIFICAR_TEXTO / VERIFICAR_EXISTE / VERIFICAR_NO_EXISTE sobre el elemento que prueba que la operacion ocurrio.',
+            });
+        }
         const usedNames = new Set<string>();
         const resolutions: ActionResolution[] = rawScenario.actions.map((step, index) => {
             const sequence = index + 1;
@@ -475,6 +501,22 @@ export class DeterministicResolver {
         });
 
         rawScenario.actions.forEach((step, index) => {
+            if (!/^VERIFICAR_/.test(step.action)) return;
+            if (!selectorCannotIdentifyElement(step.selector)) return;
+            gaps.push({
+                id: `gap-weak-assertion-${index + 1}`,
+                sequence: index + 1,
+                type: 'verification-semantics',
+                description: `La acción ${index + 1} verifica con "${step.selector}", un XPath sin ningún ` +
+                    'predicado: engancha el primer nodo de ese tipo, que existe en casi cualquier pantalla. ' +
+                    'La aserción pasaría igual aunque el filtro no se haya aplicado.',
+                requiredOutput: 'Apunta la verificación a algo propio del resultado (accessibility id, ' +
+                    'texto del título del contenedor, o el XPath con un predicado que lo distinga) y ' +
+                    'explica en el Then qué prueba ese elemento.',
+            });
+        });
+
+        rawScenario.actions.forEach((step, index) => {
             if (!selectorUsesFakeWildcard(step.selector)) return;
             gaps.push({
                 id: `gap-selector-wildcard-${index + 1}`,
@@ -495,6 +537,35 @@ export class DeterministicResolver {
                 requiredOutput: 'Indicar el mismo valor utilizado durante la grabación; no inventarlo.',
             });
         });
+
+        // Un ciclo repetido casi siempre significa "probar todas las opciones",
+        // pero convertirlo en Examples cambia el caso a N ejecuciones completas.
+        // El recorder lo detecta y lo propone; la lectura la elige el QA.
+        const repetition = detectRepetition(rawScenario.actions);
+        if (repetition) {
+            const last = repetition.startSequence + repetition.length * repetition.repetitions - 1;
+            gaps.push({
+                id: 'gap-repetition',
+                sequence: repetition.startSequence,
+                type: 'repetition',
+                description:
+                    `Las acciones ${repetition.startSequence}-${last} repiten ${repetition.repetitions} veces ` +
+                    `el mismo ciclo de ${repetition.length} accion(es), variando solo <${repetition.parameter}>: ` +
+                    `${repetition.values.join(', ')}.`,
+                requiredOutput: [
+                    `Recomendado: un solo escenario con una data table de Cucumber en el step, iterando los ` +
+                    `${repetition.repetitions} valores de <${repetition.parameter}>. El step acumula los fallos y ` +
+                    'lanza uno solo al final nombrando cual fallo, asi se evaluan todos y se sabe cual rompio ' +
+                    'sin repetir el login. El framework ya usa DataTable en marketplace, nexus y home.',
+                    `Alternativa: Scenario Outline con ${repetition.repetitions} filas de Examples, solo si cada ` +
+                    'valor necesita correr aislado y eso justifica repetir el login completo en cada fila.',
+                    `Alternativa: encadenar las ${repetition.repetitions} vueltas sin tabla, solo si lo que se ` +
+                    'valida es la acumulacion y no cada valor por separado.',
+                    `En cualquiera, el locator va parametrizado con {${repetition.parameter}} y .replace(), ` +
+                    'como ya hacen home.locator.json y pautas.locator.json.',
+                ].join(' '),
+            });
+        }
 
         const scenarioRows: NonNullable<GenerationRequest['scenarioRows']> = [{
             keyword: 'Given',
@@ -646,6 +717,7 @@ export class DeterministicResolver {
             files,
             existingCase,
             reuseTarget,
+            ...(repetition ? { repetition } : {}),
             unresolvedGapIds: gaps.map(gap => gap.id),
             budgets: { maxDurationMs: 300_000, maxContextBytes: 20_000, maxRepairAttempts: 1 },
         };

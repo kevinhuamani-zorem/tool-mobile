@@ -55,6 +55,16 @@ export interface PlannedFile {
     baseHash?: string;
 }
 
+export interface RepetitionProposal {
+    startSequence: number;
+    length: number;
+    repetitions: number;
+    varyingOffset: number;
+    values: string[];
+    parameter: string;
+    sequences: number[][];
+}
+
 export interface GenerationPlan {
     schemaVersion: number;
     pipelineVersion: string;
@@ -67,6 +77,8 @@ export interface GenerationPlan {
     files: PlannedFile[];
     unresolvedGapIds: string[];
     existingCase?: ExistingAutomationCandidate;
+    /** Ciclo repetido detectado; el QA decide si se convierte en Examples. */
+    repetition?: RepetitionProposal;
     reuseTarget?: {
         reason: string;
         score: number;
@@ -144,9 +156,15 @@ export interface ResolvedContext {
 export interface UnresolvedGap {
     id: string;
     sequence?: number;
-    type: 'missing-selector' | 'missing-intent' | 'test-data' | 'test-input' | 'semantic-naming' | 'verification-semantics' | 'refinement';
+    type: 'missing-assertion' | 'missing-selector' | 'missing-intent' | 'test-data' | 'test-input' | 'semantic-naming' | 'verification-semantics' | 'repetition' | 'refinement';
     description: string;
     requiredOutput: string;
+    /**
+     * [visual-recorder] Gap bloqueante: no es algo que el agente pueda resolver
+     * con mas contexto, sino un defecto de la grabacion que solo el QA puede
+     * corregir. El paquete no se arma y el agente nunca arranca.
+     */
+    blocking?: boolean;
 }
 
 export interface UnresolvedContext {
@@ -200,4 +218,7 @@ export interface AutomationPackageResult {
     agentRequired: boolean;
     responseAvailable: boolean;
     validation?: AutomationValidation;
+    /** Bytes del contexto mínimo y aviso si supera el objetivo (no bloquea). */
+    contextBytes?: number;
+    contextWarning?: string;
 }

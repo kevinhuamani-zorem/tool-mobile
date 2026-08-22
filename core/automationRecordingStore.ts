@@ -29,6 +29,14 @@ function atomicJson(file: string, value: unknown): void {
     fs.renameSync(temporary, file);
 }
 
+function readJson<T>(file: string): T | undefined {
+    try {
+        return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+    } catch {
+        return undefined;
+    }
+}
+
 function isSensitiveInput(step: RecordedStep): boolean {
     if (step.action !== 'ESCRIBIR') return false;
     const context = [recordedStepContext(step), step.variableName]
@@ -97,6 +105,47 @@ export class AutomationRecordingStore {
         atomicJson(path.join(this.activeDirectory, 'manifest.json'), this.manifest);
         atomicJson(path.join(this.activeDirectory, 'actions.json'), []);
         return this.manifest;
+    }
+
+    /**
+     * [visual-recorder] Reengancha una grabacion ya existente como grabacion
+     * activa, para que el QA pueda seguir grabando encima (por ejemplo, para
+     * agregar el Then que falta) sin perder las acciones ya capturadas.
+     *
+     * A diferencia de `start`, no crea carpeta: reutiliza la del recording, asi
+     * `replaceActions` y `buildScenario` sobreescriben ese mismo paquete y la
+     * revision sigue avanzando en vez de dejar dos grabaciones sueltas.
+     */
+    resume(directory: string): {
+        manifest: RecordingManifest;
+        actions: RecordedStep[];
+        scenario?: AutomationScenario;
+    } {
+        const manifest = readJson<RecordingManifest>(path.join(directory, 'manifest.json'));
+        const scenario = readJson<AutomationScenario>(path.join(directory, 'scenario.json'));
+        if (!manifest && !scenario) {
+            throw new Error('La grabación no tiene manifest ni scenario; no se puede continuar');
+        }
+        // actions.json es la fuente viva; scenario.json solo existe si el QA ya
+        // llego a preparar el paquete al menos una vez.
+        const actions = readJson<RecordedStep[]>(path.join(directory, 'actions.json'))
+            || scenario?.actions
+            || [];
+        const recovered: RecordingManifest = manifest || {
+            schemaVersion: AUTOMATION_SCHEMA_VERSION,
+            pipelineVersion: AUTOMATION_PIPELINE_VERSION,
+            recordingId: scenario!.recordingId,
+            revision: scenario!.revision,
+            createdAt: scenario!.createdAt,
+            updatedAt: scenario!.createdAt,
+            actionCount: actions.length,
+            squad: scenario!.squad,
+            platform: scenario!.platform,
+            environment: scenario!.environment,
+        };
+        this.activeDirectory = directory;
+        this.manifest = recovered;
+        return { manifest: recovered, actions, scenario };
     }
 
     replaceActions(actions: RecordedStep[], context: RecordingContext): RecordingManifest {

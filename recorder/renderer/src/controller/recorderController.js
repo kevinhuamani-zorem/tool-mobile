@@ -168,6 +168,11 @@ export async function initializeRecorder() {
     const onboardingRegenerationHint = document.getElementById('onboardingRegenerationHint');
     const btnOnboardingBack = document.getElementById('btnOnboardingBack');
     const btnOnboardingAnalyze = document.getElementById('btnOnboardingAnalyze');
+    // [visual-recorder] Las dos casuisticas de "Completar una grabacion".
+    const rdbCompleteSteps = document.getElementById('rdbCompleteSteps');
+    const rdbCompleteLocators = document.getElementById('rdbCompleteLocators');
+    const onboardingStepsHint = document.getElementById('onboardingStepsHint');
+    const onboardingLocatorsHint = document.getElementById('onboardingLocatorsHint');
     const btnOnboardingRegenerateBack = document.getElementById('btnOnboardingRegenerateBack');
     const btnOnboardingRegeneratePrepare = document.getElementById('btnOnboardingRegeneratePrepare');
     const assignmentTarget = document.getElementById('assignmentTarget');
@@ -188,6 +193,14 @@ export async function initializeRecorder() {
     let advanceAssignmentAfterSave = false;
     let workflowMode = 'new';
     let recordingScenarioCatalog = [];
+    // [visual-recorder] El onboarding se muestra MIENTRAS el dispositivo conecta,
+    // y start-session crea una grabacion nueva al terminar. Continuar una
+    // grabacion tiene que esperar a ese momento o el arranque la pisaria.
+    let markSessionReady = () => {};
+    let sessionReady = Promise.resolve();
+    function resetSessionReady() {
+        sessionReady = new Promise(resolve => { markSessionReady = resolve; });
+    }
     const collapsedLocatorGroups = new Set([
         'Botones', 'Campos', 'Textos', 'Imágenes e íconos', 'Listas y contenedores', 'Otros'
     ]);
@@ -523,7 +536,49 @@ export async function initializeRecorder() {
                 : `${result.scenarios.length} grabación(es) encontradas en ${squad}`;
         onboardingScenarioHint.textContent =
             `${result.scenarios.length} grabación(es) del ambiente activo en ${squad}`;
+        updateCompleteModeControls();
         updateRegenerationControls();
+    }
+
+    /**
+     * [visual-recorder] Habilita/deshabilita las dos casuisticas de "Completar
+     * una grabacion" segun lo que la grabacion elegida permite realmente:
+     *
+     *  - Seguir grabando pasos: siempre se puede, pero solo tiene sentido en la
+     *    plataforma con la que se grabo (los pasos nuevos se suman a esas).
+     *  - Completar locators: necesita un plan de generacion. Una grabacion sin
+     *    Then nunca llega a tenerlo, y ahi la unica salida es grabar el Then.
+     */
+    function updateCompleteModeControls() {
+        if (!rdbCompleteSteps || !rdbCompleteLocators) return;
+        const selected = recordingScenarioCatalog.find(
+            scenario => scenario.id === cmbOnboardingScenario.value
+        );
+        const samePlatform = !selected || selected.platform === sessionPlatform;
+
+        rdbCompleteSteps.disabled = Boolean(selected && !samePlatform);
+        rdbCompleteLocators.disabled = Boolean(selected && !selected.hasPlan);
+        if (rdbCompleteSteps.disabled && !rdbCompleteLocators.disabled) rdbCompleteLocators.checked = true;
+        if (rdbCompleteLocators.disabled && !rdbCompleteSteps.disabled) rdbCompleteSteps.checked = true;
+
+        onboardingStepsHint.textContent = !selected
+            ? 'Recupera las acciones ya grabadas y continúa sobre la misma grabación.'
+            : samePlatform
+                ? `Continúa sobre las ${selected.actionCount} acción(es) ya grabadas` +
+                  (selected.hasAssertion ? '.' : '; esta grabación aún no tiene Then.')
+                : `Solo desde un dispositivo ${String(selected.platform).toUpperCase()}: así se grabó el caso.`;
+
+        onboardingLocatorsHint.textContent = !selected
+            ? 'Asigna solo los locators de esta plataforma; no vuelve a generar el caso.'
+            : selected.hasPlan
+                ? `Asigna los locators ${sessionPlatform.toUpperCase()} pendientes; no vuelve a generar el caso.`
+                : selected.hasAssertion
+                    ? 'Todavía no hay plan de generación: prepara el paquete del agente antes.'
+                    : 'Sin Then no hay plan de generación (ISTQB): graba primero la verificación.';
+
+        btnOnboardingAnalyze.textContent = rdbCompleteLocators.checked
+            ? 'Analizar y completar →'
+            : 'Continuar la grabación →';
     }
 
     function updateRegenerationControls() {
@@ -847,6 +902,7 @@ export async function initializeRecorder() {
         document.querySelector('.onboarding-options').style.display = 'none';
         onboardingRegenerateFlow.style.display = 'none';
         onboardingExistingFlow.style.display = 'flex';
+        updateCompleteModeControls();
         cmbOnboardingScenario.focus();
     });
 
@@ -858,6 +914,9 @@ export async function initializeRecorder() {
         updateRegenerationControls();
     });
 
+    cmbOnboardingScenario.addEventListener('change', updateCompleteModeControls);
+    rdbCompleteSteps?.addEventListener('change', updateCompleteModeControls);
+    rdbCompleteLocators?.addEventListener('change', updateCompleteModeControls);
     cmbOnboardingRegeneration.addEventListener('change', updateRegenerationControls);
     chkRegenerationClean.addEventListener('change', updateRegenerationControls);
 
@@ -914,9 +973,83 @@ export async function initializeRecorder() {
         );
     });
 
+    /**
+     * [visual-recorder] Reengancha la grabacion elegida y devuelve el recorder a
+     * modo "grabando", con las acciones previas ya cargadas y la metadata del
+     * caso rellenada. El QA sigue grabando (tipicamente el Then que falta) y
+     * finaliza por el flujo normal, que reescribe la misma grabacion.
+     */
+    async function resumeSelectedRecording() {
+        const recordingId = cmbOnboardingScenario.value;
+        // start-session crea una grabacion nueva al conectar; si reenganchamos
+        // antes de eso, el arranque nos la pisa.
+        disableBtn(btnOnboardingAnalyze, '⏳ Esperando el dispositivo...');
+        await sessionReady;
+        disableBtn(btnOnboardingAnalyze, '⏳ Cargando acciones...');
+        const result = await api.resumeRecording({
+            recordingId,
+            squad: cmbFrameworkSquad.value || 'payment'
+        });
+        enableBtn(btnOnboardingAnalyze);
+        updateCompleteModeControls();
+        if (!result.success) {
+            onboardingScenarioHint.textContent = '✗ ' + result.error;
+            return;
+        }
+
+        workflowMode = 'new';
+        activeScenarioCoverage = null;
+        currentAssignment = null;
+        selectedCatalogLocator = null;
+        verifiedSelector = '';
+        scenarioLocatorQueue.innerHTML = '';
+        txtSelector.value = '';
+        txtVarName.value = '';
+        txtVarName.readOnly = false;
+        setVerify('— Ingresa un selector');
+        renderAssignmentTarget();
+        screenRecorder.classList.remove('existing-workflow');
+        scenarioCoveragePanel.classList.remove('is-open');
+        renderSteps(result.steps || []);
+
+        // Rellena la metadata del caso para que el QA no la reescriba distinta:
+        // si cambia, el fingerprint cambia y el paquete deja de ser el mismo.
+        const request = result.scenario?.request;
+        if (request) {
+            if (request.featureName) txtFeature.value = request.featureName;
+            if (request.scenarioName) txtScenario.value = request.scenarioName;
+            if (request.fileName) txtFeatureFile.value = request.fileName;
+            if (request.locatorModule) txtLocatorModule.value = request.locatorModule;
+            if (request.caseId) txtCaseId.value = request.caseId;
+            if (request.tag) txtFeatureTag.value = request.tag;
+            if (request.dataName) txtDataName.value = request.dataName;
+            if (request.pathType &&
+                [...cmbPathType.options].some(option => option.value === request.pathType)) {
+                cmbPathType.value = request.pathType;
+            }
+        }
+        if (result.scenario?.objective) txtAutomationObjective.value = result.scenario.objective;
+        if (result.scenario?.acceptanceCriteria) {
+            txtAutomationAcceptance.value = result.scenario.acceptanceCriteria;
+        }
+
+        sessionOnboarding.style.display = 'none';
+        updateFinalAction();
+        setStatus(
+            result.hasAssertion
+                ? `🎬 Grabación retomada · ${(result.steps || []).length} acción(es) · sigue grabando`
+                : `🎬 Grabación retomada · falta el Then: graba la verificación del resultado`,
+            result.hasAssertion ? '#00CC00' : '#FF9900'
+        );
+    }
+
     btnOnboardingAnalyze.addEventListener('click', async () => {
         if (!cmbOnboardingScenario.value) {
             onboardingScenarioHint.textContent = '⚠ Selecciona una grabación';
+            return;
+        }
+        if (rdbCompleteSteps?.checked) {
+            await resumeSelectedRecording();
             return;
         }
         cmbExistingScenario.value = cmbOnboardingScenario.value;
@@ -1919,6 +2052,7 @@ export async function initializeRecorder() {
         screenRecorder.style.cssText = 'display:flex !important; flex-direction:column';
         lblDevice.textContent        = '☁️ ' + deviceLabel + ' — conectando...';
         setStatus('🔄 Conectando con BrowserStack...', '#FF6600');
+        resetSessionReady();
         setRecorderConnecting(true);
         sessionPlatform = bsPlatform;
         await loadExistingScenarios();
@@ -1947,6 +2081,7 @@ export async function initializeRecorder() {
         try {
             const result = await api.bsStartSession(config);
             if (result.success) {
+                markSessionReady();
                 setRecorderConnecting(false);
                 sessionPlatform = bsPlatform;
                 cmbFrameworkSquad.disabled = true;
@@ -2037,6 +2172,7 @@ export async function initializeRecorder() {
         screenRecorder.style.cssText = 'display:flex !important; flex-direction:column';
         lblDevice.textContent        = deviceName + ' — conectando...';
         setStatus('🔄 Conectando con Appium...', '#FF6600');
+        resetSessionReady();
         setRecorderConnecting(true);
         sessionPlatform = 'android';
         await loadExistingScenarios();
@@ -2056,6 +2192,7 @@ export async function initializeRecorder() {
         try {
             const result = await api.startSession(config);
             if (result.success) {
+                markSessionReady();
                 setRecorderConnecting(false);
                 sessionPlatform = 'android';
                 cmbFrameworkSquad.disabled = true;

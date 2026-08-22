@@ -37,6 +37,14 @@ export function words(value: string): string[] {
         .filter(word => word.length > 1);
 }
 
+export const TECHNICAL_STOP_WORDS = new Set([
+    'usuario', 'debe', 'poder', 'pueda', 'sus', 'todos', 'todas', 'ubicar',
+    'boton', 'botones', 'ver', 'verificar', 'validar', 'existe', 'mostrar', 'muestra',
+    'seleccionar', 'selecciona', 'hacer', 'hace', 'click', 'pantalla', 'elemento',
+    'para', 'desde', 'hacia', 'sobre', 'entre', 'esta', 'este', 'estos', 'estas',
+    'del', 'las', 'los', 'una', 'uno', 'con', 'que', 'por', 'como', 'and', 'the',
+]);
+
 export function slug(value: string, fallback: string): string {
     const output = value.toLowerCase().normalize('NFD')
         .replace(DIACRITICS, '')
