@@ -61,11 +61,13 @@ generadores, validadores o plantillas.
 6. **No hay sobrescritura arbitraria.** Conserva validación de rutas, escritura
    atómica, hashes y el registro de archivos generados. Un archivo externo o
    alterado fuera del recorder no se reemplaza silenciosamente.
-7. **El QA describe intención, no nombres técnicos.** Durante una grabación el
-   formulario captura `elementIntent` (por ejemplo, `abrir movimientos`). El
-   resolver decide de forma determinista si reutiliza un locator de squad/Home
-   o crea un nombre lógico. Un locator lógico sirve a ambas plataformas y cada
-   ejecución actualiza exclusivamente su bloque de plataforma.
+7. **El QA aporta contexto, no texto contractual.** Durante una grabación el
+   formulario captura `contextHint` (`elementIntent` solo existe por
+   compatibilidad). Es una pista libre para comprender el elemento y resolver
+   reutilización/nombres; nunca se copia literalmente como Step. El Gherkin se
+   sintetiza con el objetivo, criterio de aceptación y secuencia completa. Un
+   locator lógico sirve a ambas plataformas y cada ejecución actualiza
+   exclusivamente su bloque de plataforma.
 8. **Los Steps solo orquestan.** La interacción Appium vive en Screen Objects y
    helpers. Una definición Given/When/Then llama métodos del Screen Object.
 9. **El preprocesador decide antes que el agente.** Selectores verificados,
@@ -88,6 +90,13 @@ generadores, validadores o plantillas.
     `agent-response.json` validado, crea una versión histórica, mantiene
     `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry
     sigue reconociendo como administrados y no modificados externamente.
+15. **Squad y ruta Feature son conceptos distintos.** `featureScope` puede
+    limitar Features a una subruta como `tapp/payment`, pero Steps, Screen
+    Objects y Locators mantienen como owner al squad seleccionado.
+16. **Reutiliza por relaciones, no por basename.** Sigue Feature -> definición
+    Gherkin -> import de Screen Object -> import de Locator. Si el plan marca
+    `update`, conserva la ruta y el baseline, y añade únicamente APIs faltantes.
+    No borres ni renombres definitions, methods o locators existentes.
 
 ## Convenciones de generación
 
@@ -117,6 +126,8 @@ generadores, validadores o plantillas.
   `_metadata` porque JSON no admite comentarios; los indexadores deben ignorar
   ese bloque.
 - La búsqueda compartida conserva el orden squad → commons → home → global.
+- `create` es el fallback. Un Feature nuevo puede vivir en `featureScope`
+  mientras las otras capas se actualizan de forma aditiva en rutas existentes.
 - Los tags de plataforma reflejan cobertura completa: `@android` para Android
   y `@ios` solo cuando todos los locators requeridos de iOS estén disponibles.
 - Nunca registres valores de `.env`, username/access key de BrowserStack ni

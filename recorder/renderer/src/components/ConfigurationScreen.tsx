@@ -146,6 +146,11 @@ export function ConfigurationScreen() {
           </div>
           <label className="field-label">Squad</label>
           <select id="cmbFrameworkSquad" className="field-select"><option value>Cargando squads...</option></select>
+          <label className="field-label">Ruta de Features <small>(opcional)</small></label>
+          <select id="cmbFrameworkFeatureScope" className="field-select">
+            <option value>Todo el squad</option>
+          </select>
+          <small className="field-help">Solo limita el mapa de Features; Steps, Screen Objects y Locators conservan el squad seleccionado.</small>
           <div className="detected-project">
             <small id="lblDetectedProjectTitle">Proyecto detectado</small>
             <strong id="lblDetectedProject">📁 fwk-mobile-test</strong>

@@ -19,6 +19,9 @@ export interface RecordedStep {
     action: Action;
     sequence?: number;
     variableName?: string;
+    /** Pista libre para comprender el elemento; no es texto Gherkin ni nombre de locator. */
+    contextHint?: string;
+    /** @deprecated Compatibilidad con recordings anteriores; se interpreta como contextHint. */
     elementIntent?: string;
     selector?: string;
     selectorVerified?: boolean;
@@ -30,6 +33,10 @@ export interface RecordedStep {
         module: string;
         scope: 'squad' | 'commons' | 'home' | 'global';
     };
+}
+
+export function recordedStepContext(step: RecordedStep): string {
+    return String(step.contextHint || step.elementIntent || step.description || '').trim();
 }
 
 export interface VerificationResult {

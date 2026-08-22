@@ -5,6 +5,10 @@ selectores comprobados, resuelve determinísticamente la reutilización del
 framework y genera Feature, Steps, Screen Object y Locators con una IA limitada
 exclusivamente a las brechas del plan.
 
+El campo **¿Qué función cumple este elemento?** es únicamente una pista de
+contexto. Ayuda a interpretar el control y encontrar reutilización, pero no se
+convierte directamente en un Step ni fija la redacción del Gherkin.
+
 ## Documentación para mantenimiento
 
 La guía técnica para continuar el proyecto está en
@@ -55,6 +59,12 @@ Al iniciar, el recorder escanea la raíz de `fwk-mobile-test` y presenta:
 - datasets de `resources/data`;
 - conteos de features, steps, Screen Objects y locators.
 
+Después del squad puede elegirse una **Ruta de Features** opcional. Por ejemplo,
+selecciona `interoperabilidad` + `tapp/payment`; no conviertas
+`interoperabilidad/tapp/payment` en un squad. El filtro limita el mapa de
+Features, pero mantiene disponible el catálogo del squad/Home para reutilizar
+las otras capas.
+
 Del `.env` solo se envían a la interfaz los nombres de las variables y si están
 configuradas. Los valores permanecen en el proceso principal y las claves
 sensibles se clasifican como tales. Esto permite usar el ambiente seleccionado
@@ -72,9 +82,10 @@ Los locators usan los bloques `<módulo>Android` o `<módulo>Ios` esperados por 
 framework. Si se informa un usuario de data, el feature usa `Scenario Outline`
 y crea su tabla `Examples`.
 
-La generación valida todas las rutas, escribe primero archivos temporales y no
-sobrescribe archivos existentes. Los locators capturados permanecen en memoria
-hasta que el usuario presiona `GENERAR`.
+La generación valida todas las rutas y escribe primero archivos temporales. Un
+archivo existente solo puede actualizarse cuando el plan lo relacionó por
+definiciones/imports y su hash sigue intacto. La actualización es aditiva y el
+validador bloquea la eliminación de APIs existentes.
 
 ### Generación segura de Steps y Screen Objects
 
@@ -89,8 +100,9 @@ acciones grabadas. Al presionar Continuar desde Gherkin:
        features/yape-steps-definitions/<squad>/<archivo>.steps.ts
        screenobjects/<squad>/<módulo>.screen.ts
 
-No se reutilizan ni modifican steps ajenos automáticamente. El Steps file solo
-orquesta y llama al Screen Object. El Screen Object extiende
+El preprocesador puede reutilizar o ampliar artefactos del mismo squad cuando
+la relación es trazable; nunca modifica archivos de otro squad. El Steps file
+solo orquesta y llama al Screen Object. El Screen Object extiende
 `BaseScreen`, resuelve elementos con `LocatorFactory` y usa los helpers del
 framework para clicks, escritura, espera, validaciones y gestos soportados.
 También se indexan los métodos públicos para validar el impacto antes de

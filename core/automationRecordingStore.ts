@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERSION } from './automationContracts';
 import { GenerationRequest, MobilePlatform } from './fwkMobileGenerator';
-import { RecordedStep } from './models';
+import { RecordedStep, recordedStepContext } from './models';
 import { projectPaths } from './projectPaths';
 
 interface RecordingContext {
@@ -31,7 +31,7 @@ function atomicJson(file: string, value: unknown): void {
 
 function isSensitiveInput(step: RecordedStep): boolean {
     if (step.action !== 'ESCRIBIR') return false;
-    const context = [step.elementIntent, step.variableName, step.description]
+    const context = [recordedStepContext(step), step.variableName]
         .filter(Boolean)
         .join(' ');
     return /(?:password|contrase(?:n|ñ)a|clave|pin|otp|token|secret|access\s*key|credential)/i.test(context);
@@ -61,7 +61,7 @@ export function scenarioFingerprint(input: {
 }): string {
     const canonical = input.actions.map(step => ({
         action: step.action,
-        intent: String(step.elementIntent || step.description || '').trim().toLowerCase(),
+        contextHint: recordedStepContext(step).toLowerCase(),
         selector: String(step.selector || '').trim().replace(/\s+/g, ' '),
     }));
     return crypto.createHash('sha256').update(JSON.stringify({

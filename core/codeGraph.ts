@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { projectPaths } from './projectPaths';
-import { RecordedStep } from './models';
+import { RecordedStep, recordedStepContext } from './models';
 
 export type CodeNodeType =
     | 'feature' | 'scenario' | 'gherkinStep'
@@ -153,7 +153,7 @@ export class CodeGraph {
         const allNodes = Object.values(this.cache.files).flatMap(file => file.nodes);
         const allEdges = Object.values(this.cache.files).flatMap(file => file.edges);
         const searchWords = words(input.actions.map(action => [
-            action.action, action.variableName, action.description
+            action.action, action.variableName, recordedStepContext(action)
         ].filter(Boolean).join(' ')).join(' '));
         const allowedSquads = new Set([input.squad, 'commons', 'home', 'global']);
         const ranked = allNodes

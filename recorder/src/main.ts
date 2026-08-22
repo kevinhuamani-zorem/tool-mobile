@@ -181,13 +181,13 @@ ipcMain.handle('analyze-step-impact', async (_, texts: string[], squad?: string)
 
 ipcMain.handle('get-workspace-info', async () => workspaceAdapter.describe());
 
-ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobilePlatform) => {
+ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobilePlatform, featureScope?: string) => {
     try {
         const selectedSquad = squad || activeSquad;
         const selectedPlatform = platform === 'ios' ? 'ios' : 'android';
         return {
             success: true,
-            catalog: reuseAnalyzer.getCatalog(selectedSquad, selectedPlatform)
+            catalog: reuseAnalyzer.getCatalog(selectedSquad, selectedPlatform, featureScope)
         };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -991,6 +991,7 @@ ipcMain.handle('prepare-automation-regeneration', async (_, input: {
     recordingId: string;
     squad?: string;
     refinement: string;
+    cleanPackage?: boolean;
 }) => {
     try {
         if (projectPaths.mode === 'neutral') {
@@ -1002,17 +1003,24 @@ ipcMain.handle('prepare-automation-regeneration', async (_, input: {
             input.recordingId,
             activeEnvironment
         );
-        const result = automationPackageBuilder.prepareRegeneration(
-            directory,
-            input.refinement
+        const info = recordingCoverageAnalyzer.getRecordingInfo(
+            squad,
+            input.recordingId,
+            activeEnvironment
         );
+        const mode = info.canRegenerate && !input.cleanPackage
+            ? 'refinement'
+            : 'reprocess';
+        const result = mode === 'refinement'
+            ? automationPackageBuilder.prepareRegeneration(directory, input.refinement)
+            : automationPackageBuilder.prepareRecordedScenario(directory, Boolean(input.cleanPackage));
         activeAutomationPackage = result.packageDirectory;
         automationPreview = null;
         const handoff = automationAgentLauncher.describe(
             projectPaths.automationAgent,
             result.packageDirectory
         );
-        return { success: true, result, handoff };
+        return { success: true, result, handoff, mode };
     } catch (e: any) {
         return { success: false, error: e.message };
     }
@@ -1077,7 +1085,7 @@ ipcMain.handle('import-automation-response', async () => {
             };
         }
         const preview = automationResponseValidator.toPreview(response);
-        const managed = generatedFileRegistry.assess(preview, scenario.squad);
+        const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
         const token = crypto.randomUUID();
         automationPreview = { token, scenario, plan, response };
         return { success: true, preview, validation, previewToken: token, conflicts: managed.conflicts };
@@ -1106,7 +1114,7 @@ ipcMain.handle('generate-automation-response', async (
         const validation = automationResponseValidator.validate(scenario, plan, response);
         if (!validation.valid) throw new Error(validation.errors.map(item => item.message).join(' | '));
         const preview = automationResponseValidator.toPreview(response);
-        const managed = generatedFileRegistry.assess(preview, scenario.squad);
+        const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
         if (managed.conflicts.length) {
             throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
         }

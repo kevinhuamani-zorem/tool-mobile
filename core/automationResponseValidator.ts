@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import {
     AutomationAgentResponse,
     AutomationScenario,
@@ -11,6 +12,7 @@ import { projectPaths } from './projectPaths';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
 import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
+import { recordedStepContext } from './models';
 
 function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
     try {
@@ -211,6 +213,16 @@ export class AutomationResponseValidator {
                         file: response.files.find(file => file.layer === 'feature')?.path,
                     });
                 }
+                const proposedStepTexts = responseScenarioSteps(preview.featureContent).flat();
+                for (const action of scenario.actions) {
+                    const contextHint = selectorNormalization.normalizeStepText(recordedStepContext(action));
+                    if (!contextHint || !proposedStepTexts.includes(contextHint)) continue;
+                    errors.push({
+                        code: 'verbatim-context-hint',
+                        message: `La pista contextual de la acción ${action.sequence} fue copiada literalmente como Step. Debe sintetizarse dentro del comportamiento del caso.`,
+                        file: response.files.find(file => file.layer === 'feature')?.path,
+                    });
+                }
                 const traceBySequence = new Map(response.actionTrace.map(trace => [trace.sequence, trace.gherkinStep]));
                 for (const action of scenario.actions.filter(item => TECHNICAL_ACTIONS.has(item.action))) {
                     const current = traceBySequence.get(action.sequence);
@@ -252,16 +264,17 @@ export class AutomationResponseValidator {
                 const stepsPlan = plan.files.find(file => file.layer === 'steps');
                 if (screenPlan && stepsPlan) {
                     const expected = screenObjectNames(screenPlan.path);
-                    const screenImport = (preview.stepContent || '').match(
-                        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/m
-                    );
-                    const alias = screenImport?.[1];
-                    const source = screenImport?.[2];
+                    const screenImports = [...(preview.stepContent || '').matchAll(
+                        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm
+                    )];
                     const expectedSource = plannedAlias(
                         screenPlan.path,
                         'screenobjects',
                         '@screenobjects'
                     );
+                    const screenImport = screenImports.find(match => match[2] === expectedSource);
+                    const alias = screenImport?.[1];
+                    const source = screenImport?.[2];
                     if (!alias) {
                         errors.push({
                             code: 'screen-alias',
@@ -331,7 +344,39 @@ export class AutomationResponseValidator {
                         file: response.files.find(file => file.layer === 'screen')?.path,
                     });
                 }
-                const catalog = this.reuseAnalyzer.getCatalog(scenario.squad, scenario.platform);
+                for (const plannedFile of plan.files.filter(file => file.operation === 'update')) {
+                    const proposed = response.files.find(file => file.layer === plannedFile.layer)?.content || '';
+                    const absolute = path.join(projectPaths.frameworkRoot, plannedFile.path);
+                    if (!fs.existsSync(absolute)) {
+                        errors.push({
+                            code: 'missing-update-target',
+                            message: `El artefacto a reutilizar ya no existe: ${plannedFile.path}`,
+                            file: plannedFile.path,
+                        });
+                        continue;
+                    }
+                    const baseline = fs.readFileSync(absolute, 'utf-8');
+                    const requiredTokens = plannedFile.layer === 'steps'
+                        ? [...baseline.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(match => match[1])
+                        : plannedFile.layer === 'screen'
+                            ? [...baseline.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(match => match[1])
+                            : plannedFile.layer === 'locators'
+                                ? responseLocatorValues(baseline).map(locator => locator.name)
+                                : [];
+                    const missingTokens = requiredTokens.filter(token => !proposed.includes(token));
+                    if (missingTokens.length) {
+                        errors.push({
+                            code: 'destructive-update',
+                            message: `La actualización elimina APIs existentes: ${missingTokens.slice(0, 5).join(', ')}`,
+                            file: plannedFile.path,
+                        });
+                    }
+                }
+                const catalog = this.reuseAnalyzer.getCatalog(
+                    scenario.squad,
+                    scenario.platform,
+                    scenario.request.featureScope
+                );
                 const stepsPath = response.files.find(file => file.layer === 'steps')?.path;
                 for (const definition of definitions) {
                     const collision = catalog.stepDefinitions.find(existing =>

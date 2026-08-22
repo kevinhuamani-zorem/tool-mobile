@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { GeneratedPreview } from './fwkMobileGenerator';
 import { projectPaths } from './projectPaths';
+import { PlannedFile } from './automationContracts';
 
 interface RegistryEntry {
     contentHash: string;
@@ -23,7 +24,11 @@ export interface ManagedFileAssessment {
 export class GeneratedFileRegistry {
     private readonly manifestPath = path.join(projectPaths.toolConfig, 'generated-files.json');
 
-    assess(preview: GeneratedPreview, squad: string): ManagedFileAssessment {
+    assess(
+        preview: GeneratedPreview,
+        squad: string,
+        plannedFiles: PlannedFile[] = []
+    ): ManagedFileAssessment {
         const manifest = this.read();
         const removedEntries = Object.keys(manifest.files).filter(relative =>
             !fs.existsSync(path.resolve(projectPaths.frameworkRoot, relative))
@@ -36,6 +41,18 @@ export class GeneratedFileRegistry {
             if (!fs.existsSync(file)) continue;
             const relative = this.relative(file);
             const entry = manifest.files[relative];
+            const plannedUpdate = plannedFiles.find(planned =>
+                planned.operation === 'update' && planned.path === relative
+            );
+            if (plannedUpdate?.baseHash) {
+                const currentHash = this.hash(fs.readFileSync(file));
+                if (currentHash !== plannedUpdate.baseHash) {
+                    conflicts.push(`${relative} (cambió después de preparar el plan)`);
+                    continue;
+                }
+                writable.add(file);
+                continue;
+            }
             if (!entry || entry.squad !== squad) {
                 conflicts.push(relative);
                 continue;

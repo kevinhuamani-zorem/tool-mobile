@@ -10,6 +10,7 @@ export async function initializeRecorder() {
     const screenRecorder  = document.getElementById('screenRecorder');
     const cmbFrameworkEnv = document.getElementById('cmbFrameworkEnvironment');
     const cmbFrameworkSquad = document.getElementById('cmbFrameworkSquad');
+    const cmbFrameworkFeatureScope = document.getElementById('cmbFrameworkFeatureScope');
     const cmbFrameworkApp = document.getElementById('cmbFrameworkApp');
     const lblFrameworkStatus = document.getElementById('lblFrameworkStatus');
     const frameworkSetupModal = document.getElementById('frameworkSetupModal');
@@ -29,6 +30,7 @@ export async function initializeRecorder() {
         root: '',
         integrated: true
     };
+    let frameworkCatalog = null;
 
     // Local
     const localPanel      = document.getElementById('localPanel');
@@ -101,7 +103,7 @@ export async function initializeRecorder() {
     const lblInspect      = document.getElementById('lblInspectStatus');
     const txtSelector     = document.getElementById('txtSelector');
     const txtVarName      = document.getElementById('txtVarName');
-    const txtElementIntent = document.getElementById('txtElementIntent');
+    const txtElementContext = document.getElementById('txtElementContext');
     const locatorCombobox = document.getElementById('locatorCombobox');
     const locatorCatalogDropdown = document.getElementById('locatorCatalogDropdown');
     const lblLocatorCatalog = document.getElementById('lblLocatorCatalog');
@@ -161,6 +163,7 @@ export async function initializeRecorder() {
     const cmbOnboardingScenario = document.getElementById('cmbOnboardingScenario');
     const cmbOnboardingRegeneration = document.getElementById('cmbOnboardingRegeneration');
     const txtRegenerationRefinement = document.getElementById('txtRegenerationRefinement');
+    const chkRegenerationClean = document.getElementById('chkRegenerationClean');
     const onboardingScenarioHint = document.getElementById('onboardingScenarioHint');
     const onboardingRegenerationHint = document.getElementById('onboardingRegenerationHint');
     const btnOnboardingBack = document.getElementById('btnOnboardingBack');
@@ -184,6 +187,7 @@ export async function initializeRecorder() {
     let verifiedSelector = '';
     let advanceAssignmentAfterSave = false;
     let workflowMode = 'new';
+    let recordingScenarioCatalog = [];
     const collapsedLocatorGroups = new Set([
         'Botones', 'Campos', 'Textos', 'Imágenes e íconos', 'Listas y contenedores', 'Otros'
     ]);
@@ -210,7 +214,10 @@ export async function initializeRecorder() {
             activeWorkspace.mode === 'fwk-mobile'
                 ? (cmbFrameworkEnv.value || 'Sin ambiente').toUpperCase()
                 : activeWorkspace.label;
-        if (lblSavedSquad) lblSavedSquad.textContent = cmbFrameworkSquad.value || 'default';
+        if (lblSavedSquad) lblSavedSquad.textContent = [
+            cmbFrameworkSquad.value || 'default',
+            cmbFrameworkFeatureScope?.value || ''
+        ].filter(Boolean).join('/');
     }
 
     function openFrameworkSetup() {
@@ -329,6 +336,7 @@ export async function initializeRecorder() {
         }
 
         const catalog = result.catalog;
+        frameworkCatalog = catalog;
         activeWorkspace = catalog.workspace || activeWorkspace;
         const workspaceName = document.getElementById('lblWorkspaceName');
         if (workspaceName && catalog.workspace) {
@@ -398,6 +406,7 @@ export async function initializeRecorder() {
             [...cmbFrameworkSquad.options].some(option => option.value === savedPreferences.squad);
         if (hasSavedEnvironment) cmbFrameworkEnv.value = savedPreferences.environment;
         if (hasSavedSquad) cmbFrameworkSquad.value = savedPreferences.squad;
+        updateFeatureScopeOptions(savedPreferences?.featureScope || '');
 
         cmbFrameworkApp.innerHTML = '<option value="">— Seleccionar app del framework —</option>';
         catalog.apps.forEach(app => {
@@ -424,7 +433,7 @@ export async function initializeRecorder() {
     async function loadSquadCatalog(platform = sessionPlatform) {
         const squad = cmbFrameworkSquad.value || 'payment';
         if (!api.getSquadCatalog || !squad) return;
-        const result = await api.getSquadCatalog(squad, platform);
+        const result = await api.getSquadCatalog(squad, platform, cmbFrameworkFeatureScope?.value || '');
         if (!result.success) {
             squadCatalog = { stepDefinitions: [], screenMethods: [], locators: [], features: [] };
             if (lblLocatorCatalog) lblLocatorCatalog.textContent = '✗ ' + result.error;
@@ -432,6 +441,22 @@ export async function initializeRecorder() {
         }
         squadCatalog = result.catalog;
         renderLocatorCatalog();
+    }
+
+    function updateFeatureScopeOptions(preferred = '') {
+        if (!cmbFrameworkFeatureScope) return;
+        const squad = frameworkCatalog?.squads?.find(item => item.name === cmbFrameworkSquad.value);
+        const scopes = squad?.featureScopes || [];
+        cmbFrameworkFeatureScope.innerHTML = '<option value="">Todo el squad</option>';
+        scopes.filter(scope => scope.path).forEach(scope => {
+            const option = document.createElement('option');
+            option.value = scope.path;
+            option.textContent = `${scope.path} (${scope.featureCount} feature${scope.featureCount === 1 ? '' : 's'})`;
+            cmbFrameworkFeatureScope.appendChild(option);
+        });
+        if ([...cmbFrameworkFeatureScope.options].some(option => option.value === preferred)) {
+            cmbFrameworkFeatureScope.value = preferred;
+        }
     }
 
     async function loadExistingScenarios() {
@@ -450,11 +475,12 @@ export async function initializeRecorder() {
         if (squad !== (cmbFrameworkSquad.value || 'payment')) return;
         cmbExistingScenario.innerHTML = '<option value="">Selecciona una grabación...</option>';
         cmbOnboardingScenario.innerHTML = '<option value="">Selecciona una grabación...</option>';
-        cmbOnboardingRegeneration.innerHTML = '<option value="">Selecciona una grabación procesada...</option>';
+        cmbOnboardingRegeneration.innerHTML = '<option value="">Selecciona una grabación...</option>';
         if (!result.success) {
             scenarioCoverageSummary.textContent = '✗ ' + result.error;
             return;
         }
+        recordingScenarioCatalog = result.scenarios;
         result.scenarios.forEach(scenario => {
             const option = document.createElement('option');
             const recordedAt = scenario.recordedAt
@@ -468,13 +494,13 @@ export async function initializeRecorder() {
             option.title = `${scenario.recordingId || scenario.id} · ${scenario.actionCount || 0} acciones`;
             cmbExistingScenario.appendChild(option);
             cmbOnboardingScenario.appendChild(option.cloneNode(true));
-            if (scenario.canRegenerate) {
-                const regenerationOption = option.cloneNode(true);
-                regenerationOption.textContent += scenario.regenerationIteration
+            const regenerationOption = option.cloneNode(true);
+            regenerationOption.textContent += scenario.canRegenerate
+                ? (scenario.regenerationIteration
                     ? ` · refinamiento v${scenario.regenerationIteration}`
-                    : ' · generado';
-                cmbOnboardingRegeneration.appendChild(regenerationOption);
-            }
+                    : ' · generado')
+                : ' · pendiente de agente';
+            cmbOnboardingRegeneration.appendChild(regenerationOption);
         });
         const scenarioStillExists = result.scenarios.some(
             scenario => scenario.id === selectedScenarioId
@@ -488,9 +514,7 @@ export async function initializeRecorder() {
             scenarioLocatorQueue.innerHTML = '';
             renderAssignmentTarget();
         }
-        if (result.scenarios.some(scenario =>
-            scenario.id === selectedRegenerationId && scenario.canRegenerate
-        )) {
+        if (result.scenarios.some(scenario => scenario.id === selectedRegenerationId)) {
             cmbOnboardingRegeneration.value = selectedRegenerationId;
         }
         scenarioCoverageSummary.textContent =
@@ -499,10 +523,31 @@ export async function initializeRecorder() {
                 : `${result.scenarios.length} grabación(es) encontradas en ${squad}`;
         onboardingScenarioHint.textContent =
             `${result.scenarios.length} grabación(es) del ambiente activo en ${squad}`;
-        const regenerable = result.scenarios.filter(scenario => scenario.canRegenerate).length;
-        onboardingRegenerationHint.textContent = regenerable
-            ? `${regenerable} automatización(es) validadas e importadas disponibles para refinar.`
-            : 'No hay automatizaciones importadas y validadas al 100% para regenerar.';
+        updateRegenerationControls();
+    }
+
+    function updateRegenerationControls() {
+        const selected = recordingScenarioCatalog.find(
+            scenario => scenario.id === cmbOnboardingRegeneration.value
+        );
+        const clean = Boolean(chkRegenerationClean?.checked);
+        const refining = Boolean(selected?.canRegenerate && !clean);
+        txtRegenerationRefinement.disabled = !refining;
+        btnOnboardingRegeneratePrepare.textContent = refining
+            ? 'Preparar refinamiento →'
+            : 'Recrear paquete para el agente →';
+        if (!selected) {
+            onboardingRegenerationHint.textContent = recordingScenarioCatalog.length
+                ? `${recordingScenarioCatalog.length} grabación(es) disponibles para reprocesar o refinar.`
+                : 'No hay grabaciones disponibles en el ambiente y squad activos.';
+        } else if (refining) {
+            onboardingRegenerationHint.textContent =
+                'Automatización validada al 100%: puedes indicar una mejora y conservar su historial.';
+        } else {
+            onboardingRegenerationHint.textContent = clean
+                ? 'Se eliminará solo el paquete anterior; acciones, XML y capturas se conservarán.'
+                : 'Se reconstruirá el paquete Cowork desde las acciones ya grabadas.';
+        }
     }
 
     async function analyzeSelectedScenario() {
@@ -810,7 +855,11 @@ export async function initializeRecorder() {
         onboardingExistingFlow.style.display = 'none';
         onboardingRegenerateFlow.style.display = 'flex';
         cmbOnboardingRegeneration.focus();
+        updateRegenerationControls();
     });
+
+    cmbOnboardingRegeneration.addEventListener('change', updateRegenerationControls);
+    chkRegenerationClean.addEventListener('change', updateRegenerationControls);
 
     btnOnboardingBack.addEventListener('click', () => {
         onboardingExistingFlow.style.display = 'none';
@@ -825,35 +874,44 @@ export async function initializeRecorder() {
     btnOnboardingRegeneratePrepare.addEventListener('click', async () => {
         const recordingId = cmbOnboardingRegeneration.value;
         const refinement = txtRegenerationRefinement.value.trim();
+        const cleanPackage = Boolean(chkRegenerationClean.checked);
         if (!recordingId) {
-            onboardingRegenerationHint.textContent = '⚠ Selecciona una automatización generada.';
+            onboardingRegenerationHint.textContent = '⚠ Selecciona una grabación.';
             return;
         }
         disableBtn(btnOnboardingRegeneratePrepare, '⏳ Preparando...');
         const result = await api.prepareAutomationRegeneration({
             recordingId,
             squad: cmbFrameworkSquad.value || 'payment',
-            refinement
+            refinement,
+            cleanPackage
         });
         enableBtn(btnOnboardingRegeneratePrepare);
         if (!result.success) {
             onboardingRegenerationHint.textContent = '✗ ' + result.error;
             return;
         }
-        workflowMode = 'regenerate';
+        workflowMode = result.mode === 'refinement' ? 'regenerate' : 'reprocess';
         automationWorkflow = true;
         invalidatePreview();
         previewDocuments = [];
         if (automationPackageStatus) {
             automationPackageStatus.textContent =
-                '✓ Iteración preparada. Abre el agente, refina la propuesta e impórtala nuevamente.';
+                result.mode === 'refinement'
+                    ? '✓ Iteración preparada. Abre el agente, refina la propuesta e impórtala nuevamente.'
+                    : '✓ Paquete reconstruido desde la grabación. Abre el agente e importa su propuesta.';
             automationPackageStatus.className = 'generate-result ok';
         }
         showAutomationHandoff(result.handoff);
         enlazarModal.style.display = 'flex';
         setWizardPage(3);
         sessionOnboarding.style.display = 'none';
-        setStatus('♻️ Refinando una automatización existente', '#00CC00');
+        setStatus(
+            result.mode === 'refinement'
+                ? '♻️ Refinando una automatización existente'
+                : '♻️ Reprocesando una grabación existente',
+            '#00CC00'
+        );
     });
 
     btnOnboardingAnalyze.addEventListener('click', async () => {
@@ -1132,6 +1190,7 @@ export async function initializeRecorder() {
     }
 
     cmbFrameworkSquad.addEventListener('change', () => {
+        updateFeatureScopeOptions();
         linkedScenarioData = null;
         activeScenarioCoverage = null;
         currentAssignment = null;
@@ -1142,6 +1201,12 @@ export async function initializeRecorder() {
         renderAssignmentTarget();
         loadSquadCatalog(sessionPlatform);
         loadExistingScenarios();
+        updateSavedFrameworkSummary();
+    });
+    cmbFrameworkFeatureScope?.addEventListener('change', () => {
+        linkedScenarioData = null;
+        activeScenarioCoverage = null;
+        loadSquadCatalog(sessionPlatform);
         updateSavedFrameworkSummary();
     });
     cmbFrameworkEnv.addEventListener('change', updateSavedFrameworkSummary);
@@ -1160,6 +1225,7 @@ export async function initializeRecorder() {
                 mode: activeWorkspace.mode,
                 environment: cmbFrameworkEnv.value,
                 squad: cmbFrameworkSquad.value,
+                featureScope: cmbFrameworkFeatureScope?.value || '',
                 savedAt: new Date().toISOString()
             }));
         } else {
@@ -1252,6 +1318,7 @@ export async function initializeRecorder() {
     function buildGenerationRequest() {
         return {
             squad: cmbFrameworkSquad.value,
+            featureScope: cmbFrameworkFeatureScope?.value || '',
             featureName: txtFeature.value.trim(),
             scenarioName: txtScenario.value.trim(),
             fileName: txtFeatureFile.value.trim(),
@@ -1500,7 +1567,7 @@ export async function initializeRecorder() {
     }
 
     function stepSummary(step) {
-        const loc = step.elementIntent || (step.variableName ? '{' + step.variableName + '}' : (step.selector || ''));
+        const loc = step.contextHint || step.elementIntent || (step.variableName ? '{' + step.variableName + '}' : (step.selector || ''));
         const map = {
             ABRIR_APP:           '📱 ABRIR APP → ' + step.value,
             CLICK:               '👆 CLICK → ' + loc,
@@ -1525,7 +1592,7 @@ export async function initializeRecorder() {
         clearSelectorChips();
         if (txtSelector) txtSelector.value = '';
         if (txtVarName)  txtVarName.value  = '';
-        if (txtElementIntent) txtElementIntent.value = '';
+        if (txtElementContext) txtElementContext.value = '';
         selectedCatalogLocator = null;
         renderSelectedLocatorCoverage();
         if (txtValue)    txtValue.value    = '';
@@ -1862,6 +1929,7 @@ export async function initializeRecorder() {
         const config = {
             platform:        bsPlatform,
             squad:           cmbFrameworkSquad.value || 'payment',
+            featureScope:     cmbFrameworkFeatureScope?.value || '',
             environment:     cmbFrameworkEnv.value,
             username:        u,
             accessKey:       k,
@@ -1882,6 +1950,7 @@ export async function initializeRecorder() {
                 setRecorderConnecting(false);
                 sessionPlatform = bsPlatform;
                 cmbFrameworkSquad.disabled = true;
+                if (cmbFrameworkFeatureScope) cmbFrameworkFeatureScope.disabled = true;
                 lblDevice.textContent = '☁️ ' + deviceLabel;
                 setStatus('✓ Sesion BrowserStack — ' + deviceLabel, '#00CC00');
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
@@ -1979,6 +2048,7 @@ export async function initializeRecorder() {
             deviceName, udid, platformVersion: version,
             appPackage: pkg, appActivity: act || '.MainActivity',
             squad: cmbFrameworkSquad.value || 'payment',
+            featureScope: cmbFrameworkFeatureScope?.value || '',
             environment: cmbFrameworkEnv.value,
             ...(apk ? { appPath: apk } : {})
         };
@@ -1989,6 +2059,7 @@ export async function initializeRecorder() {
                 setRecorderConnecting(false);
                 sessionPlatform = 'android';
                 cmbFrameworkSquad.disabled = true;
+                if (cmbFrameworkFeatureScope) cmbFrameworkFeatureScope.disabled = true;
                 lblDevice.textContent = deviceName;
                 setStatus('✓ Sesion activa — ' + deviceName, '#00CC00');
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
@@ -2021,6 +2092,7 @@ export async function initializeRecorder() {
         sessionOnboarding.style.display = 'none';
         await api.closeSession();
         cmbFrameworkSquad.disabled = false;
+        if (cmbFrameworkFeatureScope) cmbFrameworkFeatureScope.disabled = false;
         screenRecorder.style.cssText = 'display:none !important';
         screenConfig.style.cssText   = 'display:flex !important; flex-direction:column';
         if (imgDevice) imgDevice.src = '';
@@ -2372,7 +2444,7 @@ export async function initializeRecorder() {
         renderSelectedLocatorCoverage();
         txtSelector.value = '';
         txtVarName.value = currentAssignment?.name || '';
-        if (txtElementIntent) txtElementIntent.value = '';
+        if (txtElementContext) txtElementContext.value = '';
         verifiedSelector = '';
         setVerify('— Selecciona y verifica un elemento');
         updateAssignmentButton();
@@ -2499,7 +2571,7 @@ export async function initializeRecorder() {
         const noSel   = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
         txtSelector.disabled = noSel.includes(action);
         txtVarName.disabled  = noSel.includes(action);
-        if (txtElementIntent) txtElementIntent.disabled = noSel.includes(action);
+        if (txtElementContext) txtElementContext.disabled = noSel.includes(action);
         const ph = {
             ABRIR_APP: 'com.example.app', ESCRIBIR: 'texto...',
             SWIPE: 'left/right/up/down', VERIFICAR_TEXTO: 'texto esperado',
@@ -2512,7 +2584,7 @@ export async function initializeRecorder() {
         const action   = cmbAction.value;
         const selector = txtSelector.value.trim();
         const varName  = currentAssignment?.name || selectedCatalogLocator?.name || '';
-        const elementIntent = txtElementIntent?.value.trim() || '';
+        const contextHint = txtElementContext?.value.trim() || '';
         const value    = txtValue.value.trim();
         const desc     = txtDesc.value.trim();
         const noSel    = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
@@ -2520,16 +2592,16 @@ export async function initializeRecorder() {
         if (!noSel.includes(action) && !selector) {
             setStatus('⚠ Ingresa un selector', '#FF6600'); return;
         }
-        if (!noSel.includes(action) && !elementIntent) {
-            setStatus('⚠ Describe qué función cumple el elemento', '#FF6600');
-            txtElementIntent?.focus();
+        if (!noSel.includes(action) && !contextHint) {
+            setStatus('⚠ Agrega una pista sobre la función del elemento', '#FF6600');
+            txtElementContext?.focus();
             return;
         }
 
         const step = {
             action,
             variableName: varName,
-            elementIntent,
+            contextHint,
             selector,
             value,
             description: desc,

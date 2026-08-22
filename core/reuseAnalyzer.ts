@@ -1,6 +1,8 @@
 import fs from 'fs';
+import ts from 'typescript';
 import path from 'path';
 import { projectPaths } from './projectPaths';
+import { featureScopeDirectory, normalizeFeatureScope } from './featureScope';
 
 export interface StepDefinitionInfo {
     keyword: 'Given' | 'When' | 'Then';
@@ -14,6 +16,20 @@ export interface ScreenMethodInfo {
     name: string;
     file: string;
     squad: string;
+    locatorFiles: string[];
+    /** Firma pública sin cuerpo, para poder reutilizar el método sin leer el archivo. */
+    signature: string;
+    /** Claves del .locator.json que alcanza el método, directas o vía getter. */
+    locatorKeys: string[];
+    className: string;
+}
+
+export interface ArtifactBundle {
+    steps: string;
+    screens: string[];
+    locators: string[];
+    stepExpressions: string[];
+    screenMethods: string[];
 }
 
 export interface StepReuseResult {
@@ -54,12 +70,14 @@ export interface LocatorInfo {
 
 export interface SquadReuseCatalog {
     squad: string;
+    featureScope: string;
     platform: 'android' | 'ios';
     stepDefinitions: StepDefinitionInfo[];
     screenMethods: ScreenMethodInfo[];
     locators: LocatorInfo[];
     features: FeatureStepGroup[];
     scenarios: FeatureScenarioInfo[];
+    artifactBundles: ArtifactBundle[];
 }
 
 export interface FeatureScenarioInfo {
@@ -73,6 +91,11 @@ export interface FeatureScenarioInfo {
         steps: string;
         screen: string;
         locators: string;
+    };
+    relatedArtifacts: {
+        steps: string[];
+        screens: string[];
+        locators: string[];
     };
 }
 
@@ -220,22 +243,29 @@ export class ReuseAnalyzer {
         );
     }
 
-    getCatalog(squad: string, platform: 'android' | 'ios'): SquadReuseCatalog {
+    getCatalog(squad: string, platform: 'android' | 'ios', featureScope = ''): SquadReuseCatalog {
         this.refresh();
+        const normalizedScope = normalizeFeatureScope(featureScope);
         const stepDefinitions = this.getStepDefinitions(squad);
         return {
             squad,
+            featureScope: normalizedScope,
             platform,
             stepDefinitions,
             screenMethods: this.getScreenMethods(squad),
             locators: this.indexLocators(squad, platform),
-            features: this.indexFeatureSteps(squad, stepDefinitions),
-            scenarios: this.indexFeatureScenarios(squad)
+            features: this.indexFeatureSteps(squad, stepDefinitions, normalizedScope),
+            scenarios: this.indexFeatureScenarios(squad, normalizedScope, stepDefinitions),
+            artifactBundles: this.indexArtifactBundles(squad, stepDefinitions),
         };
     }
 
-    private indexFeatureScenarios(squad: string): FeatureScenarioInfo[] {
-        const root = path.join(projectPaths.features, squad);
+    private indexFeatureScenarios(
+        squad: string,
+        featureScope: string,
+        definitions: StepDefinitionInfo[]
+    ): FeatureScenarioInfo[] {
+        const root = featureScopeDirectory(projectPaths.features, squad, featureScope);
         if (!fs.existsSync(root)) return [];
         const files = this.walkFiles(root, '.feature');
         const scenarios: FeatureScenarioInfo[] = [];
@@ -248,15 +278,16 @@ export class ReuseAnalyzer {
             let current: FeatureScenarioInfo | undefined;
             const flush = (): void => {
                 if (!current) return;
-                const artifacts = {
-                    feature: relativeFeature,
-                    steps: `features/yape-steps-definitions/${squad}/${basename}.steps.ts`,
-                    screen: `screenobjects/${squad}/${basename}.screen.ts`,
-                    locators: `resources/locators/${squad}/${basename}.locator.json`,
-                };
-                current.artifacts = Object.values(artifacts).every(candidate =>
-                    fs.existsSync(path.join(projectPaths.frameworkRoot, candidate))
-                ) ? artifacts : undefined;
+                const related = this.resolveScenarioArtifacts(current.steps, definitions);
+                current.relatedArtifacts = related;
+                if (related.steps.length === 1 && related.screens.length === 1 && related.locators.length === 1) {
+                    current.artifacts = {
+                        feature: relativeFeature,
+                        steps: related.steps[0],
+                        screen: related.screens[0],
+                        locators: related.locators[0],
+                    };
+                }
                 scenarios.push(current);
                 current = undefined;
             };
@@ -271,6 +302,7 @@ export class ReuseAnalyzer {
                         caseId: name.match(/\[(TC-\d+)\]/i)?.[1]?.toUpperCase(),
                         file: relativeFeature,
                         steps: [],
+                        relatedArtifacts: { steps: [], screens: [], locators: [] },
                     };
                     continue;
                 }
@@ -282,6 +314,74 @@ export class ReuseAnalyzer {
             flush();
         }
         return scenarios;
+    }
+
+    private resolveScenarioArtifacts(
+        steps: FeatureScenarioInfo['steps'],
+        definitions: StepDefinitionInfo[]
+    ): FeatureScenarioInfo['relatedArtifacts'] {
+        const matchedDefinitions = definitions.filter(definition => {
+            const regex = safeRegex(definition.expression);
+            return regex ? steps.some(step => {
+                regex.lastIndex = 0;
+                return regex.test(step.text);
+            }) : false;
+        });
+        const stepFiles = [...new Set(matchedDefinitions.map(definition => definition.file))].sort();
+        const screenFiles = [...new Set(stepFiles.flatMap(file =>
+            this.importedFrameworkFiles(file, 'screenobjects')
+        ))].sort();
+        const locatorFiles = [...new Set(screenFiles.flatMap(file =>
+            this.importedFrameworkFiles(file, 'locators')
+        ))].sort();
+        return { steps: stepFiles, screens: screenFiles, locators: locatorFiles };
+    }
+
+    private indexArtifactBundles(
+        squad: string,
+        definitions: StepDefinitionInfo[]
+    ): ArtifactBundle[] {
+        const stepFiles = [...new Set(definitions
+            .filter(definition => definition.squad === squad)
+            .map(definition => definition.file))].sort();
+        return stepFiles.map(steps => {
+            const screens = [...new Set(this.importedFrameworkFiles(steps, 'screenobjects'))].sort();
+            const locators = [...new Set(screens.flatMap(screen =>
+                this.importedFrameworkFiles(screen, 'locators')
+            ))].sort();
+            return {
+                steps,
+                screens,
+                locators,
+                stepExpressions: definitions.filter(definition => definition.file === steps)
+                    .map(definition => definition.expression),
+                screenMethods: this.screenMethods.filter(method => screens.includes(method.file))
+                    .map(method => method.name),
+            };
+        }).filter(bundle => bundle.screens.length > 0 || bundle.locators.length > 0);
+    }
+
+    private importedFrameworkFiles(
+        relativeFile: string,
+        target: 'screenobjects' | 'locators'
+    ): string[] {
+        const absoluteFile = path.join(projectPaths.frameworkRoot, relativeFile);
+        if (!fs.existsSync(absoluteFile)) return [];
+        const content = fs.readFileSync(absoluteFile, 'utf-8');
+        const imports = [...content.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)]
+            .map(match => match[1]);
+        const alias = target === 'screenobjects' ? '@screenobjects/' : '@locators/';
+        const root = target === 'screenobjects' ? projectPaths.screenobjects : projectPaths.locators;
+        return imports.flatMap(source => {
+            let absolute: string | undefined;
+            if (source.startsWith(alias)) absolute = path.join(root, source.slice(alias.length));
+            else if (source.startsWith('.')) absolute = path.resolve(path.dirname(absoluteFile), source);
+            if (!absolute) return [];
+            const candidates = [absolute, `${absolute}.ts`, `${absolute}.json`];
+            const found = candidates.find(candidate => fs.existsSync(candidate));
+            if (!found || !(found === root || found.startsWith(root + path.sep))) return [];
+            return [path.relative(projectPaths.frameworkRoot, found).replace(/\\/g, '/')];
+        });
     }
 
     getScreenMethods(squad?: string): ScreenMethodInfo[] {
@@ -431,9 +531,10 @@ export class ReuseAnalyzer {
 
     private indexFeatureSteps(
         squad: string,
-        definitions: StepDefinitionInfo[]
+        definitions: StepDefinitionInfo[],
+        featureScope = ''
     ): FeatureStepGroup[] {
-        const root = path.join(projectPaths.features, squad);
+        const root = featureScopeDirectory(projectPaths.features, squad, featureScope);
         if (!fs.existsSync(root)) return [];
         const files: string[] = [];
         const pending = [root];
@@ -469,21 +570,61 @@ export class ReuseAnalyzer {
 
     private indexScreenMethods(): ScreenMethodInfo[] {
         const methods: ScreenMethodInfo[] = [];
-        const methodPattern = /\b(?:public\s+)?async\s+([A-Za-z_$][\w$]*)\s*\(/g;
-
         for (const file of walkTypeScript(projectPaths.screenobjects)) {
             const relative = path.relative(projectPaths.screenobjects, file);
             const squad = relative.split(path.sep)[0];
+            const frameworkRelative = path.relative(projectPaths.frameworkRoot, file);
             const content = fs.readFileSync(file, 'utf-8');
-            let match: RegExpExecArray | null;
-            while ((match = methodPattern.exec(content)) !== null) {
-                methods.push({
-                    name: match[1],
-                    file: path.relative(projectPaths.frameworkRoot, file),
-                    squad
-                });
+            const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+            const locatorFiles = this.importedFrameworkFiles(frameworkRelative, 'locators');
+            for (const declaration of source.statements) {
+                if (!ts.isClassDeclaration(declaration)) continue;
+                const className = declaration.name?.text || '';
+                // Los getters traducen `this.x` a una clave del locator JSON; sin
+                // resolverlos, un método parecería no usar ningún locator.
+                const getters = new Map<string, string[]>();
+                for (const member of declaration.members) {
+                    if (!ts.isGetAccessorDeclaration(member) || !member.name || !ts.isIdentifier(member.name)) continue;
+                    getters.set(member.name.text, locatorKeysIn(member.getText(source)));
+                }
+                for (const member of declaration.members) {
+                    if (!ts.isMethodDeclaration(member) || !member.name || !ts.isIdentifier(member.name)) continue;
+                    if (!member.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)) continue;
+                    const body = member.body ? member.body.getText(source) : '';
+                    const used = new Set(locatorKeysIn(body));
+                    for (const [getter, keys] of getters) {
+                        if (new RegExp(`this\\.${getter}\\b`).test(body)) keys.forEach(key => used.add(key));
+                    }
+                    methods.push({
+                        name: member.name.text,
+                        file: frameworkRelative,
+                        squad,
+                        locatorFiles,
+                        signature: methodSignature(member, source),
+                        locatorKeys: [...used].sort(),
+                        className,
+                    });
+                }
             }
         }
         return methods;
     }
+}
+
+/** Claves alcanzadas como `Locators["bloqueAndroid"].clave` o `Locators.bloqueIos.clave`. */
+export function locatorKeysIn(text: string): string[] {
+    const keys = new Set<string>();
+    for (const match of text.matchAll(/[A-Za-z_$][\w$]*\s*\[\s*["'][^"']+["']\s*\]\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
+        keys.add(match[1]);
+    }
+    for (const match of text.matchAll(/[A-Za-z_$][\w$]*\s*\.\s*[A-Za-z_$][\w$]*(?:Android|Ios)\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
+        keys.add(match[1]);
+    }
+    return [...keys];
+}
+
+function methodSignature(member: ts.MethodDeclaration, source: ts.SourceFile): string {
+    const parameters = member.parameters.map(parameter => parameter.getText(source)).join(', ');
+    const returnType = member.type ? `: ${member.type.getText(source)}` : '';
+    return `${member.name.getText(source)}(${parameters})${returnType}`;
 }

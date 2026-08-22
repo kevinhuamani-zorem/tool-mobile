@@ -5,6 +5,7 @@ import {
     AutomationScenario,
     GenerationPlan,
 } from './automationContracts';
+import { recordedStepContext } from './models';
 import {
     ExistingScenarioInfo,
     ScenarioCoverageResult,
@@ -46,7 +47,7 @@ function scenarioSteps(scenario: AutomationScenario): ExistingScenarioInfo['step
     if (rows.length) return rows.map(row => ({ keyword: row.keyword, text: row.text }));
     return scenario.actions.map(action => ({
         keyword: action.action.startsWith('VERIFICAR') ? 'Then' : 'When',
-        text: action.elementIntent || action.description || action.action,
+        text: recordedStepContext(action) || action.action,
     }));
 }
 
@@ -68,6 +69,13 @@ export class RecordingCoverageAnalyzer {
             .find(candidate => candidate.scenario.recordingId === recordingId);
         if (!entry) throw new Error(`No se encontró la grabación: ${recordingId}`);
         return entry.directory;
+    }
+
+    getRecordingInfo(squad: string, recordingId: string, environment = ''): RecordingScenarioInfo {
+        const entry = this.entries(squad, environment)
+            .find(candidate => candidate.scenario.recordingId === recordingId);
+        if (!entry) throw new Error(`No se encontró la grabación: ${recordingId}`);
+        return entry.info;
     }
 
     analyze(squad: string, recordingId: string, environment = ''): ScenarioCoverageResult {
@@ -133,7 +141,7 @@ export class RecordingCoverageAnalyzer {
             : [];
         const steps: ScenarioStepResolution[] = (rows.length ? rows : entry.scenario.actions.map(action => ({
             keyword: action.action.startsWith('VERIFICAR') ? 'Then' : 'When',
-            text: action.elementIntent || action.description || action.action,
+            text: recordedStepContext(action) || action.action,
             actions: [action],
         }))).map((row, index) => {
             const locators = (row.actions || [])

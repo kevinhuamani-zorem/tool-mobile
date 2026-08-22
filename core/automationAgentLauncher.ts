@@ -16,7 +16,7 @@ export class AutomationAgentLauncher {
         const repair = fs.existsSync(path.join(packageDirectory, 'repair-context.json'));
         return repair
             ? 'Lee repair-context.json y corrige únicamente los archivos indicados. No explores el repositorio. Ejecuta node verify-package.js.'
-            : 'Trabaja únicamente en esta carpeta. Lee instructions.md, generation-plan.json, resolved-context.json, unresolved-context.json y scenario.json. Resuelve solo los gaps declarados, escribe agent-response.json y ejecuta node verify-package.js. No explores fwk-mobile-test.';
+            : 'Trabaja únicamente en esta carpeta. Lee instructions.md y solo los archivos mínimos que allí se enumeran. No leas resolved-context.json salvo diagnóstico explícito. Resuelve solo los gaps declarados, escribe agent-response.json y ejecuta node verify-package.js. No explores fwk-mobile-test.';
     }
 
     describe(provider: AutomationAgent, packageDirectory: string): LaunchResult {

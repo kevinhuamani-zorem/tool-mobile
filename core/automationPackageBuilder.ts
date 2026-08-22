@@ -24,6 +24,30 @@ function relative(file: string): string {
     return path.relative(projectPaths.frameworkRoot, file).replace(/\\/g, '/');
 }
 
+function baselineSymbols(layer: AgentGeneratedFile['layer'], content: string): string[] {
+    if (layer === 'steps') {
+        return [...content.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)]
+            .map(match => match[1]);
+    }
+    if (layer === 'screen') {
+        return [...content.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)]
+            .map(match => match[1]);
+    }
+    if (layer === 'locators') {
+        try {
+            const document = JSON.parse(content) as Record<string, unknown>;
+            return Object.entries(document).flatMap(([block, value]) =>
+                block !== '_metadata' && value && typeof value === 'object' && !Array.isArray(value)
+                    ? Object.keys(value as Record<string, unknown>).map(name => `${block}.${name}`)
+                    : []
+            );
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
 function responseFromPreview(
     scenario: AutomationScenario,
     plan: GenerationPlan,
@@ -107,8 +131,10 @@ function instructions(result: ResolverResult): string {
         `- No explores el repositorio ni leas XML/capturas salvo que un gap lo pida explícitamente.\n` +
         `- Conserva exactamente recordingId, planId y las cuatro rutas del plan.\n` +
         `- Los selectores verificados y decisiones reuse/create del plan son definitivos.\n` +
+        `- contextHint/elementIntent es solo una pista libre escrita por el QA para comprender el elemento. No la copies literalmente ni la conviertas uno-a-uno en un Step; sintetiza comportamientos declarativos usando el objetivo, criterio de aceptación y secuencia completa.\n` +
         `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
+        `- Si reuse-context.json contiene updateBaselines, abre únicamente su archivo reference dentro de baselines/, parte de ese contenido y añade solo lo faltante; no reemplaces ni borres APIs existentes.\n` +
         `- Steps solo orquestan; Screen Object extiende BaseScreen; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
         `- Usa aliases del framework: @screenobjects para Screen Objects/BaseScreen, @utils para helpers y @locators para JSON. No uses rutas relativas en Steps ni Screen Objects.\n` +
@@ -136,6 +162,7 @@ function regenerationInstructions(
         `- Usa un alias de dominio derivado del archivo Screen Object; están prohibidos generatedScreen, screen, page, screenObject y obj.\n` +
         `- Conserva imports por alias (@screenobjects, @utils, @locators), nunca rutas relativas. browser solo se importa cuando se utiliza.\n` +
         `- No explores el repositorio ni cambies selectores verificados o decisiones deterministas.\n` +
+        `- contextHint/elementIntent es contexto no vinculante del QA: no lo copies literalmente como Step; conserva o mejora la síntesis declarativa del comportamiento completo.\n` +
         `- Redacta Gherkin declarativo y agrupa clicks, scrolls, swipes y esperas dentro de steps funcionales.\n` +
         `- Conserva los tags de plataforma: @android si Android está completo y @ios si iOS está completo.\n` +
         `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
@@ -147,6 +174,8 @@ function verifierSource(): string {
     return String.raw`'use strict';
 const plan=require('./generation-plan.json');
 const scenario=require('./scenario.json');
+const fs=require('fs');
+const reuse=require('./reuse-context.json');
 let response;
 try{response=require('./agent-response.json')}catch(e){console.error('Falta agent-response.json');process.exit(1)}
 const errors=[];
@@ -159,6 +188,7 @@ const feature=(response.files||[]).find(x=>x.layer==='feature')?.content||'';
 const steps=(response.files||[]).find(x=>x.layer==='steps')?.content||'';
 const screen=(response.files||[]).find(x=>x.layer==='screen')?.content||'';
 const locator=(response.files||[]).find(x=>x.layer==='locators')?.content||'';
+for(const baseline of reuse.updateBaselines||[]){const proposed=(response.files||[]).find(x=>x.layer===baseline.layer)?.content||'';const content=fs.readFileSync(baseline.reference,'utf8');let tokens=[];if(baseline.layer==='steps')tokens=[...content.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(x=>x[1]);else if(baseline.layer==='screen')tokens=[...content.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(x=>x[1]);else if(baseline.layer==='locators'){try{tokens=Object.entries(JSON.parse(content)).filter(([name,value])=>name!=='_metadata'&&value&&typeof value==='object'&&!Array.isArray(value)).flatMap(([,value])=>Object.keys(value))}catch(e){}}const missing=tokens.filter(token=>!proposed.includes(token));if(missing.length)errors.push('Update destructivo '+baseline.path+': '+missing.slice(0,5).join(', '))}
 if(!/^\s*@[-A-Za-z0-9_]+/m.test(feature))errors.push('Feature sin tag válido');
 const requiredPlatforms=new Set([scenario.platform]);
 try{const document=JSON.parse(locator);for(const platform of ['android','ios']){const values=Object.entries(document).filter(([name,value])=>name.toLowerCase().endsWith(platform)&&value&&typeof value==='object'&&!Array.isArray(value)).flatMap(([,value])=>Object.values(value));if(values.length&&values.every(value=>typeof value==='string'&&value.trim()))requiredPlatforms.add(platform)}}catch(e){}
@@ -167,6 +197,9 @@ if(!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.
 if(!/^\s*Then\s+\S+/m.test(feature))errors.push('Scenario sin Then');
 const imperative=/^\s*(?:Given|When|Then|And|But)\s+.*(?:\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b|\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:bot[oó]n|elemento|campo)\b|\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b|\b(?:espera|esperar)\s+\d+\s*segundos?\b|\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b)/gmi;
 for(const match of feature.matchAll(imperative))errors.push('Gherkin técnico/imperativo: '+match[0].trim());
+const normalizeText=value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/<[^>]+>/g,'<param>').replace(/[^a-z0-9<>]+/g,' ').replace(/\s+/g,' ').trim();
+const featureSteps=[...feature.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gmi)].map(match=>normalizeText(match[1]));
+for(const action of scenario.actions){const hint=normalizeText(action.contextHint||action.elementIntent||action.description);if(hint&&featureSteps.includes(hint))errors.push('Pista contextual copiada literalmente como Step en acción '+action.sequence)}
 const traceBySequence=new Map((response.actionTrace||[]).map(x=>[x.sequence,x.gherkinStep]));
 const technical=new Set(['SCROLL_DOWN','SCROLL_UP','SWIPE','ESPERAR','SCREENSHOT']);
 for(const action of scenario.actions.filter(x=>technical.has(x.action))){const current=traceBySequence.get(action.sequence);const grouped=current&&[action.sequence-1,action.sequence+1].some(x=>traceBySequence.get(x)===current);if(!grouped)errors.push('Acción técnica sin agrupar '+action.sequence+' ('+action.action+')')}
@@ -201,6 +234,23 @@ export class AutomationPackageBuilder {
         private readonly validator = new AutomationResponseValidator(),
         private readonly frameworkRoot = projectPaths.frameworkRoot,
     ) {}
+
+    prepareRecordedScenario(
+        recordingDirectory: string,
+        cleanPackage = false
+    ): AutomationPackageResult {
+        const scenarioFile = path.join(recordingDirectory, 'scenario.json');
+        if (!fs.existsSync(scenarioFile)) {
+            throw new Error('La grabación no contiene scenario.json');
+        }
+        const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf-8')) as AutomationScenario;
+        if (!scenario.actions.length) throw new Error('La grabación no contiene acciones para reprocesar');
+        const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
+        if (cleanPackage && fs.existsSync(packageDirectory)) {
+            fs.rmSync(packageDirectory, { recursive: true, force: true });
+        }
+        return this.prepare(scenario, recordingDirectory);
+    }
 
     prepareRegeneration(
         recordingDirectory: string,
@@ -331,21 +381,59 @@ export class AutomationPackageBuilder {
         writeJson(path.join(packageDirectory, 'generation-plan.json'), result.plan);
         writeJson(path.join(packageDirectory, 'resolved-context.json'), result.resolvedContext);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), result.unresolvedContext);
+        const baselinesDirectory = path.join(packageDirectory, 'baselines');
+        fs.rmSync(baselinesDirectory, { recursive: true, force: true });
+        const updateBaselines = result.plan.files
+            .filter(file => file.operation === 'update')
+            .map(file => {
+                const source = path.join(this.frameworkRoot, file.path);
+                const content = fs.readFileSync(source, 'utf-8');
+                const reference = `baselines/${file.layer}-${path.basename(file.path)}`;
+                const destination = path.join(packageDirectory, reference);
+                fs.mkdirSync(path.dirname(destination), { recursive: true });
+                fs.copyFileSync(source, destination);
+                const symbols = baselineSymbols(file.layer, content);
+                return {
+                    layer: file.layer,
+                    path: file.path,
+                    baseHash: file.baseHash,
+                    reference,
+                    bytes: Buffer.byteLength(content, 'utf-8'),
+                    preserve: {
+                        count: symbols.length,
+                        sample: symbols.slice(0, 12),
+                    },
+                };
+            });
+        const reuseCandidates = (result.resolvedContext.frameworkAwareness?.candidates || [])
+            .slice(0, 3)
+            .map(candidate => ({
+                feature: candidate.feature,
+                scenario: candidate.scenario,
+                caseId: candidate.caseId,
+                file: candidate.file,
+                score: candidate.score,
+                selectorCoverage: candidate.selectorCoverage,
+                matchedSteps: candidate.matchedSteps.slice(0, 3),
+                paths: candidate.paths,
+            }));
         writeJson(path.join(packageDirectory, 'reuse-context.json'), {
             schemaVersion: result.resolvedContext.schemaVersion,
             recordingId: result.scenario.recordingId,
             decision: result.resolvedContext.frameworkAwareness?.decision || 'create-new',
             existingCase: result.plan.existingCase,
-            candidates: result.resolvedContext.frameworkAwareness?.candidates || [],
+            reuseTarget: result.plan.reuseTarget,
+            candidates: reuseCandidates,
+            updateBaselines,
         });
         writeJson(path.join(packageDirectory, 'collision-report.json'), {
             schemaVersion: result.resolvedContext.schemaVersion,
             recordingId: result.scenario.recordingId,
             exactStepDefinitions: result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [],
             selectorCollisions: result.resolvedContext.frameworkAwareness?.selectorCollisions || [],
-            requiresReuse: Boolean(result.resolvedContext.frameworkAwareness?.selectorCollisions.length),
+            requiresReuse: Boolean(result.resolvedContext.frameworkAwareness?.selectorCollisions?.length),
             blocking: !result.plan.existingCase && Boolean(
-                result.resolvedContext.frameworkAwareness?.exactStepDefinitions.length
+                result.resolvedContext.frameworkAwareness?.exactStepDefinitions?.length
             ),
         });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());

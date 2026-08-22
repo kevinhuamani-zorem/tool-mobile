@@ -11,6 +11,21 @@ screenobjects/<squad>/<modulo>.screen.ts
 resources/locators/<squad>/<modulo>.locator.json
 ```
 
+Cuando el squad organiza Features en subcarpetas, la primera ruta puede ser
+`features/yape-features/<squad>/<featureScope>/<archivo>.feature`.
+`featureScope` nunca se replica automáticamente en Steps, Screen Objects ni
+Locators.
+
+La relación entre capas se obtiene por definiciones e imports, no por igualdad
+del basename. Por ejemplo, `squad=interoperabilidad` y
+`featureScope=tapp/payment` puede resolver `tapp-payments.steps.ts`,
+`tapp-subhome.screen.ts` y `tapp-subhome.locator.json`.
+
+Cada archivo planificado declara `create` o `update`. Un `update` incluye el
+hash del baseline y debe ser aditivo: conserva definitions, methods y locators
+existentes. Si el archivo cambia después de preparar el plan, se bloquea la
+escritura y se debe preparar un paquete nuevo.
+
 Las cuatro capas llevan metadata de procedencia agregada por el recorder:
 `Generado por Appium Visual Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
 de creación. Feature usa comentarios `#`, Steps y Screen Object usan `//`, y
@@ -21,6 +36,13 @@ En `neutral` se exportan Feature y recording portable bajo `runtime/exports`;
 no se debe presentar como generación de las cuatro capas.
 
 ## Feature
+
+`contextHint` es una pista libre capturada junto al elemento. No representa una
+definición Gherkin ni texto contractual. El preprocesador y el agente pueden
+usarla para comprender el dominio, pero deben sintetizar los Steps a partir del
+objetivo, criterio de aceptación y conjunto ordenado de acciones. Copiar una
+pista literalmente al Feature produce `verbatim-context-hint` y bloquea la
+importación.
 
 - Debe tener tag sin `@` duplicado.
 - El ID válido es `TC-<número>`.

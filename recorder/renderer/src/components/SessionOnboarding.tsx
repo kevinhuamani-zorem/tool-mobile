@@ -31,8 +31,8 @@ export function SessionOnboarding() {
           <button id="btnOnboardingRegenerate" className="onboarding-option">
             <span className="onboarding-option-icon">♻️</span>
             <span>
-              <strong>Regenerar una automatización</strong>
-              <small>Refina con el agente un caso ya generado y reemplaza sus cuatro archivos administrados.</small>
+              <strong>Reprocesar o refinar una grabación</strong>
+              <small>Vuelve a probar el agente sin grabar otra vez, o refina una automatización ya generada.</small>
             </span>
           </button>
         </div>
@@ -52,20 +52,27 @@ export function SessionOnboarding() {
           </div>
         </div>
         <div id="onboardingRegenerateFlow" className="onboarding-existing-flow" style={{display: 'none'}}>
-          <label className="field-label">Selecciona una automatización generada:</label>
+          <label className="field-label">Selecciona una grabación:</label>
           <select id="cmbOnboardingRegeneration" className="field-select">
-            <option value>Selecciona una grabación procesada...</option>
+            <option value>Selecciona una grabación...</option>
           </select>
           <label className="field-label" htmlFor="txtRegenerationRefinement">¿Qué deseas mejorar? (opcional)</label>
           <textarea id="txtRegenerationRefinement" className="field-input" rows={3}
             placeholder="Déjalo vacío para solicitar una revisión general, o indica una mejora específica" />
+          <label className="onboarding-clean-option" htmlFor="chkRegenerationClean">
+            <input id="chkRegenerationClean" type="checkbox" />
+            <span>
+              <strong>Limpiar el paquete anterior</strong>
+              <small>Conserva acciones, XML y capturas; elimina solo la propuesta y archivos temporales del agente.</small>
+            </span>
+          </label>
           <div id="onboardingRegenerationHint" className="coverage-summary">
-            Solo aparecen grabaciones validadas al 100% cuyas cuatro capas ya existen en el workspace.
+            Las grabaciones pendientes se pueden reprocesar; las generadas al 100% también se pueden refinar.
           </div>
           <div className="onboarding-actions">
             <button id="btnOnboardingRegenerateBack" className="btn btn-dark">← Volver</button>
             <button id="btnOnboardingRegeneratePrepare" className="btn btn-green">
-              Preparar refinamiento →
+              Preparar paquete →
             </button>
           </div>
         </div>

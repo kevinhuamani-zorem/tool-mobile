@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import {
     ActionResolution,
     AutomationScenario,
@@ -11,8 +13,10 @@ import {
     AUTOMATION_SCHEMA_VERSION,
 } from './automationContracts';
 import { GenerationRequest } from './fwkMobileGenerator';
-import { FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
-import { Action, RecordedStep } from './models';
+import { ArtifactBundle, FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
+import { Action, RecordedStep, recordedStepContext } from './models';
+import { normalizeFeatureScope } from './featureScope';
+import { projectPaths } from './projectPaths';
 
 export interface ResolverResult {
     scenario: AutomationScenario;
@@ -22,7 +26,7 @@ export interface ResolverResult {
 }
 
 interface CatalogProvider {
-    getCatalog(squad: string, platform: 'android' | 'ios'): SquadReuseCatalog;
+    getCatalog(squad: string, platform: 'android' | 'ios', featureScope?: string): SquadReuseCatalog;
 }
 
 const SELECTOR_ACTIONS = new Set<Action>([
@@ -88,7 +92,7 @@ function genericName(value: string): boolean {
 }
 
 function actionIntent(step: RecordedStep, sequence: number): string {
-    const intent = String(step.elementIntent || step.description || step.variableName || '').trim();
+    const intent = recordedStepContext(step) || String(step.variableName || '').trim();
     const semanticIntent = /^VERIFICAR_/.test(step.action)
         ? intent.replace(/^(?:verificar|validar)(?:\s+que)?\s+/i, '')
         : intent;
@@ -106,7 +110,7 @@ const TECHNICAL_STOP_WORDS = new Set([
 function compactTechnicalName(scenario: AutomationScenario): string {
     const candidates = [
         scenario.acceptanceCriteria,
-        ...scenario.actions.map(action => action.elementIntent || ''),
+        ...scenario.actions.map(recordedStepContext),
         scenario.objective,
     ];
     const meaningful: string[] = [];
@@ -142,13 +146,14 @@ function behaviorText(actions: RecordedStep[], intents: string[], technicalName:
     }
     if (/^mostrar\s+/i.test(intent)) return `el usuario consulta ${intent.replace(/^mostrar\s+/i, '')}`;
     if (/^ver\s+/i.test(intent)) return `el usuario consulta ${intent.replace(/^ver\s+/i, '')}`;
-    return `el usuario realiza ${intent}`;
+    return `el usuario completa ${titleFromSlug(technicalName).toLowerCase()}`;
 }
 
-function assertionText(intents: string[]): string {
-    const description = intents.filter(Boolean).join(' y ')
-        .replace(/^boton\s+de\s+/i, 'el botón de ');
-    return `se muestra ${description || 'el resultado esperado'}`;
+function assertionText(intents: string[], technicalName: string): string {
+    const context = intents.filter(Boolean).join(' ');
+    if (/movimiento/i.test(context)) return 'se muestran los movimientos esperados';
+    if (/saldo/i.test(context)) return 'se muestra la información de saldo esperada';
+    return `se obtiene el resultado esperado de ${titleFromSlug(technicalName).toLowerCase()}`;
 }
 
 function inputParameterName(intent: string, sequence: number): string {
@@ -217,6 +222,7 @@ function frameworkCandidates(
                 candidateSteps.some(existing => normalizeStepText(existing) === normalizeStepText(step))
             ),
             paths: candidate.artifacts,
+            relatedPaths: candidate.relatedArtifacts,
         };
     }).filter(candidate => candidate.score >= 0.35)
         .sort((left, right) => right.score - left.score || right.selectorCoverage - left.selectorCoverage)
@@ -228,6 +234,53 @@ function likelyDynamicText(value = ''): boolean {
     return /(?:S\/|\$|€|£)\s*\d|\b\d+[.,]\d{2}\b|\b\d{6,}\b/.test(text);
 }
 
+function bestArtifactBundle(
+    catalog: SquadReuseCatalog,
+    scenario: AutomationScenario,
+    resolutions: ActionResolution[]
+): { bundle: ArtifactBundle; score: number; reason: string } | undefined {
+    const reusedFiles = new Set(resolutions
+        .filter(resolution => resolution.resolution === 'reuse' && resolution.source?.scope === 'squad')
+        .map(resolution => resolution.source!.file));
+    const semanticContext = [
+        scenario.objective,
+        scenario.acceptanceCriteria,
+        ...resolutions.map(resolution => resolution.intent),
+    ].join(' ');
+    const ranked = (catalog.artifactBundles || []).flatMap(bundle => {
+        if (bundle.screens.length !== 1 || bundle.locators.length !== 1) return [];
+        const exactLocatorHits = bundle.locators.filter(file => reusedFiles.has(file)).length;
+        const bundleContext = [bundle.steps, ...bundle.screens, ...bundle.locators,
+            ...bundle.stepExpressions, ...bundle.screenMethods].join(' ');
+        const semanticScore = similarity(semanticContext, bundleContext);
+        const score = Math.min(1, exactLocatorHits > 0 ? 0.85 + semanticScore * 0.15 : semanticScore);
+        return [{
+            bundle,
+            score: Number(score.toFixed(3)),
+            reason: exactLocatorHits > 0
+                ? 'El Screen Object existente ya consume un locator reutilizado por el recording.'
+                : 'Coincidencia semántica con métodos y archivos existentes del alcance.',
+        }];
+    }).sort((left, right) => right.score - left.score);
+    return ranked[0]?.score >= 0.45 ? ranked[0] : undefined;
+}
+
+function plannedFile(
+    layer: 'feature' | 'steps' | 'screen' | 'locators',
+    relativePath: string,
+    operation: 'create' | 'update'
+) {
+    const absolute = path.join(projectPaths.frameworkRoot, relativePath);
+    return {
+        layer,
+        path: relativePath,
+        operation,
+        ...(operation === 'update' && fs.existsSync(absolute) ? {
+            baseHash: crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex'),
+        } : {}),
+    };
+}
+
 export class DeterministicResolver {
     constructor(private readonly catalog: CatalogProvider = new ReuseAnalyzer()) {}
 
@@ -235,7 +288,8 @@ export class DeterministicResolver {
         if (!/^[a-z0-9][a-z0-9_-]*$/.test(rawScenario.squad)) {
             throw new Error(`Squad inválido: ${rawScenario.squad}`);
         }
-        const catalog = this.catalog.getCatalog(rawScenario.squad, rawScenario.platform);
+        const featureScope = normalizeFeatureScope(rawScenario.request.featureScope);
+        const catalog = this.catalog.getCatalog(rawScenario.squad, rawScenario.platform, featureScope);
         const objectiveSlug = slug(rawScenario.objective, `caso-${rawScenario.recordingId.slice(-8)}`);
         const technicalName = slug(compactTechnicalName(rawScenario), objectiveSlug);
         const requestFileName = slug(rawScenario.request.fileName, objectiveSlug);
@@ -246,6 +300,7 @@ export class DeterministicResolver {
         const autoGeneratedLocatorModule = genericName(rawScenario.request.locatorModule) || requestLocatorModule === objectiveSlug;
         const normalizedRequest: GenerationRequest = {
             ...rawScenario.request,
+            featureScope,
             featureName: autoGeneratedFeatureName
                 ? titleFromSlug(technicalName)
                 : rawScenario.request.featureName,
@@ -366,7 +421,7 @@ export class DeterministicResolver {
                     ...step,
                     selector: resolution.selector || step.selector,
                     variableName: resolution.locatorName || step.variableName,
-                    elementIntent: resolution.intent,
+                    contextHint: recordedStepContext(step),
                 };
                 const parameter = inputParameterName(resolution.intent, resolution.sequence);
                 examples[parameter] = /^<valor>$/i.test(step.value || '')
@@ -377,7 +432,7 @@ export class DeterministicResolver {
                     value: `<${parameter}>`,
                     selector: resolution.selector || step.selector,
                     variableName: resolution.locatorName || step.variableName,
-                    elementIntent: resolution.intent,
+                    contextHint: recordedStepContext(step),
                 };
             });
             const inputParameter = (parameterizedActions.find(action => action.action === 'ESCRIBIR')
@@ -390,7 +445,7 @@ export class DeterministicResolver {
                     ? (assertionSeen ? 'And' : 'Then')
                     : (behaviorSeen ? 'And' : 'When'),
                 text: chunk.assertion
-                    ? assertionText(intents)
+                    ? assertionText(intents, technicalName)
                     : behavior,
                 status: 'missing',
                 actions: parameterizedActions,
@@ -413,16 +468,33 @@ export class DeterministicResolver {
             selectorCoverage: reusable.selectorCoverage,
             paths: reusable.paths,
         } : undefined;
+        const reusableBundle = existingCase ? undefined : bestArtifactBundle(catalog, scenario, resolutions);
+        const featurePrefix = featureScope ? `${scenario.squad}/${featureScope}` : scenario.squad;
+        const reuseTarget = reusableBundle ? {
+            reason: reusableBundle.reason,
+            score: reusableBundle.score,
+            steps: reusableBundle.bundle.steps,
+            screen: reusableBundle.bundle.screens[0],
+            locators: reusableBundle.bundle.locators[0],
+        } : undefined;
+        if (reuseTarget && !gaps.some(gap => gap.id === 'gap-extend-existing-artifacts')) {
+            gaps.push({
+                id: 'gap-extend-existing-artifacts',
+                type: 'semantic-naming',
+                description: 'El caso debe extender artefactos existentes relacionados en vez de crear duplicados.',
+                requiredOutput: 'Conservar el contenido existente y agregar únicamente definitions, methods y locators faltantes.',
+            });
+        }
         const files = existingCase ? [
-            { layer: 'feature' as const, path: existingCase.paths.feature, operation: 'update' as const },
-            { layer: 'steps' as const, path: existingCase.paths.steps, operation: 'update' as const },
-            { layer: 'screen' as const, path: existingCase.paths.screen, operation: 'update' as const },
-            { layer: 'locators' as const, path: existingCase.paths.locators, operation: 'update' as const },
+            plannedFile('feature', existingCase.paths.feature, 'update'),
+            plannedFile('steps', existingCase.paths.steps, 'update'),
+            plannedFile('screen', existingCase.paths.screen, 'update'),
+            plannedFile('locators', existingCase.paths.locators, 'update'),
         ] : [
-            { layer: 'feature' as const, path: `features/yape-features/${scenario.squad}/${normalizedRequest.fileName}.feature`, operation: 'create' as const },
-            { layer: 'steps' as const, path: `features/yape-steps-definitions/${scenario.squad}/${normalizedRequest.fileName}.steps.ts`, operation: 'create' as const },
-            { layer: 'screen' as const, path: `screenobjects/${scenario.squad}/${normalizedRequest.locatorModule}.screen.ts`, operation: 'create' as const },
-            { layer: 'locators' as const, path: `resources/locators/${scenario.squad}/${normalizedRequest.locatorModule}.locator.json`, operation: 'create' as const },
+            plannedFile('feature', `features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`, 'create'),
+            plannedFile('steps', reuseTarget?.steps || `features/yape-steps-definitions/${scenario.squad}/${normalizedRequest.fileName}.steps.ts`, reuseTarget?.steps ? 'update' : 'create'),
+            plannedFile('screen', reuseTarget?.screen || `screenobjects/${scenario.squad}/${normalizedRequest.locatorModule}.screen.ts`, reuseTarget?.screen ? 'update' : 'create'),
+            plannedFile('locators', reuseTarget?.locators || `resources/locators/${scenario.squad}/${normalizedRequest.locatorModule}.locator.json`, reuseTarget?.locators ? 'update' : 'create'),
         ];
         const planId = `plan-${crypto.createHash('sha256').update(JSON.stringify({
             recordingId: scenario.recordingId,
@@ -430,6 +502,7 @@ export class DeterministicResolver {
             resolutions,
             files,
             existingCase,
+            reuseTarget,
         })).digest('hex').slice(0, 24)}`;
         const unresolved = resolutions.filter(item => item.resolution === 'unresolved').length;
         const plan: GenerationPlan = {
@@ -445,6 +518,7 @@ export class DeterministicResolver {
             resolutions,
             files,
             existingCase,
+            reuseTarget,
             unresolvedGapIds: gaps.map(gap => gap.id),
             budgets: { maxDurationMs: 300_000, maxContextBytes: 20_000, maxRepairAttempts: 1 },
         };
@@ -479,7 +553,8 @@ export class DeterministicResolver {
                             module: item.source!.module,
                             scope: item.source!.scope,
                         })),
-                    decision: existingCase ? 'reuse-existing' : 'create-new',
+                    decision: existingCase ? 'reuse-existing' : reuseTarget ? 'extend-existing' : 'create-new',
+                    reuseTarget,
                 },
                 frameworkContract: {
                     stepsOnlyOrchestrate: true,

@@ -4,12 +4,15 @@ import { projectPaths } from './projectPaths';
 import { RecordedStep, toGherkinLine } from './models';
 import { screenObjectNames } from './semanticNaming';
 import { withGeneratedFileMetadata } from './generatedFileMetadata';
+import { featureScopeDirectory, normalizeFeatureScope } from './featureScope';
 
 export type TestPathType = 'Happy Path' | 'Unhappy Path';
 export type MobilePlatform = 'android' | 'ios';
 
 export interface GenerationRequest {
     squad: string;
+    /** Ruta opcional bajo features/yape-features/<squad>; no altera las demás capas. */
+    featureScope?: string;
     featureName: string;
     scenarioName: string;
     fileName: string;
@@ -75,8 +78,7 @@ export class FwkMobileGenerator {
         if (steps.length === 0) throw new Error('No hay steps grabados');
 
         const featurePath = path.join(
-            projectPaths.features,
-            normalized.squad,
+            featureScopeDirectory(projectPaths.features, normalized.squad, normalized.featureScope),
             `${normalized.fileName}.feature`
         );
         const missingRows = normalized.scenarioRows?.filter(row => row.status === 'missing') || [];
@@ -270,6 +272,7 @@ export class FwkMobileGenerator {
         return {
             ...request,
             squad,
+            featureScope: normalizeFeatureScope(request.featureScope),
             locatorModule,
             fileName,
             caseId,

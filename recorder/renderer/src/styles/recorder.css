@@ -494,9 +494,9 @@ body {
     display: none;
 }
 #screenRecorder.existing-workflow .step-action-editor,
-#screenRecorder.existing-workflow .panel-element > label[for="txtElementIntent"],
-#screenRecorder.existing-workflow #txtElementIntent,
-#screenRecorder.existing-workflow #txtElementIntent + .field-help {
+#screenRecorder.existing-workflow .panel-element > label[for="txtElementContext"],
+#screenRecorder.existing-workflow #txtElementContext,
+#screenRecorder.existing-workflow #txtElementContext + .field-help {
     display: none;
 }
 .scenario-coverage-panel .coverage-panel-title {
@@ -709,6 +709,24 @@ body {
     gap: 8px;
     margin-top: 4px;
 }
+.onboarding-clean-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 4px 0;
+    padding: 11px 12px;
+    color: #D6D6E8;
+    background: #202033;
+    border: 1px solid #44465F;
+    border-radius: 7px;
+    cursor: pointer;
+}
+.onboarding-clean-option input {
+    margin-top: 2px;
+    accent-color: #8A2FBA;
+}
+.onboarding-clean-option span { display: flex; flex-direction: column; gap: 3px; }
+.onboarding-clean-option small { color: #A2A4C4; font-size: 10px; }
 
 /* DEVICE SCREEN */
 .device-screen-container {

@@ -13,23 +13,54 @@ const { AutomationAgentLauncher } = require('../dist/core/automationAgentLaunche
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { RecordingCoverageAnalyzer } = require('../dist/core/recordingCoverageAnalyzer');
 const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
+const { FrameworkScanner } = require('../dist/core/frameworkScanner');
+const { ReuseAnalyzer } = require('../dist/core/reuseAnalyzer');
 
-test('la captura solicita intención funcional y no un nombre técnico de locator', () => {
+test('la captura solicita contexto funcional y no un nombre técnico de locator', () => {
     const workspace = fs.readFileSync(path.join(
         __dirname,
         '../recorder/renderer/src/components/RecorderWorkspace.tsx'
     ), 'utf8');
     assert.match(workspace, /¿Qué función cumple este elemento\?/);
-    assert.match(workspace, /id="txtElementIntent"/);
+    assert.match(workspace, /id="txtElementContext"/);
+    assert.match(workspace, /No se copiará como Step ni como nombre fijo del locator/);
     assert.doesNotMatch(workspace, /Buscar o asignar locator lógico/);
     assert.doesNotMatch(workspace, /Buscar locator del squad o crear uno/);
     const onboarding = fs.readFileSync(path.join(
         __dirname,
         '../recorder/renderer/src/components/SessionOnboarding.tsx'
     ), 'utf8');
-    assert.match(onboarding, /Regenerar una automatización/);
+    assert.match(onboarding, /Reprocesar o refinar una grabación/);
     assert.match(onboarding, /id="cmbOnboardingRegeneration"/);
     assert.match(onboarding, /id="txtRegenerationRefinement"/);
+    assert.match(onboarding, /id="chkRegenerationClean"/);
+});
+
+test('configuración separa squad de la ruta anidada de Features', () => {
+    const configuration = fs.readFileSync(path.join(
+        __dirname,
+        '../recorder/renderer/src/components/ConfigurationScreen.tsx'
+    ), 'utf8');
+    const controller = fs.readFileSync(path.join(
+        __dirname,
+        '../recorder/renderer/src/controller/recorderController.js'
+    ), 'utf8');
+    assert.match(configuration, /id="cmbFrameworkFeatureScope"/);
+    assert.match(configuration, /Solo limita el mapa de Features/);
+    assert.match(controller, /featureScope:\s*cmbFrameworkFeatureScope/);
+});
+
+test('scanner y catálogo resuelven las cuatro capas de un Feature anidado por relaciones', () => {
+    const scanner = new FrameworkScanner().scan();
+    const interoperabilidad = scanner.squads.find(squad => squad.name === 'interoperabilidad');
+    assert.ok(interoperabilidad.featureScopes.some(scope => scope.path === 'tapp/payment'));
+    const catalog = new ReuseAnalyzer().getCatalog('interoperabilidad', 'ios', 'tapp/payment');
+    assert.equal(catalog.featureScope, 'tapp/payment');
+    assert.equal(catalog.scenarios.length, 1);
+    const related = catalog.scenarios[0].relatedArtifacts;
+    assert.ok(related.steps.includes('features/yape-steps-definitions/interoperabilidad/tapp-payments.steps.ts'));
+    assert.ok(related.screens.includes('screenobjects/interoperabilidad/tapp-subhome.screen.ts'));
+    assert.ok(related.locators.includes('resources/locators/interoperabilidad/tapp-subhome.locator.json'));
 });
 
 function request() {
@@ -59,8 +90,8 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     const store = new AutomationRecordingStore(root);
     store.start({ squad: 'payment', platform: 'android', environment: 'qa' });
     store.replaceActions([
-        { action: 'ESCRIBIR', selector: 'id=phone', variableName: 'phone', elementIntent: 'numero a yapear', value: '999111222' },
-        { action: 'ESCRIBIR', selector: 'id=password', variableName: 'password', elementIntent: 'contraseña', value: 'secreto' }
+        { action: 'ESCRIBIR', selector: 'id=phone', variableName: 'phone', contextHint: 'numero a yapear', value: '999111222' },
+        { action: 'ESCRIBIR', selector: 'id=password', variableName: 'password', contextHint: 'contraseña', value: 'secreto' }
     ], {
         squad: 'payment', platform: 'android', environment: 'qa'
     });
@@ -69,6 +100,7 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     assert.equal(actions[0].value, '999111222');
     assert.equal(actions[1].value, '<password>');
     assert.equal(actions[0].selectorVerified, true);
+    assert.equal(actions[0].contextHint, 'numero a yapear');
 });
 
 test('completar caso lista solo recordings del ambiente y reconstruye su cobertura', () => {
@@ -117,6 +149,7 @@ test('completar caso lista solo recordings del ambiente y reconstruye su cobertu
     const analyzer = new RecordingCoverageAnalyzer(recordings, framework, locatorsRoot);
     const listed = analyzer.listRecordings('payment', 'qa');
     assert.deepEqual(listed.map(item => item.id), ['rec-runtime-only']);
+    assert.equal(listed[0].canRegenerate, false);
     assert.equal(listed.some(item => item.name === 'Caso del framework'), false);
     const coverage = analyzer.analyze('payment', 'rec-runtime-only', 'qa');
     assert.equal(coverage.locators.length, 1);
@@ -251,6 +284,69 @@ test('resolver propone dataName editable cuando el recording no lo especifica', 
     assert.equal(result.unresolvedContext.gaps.some(gap => gap.id === 'gap-test-data'), false);
 });
 
+test('resolver filtra por featureScope y extiende artefactos relacionados sin duplicarlos', () => {
+    let requestedScope = null;
+    const catalog = {
+        getCatalog: (squad, platform, featureScope) => {
+            requestedScope = featureScope;
+            return {
+                squad, platform, featureScope,
+                stepDefinitions: [], screenMethods: [], features: [], scenarios: [],
+                locators: [{
+                    name: 'btnFiltrarMovimientos', selector: 'id=filter',
+                    androidSelector: 'id=filter', iosSelector: '',
+                    file: 'resources/locators/payment/filtro-movimientos.locator.json',
+                    module: 'payment/filtro-movimientos', squad: 'payment',
+                    scope: 'squad', platform: 'android'
+                }],
+                artifactBundles: [{
+                    steps: 'features/yape-steps-definitions/payment/filtro-movimientos.steps.ts',
+                    screens: ['screenobjects/payment/filtro-movimientos.screen.ts'],
+                    locators: ['resources/locators/payment/filtro-movimientos.locator.json'],
+                    stepExpressions: ['el usuario consulta sus movimientos'],
+                    screenMethods: ['consultarMovimientos']
+                }]
+            };
+        }
+    };
+    const recorded = scenario([{
+        action: 'CLICK', selector: 'id=filter', selectorVerified: true,
+        contextHint: 'permite filtrar los movimientos'
+    }]);
+    recorded.request.featureScope = 'tapp/payment';
+    const result = new DeterministicResolver(catalog).resolve(recorded);
+    assert.equal(requestedScope, 'tapp/payment');
+    assert.match(result.plan.files.find(file => file.layer === 'feature').path,
+        /^features\/yape-features\/payment\/tapp\/payment\/.+\.feature$/);
+    assert.equal(result.plan.files.find(file => file.layer === 'steps').operation, 'update');
+    assert.equal(result.plan.files.find(file => file.layer === 'screen').path,
+        'screenobjects/payment/filtro-movimientos.screen.ts');
+    assert.equal(result.plan.files.find(file => file.layer === 'locators').operation, 'update');
+    assert.equal(result.plan.reuseTarget.locators,
+        'resources/locators/payment/filtro-movimientos.locator.json');
+    assert.ok(result.plan.unresolvedGapIds.includes('gap-extend-existing-artifacts'));
+});
+
+test('generador escribe el Feature en su alcance y conserva otras capas en el squad', () => {
+    const preview = new FwkMobileGenerator().preview({
+        ...request(),
+        featureScope: 'tapp/payment',
+        scenarioRows: [{
+            keyword: 'Then', text: 'se muestra el resultado esperado', status: 'missing',
+            actions: [{
+                action: 'VERIFICAR_EXISTE', selector: 'id=result', selectorVerified: true,
+                variableName: 'resultado'
+            }]
+        }]
+    }, [{ action: 'VERIFICAR_EXISTE', selector: 'id=result', variableName: 'resultado' }]);
+    assert.match(preview.featurePath.replace(/\\/g, '/'),
+        /features\/yape-features\/payment\/tapp\/payment\/flujo-mobile\.feature$/);
+    assert.match(preview.stepPath.replace(/\\/g, '/'),
+        /features\/yape-steps-definitions\/payment\/flujo-mobile\.steps\.ts$/);
+    assert.match(preview.screenPath.replace(/\\/g, '/'),
+        /screenobjects\/payment\/nueva-pantalla\.screen\.ts$/);
+});
+
 test('resolver convierte un teléfono grabado en parámetro y Example', () => {
     const recorded = scenario([{
         action: 'ESCRIBIR', selector: 'id=phone', selectorVerified: true,
@@ -338,7 +434,17 @@ test('resolver agrupa acciones técnicas en comportamiento y propone rutas compa
     assert.equal(result.scenario.request.scenarioRows.length, 3);
     assert.equal(result.scenario.request.scenarioRows[1].text, 'el usuario consulta todos sus movimientos');
     assert.equal(result.scenario.request.scenarioRows[1].actions.length, 4);
-    assert.equal(result.scenario.request.scenarioRows[2].text, 'se muestra el botón de filtro de movimientos');
+    assert.equal(result.scenario.request.scenarioRows[2].text, 'se muestran los movimientos esperados');
+});
+
+test('resolver usa contextHint como pista sin copiarlo literalmente al Gherkin', () => {
+    const contextHint = 'permite consultar el detalle consolidado de la cuenta seleccionada';
+    const result = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'CLICK', selector: 'id=detalle', selectorVerified: true, contextHint
+    }]));
+    const generated = result.scenario.request.scenarioRows.map(row => row.text);
+    assert.equal(generated.includes(contextHint), false);
+    assert.equal(result.scenario.actions[0].contextHint, contextHint);
 });
 
 test('resolver reutiliza las cuatro capas cuando encuentra un caso equivalente del squad', () => {
@@ -497,6 +603,19 @@ test('validator rechaza Gherkin procedimental que narra acciones de interfaz', (
     assert.equal(validation.errors.some(error => error.code === 'imperative-gherkin'), true);
 });
 
+test('validator rechaza copiar contextHint literalmente como Step', () => {
+    const hint = 'se muestra la lista de movimientos';
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        contextHint: hint
+    }]));
+    const response = validResponse(resolved.plan);
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.errors.some(error => error.code === 'verbatim-context-hint'), true);
+});
+
 test('validator exige englobar acciones técnicas en un step funcional', () => {
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([
         { action: 'CLICK', selector: 'id=movimientos', selectorVerified: true, elementIntent: 'consultar movimientos' },
@@ -598,12 +717,14 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     const verifier = fs.readFileSync(path.join(result.packageDirectory, 'verify-package.js'), 'utf8');
     assert.match(instructions, /Gherkin declarativo/);
     assert.match(instructions, /Agrupa acciones técnicas consecutivas/);
+    assert.match(instructions, /contextHint\/elementIntent es solo una pista libre/);
     assert.match(instructions, /@screenobjects.*@utils.*@locators/);
     assert.match(instructions, /Importa browser.*únicamente si/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);
     assert.match(verifier, /usa imports relativos/);
     assert.match(verifier, /importa browser pero no lo utiliza/);
+    assert.match(verifier, /Pista contextual copiada literalmente como Step/);
     assert.doesNotThrow(() => execFileSync(process.execPath, ['verify-package.js'], {
         cwd: result.packageDirectory,
         stdio: 'pipe'
@@ -621,6 +742,96 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         cwd: result.packageDirectory,
         stdio: 'pipe'
     }));
+});
+
+test('package builder mantiene baselines grandes fuera del contexto mínimo', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-update-package-'));
+    const framework = path.join(root, 'framework');
+    const recording = path.join(root, 'recording');
+    const baselinePath = 'screenobjects/payment/movements.screen.ts';
+    const baselineFile = path.join(framework, baselinePath);
+    fs.mkdirSync(path.dirname(baselineFile), { recursive: true });
+    const methods = Array.from({ length: 800 }, (_, index) =>
+        `  public async existingMethod${index}(): Promise<void> { return; }`
+    ).join('\n');
+    fs.writeFileSync(baselineFile, `export class MovementsScreen {\n${methods}\n}\n`);
+
+    const recorded = scenario([{
+        action: 'CLICK', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'mostrar movimientos'
+    }]);
+    const plan = {
+        schemaVersion: 1, pipelineVersion: '1.0.0', planId: 'plan-update-large',
+        recordingId: recorded.recordingId, fingerprint: recorded.fingerprint,
+        deterministicCoverage: 0.75, status: 'agent-required',
+        unresolvedGapIds: ['gap-screen'],
+        budgets: { maxDurationMs: 300000, maxContextBytes: 20000, maxRepairAttempts: 1 },
+        resolutions: [],
+        files: [{
+            layer: 'screen', path: baselinePath, operation: 'update', baseHash: 'hash-screen'
+        }],
+        reuseTarget: { screen: baselinePath }
+    };
+    const fakeResolver = {
+        resolve: () => ({
+            scenario: recorded,
+            plan,
+            resolvedContext: {
+                schemaVersion: 1, recordingId: recorded.recordingId, planId: plan.planId,
+                frameworkAwareness: { decision: 'update-existing', candidates: [] }
+            },
+            unresolvedContext: {
+                schemaVersion: 1, recordingId: recorded.recordingId,
+                planId: plan.planId, gaps: [{ id: 'gap-screen', type: 'screen' }]
+            }
+        })
+    };
+    const builder = new AutomationPackageBuilder(
+        fakeResolver,
+        new AutomationMemory(path.join(root, 'memory')),
+        undefined,
+        undefined,
+        framework
+    );
+    const result = builder.prepare(recorded, recording);
+    const reuse = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'reuse-context.json'), 'utf8'
+    ));
+    const baseline = reuse.updateBaselines[0];
+    assert.equal(result.agentRequired, true);
+    assert.equal(Object.hasOwn(baseline, 'content'), false);
+    assert.equal(baseline.preserve.count, 800);
+    assert.equal(baseline.preserve.sample.length, 12);
+    assert.ok(fs.statSync(path.join(result.packageDirectory, baseline.reference)).size > 20_000);
+    const mandatoryBytes = [
+        'scenario.json', 'generation-plan.json', 'reuse-context.json',
+        'collision-report.json', 'unresolved-context.json', 'instructions.md'
+    ].reduce((total, file) => total + fs.statSync(path.join(result.packageDirectory, file)).size, 0);
+    assert.ok(mandatoryBytes <= 20_000);
+});
+
+test('reprocesar una grabación limpia solo el paquete y conserva la evidencia original', () => {
+    const recording = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-reprocess-'));
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]);
+    fs.writeFileSync(path.join(recording, 'scenario.json'), JSON.stringify(recorded));
+    const packageDirectory = path.join(recording, 'generation', 'automation');
+    const evidenceDirectory = path.join(recording, 'actions', '001');
+    fs.mkdirSync(packageDirectory, { recursive: true });
+    fs.mkdirSync(evidenceDirectory, { recursive: true });
+    fs.writeFileSync(path.join(packageDirectory, 'stale-agent-response.json'), '{}');
+    fs.writeFileSync(path.join(evidenceDirectory, 'screen.xml'), '<hierarchy/>');
+
+    const builder = new AutomationPackageBuilder(
+        new DeterministicResolver(emptyCatalog),
+        new AutomationMemory(path.join(recording, 'memory'))
+    );
+    const result = builder.prepareRecordedScenario(recording, true);
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'stale-agent-response.json')), false);
+    assert.equal(fs.existsSync(path.join(evidenceDirectory, 'screen.xml')), true);
+    assert.equal(fs.existsSync(path.join(result.packageDirectory, 'generation-plan.json')), true);
 });
 
 test('regeneración versiona la propuesta anterior y conserva las cuatro rutas importadas', () => {
@@ -709,6 +920,7 @@ test('launcher abre una terminal en el paquete sin ejecutar automáticamente el 
     assert.equal(call.command, process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd.exe' : 'x-terminal-emulator');
     assert.ok(call.args.some(value => String(value).includes(root)));
     assert.match(result.prompt, /instructions\.md/);
+    assert.match(result.prompt, /No leas resolved-context\.json/);
     assert.doesNotMatch(call.args.join(' '), /instructions\.md/);
 });
 

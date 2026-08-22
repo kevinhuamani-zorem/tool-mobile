@@ -43,6 +43,8 @@ export interface PlannedFile {
     layer: 'feature' | 'steps' | 'screen' | 'locators';
     path: string;
     operation: 'create' | 'update';
+    /** Hash del archivo conocido al preparar el plan; protege updates contra cambios externos. */
+    baseHash?: string;
 }
 
 export interface GenerationPlan {
@@ -57,6 +59,13 @@ export interface GenerationPlan {
     files: PlannedFile[];
     unresolvedGapIds: string[];
     existingCase?: ExistingAutomationCandidate;
+    reuseTarget?: {
+        reason: string;
+        score: number;
+        steps?: string;
+        screen?: string;
+        locators?: string;
+    };
     budgets: {
         maxDurationMs: number;
         maxContextBytes: number;
@@ -87,6 +96,11 @@ export interface FrameworkReuseCandidate {
     selectorCoverage: number;
     matchedSteps: string[];
     paths?: ExistingAutomationCandidate['paths'];
+    relatedPaths?: {
+        steps: string[];
+        screens: string[];
+        locators: string[];
+    };
 }
 
 export interface ResolvedContext {
@@ -108,7 +122,8 @@ export interface ResolvedContext {
             module: string;
             scope: 'squad' | 'home';
         }>;
-        decision: 'create-new' | 'reuse-existing';
+        decision: 'create-new' | 'reuse-existing' | 'extend-existing';
+        reuseTarget?: GenerationPlan['reuseTarget'];
     };
     frameworkContract: {
         stepsOnlyOrchestrate: true;

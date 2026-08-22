@@ -53,16 +53,16 @@ export function RecorderWorkspace() {
           <input type="text" id="txtSelector" className="field-input" placeholder="XPath..." />
           <button className="btn btn-dark" id="btnCopy">📋</button>
         </div>
-        <label className="field-label" htmlFor="txtElementIntent">¿Qué función cumple este elemento?</label>
+        <label className="field-label" htmlFor="txtElementContext">¿Qué función cumple este elemento?</label>
         <input
           type="text"
-          id="txtElementIntent"
+          id="txtElementContext"
           className="field-input"
           autoComplete="off"
-          placeholder="Ej.: abrir movimientos, confirmar pago, ingresar correo"
+          placeholder="Ej.: abre el historial donde el usuario consulta sus operaciones"
         />
         <div className="field-help">
-          Describe su intención funcional. El recorder resolverá si reutiliza o crea el locator y definirá su nombre técnico.
+          Es una pista de contexto para comprender el elemento. No se copiará como Step ni como nombre fijo del locator.
         </div>
         <div id="locatorCombobox" className="catalog-combobox compatibility-only" aria-hidden="true">
           <input type="hidden" id="txtVarName" />

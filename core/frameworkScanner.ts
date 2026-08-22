@@ -27,6 +27,7 @@ export interface FrameworkFileInfo {
 export interface SquadInfo {
     name: string;
     layers: Record<LayerName, number>;
+    featureScopes: Array<{ path: string; featureCount: number }>;
 }
 
 export interface FrameworkCatalog {
@@ -122,17 +123,31 @@ export class FrameworkScanner {
             }
         }
 
-        const squads = [...squadNames].sort().map(name => ({
-            name,
-            layers: Object.fromEntries(
+        const squads = [...squadNames].sort().map(name => {
+            const squadFeatureRoot = path.join(projectPaths.features, name);
+            const featureScopes = new Map<string, number>();
+            for (const file of filesByLayer.features.filter(
+                candidate => firstPathSegment(projectPaths.features, candidate) === name
+            )) {
+                const directory = path.dirname(path.relative(squadFeatureRoot, file));
+                const scope = directory === '.' ? '' : directory.replace(/\\/g, '/');
+                featureScopes.set(scope, (featureScopes.get(scope) || 0) + 1);
+            }
+            return {
+                name,
+                featureScopes: [...featureScopes.entries()]
+                    .map(([scopePath, featureCount]) => ({ path: scopePath, featureCount }))
+                    .sort((left, right) => left.path.localeCompare(right.path)),
+                layers: Object.fromEntries(
                 (Object.keys(layerRoots) as LayerName[]).map(layer => [
                     layer,
                     filesByLayer[layer].filter(
                         file => firstPathSegment(layerRoots[layer], file) === name
                     ).length
                 ])
-            ) as Record<LayerName, number>
-        }));
+                ) as Record<LayerName, number>
+            };
+        });
 
         return {
             frameworkRoot: projectPaths.frameworkRoot,

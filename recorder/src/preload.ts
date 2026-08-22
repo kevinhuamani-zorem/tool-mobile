@@ -8,8 +8,8 @@ contextBridge.exposeInMainWorld('api', {
     analyzeStepImpact:   (texts: string[], squad?: string) =>
         ipcRenderer.invoke('analyze-step-impact', texts, squad),
     getWorkspaceInfo:    () => ipcRenderer.invoke('get-workspace-info'),
-    getSquadCatalog:     (squad: string, platform: string) =>
-        ipcRenderer.invoke('get-squad-catalog', squad, platform),
+    getSquadCatalog:     (squad: string, platform: string, featureScope?: string) =>
+        ipcRenderer.invoke('get-squad-catalog', squad, platform, featureScope),
     getExistingScenarios:(squad: string)         => ipcRenderer.invoke('get-existing-scenarios', squad),
     getScenarioCoverage:(scenarioId: string, squad: string) =>
         ipcRenderer.invoke('get-scenario-coverage', scenarioId, squad),
