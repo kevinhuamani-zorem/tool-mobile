@@ -1,318 +1,75 @@
 # Appium Visual Recorder
 
-Herramienta de grabación visual de pruebas mobile. Registra acciones y
-selectores comprobados, resuelve determinísticamente la reutilización del
-framework y genera Feature, Steps, Screen Object y Locators con una IA limitada
-exclusivamente a las brechas del plan.
+Appium Visual Recorder es una herramienta visual acoplada a
+`fwk-mobile-test`. Permite que un QA navegue una aplicación Android o iOS,
+registre acciones, verifique selectores y entregue evidencia estructurada para
+generar o actualizar las cuatro capas de automatización del framework:
 
-El campo **¿Qué función cumple este elemento?** es únicamente una pista de
-contexto. Ayuda a interpretar el control y encontrar reutilización, pero no se
-convierte directamente en un Step ni fija la redacción del Gherkin.
+1. Feature Gherkin.
+2. Step Definitions.
+3. Screen Object.
+4. Locators Android/iOS.
 
-## Documentación para mantenimiento
+El recorder no es un framework de ejecución independiente. Funciona
+exclusivamente instalado en `fwk-mobile-test/tools/visual-recorder` y usa el
+framework padre como fuente de ambientes, squads, datos, aplicaciones,
+artefactos reutilizables y destino de generación.
 
-La guía técnica para continuar el proyecto está en
-[`docs/README.md`](docs/README.md). Las reglas obligatorias para personas y
-agentes de IA están en [`AGENTS.md`](AGENTS.md).
-
-> Puede vivir integrado o ejecutarse como herramienta independiente. El
-> proyecto destino se resuelve mediante el adaptador activo. Las configuraciones
-> locales quedan en `config/` y las capturas temporales en `runtime/`; ambas
-> están excluidas de Git.
-
-## Aislamiento del repositorio
-
-En la rama de desarrollo del recorder, Git versiona exclusivamente
-`tools/visual-recorder` y el `.gitignore` raíz que mantiene ese límite. El
-framework `fwk-mobile-test` permanece en disco como workspace local para
-escaneo, ejecución y generación, pero sus Features, Steps, Screen Objects,
-locators, datos y configuración no forman parte del repositorio del recorder.
-
-Esto significa que `git status` no debe mostrar cambios del framework. Para
-usar otro checkout local basta con configurar `TARGET_PROJECT`; no se debe
-copiar ni versionar el proyecto destino dentro del recorder.
-
-## Modos de workspace
-
-El recorder puede ejecutarse sin estar dentro de `fwk-mobile-test`:
+## Flujo actual
 
 ```text
-fwk-mobile  → usa las cuatro capas de un proyecto fwk-mobile externo
-standalone  → crea un workspace WebdriverIO autocontenido
-neutral     → exporta únicamente Gherkin y recording.json
+QA graba y verifica acciones
+        ↓
+scenario.json + selectores + evidencia
+        ↓
+preprocesador determinista
+        ↓
+generation-plan.json + contexto mínimo
+        ↓
+agente resuelve únicamente los gaps
+        ↓
+agent-response.json
+        ↓
+validador determinista
+        ↓
+preview editable
+        ↓
+Feature + Steps + Screen Object + Locators
 ```
 
-Ejemplos:
+El preprocesador busca primero reutilización en el squad seleccionado y en
+Home. El agente no recibe todo `fwk-mobile-test`: recibe selectores ya
+verificados, decisiones de reutilización, APIs relevantes y únicamente el
+contexto necesario para completar los gaps.
+
+## Requisitos
+
+Requisitos generales:
+
+- checkout local de `fwk-mobile-test`;
+- Node.js 18 o superior y npm;
+- Git con acceso SSH al repositorio privado del recorder;
+- Appium 3 y el driver requerido para sesiones locales.
+
+Requisitos según plataforma:
+
+- **Android local:** Java 17+, Android SDK/ADB, UiAutomator2 y depuración USB.
+- **iOS local:** macOS, Xcode, WebDriverAgent y el driver XCUITest.
+- **BrowserStack:** credenciales válidas, dispositivo y app disponibles en la
+  cuenta. Java no es necesario por usar BrowserStack.
+
+Comprobaciones frecuentes:
 
 ```bash
-RECORDER_MODE=fwk-mobile TARGET_PROJECT=/ruta/al/fwk-mobile-test ./run.sh
-RECORDER_MODE=standalone ./run.sh
-RECORDER_MODE=neutral ./run.sh
+node --version
+npm --version
+appium --version
+adb devices
 ```
 
-También puedes copiar `config/workspace.example.json` como
-`config/workspace.json`. El archivo real permanece dentro del recorder y está
-excluido de Git. Sin configuración explícita se detecta `fwk-mobile` cuando
-existe como proyecto padre; en otra ubicación se selecciona `standalone`.
+## Instalación dentro de fwk-mobile-test
 
-El adaptador `standalone` crea su proyecto por defecto en
-`tools/visual-recorder/workspace`. El modo `neutral` escribe salidas portables
-en `tools/visual-recorder/runtime/exports`. El adaptador `fwk-mobile` acepta
-cualquier ruta mediante `TARGET_PROJECT`, por lo que el recorder ya no necesita
-vivir dentro del repositorio objetivo.
-
-## Descubrimiento del framework
-
-Al iniciar, el recorder escanea la raíz de `fwk-mobile-test` y presenta:
-
-- ambientes definidos como `config/envs/.env.*`;
-- squads disponibles en las capas del framework;
-- APK/IPA ubicados en `resources/apps`;
-- datasets de `resources/data`;
-- conteos de features, steps, Screen Objects y locators.
-
-Después del squad puede elegirse una **Ruta de Features** opcional. Por ejemplo,
-selecciona `interoperabilidad` + `tapp/payment`; no conviertas
-`interoperabilidad/tapp/payment` en un squad. El filtro limita el mapa de
-Features, pero mantiene disponible el catálogo del squad/Home para reutilizar
-las otras capas.
-
-Del `.env` solo se envían a la interfaz los nombres de las variables y si están
-configuradas. Los valores permanecen en el proceso principal y las claves
-sensibles se clasifican como tales. Esto permite usar el ambiente seleccionado
-en una fase posterior sin exponer secretos en Electron.
-
-## Salida compatible con fwk-mobile-test
-
-La generación normal solicita squad, archivo, módulo de locators, ID `TC-10239`,
-tipo de camino y tag. La salida se escribe directamente en:
-
-    features/yape-features/<squad>/<archivo>.feature
-    resources/locators/<squad>/<módulo>.locator.json
-
-Los locators usan los bloques `<módulo>Android` o `<módulo>Ios` esperados por el
-framework. Si se informa un usuario de data, el feature usa `Scenario Outline`
-y crea su tabla `Examples`.
-
-La generación valida todas las rutas y escribe primero archivos temporales. Un
-archivo existente solo puede actualizarse cuando el plan lo relacionó por
-definiciones/imports y su hash sigue intacto. La actualización es aditiva y el
-validador bloquea la eliminación de APIs existentes.
-
-### Generación segura de Steps y Screen Objects
-
-El constructor permite redactar los steps Gherkin y asociarles una o más
-acciones grabadas. Al presionar Continuar desde Gherkin:
-
-1. se indexan las expresiones regulares `Given`, `When` y `Then` existentes;
-2. cada texto se contrasta con escenarios y squads existentes;
-3. se muestra exactamente qué casos serían impactados;
-4. el usuario debe corregir el conflicto y se generan definiciones nuevas:
-
-       features/yape-steps-definitions/<squad>/<archivo>.steps.ts
-       screenobjects/<squad>/<módulo>.screen.ts
-
-El preprocesador puede reutilizar o ampliar artefactos del mismo squad cuando
-la relación es trazable; nunca modifica archivos de otro squad. El Steps file
-solo orquesta y llama al Screen Object. El Screen Object extiende
-`BaseScreen`, resuelve elementos con `LocatorFactory` y usa los helpers del
-framework para clicks, escritura, espera, validaciones y gestos soportados.
-También se indexan los métodos públicos para validar el impacto antes de
-escribir.
-
-### Pipeline de automatización con contexto mínimo
-
-```text
-scenario.json
-  → resolver determinista
-  → generation-plan.json + contexto resuelto/no resuelto
-  → memoria 100% o Copilot/Claude solo para gaps
-  → agent-response.json
-  → validator determinista
-  → preview editable
-  → escritura y memoria versionada
-```
-
-Al iniciar una sesión existen tres flujos separados:
-
-- **Crear un caso nuevo:** registra acciones y genera las cuatro capas.
-- **Completar una grabación:** captura únicamente los locators faltantes de la
-  plataforma activa; no regenera Steps. Al completar la cobertura actualiza el
-  Feature con `@android` o `@ios` sin eliminar los tags ya disponibles.
-- **Regenerar una automatización:** parte de un caso validado e importado,
-  conserva sus rutas, guarda la versión anterior y permite refinar las cuatro
-  capas con el agente antes de reemplazar los archivos administrados. La
-  indicación de mejora es opcional; vacía solicita una revisión general.
-
-El agente no recibe el repositorio completo. Squad/Home, selectores verificados,
-rutas y orden ya están resueltos. El paquete tiene un límite de 20 KB y solo
-existe una reparación dirigida. “Abrir Terminal del agente” abre una terminal
-en la carpeta exacta del paquete, pero no ejecuta Copilot/Claude. La pantalla
-muestra un prompt inicial copiable para que el usuario elija el agente y lo
-inicie manualmente.
-
-Los Screen Objects usan nombres derivados de su archivo. Por ejemplo,
-`cuentas-tapp-ingresar-opcion.screen.ts` genera la clase
-`CuentasTappIngresarOpcionScreen` y el alias importado
-`cuentasTappIngresarOpcionScreen`; el validador rechaza nombres genéricos.
-
-El preprocesador añade `reuse-context.json` con hasta cinco casos cercanos y
-`collision-report.json` con coincidencias exactas. Si reconoce un caso ya
-automatizado con sus cuatro capas, conserva esos archivos y evita abrir el
-agente. El validador vuelve a comprobar las colisiones al importar la respuesta.
-
-Configura el proveedor en `.env`:
-
-```dotenv
-AUTOMATION_AGENT=copilot
-```
-
-El `.env` real está excluido de Git. Los reportes generados por pruebas,
-cobertura o métricas bajo `coverage/`, `test-results/` y `runtime/quality/`
-también están excluidos; las pruebas y el procedimiento QA sí se versionan.
-
-Al finalizar, el usuario revisa acciones, describe objetivo/aceptación, prepara
-el paquete, abre la Terminal si necesita resolver gaps, importa la respuesta y
-edita las cuatro capas en el visor. Solo una
-generación validada con score 100 se guarda como memoria reutilizable.
-
-### CodeGraph local
-
-El recorder indexa localmente las relaciones entre Features, Scenarios, Step
-Definitions, Screen Objects, métodos y locators. El grafo se consulta
-localmente para reducir el contexto necesario durante mantenimiento y análisis.
-El cache incremental se guarda exclusivamente como
-`tools/visual-recorder/runtime/codegraph-<modo>.json`, excluido de Git. El proyecto se
-usa en modo lectura y los archivos sin cambios no se vuelven a indexar.
-
-Para visualizar un subgrafo en VS Code:
-
-```bash
-cd tools/visual-recorder
-npm run codegraph:export -- --squad payment --feature movimientos
-```
-
-Se generan dentro de `runtime/`:
-
-```text
-codegraph-payment-movimientos.dot
-codegraph-payment-movimientos.mmd
-```
-
-El `.dot` puede abrirse con **Graphviz Interactive Preview** y el `.mmd` con
-una extensión de preview para Mermaid. Opciones adicionales:
-
-```bash
-npm run codegraph:export -- --squad payment --search yapear --limit 60
-npm run codegraph:export -- --squad payment --feature login --format dot
-```
-
-El límite permitido es de 10 a 150 nodos. Tanto el nombre de salida como la
-ruta se normalizan y siempre permanecen dentro de `tools/visual-recorder/runtime`.
-
-### CodeGraph del propio recorder
-
-Existe un segundo grafo separado para desarrollar y mantener
-`tools/visual-recorder`. Indexa:
-
-- módulos e imports TypeScript/JavaScript;
-- componentes React;
-- servicios y símbolos;
-- canales IPC `renderer → preload → main`;
-- IDs JSX y bindings mediante `getElementById`;
-- scripts npm y pruebas unitarias.
-
-Consultas:
-
-```bash
-npm run codegraph:recorder -- --search generateFwkFiles
-npm run codegraph:recorder -- --component ScenarioBuilderModal
-npm run codegraph:recorder -- --ipc preview-fwk-files
-```
-
-Por defecto genera JSON, DOT y Mermaid dentro de `runtime/`. Para obtener solo
-el JSON compacto que puede consumirse como contexto:
-
-```bash
-npm run codegraph:recorder -- \
-  --ipc preview-fwk-files \
-  --limit 40 \
-  --format json
-```
-
-El índice incremental vive en `runtime/codegraph-recorder.json`. El grafo
-permanece local y sirve para consultar la arquitectura y cargar únicamente los
-módulos relacionados durante mantenimiento del recorder.
-
-La puerta completa de calidad se ejecuta con `npm run quality`. Los umbrales y
-el procedimiento manual están en
-[`docs/GENERATION_QUALITY_ASSURANCE.md`](docs/GENERATION_QUALITY_ASSURANCE.md).
-
-### Preview y validación
-
-Antes de generar es obligatorio presionar `Preview`. La interfaz permite
-alternar y revisar el contenido de cada archivo propuesto. El proceso principal:
-
-- valida el formato Gherkin y `[TC-10239][Path][AUTO-FRONT]`;
-- valida los bloques Android/iOS y la sintaxis JSON;
-- valida sintaxis TypeScript de Steps y Screen Objects;
-- informa selectores pendientes para la otra plataforma;
-- detecta conflictos con archivos existentes;
-- rechaza rutas fuera de las capas permitidas.
-
-Cada Preview crea un token asociado al contenido exacto de la grabación y la
-configuración elegida. Si se modifican steps, rutas o metadatos después de
-revisar, `GENERAR` se rechaza y exige ejecutar Preview nuevamente.
-
----
-
-## Como funciona
-
-    MODO 1 - GRABACION
-    Panel Electron → Conecta con dispositivo Android via Appium →
-    XML Hierarchy Viewer permite inspeccionar elementos →
-    Se captura XPath automaticamente → Se generan .feature y .locators
-
-    MODO 2 - EJECUCION
-    Lee el .feature generado → Resuelve variables del .locators →
-    Ejecuta con Cucumber + WebdriverIO + Appium →
-    Genera reporte HTML
-
----
-
-## Pre-requisitos
-
-    Node.js 18+
-    Verificar : node --version
-    Descargar : https://nodejs.org
-
-    Java 17+ (requerido unicamente para Android local; no es necesario para BrowserStack ni iOS local)
-    Verificar : java --version
-    Descargar : https://adoptium.net
-
-    Android SDK / ADB
-    Verificar : adb --version
-    Incluido en Android Studio : https://developer.android.com/studio
-
-    Appium 3+
-    Verificar : appium --version
-    Instalar  : npm install -g appium
-
-    Appium UiAutomator2 Driver
-    Instalar  : appium driver install uiautomator2
-    Verificar : appium driver list --installed
-
-    Dispositivo Android con depuracion USB activada
-    Verificar : adb devices
-
----
-
-## Instalacion
-
-### Acoplarlo a fwk-mobile-test con un solo comando
-
-El repositorio es privado. Desde la raíz de `fwk-mobile-test`, instala mediante
-el acceso SSH configurado para GitHub:
+El repositorio es privado. Desde la raíz de `fwk-mobile-test`, ejecuta:
 
 ```bash
 git clone --depth 1 --branch visual-recorder --single-branch \
@@ -320,20 +77,18 @@ git clone --depth 1 --branch visual-recorder --single-branch \
   && ./tools/visual-recorder/install.sh
 ```
 
-El instalador remoto:
+El instalador:
 
 - valida que la carpeta actual sea la raíz de `fwk-mobile-test`;
-- clona la rama standalone en `tools/visual-recorder` o la actualiza mediante
-  `fast-forward` si ya está instalada;
-- ejecuta `npm ci` para instalar versiones reproducibles;
-- crea `tools/visual-recorder/.env` con `RECORDER_MODE=fwk-mobile` y la ruta
-  absoluta del framework, sin reemplazar una configuración existente;
-- registra `npm run recorder` en el `package.json` raíz del framework;
-- agrega `/tools/visual-recorder/` al `.gitignore` del framework para que el
-  proyecto padre no versione el checkout interno.
+- instala el checkout en `tools/visual-recorder`;
+- ejecuta `npm ci` con el lockfile del recorder;
+- crea `.env` con el modo `fwk-mobile` y la ruta absoluta del framework;
+- agrega `npm run recorder` al `package.json` raíz del framework;
+- agrega `/tools/visual-recorder/` al `.gitignore` del framework;
+- conserva el `.env` existente y rechaza actualizaciones si encuentra cambios
+  locales sin guardar dentro del recorder.
 
-El checkout se realiza por SSH, por lo que cada QA debe tener acceso al
-repositorio en GitHub. Para instalar y abrir el recorder en el mismo comando:
+Para instalar e iniciar en el mismo comando:
 
 ```bash
 git clone --depth 1 --branch visual-recorder --single-branch \
@@ -341,224 +96,316 @@ git clone --depth 1 --branch visual-recorder --single-branch \
   && ./tools/visual-recorder/install.sh --start
 ```
 
-Si GitHub CLI está instalado y autenticado con `gh auth login`, también puede
-descargarse únicamente el instalador privado y ejecutarlo directamente:
+Si GitHub CLI está instalado y autenticado, también puede descargarse el
+instalador privado directamente:
 
 ```bash
+gh auth login
 gh api -H 'Accept: application/vnd.github.raw+json' \
   'repos/kevinhuamani-zorem/tool-mobile/contents/install.sh?ref=visual-recorder' \
   | bash
 ```
 
-`raw.githubusercontent.com` sin autenticación responde `404` para este
-repositorio privado y no debe usarse como comando de instalación.
+`raw.githubusercontent.com` sin autenticación devuelve `404` para el
+repositorio privado.
 
-Después de instalarlo, puede iniciarse nuevamente con:
+### Actualizar una instalación existente
+
+Desde la raíz de `fwk-mobile-test`:
+
+```bash
+./tools/visual-recorder/install.sh
+```
+
+La actualización usa `fast-forward`; no sobrescribe cambios locales del
+recorder.
+
+## Ejecución
+
+Desde la raíz del framework:
 
 ```bash
 npm run recorder
 ```
 
-El comando es idempotente. Si detecta cambios locales dentro del recorder,
-detiene la actualización para no sobrescribirlos. Para usar una raíz distinta
-sin cambiar de directorio:
+El comando inicia Appium, compila el proceso principal y el renderer React, y
+abre Electron. Si el puerto `4723` ya está ocupado, el recorder se detiene para
+no cerrar una sesión ajena.
 
-```bash
-gh api -H 'Accept: application/vnd.github.raw+json' \
-  'repos/kevinhuamani-zorem/tool-mobile/contents/install.sh?ref=visual-recorder' \
-  | FWK_MOBILE_ROOT=/ruta/al/fwk-mobile-test bash
+## Configuración inicial
+
+Al iniciar, el recorder escanea `fwk-mobile-test` y permite elegir:
+
+- ambiente definido bajo `config/envs`;
+- squad propietario de la automatización;
+- ruta anidada opcional de Features dentro del squad;
+- conexión local o BrowserStack;
+- plataforma Android o iOS;
+- dispositivo y aplicación.
+
+Squad y ruta de Feature son conceptos diferentes. Por ejemplo, puede elegirse
+el squad `interoperabilidad` y el alcance `tapp/payment`. El Feature se genera
+en esa subruta, mientras Steps, Screen Objects y Locators siguen perteneciendo
+al squad.
+
+Los valores secretos de `.env` permanecen en el proceso principal. El renderer
+solo recibe el nombre de las variables y su estado de configuración.
+
+## Flujos de trabajo del QA
+
+### Crear un caso nuevo
+
+1. Configura y conecta el dispositivo.
+2. Navega o inspecciona la aplicación.
+3. Selecciona un elemento y verifica el selector propuesto.
+4. Describe brevemente qué función cumple el elemento.
+5. Elige la acción y registra el valor funcional cuando aplique.
+6. Guarda el paso y continúa hasta completar el flujo.
+7. Define objetivo, criterio de aceptación e ID `TC-<número>`.
+8. Prepara el paquete mínimo para el agente.
+9. Importa y valida `agent-response.json`.
+10. Revisa el preview y genera las cuatro capas.
+
+El campo **¿Qué función cumple este elemento?** es una pista de contexto. No se
+copia como Step ni obliga al agente a redactar el Gherkin con ese texto.
+
+### Completar una grabación existente
+
+Este flujo se usa cuando una grabación quedó incompleta o cuando sus archivos
+solo tienen cobertura para una plataforma.
+
+- El selector muestra únicamente recordings compatibles con el ambiente y la
+  plataforma activa.
+- Si falta iOS o Android, el QA captura y verifica los selectores pendientes.
+- El recorder actualiza únicamente el bloque de locators de la plataforma
+  activa.
+- Feature, Steps y Screen Object existentes se conservan.
+- Al completar cobertura, el Feature obtiene el tag `@android` o `@ios`
+  correspondiente sin eliminar tags válidos previos.
+
+### Regenerar una automatización
+
+Permite volver a procesar un recording sin repetir la grabación. Puede elegirse
+un caso aún no resuelto por el agente o uno ya generado.
+
+- La instrucción de mejora es opcional.
+- Se conserva `recordingId`, evidencia, orden de acciones y rutas administradas.
+- Una automatización existente se versiona antes del refinamiento.
+- El nuevo preview puede actualizar Feature, Steps, Screen Object y Locators.
+- Solo se reemplazan archivos reconocidos por el registro del recorder y que no
+  fueron modificados externamente.
+
+La opción de limpieza elimina paquetes y propuestas generadas, pero conserva
+la evidencia original para volver a probar el agente.
+
+## Inspector y evidencia
+
+El inspector combina screenshot y jerarquía XML para seleccionar el elemento
+correcto. El QA debe verificar el selector antes de guardar la acción. El
+recording conserva:
+
+- orden y tipo de cada acción;
+- selector verificado y estrategia Appium;
+- contexto funcional aportado por el QA;
+- valores funcionales como teléfono, correo o monto;
+- screenshot y XML asociados cuando son necesarios;
+- plataforma, ambiente, squad y alcance de Feature.
+
+Contraseñas, PIN, OTP, tokens y credenciales se redactan antes de preparar el
+paquete para el agente.
+
+La lectura del XML completo es circunstancial. Si el selector verificado es
+suficiente, el agente debe usarlo y no explorar XML ni el framework completo.
+
+## Acciones soportadas
+
+El recorder puede registrar, ejecutar y trazar acciones como:
+
+- click y presión prolongada;
+- escritura y limpieza de campos;
+- validación de texto, contenido o existencia;
+- scroll y swipe por arrastre;
+- espera controlada;
+- navegación hacia atrás;
+- captura de pantalla.
+
+Varias acciones técnicas consecutivas pueden mapearse a un único comportamiento
+funcional. El Gherkin debe ser declarativo y no una transcripción imperativa de
+clicks, scrolls o esperas.
+
+## Generación y reutilización
+
+Las rutas soportadas en `fwk-mobile-test` son:
+
+```text
+features/yape-features/<squad>/<scope>/<archivo>.feature
+features/yape-steps-definitions/<squad>/<archivo>.steps.ts
+screenobjects/<squad>/<archivo>.screen.ts
+resources/locators/<squad>/<archivo>.locator.json
 ```
 
-### Instalación manual para desarrollo
+Antes de crear archivos, el resolver sigue relaciones entre Feature, Step
+Definition, Screen Object y Locators. Cuando encuentra un artefacto compatible:
 
-    cd tools/visual-recorder
-    npm install
+- reutiliza Steps existentes;
+- amplía Screen Objects sin borrar métodos previos;
+- añade locators sin reemplazar claves existentes;
+- mantiene rutas y nombres ya adoptados por el framework.
 
----
+Los Steps solo orquestan. La lógica Appium vive en Screen Objects y helpers del
+framework. Los imports generados usan los aliases configurados por
+`fwk-mobile-test`, como `@screenobjects`, `@utils` y `@locators`.
 
-## Ejecucion del grabador
+Los locators conservan un nombre lógico común y valores independientes por
+plataforma. Los bloques siguen la convención `<módulo>Android` y `<módulo>Ios`.
 
-    npm run recorder
+## Agente y contexto mínimo
 
-También puede iniciarse directamente desde esta carpeta:
+El agente se usa únicamente cuando el preprocesador deja gaps semánticos o de
+estructura. El paquete se guarda dentro de:
 
-    ./run.sh
+```text
+tools/visual-recorder/runtime/recordings/<recording>/generation/cowork/
+```
 
-El script automaticamente:
-- Limpia el puerto 4723
-- Inicia Appium en background
-- Compila TypeScript
-- Abre el panel Electron
+La pantalla **Abrir Terminal del agente** abre una terminal en esa ruta y
+muestra el prompt inicial. No ejecuta automáticamente el agente.
 
----
+El paquete contiene como máximo el contexto mínimo necesario:
 
-## Flujo de grabacion
+- `scenario.json` normalizado;
+- `generation-plan.json`;
+- contexto resuelto y gaps pendientes;
+- firmas y fragmentos reutilizables del squad/Home;
+- reglas compactas y verificador autocontenido.
 
-    1. CONFIGURACION DEL DISPOSITIVO
-       - El panel detecta automaticamente los dispositivos conectados
-       - Presionar "Detectar" para obtener el package de la app en primer plano
-       - Completar Activity si es necesario
-       - Presionar "INICIAR SESION"
+El agente escribe `agent-response.json`. El recorder lo importa y aplica un
+validador determinista. Solo una respuesta con score 100 puede llegar al
+preview y promocionarse a memoria reutilizable.
 
-    2. XML HIERARCHY VIEWER
-       - Presionar "Inspector" en el header
-       - Se carga el screenshot del dispositivo y el XML de la pantalla
-       - Hacer hover sobre la imagen para ver elementos resaltados en azul
-       - Hacer click en un elemento para ver sus atributos y XPaths sugeridos
-       - Seleccionar el XPath adecuado de las sugerencias
-       - Presionar "Verificar" para confirmar que el selector encuentra el elemento
-       - Presionar "Usar" para cargar el XPath en el panel principal
+## Preview, validación y escritura
 
-    3. INSPECTOR AUTOMATICO
-       - Presionar "Inspeccionar elemento"
-       - Tocar un elemento en el dispositivo fisico
-       - El panel captura automaticamente el XPath del elemento tocado
+Antes de escribir en `fwk-mobile-test`, el usuario revisa los cuatro archivos
+en un visor editable. El validador comprueba, entre otros contratos:
 
-    4. DEFINIR STEP
-       - Elegir la accion del combo
-       - Completar el valor si aplica
-       - Presionar "EJECUTAR Y GUARDAR STEP"
+- escenario con formato `[TC-10239][Path][AUTO-FRONT]`;
+- Gherkin declarativo con aserción `Then`;
+- tags de plataforma acordes a la cobertura real;
+- trazabilidad completa entre acciones y Steps funcionales;
+- nombres descriptivos para archivos, clases, aliases y métodos;
+- sintaxis TypeScript y JSON;
+- imports mediante aliases del framework y ausencia de imports sin uso;
+- bloques Android/iOS soportados;
+- ausencia de duplicados semánticos y rutas fuera del squad autorizado;
+- actualización aditiva de artefactos reutilizados.
 
-    5. Repetir pasos 2-4 para cada accion del flujo
+El preview genera un token ligado al contenido exacto. Si se modifica una ruta,
+acción, metadata o archivo revisado, el token se invalida y debe generarse un
+nuevo preview.
 
-    6. Completar Feature y Scenario
+Todos los archivos nuevos incluyen metadata del recorder, autor
+`Kevinarnold.zorem` y fecha de creación. En JSON la metadata vive en
+`_metadata`.
 
-    7. Presionar "GENERAR" para crear los archivos
+## Ejecutar el caso generado
 
----
+El recorder genera archivos para `fwk-mobile-test`; la ejecución se realiza con
+los comandos y configuraciones del propio framework. Usa el tag o ID del caso
+creado según la convención vigente del proyecto, por ejemplo:
 
-## Acciones disponibles
+```bash
+npm test -- --cucumberOpts.tagExpression='@miflujo'
+```
 
-    ABRIR_APP        Lanzar la app por packageName
-    CLICK            Tap en un elemento
-    ESCRIBIR         setValue en un campo de texto
-    LIMPIAR          Limpiar el contenido de un campo
-    SCROLL_DOWN      Scroll hacia abajo
-    SCROLL_UP        Scroll hacia arriba
-    SCROLL_HASTA     Scroll hasta encontrar un elemento
-    SWIPE            Swipe en direccion (left/right/up/down)
-    PRESION_LARGA    Long press en un elemento
-    VERIFICAR_TEXTO  Verificar texto en un elemento
-    VERIFICAR_EXISTE Verificar que un elemento es visible
-    VERIFICAR_NO_EXISTE Verificar que un elemento no existe
-    VOLVER           Presionar boton back del dispositivo
-    ESPERAR          Esperar N segundos
-    SCREENSHOT       Captura de pantalla del dispositivo
+Confirma el comando exacto en el README y los scripts de la versión local de
+`fwk-mobile-test`, ya que el recorder no mantiene un runner alternativo.
 
----
+## Datos locales y seguridad
 
-## Archivos generados
+No se versionan:
 
-    automation/features/yape-features/<nombre>.feature  Escenario Gherkin ejecutable
-    resources/locators/global.locator.json               Locators globales por plataforma
+- `.env` y `config/workspace.json`;
+- `runtime/`, recordings, screenshots y XML;
+- memoria del agente y paquetes Cowork;
+- `workspace/`, `coverage/`, `test-results/` y builds;
+- credenciales BrowserStack o secretos del framework.
 
-Los features pueden declarar un módulo de locators; si no lo hacen se usa `global`:
+La escritura está confinada al recorder y a las cuatro capas autorizadas del
+framework. No se sobrescriben silenciosamente archivos ajenos o modificados
+fuera del recorder.
 
-    # locator-module: autenticacion/login/login
+## CodeGraph
 
-Cada archivo `*.locator.json` contiene bloques `android` e `ios`. Los selectores
-deben indicar su estrategia explícitamente, por ejemplo `~Allow`,
-`id=com.app:id/btn_login`, `android=new UiSelector()...` o `iosClassChain=...`.
+El CodeGraph del framework indexa relaciones entre Features, Steps, Screen
+Objects, métodos y locators para reducir contexto y detectar reutilización.
 
-    Formato .locators:
-    nombre_variable:@:selector
+```bash
+cd tools/visual-recorder
+npm run codegraph:export -- --squad payment --feature movimientos
+npm run codegraph:export -- --squad payment --search yapear --limit 60
+```
 
-    Selectores soportados:
-    XPath      : //*[@resource-id="com.app:id/btn_login"]
-    Text       : //*[@text="Iniciar sesion"]
-    ContentDesc: //*[@content-desc="Login button"]
+Los archivos `.json`, `.dot` y `.mmd` generados viven en `runtime/`. El `.dot`
+puede visualizarse en VS Code con Graphviz Interactive Preview y el `.mmd` con
+una extensión Mermaid.
 
-    Formato .feature (declarativo, sin narrar acciones de UI):
-    Feature: Autenticación en Yape
-      Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Iniciar sesión
-        Given el usuario <username> inicia sesión en Yape
-        When autentica su identidad
-        Then accede a su cuenta
+El grafo interno del recorder sirve para mantenimiento:
 
-        Examples:
-          | username   |
-          | usuario_qa |
+```bash
+npm run codegraph:recorder -- --search generateFwkFiles
+npm run codegraph:recorder -- --component ScenarioBuilderModal
+npm run codegraph:recorder -- --ipc preview-fwk-files
+```
 
----
+## Desarrollo y calidad
 
-## Ejecutar casos grabados
+Comandos dentro de `tools/visual-recorder`:
 
-    ./test.sh
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run quality:metrics
+npm run quality
+npm run build
+```
 
-O manualmente en dos terminales:
+`npm run quality` es la puerta obligatoria para cambios que afecten generación,
+IPC, workspace, drivers o validación.
 
-    Terminal 1: appium --port 4723 --relaxed-security
-    Terminal 2: npm test
+Documentación técnica:
 
-El reporte HTML se genera en:
+- [`AGENTS.md`](AGENTS.md): reglas obligatorias para personas y agentes.
+- [`docs/README.md`](docs/README.md): índice técnico.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): arquitectura y límites.
+- [`docs/GENERATION_CONTRACT.md`](docs/GENERATION_CONTRACT.md): contrato de las
+  cuatro capas.
+- [`docs/GENERATION_QUALITY_ASSURANCE.md`](docs/GENERATION_QUALITY_ASSURANCE.md):
+  métricas y procedimiento QA.
+- [`docs/OPERATIONS_AND_TROUBLESHOOTING.md`](docs/OPERATIONS_AND_TROUBLESHOOTING.md):
+  operación y diagnóstico.
 
-    recorded/reports/report.html
+## Estructura del recorder
 
----
+```text
+visual-recorder/
+├── core/                  Dominio, escaneo, generación y validación
+├── recorder/src/          Electron main, preload e inspector
+├── recorder/renderer/     Aplicación React
+├── config/                Ejemplos de configuración local
+├── docs/                  Arquitectura, contratos y operación
+├── scripts/               Calidad y CodeGraph
+├── tests/                 Contratos ejecutables
+├── runtime/               Evidencia y caché local no versionada
+├── install.sh             Instalación acoplada al framework
+├── run.sh                 Arranque de Appium y Electron
+└── package.json
+```
 
-## Estructura del proyecto
+## Tecnologías
 
-    appium-visual-recorder/
-    package.json
-    tsconfig.json
-    cucumber.json
-    run.sh                        Script arranque del grabador
-    test.sh                       Script ejecucion de pruebas
-    README.md
-    src/
-      main.ts                     Proceso principal Electron + IPC handlers
-      preload.ts                  Bridge contextBridge entre UI y Node
-      appiumDriverManager.ts      Maneja sesion Appium + WebdriverIO
-      mobileInspector.ts          Inspector XML Hierarchy Viewer
-      mobileStepExecutor.ts       Ejecuta cada step en el dispositivo
-      locatorManager.ts           Lee y escribe el archivo .locators
-      featureGenerator.ts         Genera el archivo .feature
-      models.ts                   Tipos e interfaces TypeScript
-    recorder/
-      renderer/
-        index.html                Entrada mínima de Vite
-        src/
-          App.tsx                 Ciclo de vida del renderer React
-          RecorderLayout.tsx      Composición de pantallas
-          components/             Pantallas, workspace y modales independientes
-          controller/             Orquestación de la API expuesta por preload
-          styles/                 Estilos del recorder
-    vite.config.ts                Build del renderer React
-    tsconfig.renderer.json        TypeScript del renderer
-    features/
-      step_definitions/
-        steps.ts                  Step definitions para Cucumber
-    recorded/
-      features/                   Features generados aqui
-      locators/                   Locators generados aqui
-      reports/                    Reportes de ejecucion
-
----
-
-## Tecnologias
-
-    Electron         28+
-    TypeScript       5+
-    Appium           3.4+
-    WebdriverIO      8+
-    UiAutomator2     7.5+
-    Cucumber         10+
-    Node.js          18+
-    ADB              Android SDK
-
----
-
-## Scripts disponibles
-
-    ./run.sh     Iniciar el grabador
-    ./test.sh    Ejecutar casos grabados
-
----
-
-## Notas
-
-    - El dispositivo debe tener depuracion USB activada
-    - Mantener la pantalla del dispositivo encendida durante la grabacion
-    - El XML Hierarchy Viewer es la forma mas confiable de capturar selectores
-    - Los selectores por resource-id son los mas estables para automatizacion
-    - Los selectores por text pueden fallar si el texto cambia por idioma
+- Electron y React.
+- TypeScript y Vite.
+- Appium y WebdriverIO.
+- Cucumber/Gherkin compatible con `fwk-mobile-test`.
+- Node.js 18 o superior.
