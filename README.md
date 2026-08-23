@@ -47,7 +47,7 @@ contexto necesario para completar los gaps.
 Requisitos generales:
 
 - checkout local de `fwk-mobile-test`;
-- Node.js 18 o superior y npm;
+- Node.js 20.19+ o 22.12+ y npm (lo exige Vite 8, que compila el renderer);
 - Git con acceso SSH al repositorio privado del recorder;
 - Appium 3 y el driver requerido para sesiones locales.
 
@@ -169,13 +169,27 @@ variables y su estado de configuración. El recorder no utiliza un `.env` propio
 El campo **¿Qué función cumple este elemento?** es una pista de contexto. No se
 copia como Step ni obliga al agente a redactar el Gherkin con ese texto.
 
+La grabación debe incluir al menos una verificación. Un caso sin resultado
+esperado no es un caso de prueba, así que el paso 8 se detiene antes de escribir
+nada y pide grabar el `Then`. Fallar temprano evita que el agente gaste tokens
+en un caso que el verificador rechazaría igual al final.
+
 ### Completar una grabación existente
 
-Este flujo se usa cuando una grabación quedó incompleta o cuando sus archivos
-solo tienen cobertura para una plataforma.
+Este flujo cubre dos situaciones distintas y el recorder pide elegir cuál
+aplica. El selector muestra únicamente recordings del ambiente y squad activos.
 
-- El selector muestra únicamente recordings compatibles con el ambiente y la
-  plataforma activa.
+**Seguir grabando pasos.** Recupera las acciones ya capturadas y devuelve el
+recorder a modo grabación sobre la misma carpeta, de modo que los pasos nuevos
+se suman a los anteriores en vez de crear una segunda grabación a medias. Es la
+salida cuando falta el `Then`: sin él la grabación nunca llega a tener plan de
+generación. La metadata del caso se rellena desde el recording para que no
+cambie el fingerprint. Solo está disponible desde la plataforma con la que se
+grabó, porque los pasos nuevos se agregan a esas acciones.
+
+**Completar locators pendientes.** Se usa cuando los archivos solo tienen
+cobertura para una plataforma. Requiere un plan de generación ya existente.
+
 - Si falta iOS o Android, el QA captura y verifica los selectores pendientes.
 - El recorder actualiza únicamente el bloque de locators de la plataforma
   activa.
@@ -259,13 +273,53 @@ framework. Los imports generados usan los aliases configurados por
 Los locators conservan un nombre lógico común y valores independientes por
 plataforma. Los bloques siguen la convención `<módulo>Android` y `<módulo>Ios`.
 
+## Reglas del caso generado
+
+Estas reglas las impone el recorder, no dependen del criterio del agente. Cada
+una se comprueba en el validador que corre al importar la propuesta y en el
+`verify-package.js` que el agente ejecuta dentro de su propia carpeta, para que
+se corrija antes de devolver nada.
+
+**Aserción obligatoria.** Sin una acción de verificación no se arma el paquete.
+
+**Steps reutilizados, literales.** Las filas que el plan marca como reutilizadas
+ya existen como Step Definition en el framework, con esa expresión exacta.
+Reescribirlas —cambiar el parámetro por un valor literal, perder una tilde— deja
+el Feature apuntando a un step inexistente, y Cucumber lo reporta como
+*undefined* recién al ejecutar. El caso típico es el login:
+`Given el usuario <username> inicia sesión en Yape` se copia tal cual.
+
+**Parámetros con Examples.** Todo `<parámetro>` obliga a `Scenario Outline:` y a
+una columna en la tabla `Examples:`. Sin la columna, el parámetro llega literal
+al step y no enlaza.
+
+**Idioma.** El código va en inglés —métodos, getters, claves de locator,
+variables y nombres de archivo—, igual que el resto del framework. El español se
+reserva para lo que lee el QA: la línea `Feature:`, el nombre del `Scenario` y el
+texto de los steps. El recorder traduce el vocabulario del dominio por su cuenta
+para no gastar tokens del agente en eso, y solo delega lo que no reconoce.
+
+**Acciones repetitivas.** Cuando detecta un ciclo que se repite variando un solo
+valor, el recorder lo propone al QA con las lecturas posibles —tabla de datos en
+un mismo escenario, `Scenario Outline` con varias filas, o encadenar las vueltas—
+y explica el costo de cada una. La decisión es del QA, el recorder no la toma.
+
+**Escritura aditiva.** Los artefactos existentes se editan agregando, nunca
+reemplazando: los métodos, locators y definitions previos se conservan y lo nuevo
+queda marcado con un comentario de procedencia que indica la grabación de origen.
+
+**Anclajes del framework.** `BaseScreen`, `LocatorFactory` y el enum
+`TypeLocator` se resuelven leyendo el framework en cada grabación —los alias
+salen de su `tsconfig.json` y cada anclaje se busca por su declaración, no por su
+ruta—. Si el framework los mueve o renombra, el import generado los sigue.
+
 ## Agente y contexto mínimo
 
 El agente se usa únicamente cuando el preprocesador deja gaps semánticos o de
 estructura. El paquete se guarda dentro de:
 
 ```text
-tools/visual-recorder/runtime/recordings/<recording>/generation/cowork/
+tools/visual-recorder/runtime/recordings/<recording>/generation/automation/
 ```
 
 La pantalla **Abrir Terminal del agente** abre una terminal en esa ruta y
@@ -296,6 +350,8 @@ en un visor editable. El validador comprueba, entre otros contratos:
 - sintaxis TypeScript y JSON;
 - imports mediante aliases del framework y ausencia de imports sin uso;
 - bloques Android/iOS soportados;
+- steps reutilizados copiados literalmente y parámetros con su `Examples`;
+- identificadores en inglés en las capas de código;
 - ausencia de duplicados semánticos y rutas fuera del squad autorizado;
 - actualización aditiva de artefactos reutilizados.
 
@@ -325,8 +381,8 @@ Confirma el comando exacto en el README y los scripts de la versión local de
 No se versionan:
 
 - `runtime/`, recordings, screenshots y XML;
-- memoria del agente y paquetes Cowork;
-- `workspace/`, `coverage/`, `test-results/` y builds;
+- memoria del agente y paquetes de generación;
+- `coverage/`, `test-results/` y builds;
 - credenciales BrowserStack o secretos del framework.
 
 La escritura está confinada al recorder y a las cuatro capas autorizadas del
@@ -383,6 +439,7 @@ Documentación técnica:
   métricas y procedimiento QA.
 - [`docs/OPERATIONS_AND_TROUBLESHOOTING.md`](docs/OPERATIONS_AND_TROUBLESHOOTING.md):
   operación y diagnóstico.
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): desarrollo del propio recorder.
 
 ## Estructura del recorder
 
@@ -407,4 +464,4 @@ visual-recorder/
 - TypeScript y Vite.
 - Appium y WebdriverIO.
 - Cucumber/Gherkin compatible con `fwk-mobile-test`.
-- Node.js 18 o superior.
+- Node.js 20.19+ o 22.12+.

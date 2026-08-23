@@ -29,7 +29,11 @@ export interface FrameworkContract {
     warnings: string[];
 }
 
-/** Ultimo recurso: la convencion de fwk-mobile tal como estaba escrita a mano. */
+/**
+ * Ultimo recurso cuando el framework no se deja leer (tsconfig ausente o
+ * ilegible, ancla no encontrada): la convencion de fwk-mobile tal como estaba
+ * escrita a mano. Se acompana siempre de un warning; nunca se usa en silencio.
+ */
 const DEFAULTS = {
     aliases: {
         '@config': 'config',
