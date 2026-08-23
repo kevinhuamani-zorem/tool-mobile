@@ -165,7 +165,6 @@ Configura el proveedor en `.env`:
 
 ```dotenv
 AUTOMATION_AGENT=copilot
-# AUTOMATION_AGENT=claude
 ```
 
 El `.env` real está excluido de Git. Los reportes generados por pruebas,
@@ -329,6 +328,7 @@ El instalador remoto:
 - ejecuta `npm ci` para instalar versiones reproducibles;
 - crea `tools/visual-recorder/.env` con `RECORDER_MODE=fwk-mobile` y la ruta
   absoluta del framework, sin reemplazar una configuración existente;
+- registra `npm run recorder` en el `package.json` raíz del framework;
 - agrega `/tools/visual-recorder/` al `.gitignore` del framework para que el
   proyecto padre no versione el checkout interno.
 
@@ -356,7 +356,7 @@ repositorio privado y no debe usarse como comando de instalación.
 Después de instalarlo, puede iniciarse nuevamente con:
 
 ```bash
-./tools/visual-recorder/run.sh
+npm run recorder
 ```
 
 El comando es idempotente. Si detecta cambios locales dentro del recorder,

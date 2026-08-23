@@ -98,6 +98,21 @@ if [[ ! -f "${INSTALL_DIR}/.env" ]]; then
     echo "Configuración creada: ${INSTALL_DIR}/.env"
 fi
 
+RECORDER_NPM_COMMAND='./tools/visual-recorder/run.sh'
+node - "${FRAMEWORK_ROOT}/package.json" "${RECORDER_NPM_COMMAND}" <<'NODE'
+const fs = require('fs');
+const packagePath = process.argv[2];
+const recorderCommand = process.argv[3];
+const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+
+packageJson.scripts = packageJson.scripts || {};
+if (packageJson.scripts.recorder !== recorderCommand) {
+    packageJson.scripts.recorder = recorderCommand;
+    fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    process.stdout.write('Comando agregado al framework: npm run recorder\n');
+}
+NODE
+
 FRAMEWORK_GITIGNORE="${FRAMEWORK_ROOT}/.gitignore"
 IGNORE_RULE='/tools/visual-recorder/'
 if [[ ! -f "${FRAMEWORK_GITIGNORE}" ]] ||
@@ -113,7 +128,7 @@ fi
 
 echo
 echo "Appium Visual Recorder está listo en: ${INSTALL_DIR}"
-echo "Para iniciarlo: ${INSTALL_DIR}/run.sh"
+echo "Para iniciarlo desde el framework: npm run recorder"
 
 if [[ "${START_RECORDER}" == "true" ]]; then
     exec "${INSTALL_DIR}/run.sh"

@@ -58,6 +58,11 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
     assert.match(fs.readFileSync(envFile, 'utf8'), /RECORDER_MODE=fwk-mobile/);
     assert.match(fs.readFileSync(envFile, 'utf8'), new RegExp(fixture.framework));
     assert.equal(
+        JSON.parse(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'))
+            .scripts.recorder,
+        './tools/visual-recorder/run.sh',
+    );
+    assert.equal(
         fs.readFileSync(path.join(fixture.framework, '.gitignore'), 'utf8')
             .split('\n')
             .filter(line => line === '/tools/visual-recorder/').length,
@@ -71,6 +76,11 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
         stdio: 'pipe',
     });
     assert.match(fs.readFileSync(envFile, 'utf8'), /CUSTOM_VALUE=preserved/);
+    assert.equal(
+        JSON.parse(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'))
+            .scripts.recorder,
+        './tools/visual-recorder/run.sh',
+    );
 });
 
 test('rechaza una carpeta que no es fwk-mobile-test', () => {
