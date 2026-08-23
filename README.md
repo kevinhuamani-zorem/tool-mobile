@@ -82,11 +82,10 @@ El instalador:
 - valida que la carpeta actual sea la raíz de `fwk-mobile-test`;
 - instala el checkout en `tools/visual-recorder`;
 - ejecuta `npm ci` con el lockfile del recorder;
-- crea `.env` con el modo `fwk-mobile` y la ruta absoluta del framework;
 - agrega `npm run recorder` al `package.json` raíz del framework;
 - agrega `/tools/visual-recorder/` al `.gitignore` del framework;
-- conserva el `.env` existente y rechaza actualizaciones si encuentra cambios
-  locales sin guardar dentro del recorder.
+- rechaza actualizaciones si encuentra cambios locales sin guardar dentro del
+  recorder.
 
 Para instalar e iniciar en el mismo comando:
 
@@ -148,8 +147,9 @@ el squad `interoperabilidad` y el alcance `tapp/payment`. El Feature se genera
 en esa subruta, mientras Steps, Screen Objects y Locators siguen perteneciendo
 al squad.
 
-Los valores secretos de `.env` permanecen en el proceso principal. El renderer
-solo recibe el nombre de las variables y su estado de configuración.
+Los valores secretos de los ambientes del framework (`config/envs/.env.*`)
+permanecen en el proceso principal. El renderer solo recibe el nombre de las
+variables y su estado de configuración. El recorder no utiliza un `.env` propio.
 
 ## Flujos de trabajo del QA
 
@@ -324,7 +324,6 @@ Confirma el comando exacto en el README y los scripts de la versión local de
 
 No se versionan:
 
-- `.env` y `config/workspace.json`;
 - `runtime/`, recordings, screenshots y XML;
 - memoria del agente y paquetes Cowork;
 - `workspace/`, `coverage/`, `test-results/` y builds;

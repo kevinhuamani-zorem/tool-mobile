@@ -2,14 +2,12 @@
 node_modules/
 dist/
 
-# Configuración local y secretos
+# Defensa adicional: el recorder no usa este archivo, pero nunca debe versionarse.
 .env
-config/workspace.json
 
 # Evidencia, memoria, caché y salidas locales
 runtime/**
 !runtime/.gitignore
-workspace/
 coverage/
 test-results/
 

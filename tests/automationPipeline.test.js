@@ -1244,7 +1244,7 @@ test('launcher abre una terminal en el paquete sin ejecutar automáticamente el 
         call = { command, args, options };
         return { unref() {} };
     });
-    const result = launcher.openTerminal('claude', root);
+    const result = launcher.openTerminal('copilot', root);
     assert.equal(call.options.cwd, root);
     assert.equal(call.command, process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd.exe' : 'x-terminal-emulator');
     assert.ok(call.args.some(value => String(value).includes(root)));

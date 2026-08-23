@@ -2,34 +2,14 @@
 
 ## Inicio rápido
 
-Integrado:
-
 ```bash
-cd tools/visual-recorder
-./run.sh
+npm run recorder
 ```
 
-Standalone:
-
-```bash
-RECORDER_MODE=standalone ./run.sh
-```
-
-Framework externo:
-
-```bash
-RECORDER_MODE=fwk-mobile TARGET_PROJECT=/ruta/al/proyecto ./run.sh
-```
-
-Proveedor de automatización (opcional):
-
-```bash
-AUTOMATION_AGENT=copilot ./run.sh
-AUTOMATION_AGENT=claude ./run.sh
-```
-
-El modo activo y la raíz deben confirmarse en la pantalla inicial antes de
-grabar. La plataforma queda fija al crear la sesión.
+Ejecuta el comando desde la raíz de `fwk-mobile-test`. El recorder resuelve el
+framework padre automáticamente y usa Copilot como agente. No requiere `.env`,
+`TARGET_PROJECT` ni selección de proveedor. La plataforma queda fija al crear
+la sesión.
 
 ## Diagnóstico por síntomas
 
@@ -94,8 +74,7 @@ no debe bloquear la creación de una ruta que ya no existe.
 
 Confirma que el adaptador soporte `supportsLayerGeneration`, que cada fila
 Gherkin tenga acciones enlazadas y que Preview incluya Feature, Steps, Screen
-Object y Locators. En neutral es esperado obtener export portable; en
-fwk-mobile/standalone es un error si el caso requiere capas nuevas.
+Object y Locators. Si el caso requiere capas nuevas, omitir alguna es un error.
 
 ### Completar un recording que solo carece de iOS o Android
 
@@ -133,7 +112,7 @@ Después debe volver a ejecutarse la importación. Un fallo no entra a memoria.
 Los logs pueden incluir modo, plataforma, dispositivo, canal y mensajes de
 error. No deben incluir:
 
-- valores de `.env`;
+- variables de ambiente del framework;
 - BrowserStack username/access key;
 - contraseñas, teléfonos, cuentas o tarjetas de datasets;
 - contenido sensible escrito durante un step.
@@ -152,7 +131,7 @@ La escritura normal es atómica. Si una generación falla:
 
 ## Evidencia mínima para reportar un bug
 
-- modo de workspace y plataforma;
+- plataforma;
 - local o BrowserStack, dispositivo y versiones (sin credenciales);
 - acción exacta y mensaje completo;
 - selector con estrategia, si aplica;

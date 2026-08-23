@@ -1,6 +1,6 @@
 # Contrato de generación
 
-## Salida fwk-mobile y standalone
+## Salida fwk-mobile
 
 Un caso completo puede producir:
 
@@ -31,9 +31,6 @@ Las cuatro capas llevan metadata de procedencia agregada por el recorder:
 de creación. Feature usa comentarios `#`, Steps y Screen Object usan `//`, y
 Locators conserva JSON válido mediante un objeto raíz `_metadata`. Este objeto
 no forma parte del catálogo de locators.
-
-En `neutral` se exportan Feature y recording portable bajo `runtime/exports`;
-no se debe presentar como generación de las cuatro capas.
 
 ## Feature
 

@@ -1,4 +1,4 @@
-import { RecorderMode, ensureWorkspace, projectPaths, validateFrameworkRoot } from './projectPaths';
+import { RecorderMode, projectPaths, validateFrameworkRoot } from './projectPaths';
 
 export interface WorkspaceAdapter {
     id: RecorderMode;
@@ -12,7 +12,7 @@ export interface WorkspaceAdapter {
         label: string;
         root: string;
         integrated: boolean;
-        output: 'fwk-mobile' | 'standalone' | 'neutral';
+        output: 'fwk-mobile';
     };
 }
 
@@ -44,26 +44,6 @@ class FwkMobileAdapter extends BaseAdapter {
     initialize(): void { validateFrameworkRoot(); }
 }
 
-class StandaloneAdapter extends BaseAdapter {
-    id = 'standalone' as const;
-    label = 'Standalone WebdriverIO';
-    integrated = false;
-    supportsCodeGraph = true;
-    supportsLayerGeneration = true;
-    initialize(): void { ensureWorkspace(); }
-}
-
-class NeutralAdapter extends BaseAdapter {
-    id = 'neutral' as const;
-    label = 'Grabación neutral';
-    integrated = false;
-    supportsCodeGraph = false;
-    supportsLayerGeneration = false;
-    initialize(): void { ensureWorkspace(); }
-}
-
-export function getWorkspaceAdapter(mode: RecorderMode = projectPaths.mode): WorkspaceAdapter {
-    if (mode === 'standalone') return new StandaloneAdapter();
-    if (mode === 'neutral') return new NeutralAdapter();
+export function getWorkspaceAdapter(): WorkspaceAdapter {
     return new FwkMobileAdapter();
 }

@@ -616,7 +616,7 @@ export class FwkMobileGenerator {
 
     /**
      * El prefijo sale del tsconfig del framework; el argumento `alias` es solo
-     * el respaldo por si ese mapeo no existe (workspace standalone, que no
+     * el respaldo por si ese mapeo no existe (por ejemplo, un módulo nuevo que no
      * genera tsconfig).
      */
     private frameworkAlias(targetFile: string, root: string, alias: string): string {

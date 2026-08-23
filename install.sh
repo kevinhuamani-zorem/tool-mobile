@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPOSITORY="${VISUAL_RECORDER_REPOSITORY:-git@github.com:kevinhuamani-zorem/tool-mobile.git}"
 BRANCH="${VISUAL_RECORDER_BRANCH:-visual-recorder}"
-FRAMEWORK_ROOT="${FWK_MOBILE_ROOT:-${TARGET_PROJECT:-$(pwd)}}"
+FRAMEWORK_ROOT="${FWK_MOBILE_ROOT:-$(pwd)}"
 INSTALL_DIR="${VISUAL_RECORDER_TARGET:-${FRAMEWORK_ROOT}/tools/visual-recorder}"
 START_RECORDER="false"
 
@@ -21,7 +21,7 @@ Opciones:
 Variables opcionales:
   FWK_MOBILE_ROOT              Ruta absoluta de fwk-mobile-test.
   VISUAL_RECORDER_REPOSITORY   Repositorio Git del recorder.
-  VISUAL_RECORDER_BRANCH       Rama standalone (visual-recorder por defecto).
+  VISUAL_RECORDER_BRANCH       Rama del recorder (visual-recorder por defecto).
   VISUAL_RECORDER_TARGET       Directorio de instalación.
   VISUAL_RECORDER_SKIP_NPM_CI  Usa 1 únicamente en pruebas controladas.
 EOF
@@ -86,16 +86,6 @@ else
     echo "Instalando Appium Visual Recorder..."
     git clone --depth 1 --branch "${BRANCH}" --single-branch \
         "${REPOSITORY}" "${INSTALL_DIR}"
-fi
-
-if [[ ! -f "${INSTALL_DIR}/.env" ]]; then
-    {
-        echo '# Configuración creada por install.sh para fwk-mobile-test.'
-        echo 'RECORDER_MODE=fwk-mobile'
-        printf 'TARGET_PROJECT="%s"\n' "${FRAMEWORK_ROOT//\"/\\\"}"
-        echo 'AUTOMATION_AGENT=copilot'
-    } > "${INSTALL_DIR}/.env"
-    echo "Configuración creada: ${INSTALL_DIR}/.env"
 fi
 
 RECORDER_NPM_COMMAND='./tools/visual-recorder/run.sh'

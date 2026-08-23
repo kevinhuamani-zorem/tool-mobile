@@ -3,9 +3,8 @@
 ## Propósito
 
 Appium Visual Recorder inspecciona y manipula una app móvil, registra acciones,
-construye Gherkin y genera automatización compatible con un workspace elegido.
-Funciona embebido en `fwk-mobile-test`, como workspace standalone o como
-grabador neutral.
+construye Gherkin y genera automatización compatible con `fwk-mobile-test`.
+Funciona exclusivamente embebido en `tools/visual-recorder` dentro del framework.
 
 ## Vista de componentes
 
@@ -19,7 +18,7 @@ flowchart LR
     MAIN --> SCAN[Scanner, CodeGraph, coverage]
     MAIN --> PIPE[Deterministic automation pipeline]
     SCAN --> TARGET[Selected workspace]
-    PIPE --> AGENT[Copilot / Claude gaps only]
+    PIPE --> AGENT[Copilot gaps only]
     AGENT --> PIPE
     PIPE --> TARGET
     PIPE --> REG[Generated file registry]
@@ -61,29 +60,22 @@ debe hacer una segunda migración total ni duplicar listeners.
 | Área | Módulos principales | Responsabilidad |
 |---|---|---|
 | Sesión | `appiumDriverManager`, `browserStackDriverManager`, `mobileStepExecutor` | Conectar, capturar, tocar, gestos y ejecutar acciones |
-| Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver modo, raíz y catálogo del proyecto |
+| Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver la raíz padre y el catálogo del framework |
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationPackageBuilder` | Recording, plan y contexto mínimo |
 | IA acotada | `automationAgentLauncher`, `automationContracts` | Abrir Terminal en el paquete y entregar un prompt acotado; el usuario inicia el agente |
 | Validación/memoria | `automationResponseValidator`, `automationMemory` | Validar, reparar una vez y versionar score 100 |
-| Generación | `fwkMobileGenerator`, `neutralGenerator`, `generationQuality` | Construir previews y contenidos |
+| Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
 | Análisis | `reuseAnalyzer`, `scenarioCoverageAnalyzer` | Impacto de steps y cobertura Android/iOS |
 | Indexación | `codeGraph`, `recorderCodeGraph`, exporters | Relaciones del framework y del propio recorder |
 | Modelo | `models` | Acciones, steps y tipos compartidos |
 
-## Modos de workspace
+## Workspace
 
-La selección se resuelve en este orden: variables de proceso o `.env`,
-`config/workspace.json`, autodetección.
-
-| Modo | Target por defecto | Capas completas | CodeGraph |
-|---|---|---:|---:|
-| `fwk-mobile` | proyecto padre detectado o `TARGET_PROJECT` | Sí | Sí |
-| `standalone` | `workspace/` dentro del recorder | Sí | Sí |
-| `neutral` | `runtime/neutral-workspace` | No; export portable | No |
-
-Todas las rutas operativas nacen en `core/projectPaths.ts`. El adaptador activo
-inicializa o valida el target, sin dispersar condiciones de modo por la UI.
+La raíz se deriva de la ubicación instalada:
+`fwk-mobile-test/tools/visual-recorder`. No se lee `.env` ni un archivo de
+workspace para cambiar el target. Todas las rutas operativas nacen en
+`core/projectPaths.ts` y el adaptador valida el framework antes de abrir la UI.
 
 ## Flujos principales
 
@@ -93,7 +85,7 @@ inicializa o valida el target, sin dispersar condiciones de modo por la UI.
 2. Antes de abrir la ventana se eliminan únicamente placeholders de recordings
    que tengan manifest válido, cero acciones y ningún scenario ni evidencia.
 3. El scanner entrega ambientes, squads, apps y conteos sin revelar valores
-   sensibles del `.env`.
+   sensibles de `config/envs/.env.*` del framework.
 4. El usuario elige conexión local o BrowserStack.
 5. `main` crea el driver correspondiente y fija la plataforma de la sesión.
 6. Screenshot, XML, taps, swipes y ejecución pasan siempre por IPC.
@@ -113,7 +105,7 @@ inicializa o valida el target, sin dispersar condiciones de modo por la UI.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
    no se invoca al agente. La memoria de calidad 100 también se reutiliza.
 7. La UI abre Terminal en el paquete y muestra el prompt inicial. El usuario
-   inicia Copilot/Claude manualmente; el agente recibe solo gaps y un contexto
+   inicia Copilot manualmente; el agente recibe solo gaps y un contexto
    máximo de 20 KB, con objetivo operativo de 5 min.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
@@ -180,4 +172,4 @@ seguridad.
   futuras deben mantener un único dueño por estado y evento.
 - `dist/` no se limpia automáticamente antes de `tsc`; nunca se usa para
   inferir la arquitectura vigente.
-- Los archivos de runtime y los targets standalone son estado local, no fuente.
+- Los archivos de runtime son estado local, no fuente.

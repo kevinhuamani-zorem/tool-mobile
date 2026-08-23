@@ -23,7 +23,6 @@ import { OutputValidator } from '../../core/outputValidator';
 import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
 import crypto from 'crypto';
 import { getWorkspaceAdapter } from '../../core/workspaceAdapter';
-import { NeutralGenerator } from '../../core/neutralGenerator';
 import { AutomationRecordingStore } from '../../core/automationRecordingStore';
 import { AutomationPackageBuilder } from '../../core/automationPackageBuilder';
 import { AutomationAgentLauncher } from '../../core/automationAgentLauncher';
@@ -49,7 +48,6 @@ const dm             = new AppiumDriverManager();
 const bsDm           = new BrowserStackDriverManager();
 const frameworkScanner = new FrameworkScanner();
 const fwkMobileGenerator = new FwkMobileGenerator();
-const neutralGenerator = new NeutralGenerator();
 const reuseAnalyzer = new ReuseAnalyzer();
 const outputValidator = new OutputValidator();
 const generatedFileRegistry = new GeneratedFileRegistry();
@@ -840,39 +838,12 @@ function prepareGenerationRequest(
     return { ...request, platform: recordingPlatform };
 }
 
-function validateNeutralPreview(preview: ReturnType<NeutralGenerator['preview']>) {
-    const errors: string[] = [];
-    if (!/^Feature:\s+\S+/m.test(preview.featureContent)) {
-        errors.push('Feature neutral sin nombre');
-    }
-    if (!/Scenario(?: Outline)?:\s+\[TC-\d+\]/.test(preview.featureContent)) {
-        errors.push('Scenario neutral sin identificador TC válido');
-    }
-    try {
-        JSON.parse(preview.locatorContent || '');
-    } catch (error: any) {
-        errors.push(`Recording JSON inválido: ${error.message}`);
-    }
-    return {
-        valid: errors.length === 0,
-        errors,
-        warnings: ['Exportación neutral: no se generan capas específicas del framework'],
-        conflicts: preview.files.filter(file => fs.existsSync(file))
-    };
-}
-
 ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, 'platform'>) => {
     try {
         const prepared = prepareGenerationRequest(request);
-        const preview = projectPaths.mode === 'neutral'
-            ? neutralGenerator.preview(prepared, recordedSteps)
-            : fwkMobileGenerator.preview(prepared, recordedSteps);
-        const validation = projectPaths.mode === 'neutral'
-            ? validateNeutralPreview(preview)
-            : outputValidator.validate(preview);
-        const managed = projectPaths.mode === 'neutral'
-            ? { conflicts: validation.conflicts, writable: new Set<string>() }
-            : generatedFileRegistry.assess(preview, prepared.squad);
+        const preview = fwkMobileGenerator.preview(prepared, recordedSteps);
+        const validation = outputValidator.validate(preview);
+        const managed = generatedFileRegistry.assess(preview, prepared.squad);
         validation.conflicts = managed.conflicts;
         validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
         const fingerprint = generationFingerprint(prepared, recordedSteps);
@@ -910,37 +881,25 @@ ipcMain.handle('generate-fwk-files', async (
         if (!previewToken || !expectedFingerprint || expectedFingerprint !== actualFingerprint) {
             throw new Error('La grabación cambió. Ejecuta Preview nuevamente antes de generar.');
         }
-        let preview = projectPaths.mode === 'neutral'
-            ? neutralGenerator.preview(prepared, recordedSteps)
-            : fwkMobileGenerator.preview(prepared, recordedSteps);
+        let preview = fwkMobileGenerator.preview(prepared, recordedSteps);
         if (reviewedContents) {
-            preview = projectPaths.mode === 'neutral'
-                ? neutralGenerator.withReviewedContents(preview, reviewedContents)
-                : fwkMobileGenerator.withReviewedContents(preview, reviewedContents);
+            preview = fwkMobileGenerator.withReviewedContents(preview, reviewedContents);
         }
-        const validation = projectPaths.mode === 'neutral'
-            ? validateNeutralPreview(preview)
-            : outputValidator.validate(preview);
-        const managed = projectPaths.mode === 'neutral'
-            ? { conflicts: validation.conflicts, writable: new Set<string>() }
-            : generatedFileRegistry.assess(preview, prepared.squad);
+        const validation = outputValidator.validate(preview);
+        const managed = generatedFileRegistry.assess(preview, prepared.squad);
         validation.conflicts = managed.conflicts;
         validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
         if (!validation.valid) {
             const details = [...validation.errors, ...validation.conflicts].join(', ');
             throw new Error(`La salida no superó la validación: ${details}`);
         }
-        const generated = projectPaths.mode === 'neutral'
-            ? neutralGenerator.generate(prepared, recordedSteps, reviewedContents)
-            : fwkMobileGenerator.generate(
-                prepared,
-                recordedSteps,
-                managed.writable,
-                reviewedContents
-            );
-        const manifest = projectPaths.mode === 'neutral'
-            ? { files: {} }
-            : generatedFileRegistry.register(generated, prepared.squad);
+        const generated = fwkMobileGenerator.generate(
+            prepared,
+            recordedSteps,
+            managed.writable,
+            reviewedContents
+        );
+        const manifest = generatedFileRegistry.register(generated, prepared.squad);
         approvedPreviews.delete(previewToken);
         return {
             success: true,
@@ -983,9 +942,6 @@ ipcMain.handle('resume-recording', async (_, input: {
     squad?: string;
 }) => {
     try {
-        if (projectPaths.mode === 'neutral') {
-            throw new Error('Continuar una grabación requiere modo fwk-mobile o standalone');
-        }
         if (!sessionActive) throw new Error('Conecta el dispositivo antes de continuar la grabación');
         const squad = input.squad || activeSquad;
         const directory = recordingCoverageAnalyzer.findRecordingDirectory(
@@ -1026,9 +982,6 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
     acceptanceCriteria: string;
 }) => {
     try {
-        if (projectPaths.mode === 'neutral') {
-            throw new Error('El agente de cuatro capas requiere modo fwk-mobile o standalone');
-        }
         if (!recordedSteps.length) throw new Error('No hay acciones grabadas');
         if (!input.objective?.trim()) throw new Error('Describe el objetivo funcional del caso');
         if (!input.acceptanceCriteria?.trim()) throw new Error('Define el resultado esperado');
@@ -1060,9 +1013,6 @@ ipcMain.handle('prepare-automation-regeneration', async (_, input: {
     cleanPackage?: boolean;
 }) => {
     try {
-        if (projectPaths.mode === 'neutral') {
-            throw new Error('La regeneración de cuatro capas requiere modo fwk-mobile o standalone');
-        }
         const squad = input.squad || activeSquad;
         const directory = recordingCoverageAnalyzer.findRecordingDirectory(
             squad,

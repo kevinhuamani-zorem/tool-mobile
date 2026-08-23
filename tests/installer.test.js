@@ -19,7 +19,6 @@ function createFixture() {
     fs.mkdirSync(source, { recursive: true });
     fs.writeFileSync(path.join(source, 'package.json'), '{"name":"fixture"}\n');
     fs.writeFileSync(path.join(source, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3,"packages":{}}\n');
-    fs.writeFileSync(path.join(source, '.env.example'), '# example\n');
     fs.writeFileSync(path.join(source, '.gitignore'), '.env\nnode_modules/\n');
     fs.writeFileSync(path.join(source, 'run.sh'), '#!/usr/bin/env bash\n');
     git(source, 'init', '-b', 'visual-recorder');
@@ -53,10 +52,8 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
     });
 
     const target = path.join(fixture.framework, 'tools', 'visual-recorder');
-    const envFile = path.join(target, '.env');
     assert.equal(fs.existsSync(path.join(target, '.git')), true);
-    assert.match(fs.readFileSync(envFile, 'utf8'), /RECORDER_MODE=fwk-mobile/);
-    assert.match(fs.readFileSync(envFile, 'utf8'), new RegExp(fixture.framework));
+    assert.equal(fs.existsSync(path.join(target, '.env')), false);
     assert.equal(
         JSON.parse(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'))
             .scripts.recorder,
@@ -69,13 +66,11 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
         1,
     );
 
-    fs.appendFileSync(envFile, 'CUSTOM_VALUE=preserved\n');
     execFileSync('bash', [installer], {
         cwd: fixture.framework,
         env: environment,
         stdio: 'pipe',
     });
-    assert.match(fs.readFileSync(envFile, 'utf8'), /CUSTOM_VALUE=preserved/);
     assert.equal(
         JSON.parse(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'))
             .scripts.recorder,

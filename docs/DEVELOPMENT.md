@@ -30,20 +30,15 @@ npm install
 
 Los grafos y métricas se guardan en `runtime/` y no se versionan.
 
-## Configurar el workspace
+## Workspace y agente
 
-Usa variables o un `.env` local en la raíz del recorder:
+No existe configuración `.env` propia del recorder. La instalación fija la
+ubicación `fwk-mobile-test/tools/visual-recorder`; desde ella se resuelve
+automáticamente el framework padre. Copilot es el único proveedor presentado
+por el flujo de automatización.
 
-```dotenv
-RECORDER_MODE=fwk-mobile
-TARGET_PROJECT=/ruta/absoluta/al/fwk-mobile-test
-AUTOMATION_AGENT=copilot
-# AUTOMATION_AGENT=claude
-```
-
-Alternativamente copia `config/workspace.example.json` como
-`config/workspace.json`. Ambos archivos locales deben permanecer ignorados.
-No agregues credenciales BrowserStack a ejemplos versionados.
+Las credenciales BrowserStack se administran desde la pantalla de conexión y
+nunca deben añadirse a archivos versionados.
 
 ## Estrategia para modificar
 

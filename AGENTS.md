@@ -25,15 +25,14 @@ el código afectado.
 - `renderer/`: aplicación React y controlador de interacción.
 - `tests/`: contratos ejecutables.
 - `docs/`: arquitectura y procedimientos vigentes.
-- `config/*.example.*`: configuraciones versionables de ejemplo.
 
 No edites como fuente:
 
 - `dist/` y `renderer-dist/`: artefactos de build; pueden contener archivos
   obsoletos hasta una compilación limpia.
-- `runtime/`, `workspace/`, `coverage/` y `test-results/`: salidas locales.
+- `runtime/`, `coverage/` y `test-results/`: salidas locales.
 - `node_modules/`.
-- `.env`, `config/workspace.json`, credenciales o archivos de sesión.
+- credenciales o archivos de sesión.
 
 No modifiques archivos del proyecto destino generado salvo que la tarea lo
 solicite expresamente. Los cambios del recorder deben hacerse en sus
@@ -52,9 +51,10 @@ generadores, validadores o plantillas.
 3. **Las rutas se resuelven centralmente.** Usa `core/projectPaths.ts` y el
    `WorkspaceAdapter`; no derives la raíz con `cwd`, padres relativos o rutas
    absolutas nuevas.
-4. **Los tres modos deben seguir aislados:** `fwk-mobile`, `standalone` y
-   `neutral`. El modo neutral no promete las cuatro capas. Nada se escribe fuera
-   del target autorizado o del `runtime/` del recorder.
+4. **El target es únicamente el framework padre.** El recorder debe vivir en
+   `fwk-mobile-test/tools/visual-recorder`; no admite modo standalone, neutral
+   ni una raíz configurable. Nada se escribe fuera del framework validado o del
+   `runtime/` del recorder.
 5. **Preview antes de escritura.** Generar requiere el token del preview exacto.
    Si cambian acciones, Gherkin, metadatos, rutas o contenido revisado, el token
    debe invalidarse.
@@ -73,7 +73,7 @@ generadores, validadores o plantillas.
 9. **El preprocesador decide antes que el agente.** Selectores verificados,
    rutas, orden de acciones y reutilización exacta en squad/Home son decisiones
    deterministas. El agente solo resuelve los gaps declarados en el plan.
-10. **IA opt-in y contexto mínimo.** Copilot/Claude solo se ejecutan por una
+10. **IA opt-in y contexto mínimo.** Copilot solo se ejecuta por una
     decisión explícita del usuario. Reciben el paquete confinado bajo
     `runtime/recordings`, sin secretos, y no deben explorar el target ni leer
     XML/capturas salvo que un gap puntual lo exija.
@@ -130,7 +130,7 @@ generadores, validadores o plantillas.
   mientras las otras capas se actualizan de forma aditiva en rutas existentes.
 - Los tags de plataforma reflejan cobertura completa: `@android` para Android
   y `@ios` solo cuando todos los locators requeridos de iOS estén disponibles.
-- Nunca registres valores de `.env`, username/access key de BrowserStack ni
+- Nunca registres valores de los ambientes del framework, username/access key de BrowserStack ni
   datos sensibles en logs, previews o errores.
 
 ## Flujo obligatorio para cambios
