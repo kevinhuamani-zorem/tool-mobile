@@ -310,6 +310,50 @@ revisar, `GENERAR` se rechaza y exige ejecutar Preview nuevamente.
 
 ## Instalacion
 
+### Acoplarlo a fwk-mobile-test con un solo comando
+
+Desde la raíz de `fwk-mobile-test`, ejecuta:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kevinhuamani-zorem/tool-mobile/visual-recorder/install.sh | bash
+```
+
+El instalador remoto:
+
+- valida que la carpeta actual sea la raíz de `fwk-mobile-test`;
+- clona la rama standalone en `tools/visual-recorder` o la actualiza mediante
+  `fast-forward` si ya está instalada;
+- ejecuta `npm ci` para instalar versiones reproducibles;
+- crea `tools/visual-recorder/.env` con `RECORDER_MODE=fwk-mobile` y la ruta
+  absoluta del framework, sin reemplazar una configuración existente;
+- agrega `/tools/visual-recorder/` al `.gitignore` del framework para que el
+  proyecto padre no versione el checkout interno.
+
+La URL descarga únicamente el instalador. El checkout se realiza por SSH, por
+lo que cada QA debe tener acceso al repositorio en GitHub. Para instalar y abrir
+el recorder en el mismo comando:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kevinhuamani-zorem/tool-mobile/visual-recorder/install.sh | bash -s -- --start
+```
+
+Después de instalarlo, puede iniciarse nuevamente con:
+
+```bash
+./tools/visual-recorder/run.sh
+```
+
+El comando es idempotente. Si detecta cambios locales dentro del recorder,
+detiene la actualización para no sobrescribirlos. Para usar una raíz distinta
+sin cambiar de directorio:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kevinhuamani-zorem/tool-mobile/visual-recorder/install.sh \
+  | FWK_MOBILE_ROOT=/ruta/al/fwk-mobile-test bash
+```
+
+### Instalación manual para desarrollo
+
     cd tools/visual-recorder
     npm install
 
