@@ -312,10 +312,13 @@ revisar, `GENERAR` se rechaza y exige ejecutar Preview nuevamente.
 
 ### Acoplarlo a fwk-mobile-test con un solo comando
 
-Desde la raíz de `fwk-mobile-test`, ejecuta:
+El repositorio es privado. Desde la raíz de `fwk-mobile-test`, instala mediante
+el acceso SSH configurado para GitHub:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kevinhuamani-zorem/tool-mobile/visual-recorder/install.sh | bash
+git clone --depth 1 --branch visual-recorder --single-branch \
+  git@github.com:kevinhuamani-zorem/tool-mobile.git tools/visual-recorder \
+  && ./tools/visual-recorder/install.sh
 ```
 
 El instalador remoto:
@@ -329,13 +332,26 @@ El instalador remoto:
 - agrega `/tools/visual-recorder/` al `.gitignore` del framework para que el
   proyecto padre no versione el checkout interno.
 
-La URL descarga únicamente el instalador. El checkout se realiza por SSH, por
-lo que cada QA debe tener acceso al repositorio en GitHub. Para instalar y abrir
-el recorder en el mismo comando:
+El checkout se realiza por SSH, por lo que cada QA debe tener acceso al
+repositorio en GitHub. Para instalar y abrir el recorder en el mismo comando:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kevinhuamani-zorem/tool-mobile/visual-recorder/install.sh | bash -s -- --start
+git clone --depth 1 --branch visual-recorder --single-branch \
+  git@github.com:kevinhuamani-zorem/tool-mobile.git tools/visual-recorder \
+  && ./tools/visual-recorder/install.sh --start
 ```
+
+Si GitHub CLI está instalado y autenticado con `gh auth login`, también puede
+descargarse únicamente el instalador privado y ejecutarlo directamente:
+
+```bash
+gh api -H 'Accept: application/vnd.github.raw+json' \
+  'repos/kevinhuamani-zorem/tool-mobile/contents/install.sh?ref=visual-recorder' \
+  | bash
+```
+
+`raw.githubusercontent.com` sin autenticación responde `404` para este
+repositorio privado y no debe usarse como comando de instalación.
 
 Después de instalarlo, puede iniciarse nuevamente con:
 
@@ -348,7 +364,8 @@ detiene la actualización para no sobrescribirlos. Para usar una raíz distinta
 sin cambiar de directorio:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kevinhuamani-zorem/tool-mobile/visual-recorder/install.sh \
+gh api -H 'Accept: application/vnd.github.raw+json' \
+  'repos/kevinhuamani-zorem/tool-mobile/contents/install.sh?ref=visual-recorder' \
   | FWK_MOBILE_ROOT=/ruta/al/fwk-mobile-test bash
 ```
 
