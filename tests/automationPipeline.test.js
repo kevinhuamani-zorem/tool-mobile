@@ -894,7 +894,10 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /Gherkin declarativo/);
     assert.match(instructions, /Agrupa acciones técnicas consecutivas/);
     assert.match(instructions, /contextHint\/elementIntent es solo una pista libre/);
-    assert.match(instructions, /@screenobjects.*@utils.*@locators/);
+    // Los anclajes del framework llegan resueltos, no como convencion memorizada.
+    assert.match(instructions, /@screenobjects\/commons\/base\.screen\.ts/);
+    assert.match(instructions, /@utils\/LocatorFactory\.ts/);
+    assert.match(instructions, /@utils\/Enums\.ts/);
     assert.match(instructions, /Importa browser.*únicamente si/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);

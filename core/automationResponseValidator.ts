@@ -15,6 +15,7 @@ import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
+import { frameworkContract } from './frameworkContract';
 
 function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
     try {
@@ -393,10 +394,14 @@ export class AutomationResponseValidator {
                     const expectedLocatorSource = locatorPlan
                         ? plannedAlias(locatorPlan.path, 'resources/locators', '@locators')
                         : undefined;
+                    // Los anclajes se leen del framework, no se asumen: comparar
+                    // contra una constante propia hacia que un import obsoleto
+                    // pasara la validacion y reventara recien en wdio.
+                    const contract = frameworkContract(projectPaths.frameworkRoot);
                     const requiredSources = [
-                        '@screenobjects/commons/base.screen.ts',
+                        contract.baseScreenImport,
                         ...(expectedLocatorSource
-                            ? ['@utils/LocatorFactory.ts', '@utils/Enums.ts', expectedLocatorSource]
+                            ? [contract.locatorFactoryImport, contract.typeLocatorImport, expectedLocatorSource]
                             : []),
                     ];
                     for (const requiredSource of requiredSources) {
@@ -408,7 +413,7 @@ export class AutomationResponseValidator {
                             });
                         }
                     }
-                    if (!new RegExp(`class\\s+${expected.className}\\s+extends\\s+BaseScreen\\b`).test(screenContent)) {
+                    if (!new RegExp(`class\\s+${expected.className}\\s+extends\\s+${contract.baseScreenClass}\\b`).test(screenContent)) {
                         errors.push({
                             code: 'screen-class-name',
                             message: `Clase Screen Object inválida. Esperado: ${expected.className}.`,

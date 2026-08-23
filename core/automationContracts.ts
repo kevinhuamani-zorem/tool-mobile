@@ -150,6 +150,16 @@ export interface ResolvedContext {
         screenExtendsBaseScreen: true;
         sharedLocatorNameAcrossPlatforms: true;
         allowedScopes: ['squad', 'home'];
+        /**
+         * [visual-recorder] Anclajes resueltos del framework en esta grabacion.
+         * Viajan como dato para que el agente use la ruta real y no una
+         * convencion memorizada, y para que un movimiento del framework se vea
+         * en el paquete en vez de descubrirse al ejecutar wdio.
+         */
+        baseScreenClass: string;
+        baseScreenImport: string;
+        locatorFactoryImport: string;
+        typeLocatorImport: string;
     };
 }
 
@@ -221,4 +231,10 @@ export interface AutomationPackageResult {
     /** Bytes del contexto mínimo y aviso si supera el objetivo (no bloquea). */
     contextBytes?: number;
     contextWarning?: string;
+    /**
+     * [visual-recorder] Anclajes del framework (BaseScreen, LocatorFactory,
+     * TypeLocator) que no se pudieron resolver y quedaron en su valor por
+     * convención. Si aparecen, el import generado puede no existir.
+     */
+    frameworkWarnings?: string[];
 }

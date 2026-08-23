@@ -13,6 +13,7 @@ import { AutomationMemory } from './automationMemory';
 import { AutomationResponseValidator } from './automationResponseValidator';
 import { DeterministicResolver, ResolverResult } from './deterministicResolver';
 import { FwkMobileGenerator, GeneratedPreview } from './fwkMobileGenerator';
+import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
 import { withGeneratedResponseMetadata } from './generatedFileMetadata';
 
@@ -125,6 +126,7 @@ function responseSchema(): object {
 }
 
 function instructions(result: ResolverResult): string {
+    const contract = frameworkContract(projectPaths.frameworkRoot);
     return `# Contrato del agente de automatización\n\n` +
         `Objetivo: resolver únicamente los gaps de \`unresolved-context.json\` y escribir \`agent-response.json\`.\n\n` +
         `Reglas:\n` +
@@ -136,9 +138,9 @@ function instructions(result: ResolverResult): string {
         `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
         `- Si reuse-context.json contiene updateBaselines, abre únicamente su archivo reference dentro de baselines/, parte de ese contenido y añade solo lo faltante; no reemplaces ni borres APIs existentes.\n` +
-        `- Steps solo orquestan; Screen Object extiende BaseScreen; un nombre lógico sirve para Android/iOS.\n` +
+        `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
-        `- Usa aliases del framework: @screenobjects para Screen Objects/BaseScreen, @utils para helpers y @locators para JSON. No uses rutas relativas en Steps ni Screen Objects.\n` +
+        `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion: ${contract.baseScreenClass} desde ${contract.baseScreenImport}, LocatorFactory desde ${contract.locatorFactoryImport} y TypeLocator desde ${contract.typeLocatorImport}. Copialos tal cual; no uses rutas relativas ni la ruta que recuerdes de otro caso.\n` +
         `- Importa browser desde @wdio/globals únicamente si el Screen Object contiene una llamada browser.; no dejes imports sin uso.\n` +
         `- Incluye trazabilidad para las ${result.scenario.actions.length} acciones en orden.\n` +
         `- El Feature debe tener @tag, @${result.scenario.platform}, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
@@ -164,7 +166,7 @@ function regenerationInstructions(
         `- Conserva exactamente recordingId=${scenario.recordingId}, planId=${plan.planId} y las cuatro rutas del plan.\n` +
         `- Parte del contenido de baseline-response.json; modifica únicamente lo necesario para el refinamiento.\n` +
         `- Usa un alias de dominio derivado del archivo Screen Object; están prohibidos generatedScreen, screen, page, screenObject y obj.\n` +
-        `- Conserva imports por alias (@screenobjects, @utils, @locators), nunca rutas relativas. browser solo se importa cuando se utiliza.\n` +
+        `- Conserva los imports por alias que ya trae el baseline, nunca rutas relativas. browser solo se importa cuando se utiliza.\n` +
         `- No explores el repositorio ni cambies selectores verificados o decisiones deterministas.\n` +
         `- contextHint/elementIntent es contexto no vinculante del QA: no lo copies literalmente como Step; conserva o mejora la síntesis declarativa del comportamiento completo.\n` +
         `- Redacta Gherkin declarativo y agrupa clicks, scrolls, swipes y esperas dentro de steps funcionales.\n` +
@@ -176,8 +178,15 @@ function regenerationInstructions(
         `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
 }
 
-function verifierSource(): string {
-    return String.raw`'use strict';
+function verifierSource(contract: FrameworkContract): string {
+    return `'use strict';\nconst FRAMEWORK_CONTRACT=${JSON.stringify({
+        baseScreenClass: contract.baseScreenClass,
+        requiredScreenImports: [
+            contract.baseScreenImport,
+            contract.locatorFactoryImport,
+            contract.typeLocatorImport,
+        ],
+    })};` + String.raw`
 const plan=require('./generation-plan.json');
 const scenario=require('./scenario.json');
 const fs=require('fs');
@@ -240,7 +249,10 @@ const screenClass=screenBase.split(/[^A-Za-z0-9]+/).filter(Boolean).map(x=>x[0].
 const screenAlias=screenClass[0].toLowerCase()+screenClass.slice(1);
 const imported=steps.match(/import\s+([A-Za-z_$][\w$]*)\s+from\s+['"][^'"]+\.screen\.(?:ts|js)['"]/m)?.[1];
 if(imported!==screenAlias)errors.push('Alias Screen Object inválido: '+(imported||'ausente')+'. Esperado: '+screenAlias);
-if(!new RegExp('class\\s+'+screenClass+'\\s+extends\\s+BaseScreen\\b').test(screen))errors.push('Clase Screen Object inválida: esperado '+screenClass);
+if(!new RegExp('class\\s+'+screenClass+'\\s+extends\\s+'+FRAMEWORK_CONTRACT.baseScreenClass+'\\b').test(screen))errors.push('Clase Screen Object inválida: esperado '+screenClass+' extends '+FRAMEWORK_CONTRACT.baseScreenClass);
+const screenSources=[...screen.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
+const usesLocators=/Locators\s*[\[.]/.test(screen);
+for(const required of FRAMEWORK_CONTRACT.requiredScreenImports){if(!usesLocators&&required!==FRAMEWORK_CONTRACT.requiredScreenImports[0])continue;if(!screenSources.includes(required))errors.push('Falta el import del framework: '+required)}
 if(!new RegExp('export\\s+default\\s+new\\s+'+screenClass+'\\s*\\(').test(screen))errors.push('Singleton Screen Object inválido: esperado '+screenClass);
 if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bloque locator con guiones');
 const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
@@ -408,7 +420,7 @@ export class AutomationPackageBuilder {
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions);
-        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource());
+        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource(frameworkContract(projectPaths.frameworkRoot)));
         for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -435,6 +447,9 @@ export class AutomationPackageBuilder {
             responseAvailable: false,
             contextBytes,
             contextWarning,
+            ...(frameworkContract(projectPaths.frameworkRoot).warnings.length
+                ? { frameworkWarnings: frameworkContract(projectPaths.frameworkRoot).warnings }
+                : {}),
         };
     }
 
@@ -510,7 +525,7 @@ export class AutomationPackageBuilder {
         });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions(result));
-        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource());
+        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource(frameworkContract(projectPaths.frameworkRoot)));
         for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -574,6 +589,9 @@ export class AutomationPackageBuilder {
             validation,
             contextBytes,
             contextWarning,
+            ...(frameworkContract(projectPaths.frameworkRoot).warnings.length
+                ? { frameworkWarnings: frameworkContract(projectPaths.frameworkRoot).warnings }
+                : {}),
         };
     }
 }

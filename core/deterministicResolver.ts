@@ -18,6 +18,7 @@ import { Action, RecordedStep, recordedStepContext } from './models';
 import { normalizeFeatureScope } from './featureScope';
 import { TECHNICAL_STOP_WORDS } from './selectorNormalization';
 import { spanishTokens, translateToEnglish, translateToSlug } from './englishIdentifiers';
+import { frameworkContract } from './frameworkContract';
 import { detectRepetition } from './repetitionDetector';
 import { projectPaths } from './projectPaths';
 
@@ -791,6 +792,9 @@ export class DeterministicResolver {
                     screenExtendsBaseScreen: true,
                     sharedLocatorNameAcrossPlatforms: true,
                     allowedScopes: ['squad', 'home'],
+                    ...(({ baseScreenClass, baseScreenImport, locatorFactoryImport, typeLocatorImport }) => ({
+                        baseScreenClass, baseScreenImport, locatorFactoryImport, typeLocatorImport,
+                    }))(frameworkContract(projectPaths.frameworkRoot)),
                 },
             },
             unresolvedContext: {

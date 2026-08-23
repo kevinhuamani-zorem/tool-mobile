@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { translateToEnglish } from './englishIdentifiers';
+import { aliasImport, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, toGherkinLine } from './models';
 import { screenObjectNames } from './semanticNaming';
@@ -434,9 +435,12 @@ export class FwkMobileGenerator {
         screenPath: string,
         locatorPath?: string
     ): string {
-        const baseImport = '@screenobjects/commons/base.screen.ts';
-        const factoryImport = '@utils/LocatorFactory.ts';
-        const enumsImport = '@utils/Enums.ts';
+        // Resueltos contra el framework en disco, no fijos: si BaseScreen o
+        // LocatorFactory se mueven, el import generado se mueve con ellos.
+        const contract = frameworkContract(projectPaths.frameworkRoot);
+        const baseImport = contract.baseScreenImport;
+        const factoryImport = contract.locatorFactoryImport;
+        const enumsImport = contract.typeLocatorImport;
         const locatorImport = locatorPath
             ? this.frameworkAlias(locatorPath, projectPaths.locators, '@locators')
             : undefined;
@@ -482,14 +486,14 @@ export class FwkMobileGenerator {
 
         return [
             ...(usesBrowser ? [`import { browser } from '@wdio/globals';`] : []),
-            `import BaseScreen from '${baseImport}';`,
+            `import ${contract.baseScreenClass} from '${baseImport}';`,
             ...(locators.length > 0 ? [
                 `import LocatorFactory from '${factoryImport}';`,
                 `import { TypeLocator } from '${enumsImport}';`,
                 `import Locators from '${locatorImport}' with { type: 'json' };`
             ] : []),
             '',
-            `class ${className} extends BaseScreen {`,
+            `class ${className} extends ${contract.baseScreenClass} {`,
             ...getters.flatMap(getter => ['', getter]),
             ...methods.flatMap(method => ['', method.content]),
             `}`,
@@ -610,12 +614,19 @@ export class FwkMobileGenerator {
         return 'XPATH';
     }
 
+    /**
+     * El prefijo sale del tsconfig del framework; el argumento `alias` es solo
+     * el respaldo por si ese mapeo no existe (workspace standalone, que no
+     * genera tsconfig).
+     */
     private frameworkAlias(targetFile: string, root: string, alias: string): string {
         const relative = path.relative(root, targetFile).replace(/\\/g, '/');
         if (!relative || relative === '..' || relative.startsWith('../')) {
             throw new Error(`No se puede crear alias fuera de ${root}: ${targetFile}`);
         }
-        return `${alias}/${relative}`;
+        const fromRoot = path.relative(projectPaths.frameworkRoot, targetFile).replace(/\\/g, '/');
+        return aliasImport(fromRoot, frameworkContract(projectPaths.frameworkRoot).aliases)
+            || `${alias}/${relative}`;
     }
 
     private stepExpression(text: string): string {
