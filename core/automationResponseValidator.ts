@@ -14,6 +14,7 @@ import { selectorNormalization } from './deterministicResolver';
 import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
+import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
 
 function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
     try {
@@ -311,6 +312,39 @@ export class AutomationResponseValidator {
                         message: `Método de Screen Object duplicado: ${duplicateMethod}`,
                         file: response.files.find(file => file.layer === 'screen')?.path,
                     });
+                }
+                // El codigo del framework se nombra en ingles; el espanol queda para
+                // la prosa que lee el QA (linea Feature, nombre del Scenario y texto
+                // de los steps). Solo se juzga lo que el agente agrega: hay 76
+                // identificadores en espanol heredados que no le tocan a el arreglar.
+                {
+                    const inheritedNames = new Set<string>();
+                    for (const plannedFile of plan.files.filter(file => file.operation === 'update')) {
+                        const absolute = path.join(projectPaths.frameworkRoot, plannedFile.path);
+                        if (!fs.existsSync(absolute)) continue;
+                        const baseline = fs.readFileSync(absolute, 'utf-8');
+                        declaredIdentifiers({
+                            steps: plannedFile.layer === 'steps' ? baseline : '',
+                            screen: plannedFile.layer === 'screen' ? baseline : '',
+                            locators: plannedFile.layer === 'locators' ? baseline : '',
+                        }).forEach(symbol => inheritedNames.add(symbol.name));
+                    }
+                    const reported = new Set<string>();
+                    const added = declaredIdentifiers({
+                        steps: preview.stepContent || '',
+                        screen: preview.screenContent || '',
+                        locators: preview.locatorContent || '',
+                    }).filter(symbol => !inheritedNames.has(symbol.name));
+                    for (const symbol of added) {
+                        const markers = spanishTokens(symbol.name);
+                        if (!markers.length || reported.has(symbol.name)) continue;
+                        reported.add(symbol.name);
+                        errors.push({
+                            code: 'non-english-identifier',
+                            message: `El ${symbol.kind} "${symbol.name}" está en español (${markers.join(', ')}). ` +
+                                'El código del framework se nombra en inglés; el español solo va en el Gherkin.',
+                        });
+                    }
                 }
                 const screenPlan = plan.files.find(file => file.layer === 'screen');
                 const stepsPlan = plan.files.find(file => file.layer === 'steps');

@@ -90,11 +90,13 @@ inicializa o valida el target, sin dispersar condiciones de modo por la UI.
 ### Arranque y sesión
 
 1. Se resuelve e inicializa el workspace.
-2. El scanner entrega ambientes, squads, apps y conteos sin revelar valores
+2. Antes de abrir la ventana se eliminan únicamente placeholders de recordings
+   que tengan manifest válido, cero acciones y ningún scenario ni evidencia.
+3. El scanner entrega ambientes, squads, apps y conteos sin revelar valores
    sensibles del `.env`.
-3. El usuario elige conexión local o BrowserStack.
-4. `main` crea el driver correspondiente y fija la plataforma de la sesión.
-5. Screenshot, XML, taps, swipes y ejecución pasan siempre por IPC.
+4. El usuario elige conexión local o BrowserStack.
+5. `main` crea el driver correspondiente y fija la plataforma de la sesión.
+6. Screenshot, XML, taps, swipes y ejecución pasan siempre por IPC.
 
 ### Caso nuevo con agente de automatización
 

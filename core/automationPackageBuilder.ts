@@ -131,7 +131,7 @@ function instructions(result: ResolverResult): string {
         `- Lee solo: generation-plan.json, reuse-context.json, collision-report.json, unresolved-context.json y scenario.json.\n` +
         `- No explores el repositorio ni leas XML/capturas salvo que un gap lo pida explícitamente.\n` +
         `- Conserva exactamente recordingId, planId y las cuatro rutas del plan.\n` +
-        `- Los selectores verificados y decisiones reuse/create del plan son definitivos.\n` +
+        `- Los selectores verificados y las decisiones reuse/create del plan son definitivos. Los nombres logicos NO: si existe el gap gap-english-naming, renombralos a ingles conservando selector y decision.\n` +
         `- contextHint/elementIntent es solo una pista libre escrita por el QA para comprender el elemento. No la copies literalmente ni la conviertas uno-a-uno en un Step; sintetiza comportamientos declarativos usando el objetivo, criterio de aceptación y secuencia completa.\n` +
         `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
@@ -144,6 +144,7 @@ function instructions(result: ResolverResult): string {
         `- El Feature debe tener @tag, @${result.scenario.platform}, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
         `- Las filas de scenarioRows con status "reused" se copian LITERALES, caracter por caracter (tildes incluidas). Ya existen como step definition en el framework: si las reescribes o reemplazas su parametro por un literal, Cucumber las reporta como undefined al ejecutar. Ejemplo: \`Given el usuario <username> inicia sesión en Yape\` se copia tal cual, nunca con el nombre del usuario dentro.\n` +
         `- Todo <parametro> que dejes en un step obliga a \`Scenario Outline:\` y a una tabla \`Examples:\` con esa columna. Toma los valores de request.examples de scenario.json; si falta la columna, el parametro llega literal al step y no enlaza.\n` +
+        `- Todo el codigo va en INGLES: metodos y getters del Screen Object, claves de locator, variables y parametros. El espanol se reserva para la prosa que lee el QA: la linea Feature, el nombre del Scenario y el texto de los steps. Ejemplo: el step "el usuario consulta todos sus movimientos" se resuelve con \`movementsScreen.openAllMovements()\`, nunca con \`elUsuarioConsultaTodosSusMovimientos()\`.\n` +
         `- Redacta Gherkin declarativo: describe intención, capacidad y resultado de negocio; no narres clicks, botones, campos, scrolls, swipes ni esperas.\n` +
         `- Agrupa acciones técnicas consecutivas dentro de un único step funcional. Varias secuencias pueden apuntar al mismo gherkinStep en actionTrace.\n` +
         `- Finaliza en menos de 5 minutos. No escribas fuera de esta carpeta.\n` +
@@ -169,6 +170,7 @@ function regenerationInstructions(
         `- Redacta Gherkin declarativo y agrupa clicks, scrolls, swipes y esperas dentro de steps funcionales.\n` +
         `- Conserva los tags de plataforma: @android si Android está completo y @ios si iOS está completo.\n` +
         `- Conserva literales las filas reused (login incluido) y su tabla Examples: son steps que ya existen en el framework.\n` +
+        `- Los identificadores nuevos van en ingles (metodos, getters, locators, variables); no renombres los que ya existen en el baseline.\n` +
         `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
         `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
         `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
@@ -214,6 +216,21 @@ const traceBySequence=new Map((response.actionTrace||[]).map(x=>[x.sequence,x.gh
 const technical=new Set(['SCROLL_DOWN','SCROLL_UP','SWIPE','ESPERAR','SCREENSHOT']);
 for(const action of scenario.actions.filter(x=>technical.has(x.action))){const current=traceBySequence.get(action.sequence);const grouped=current&&[action.sequence-1,action.sequence+1].some(x=>traceBySequence.get(x)===current);if(!grouped)errors.push('Acción técnica sin agrupar '+action.sequence+' ('+action.action+')')}
 const defs=[...steps.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(x=>x[1]);
+const esFn=new Set(['el','la','los','las','un','una','unos','unas','del','al','de','por','para','con','se','su','sus','lo','que','cual','cuando','donde','como','ver','este','esta','estos','estas','ese','esa','esos','esas']);
+const esDom=new Set(['usuario','usuarios','boton','botones','pantalla','pantallas','mostrar','muestra','muestran','todo','todos','todas','mas','filtrar','filtro','filtros','buscar','busca','validar','valida','verificar','verifica','ingresar','ingresa','seleccionar','selecciona','escribir','escribe','contenedor','pagina','cuenta','cuentas','saldo','monto','correo','clave','contrasena','numero','nombre','fecha','campo','campos','lista','listas','mensaje','mensajes','guardar','enviar','cerrar','abrir','continuar','aceptar','cancelar','siguiente','anterior','inicio','periodo','periodos','fallo','fallos','fila','filas','movimiento','movimientos','titulo','opcion','opciones','esperado','esperados','esperada','esperadas','deberia','debe','consulta','consultar']);
+const esTokens=name=>{const t=[...new Set(String(name||'').replace(/([a-z0-9])([A-Z])/g,'$1 $2').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').split(/[^a-z0-9]+/).filter(w=>w.length>1))];const d=t.filter(w=>esDom.has(w));const f=t.filter(w=>esFn.has(w));return(!d.length&&f.length<2)?[]:[...d,...f]};
+const declared=[];
+for(const m of screen.matchAll(/public\s+(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/g))declared.push(['metodo',m[1]]);
+for(const m of screen.matchAll(/(?:private|protected|public)\s+get\s+([A-Za-z_$][\w$]*)\s*\(/g))declared.push(['getter',m[1]]);
+for(const m of screen.matchAll(/(?:private|protected)\s+(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/g))declared.push(['miembro',m[1]]);
+for(const body of [steps,screen]){for(const m of body.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*[=:]/g))declared.push(['variable',m[1]]);for(const m of body.matchAll(/\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s+of\b/g))declared.push(['variable',m[1]])}
+try{const doc=JSON.parse(locator);for(const [block,value] of Object.entries(doc)){if(block==='_metadata'||!value||typeof value!=='object'||Array.isArray(value))continue;for(const key of Object.keys(value))declared.push(['locator',key])}}catch(e){}
+const inheritedNames=new Set();
+for(const baseline of reuse.updateBaselines||[]){let content='';try{content=fs.readFileSync(baseline.reference,'utf8')}catch(e){continue}
+for(const m of content.matchAll(/(?:public|private|protected)\s+(?:async\s+)?(?:get\s+)?([A-Za-z_$][\w$]*)\s*\(/g))inheritedNames.add(m[1]);
+if(baseline.layer==='locators'){try{const doc=JSON.parse(content);for(const [block,value] of Object.entries(doc)){if(block==='_metadata'||!value||typeof value!=='object'||Array.isArray(value))continue;for(const key of Object.keys(value))inheritedNames.add(key)}}catch(e){}}}
+const reportedEs=new Set();
+for(const [kind,name] of declared){if(inheritedNames.has(name)||reportedEs.has(name))continue;const markers=esTokens(name);if(!markers.length)continue;reportedEs.add(name);errors.push('Identificador en espanol ('+kind+'): '+name+' ['+markers.join(', ')+']. El codigo va en ingles; el espanol solo en el Gherkin')}
 if(defs.some((x,i)=>defs.indexOf(x)!==i))errors.push('Definición Gherkin duplicada');
 const methods=[...screen.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(x=>x[1]);
 if(methods.some((x,i)=>methods.indexOf(x)!==i))errors.push('Método Screen Object duplicado');

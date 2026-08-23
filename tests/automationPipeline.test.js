@@ -124,6 +124,57 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     assert.equal(actions[0].contextHint, 'numero a yapear');
 });
 
+test('al iniciar elimina únicamente placeholders sin scenario ni acciones', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-prune-'));
+    const context = { squad: 'payment', platform: 'android', environment: 'qa' };
+    const emptyStore = new AutomationRecordingStore(root);
+    emptyStore.start(context);
+    const emptyDirectory = emptyStore.getActiveDirectory();
+    emptyStore.reset();
+
+    const withActions = new AutomationRecordingStore(root);
+    withActions.start(context);
+    withActions.replaceActions([
+        { action: 'CLICK', selector: '~Yapear', contextHint: 'abrir yapear' },
+    ], context);
+    const actionsDirectory = withActions.getActiveDirectory();
+    withActions.reset();
+
+    const withScenario = new AutomationRecordingStore(root);
+    withScenario.start(context);
+    const scenarioDirectory = withScenario.getActiveDirectory();
+    fs.writeFileSync(path.join(scenarioDirectory, 'scenario.json'), '{}');
+    withScenario.reset();
+
+    const withAdditionalEvidence = new AutomationRecordingStore(root);
+    withAdditionalEvidence.start(context);
+    const evidenceDirectory = withAdditionalEvidence.getActiveDirectory();
+    fs.writeFileSync(path.join(evidenceDirectory, 'evidence.xml'), '<hierarchy />');
+    withAdditionalEvidence.reset();
+
+    const cleanup = new AutomationRecordingStore(root).pruneEmptyRecordings();
+
+    assert.deepEqual(cleanup.removed, [path.basename(emptyDirectory)]);
+    assert.equal(fs.existsSync(emptyDirectory), false);
+    assert.equal(fs.existsSync(actionsDirectory), true);
+    assert.equal(fs.existsSync(scenarioDirectory), true);
+    assert.equal(fs.existsSync(evidenceDirectory), true);
+    assert.equal(cleanup.skipped, 3);
+});
+
+test('la limpieza conserva el recording activo aunque todavía esté vacío', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-prune-active-'));
+    const store = new AutomationRecordingStore(root);
+    store.start({ squad: 'payment', platform: 'android', environment: 'qa' });
+    const activeDirectory = store.getActiveDirectory();
+
+    const cleanup = store.pruneEmptyRecordings();
+
+    assert.deepEqual(cleanup.removed, []);
+    assert.equal(cleanup.skipped, 1);
+    assert.equal(fs.existsSync(activeDirectory), true);
+});
+
 // Las dos casuisticas de "Completar una grabacion" dependen de estos flags:
 // sin plan no hay locators que asignar, y una grabacion sin Then nunca va a
 // tener plan porque el builder la corta antes.
@@ -456,8 +507,9 @@ test('resolver convierte un teléfono grabado en parámetro y Example', () => {
     recorded.acceptanceCriteria = 'mostrar el usuario encontrado';
     const result = new DeterministicResolver(emptyCatalog).resolve(recorded);
     const row = result.scenario.request.scenarioRows[1];
-    assert.equal(row.actions[0].value, '<numero>');
-    assert.equal(result.scenario.request.examples.numero, '999111222');
+    // El parametro viaja al Gherkin, a Examples y a la variable del step: ingles.
+    assert.equal(row.actions[0].value, '<number>');
+    assert.equal(result.scenario.request.examples.number, '999111222');
 });
 
 test('resolver rechaza como completo un valor funcional perdido', () => {
@@ -478,7 +530,9 @@ test('resolver crea nombres semánticos y no solicita al agente cuando todo est�
     }]));
     assert.equal(result.plan.status, 'deterministic');
     assert.equal(result.plan.deterministicCoverage, 1);
-    assert.equal(result.plan.resolutions[0].locatorName, 'listaDeMovimientos');
+    // "lista de movimientos" se traduce sin pasar por el agente: el camino
+    // determinista sigue costando cero tokens.
+    assert.equal(result.plan.resolutions[0].locatorName, 'movementsList');
     assert.equal(result.plan.files.length, 4);
     assert.equal(result.unresolvedContext.gaps.length, 0);
 });
@@ -514,7 +568,8 @@ test('generador consolida pasos repetidos y usa acceso seguro a bloques locator'
         ]
     }, [repeatedScroll, repeatedScroll, click]);
     assert.equal((preview.stepContent.match(/el usuario desplaza movimientos/g) || []).length, 1);
-    assert.equal((preview.screenContent.match(/elUsuarioDesplazaMovimientos\(/g) || []).length, 1);
+    // El step sigue en espanol; el metodo que lo implementa, no.
+    assert.equal((preview.screenContent.match(/userScrollMovements\(/g) || []).length, 1);
     assert.match(preview.screenContent, /Locators\["movementsFilterAndroid"\]\.verTodos/);
 });
 
@@ -529,7 +584,9 @@ test('resolver agrupa acciones técnicas en comportamiento y propone rutas compa
     recorded.objective = 'el usuario debe poder ver todos sus movimientos y ubicar el boton de filtro';
     recorded.acceptanceCriteria = 'verificar que existe el filtro de movimientos';
     const result = new DeterministicResolver(emptyCatalog).resolve(recorded);
-    assert.match(result.plan.files[0].path, /filtro-movimientos\.feature$/);
+    // El archivo va en ingles como el resto del framework; la linea Feature,
+    // que deriva del mismo texto, se queda en espanol porque la lee el QA.
+    assert.match(result.plan.files[0].path, /filter-movements\.feature$/);
     assert.equal(result.scenario.request.featureName, 'Filtro de movimientos');
     assert.equal(result.scenario.request.scenarioRows.length, 3);
     assert.equal(result.scenario.request.scenarioRows[1].text, 'el usuario consulta todos sus movimientos');
@@ -608,13 +665,13 @@ function validResponse(plan, recordingId = 'rec-test') {
         // El Given viene de login.steps.ts: se copia literal y su usuario
         // viaja por Examples, nunca inlinado dentro del step.
         feature: 'Feature: Consulta de movimientos\n\n@miflujo @android\n  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario <username> inicia sesión en Yape\n    Then se muestra la lista de movimientos\n\n    Examples:\n      | username   |\n      | Usuario QA |\n',
-        steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.validar(); });\n`,
-        screen: `import BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorFactory from '@utils/LocatorFactory.ts';\nimport { TypeLocator } from '@utils/Enums.ts';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends BaseScreen { private get lista(): string { return LocatorFactory.getElement(TypeLocator.XPATH, Locators.consultaIos.listaDeMovimientos, TypeLocator.ID, Locators.consultaAndroid.listaDeMovimientos); } public async validar(): Promise<void> { await this.uiHelper.waitForDisplayed(this.lista); } }\nexport default new ${screenClass}();\n`,
-        locators: JSON.stringify({ consultaAndroid: { listaDeMovimientos: 'id=movimientos' }, consultaIos: { listaDeMovimientos: '' } }, null, 2)
+        steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.verifyMovementsList(); });\n`,
+        screen: `import BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorFactory from '@utils/LocatorFactory.ts';\nimport { TypeLocator } from '@utils/Enums.ts';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends BaseScreen { private get movementsList(): string { return LocatorFactory.getElement(TypeLocator.XPATH, Locators.consultaIos.movementsList, TypeLocator.ID, Locators.consultaAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForDisplayed(this.movementsList); } }\nexport default new ${screenClass}();\n`,
+        locators: JSON.stringify({ consultaAndroid: { movementsList: 'id=movimientos' }, consultaIos: { movementsList: '' } }, null, 2)
     };
     return {
         schemaVersion: 1, recordingId, planId: plan.planId, resolutions: [],
-        actionTrace: [{ sequence: 1, gherkinStep: 'Then se muestra la lista de movimientos', locatorName: 'listaDeMovimientos' }],
+        actionTrace: [{ sequence: 1, gherkinStep: 'Then se muestra la lista de movimientos', locatorName: 'movementsList' }],
         files: plan.files.map(file => ({ layer: file.layer, path: file.path, content: content[file.layer] }))
     };
 }
@@ -643,7 +700,7 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
 
     const completedIos = validResponse(resolved.plan);
     const iosLocators = JSON.parse(completedIos.files.find(file => file.layer === 'locators').content);
-    iosLocators.consultaIos.listaDeMovimientos = 'Movimientos';
+    iosLocators.consultaIos.movementsList = 'Movimientos';
     completedIos.files.find(file => file.layer === 'locators').content = JSON.stringify(iosLocators);
     assert.equal(
         validator.validate(resolved.scenario, resolved.plan, completedIos)
@@ -950,6 +1007,62 @@ test('rechaza el Given reutilizado reescrito y el parámetro sin Examples', () =
             .some(warning => /Step definition sin uso/.test(warning)),
         false
     );
+});
+
+// El codigo va en ingles, el Gherkin en espanol. Solo se juzga lo que el agente
+// agrega: el framework arrastra ~90 identificadores en espanol heredados.
+test('rechaza identificadores en español y no toca el Gherkin ni lo heredado', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-english-'));
+    const builder = new AutomationPackageBuilder(
+        new DeterministicResolver(emptyCatalog),
+        new AutomationMemory(path.join(root, 'memory'))
+    );
+    const result = builder.prepare(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]), root);
+    const plan = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'generation-plan.json'), 'utf8'
+    ));
+    const resolvedScenario = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'scenario.json'), 'utf8'
+    ));
+    const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+
+    // La propuesta correcta pasa: su Gherkin es español y su código inglés.
+    const limpio = validator.validate(resolvedScenario, plan, validResponse(plan));
+    assert.equal(limpio.errors.some(error => error.code === 'non-english-identifier'), false);
+    assert.match(
+        validResponse(plan).files.find(file => file.layer === 'feature').content,
+        /Then se muestra la lista de movimientos/,
+        'el texto del step sigue en español'
+    );
+
+    const enEspanol = validResponse(plan);
+    const screenFile = enEspanol.files.find(file => file.layer === 'screen');
+    screenFile.content = screenFile.content.replace(
+        'public async verifyMovementsList()',
+        'public async seMuestranLosMovimientosEsperados()'
+    );
+    const errores = validator.validate(resolvedScenario, plan, enEspanol).errors
+        .filter(error => error.code === 'non-english-identifier');
+    assert.equal(errores.length, 1);
+    assert.match(errores[0].message, /seMuestranLosMovimientosEsperados/);
+    assert.match(errores[0].message, /está en español/);
+
+    fs.writeFileSync(
+        path.join(result.packageDirectory, 'agent-response.json'),
+        JSON.stringify(enEspanol)
+    );
+    assert.throws(() => execFileSync(process.execPath, ['verify-package.js'], {
+        cwd: result.packageDirectory,
+        stdio: 'pipe'
+    }), error => /Identificador en espanol/.test(String(error.stdout) + String(error.stderr)));
+
+    const instructions = fs.readFileSync(
+        path.join(result.packageDirectory, 'instructions.md'), 'utf8'
+    );
+    assert.match(instructions, /Todo el codigo va en INGLES/);
 });
 
 test('package builder mantiene baselines grandes fuera del contexto mínimo', () => {

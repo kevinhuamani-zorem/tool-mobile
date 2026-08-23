@@ -33,6 +33,8 @@ La puerta exige:
 - equivalencia de selectores con o sin prefijos `id=`, `~` y `android=`.
 - imports internos por `@screenobjects`, `@utils` y `@locators`, sin rutas
   relativas ni imports de `browser` sin uso.
+- limpieza de placeholders vacíos al arrancar sin eliminar recordings con
+  scenario, acciones o evidencia adicional.
 
 ## Control manual
 

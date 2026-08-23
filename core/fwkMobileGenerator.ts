@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { translateToEnglish } from './englishIdentifiers';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, toGherkinLine } from './models';
 import { screenObjectNames } from './semanticNaming';
@@ -505,8 +506,12 @@ export class FwkMobileGenerator {
         if (row.methodName && /^[a-z][A-Za-z0-9]*$/.test(row.methodName)) {
             return row.methodName;
         }
-        const words = row.text
-            .replace(/<[^>]+>/g, '')
+        // El texto del step es espanol a proposito (lo lee el QA); el nombre del
+        // metodo no: el codigo del framework se nombra en ingles.
+        const source = row.text.replace(/<[^>]+>/g, '');
+        const translated = translateToEnglish(source).name;
+        if (translated) return translated;
+        const words = source
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^A-Za-z0-9]+/g, ' ')
             .trim().split(/\s+/).filter(Boolean);

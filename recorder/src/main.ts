@@ -142,6 +142,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    const cleanup = automationRecordingStore.pruneEmptyRecordings();
+    if (cleanup.removed.length) {
+        console.log(`[Main] Grabaciones vacías eliminadas: ${cleanup.removed.length}`);
+    }
     console.log('[Main] Abriendo ventana...');
     createWindow();
     console.log('[Main] Ventana lista');

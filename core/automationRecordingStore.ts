@@ -22,6 +22,11 @@ interface RecordingManifest extends RecordingContext {
     actionCount: number;
 }
 
+export interface EmptyRecordingCleanup {
+    removed: string[];
+    skipped: number;
+}
+
 function atomicJson(file: string, value: unknown): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
@@ -86,6 +91,54 @@ export class AutomationRecordingStore {
     private manifest: RecordingManifest | null = null;
 
     constructor(private readonly recordingsRoot = projectPaths.recordings) {}
+
+    /**
+     * Elimina placeholders creados por sesiones que nunca registraron una
+     * acción. La comprobación es deliberadamente estricta: una carpeta con
+     * scenario, archivos adicionales o estado inconsistente se conserva para
+     * no perder evidencia recuperable.
+     */
+    pruneEmptyRecordings(): EmptyRecordingCleanup {
+        if (!fs.existsSync(this.recordingsRoot)) return { removed: [], skipped: 0 };
+        const removed: string[] = [];
+        let skipped = 0;
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(this.recordingsRoot, { withFileTypes: true });
+        } catch {
+            return { removed, skipped };
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            const directory = path.join(this.recordingsRoot, entry.name);
+            if (directory === this.activeDirectory) {
+                skipped++;
+                continue;
+            }
+            try {
+                const manifest = readJson<RecordingManifest>(path.join(directory, 'manifest.json'));
+                const actions = readJson<RecordedStep[]>(path.join(directory, 'actions.json'));
+                const files = fs.readdirSync(directory).filter(name => name !== '.DS_Store');
+                const isPlaceholder = Boolean(
+                    manifest?.recordingId
+                    && manifest.actionCount === 0
+                    && Array.isArray(actions)
+                    && actions.length === 0
+                    && !files.includes('scenario.json')
+                    && files.every(name => name === 'manifest.json' || name === 'actions.json')
+                );
+                if (!isPlaceholder) {
+                    skipped++;
+                    continue;
+                }
+                fs.rmSync(directory, { recursive: true });
+                removed.push(entry.name);
+            } catch {
+                skipped++;
+            }
+        }
+        return { removed, skipped };
+    }
 
     start(context: RecordingContext): RecordingManifest {
         const now = new Date().toISOString();
