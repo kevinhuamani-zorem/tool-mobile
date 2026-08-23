@@ -20,6 +20,18 @@ agentes de IA están en [`AGENTS.md`](AGENTS.md).
 > locales quedan en `config/` y las capturas temporales en `runtime/`; ambas
 > están excluidas de Git.
 
+## Aislamiento del repositorio
+
+En la rama de desarrollo del recorder, Git versiona exclusivamente
+`tools/visual-recorder` y el `.gitignore` raíz que mantiene ese límite. El
+framework `fwk-mobile-test` permanece en disco como workspace local para
+escaneo, ejecución y generación, pero sus Features, Steps, Screen Objects,
+locators, datos y configuración no forman parte del repositorio del recorder.
+
+Esto significa que `git status` no debe mostrar cambios del framework. Para
+usar otro checkout local basta con configurar `TARGET_PROJECT`; no se debe
+copiar ni versionar el proyecto destino dentro del recorder.
+
 ## Modos de workspace
 
 El recorder puede ejecutarse sin estar dentro de `fwk-mobile-test`:
