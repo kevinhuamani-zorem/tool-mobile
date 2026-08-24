@@ -12,6 +12,11 @@ const { AutomationPackageBuilder, BlockingGapError } = require('../dist/core/aut
 const { AutomationAgentLauncher } = require('../dist/core/automationAgentLauncher');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { RecordingCoverageAnalyzer } = require('../dist/core/recordingCoverageAnalyzer');
+const { frameworkContract } = require('../dist/core/frameworkContract');
+const { inferredStrategy } = require('../dist/core/locatorStrategy');
+const { projectPaths } = require('../dist/core/projectPaths');
+
+const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
 const { FrameworkScanner } = require('../dist/core/frameworkScanner');
 const { ReuseAnalyzer } = require('../dist/core/reuseAnalyzer');
@@ -77,8 +82,10 @@ test('scanner y catálogo resuelven las cuatro capas de un Feature anidado por r
     assert.ok(interoperabilidad.featureScopes.some(scope => scope.path === 'tapp/payment'));
     const catalog = new ReuseAnalyzer().getCatalog('interoperabilidad', 'ios', 'tapp/payment');
     assert.equal(catalog.featureScope, 'tapp/payment');
-    assert.equal(catalog.scenarios.length, 1);
-    const related = catalog.scenarios[0].relatedArtifacts;
+    // Se ancla al escenario que interesa, no al conteo: el squad suma casos.
+    const subhome = catalog.scenarios.find(item => /subhome/i.test(item.name || ''));
+    assert.ok(subhome, 'el catálogo debe resolver el escenario de subhome');
+    const related = subhome.relatedArtifacts;
     assert.ok(related.steps.includes('features/yape-steps-definitions/interoperabilidad/tapp-payments.steps.ts'));
     assert.ok(related.screens.includes('screenobjects/interoperabilidad/tapp-subhome.screen.ts'));
     assert.ok(related.locators.includes('resources/locators/interoperabilidad/tapp-subhome.locator.json'));
@@ -446,6 +453,9 @@ test('resolver filtra por featureScope y extiende artefactos relacionados sin du
                 locators: [{
                     name: 'btnFiltrarMovimientos', selector: 'id=filter',
                     androidSelector: 'id=filter', iosSelector: '',
+                    // La estrategia la declara el getter que lo consume; sin ella
+                    // el resolver no puede afirmar que el locator sirva.
+                    androidStrategy: 'XPATH',
                     file: 'resources/locators/payment/filtro-movimientos.locator.json',
                     module: 'payment/filtro-movimientos', squad: 'payment',
                     scope: 'squad', platform: 'android'
@@ -613,6 +623,7 @@ test('resolver reutiliza las cuatro capas cuando encuentra un caso equivalente d
     };
     const locator = (name, selector) => ({
         name, selector, androidSelector: selector, iosSelector: '', file: paths.locators,
+        androidStrategy: inferredStrategy(selector) || 'ID',
         module: 'payment/filtro-movimientos', squad: 'payment', scope: 'squad', platform: 'android'
     });
     const catalog = {
@@ -666,7 +677,9 @@ function validResponse(plan, recordingId = 'rec-test') {
         // viaja por Examples, nunca inlinado dentro del step.
         feature: 'Feature: Consulta de movimientos\n\n@miflujo @android\n  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario <username> inicia sesión en Yape\n    Then se muestra la lista de movimientos\n\n    Examples:\n      | username   |\n      | Usuario QA |\n',
         steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.verifyMovementsList(); });\n`,
-        screen: `import BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorFactory from '@utils/LocatorFactory.ts';\nimport { TypeLocator } from '@utils/Enums.ts';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends BaseScreen { private get movementsList(): string { return LocatorFactory.getElement(TypeLocator.XPATH, Locators.consultaIos.movementsList, TypeLocator.ID, Locators.consultaAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForDisplayed(this.movementsList); } }\nexport default new ${screenClass}();\n`,
+        // El fixture se arma desde el contrato real del framework: si el
+        // framework renombra o mueve un anclaje, el test lo sigue.
+        screen: `import ${CONTRACT.baseScreenClass} from '${CONTRACT.baseScreenImport}';\nimport ${CONTRACT.locatorFactorySymbol} from '${CONTRACT.locatorFactoryImport}';\nimport { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends ${CONTRACT.baseScreenClass} { private get movementsList(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaIos.movementsList, ${CONTRACT.typeLocatorSymbol}.ID, Locators.consultaAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForDisplayed(this.movementsList); } }\nexport default new ${screenClass}();\n`,
         locators: JSON.stringify({ consultaAndroid: { movementsList: 'id=movimientos' }, consultaIos: { movementsList: '' } }, null, 2)
     };
     return {
@@ -726,7 +739,7 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     const relativeImports = validResponse(resolved.plan);
     relativeImports.files.find(file => file.layer === 'screen').content =
         relativeImports.files.find(file => file.layer === 'screen').content
-            .replace("'@screenobjects/commons/base.screen.ts'", "'../commons/base.screen.ts'");
+            .replace(`'${CONTRACT.baseScreenImport}'`, "'../commons/base.screen.ts'");
     const relativeValidation = validator.validate(resolved.scenario, resolved.plan, relativeImports);
     assert.equal(relativeValidation.valid, false);
     assert.equal(relativeValidation.errors.some(error =>
@@ -894,10 +907,13 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /Gherkin declarativo/);
     assert.match(instructions, /Agrupa acciones técnicas consecutivas/);
     assert.match(instructions, /contextHint\/elementIntent es solo una pista libre/);
-    // Los anclajes del framework llegan resueltos, no como convencion memorizada.
-    assert.match(instructions, /@screenobjects\/commons\/base\.screen\.ts/);
-    assert.match(instructions, /@utils\/LocatorFactory\.ts/);
-    assert.match(instructions, /@utils\/Enums\.ts/);
+    // Los anclajes llegan resueltos del framework real, no memorizados: el test
+    // los lee del mismo contrato para no romperse cuando el framework se mueva.
+    const contract = frameworkContract(projectPaths.frameworkRoot);
+    assert.ok(instructions.includes(contract.baseScreenImport));
+    assert.ok(instructions.includes(contract.locatorFactoryImport));
+    assert.ok(instructions.includes(contract.typeLocatorImport));
+    assert.ok(instructions.includes(contract.locatorFactorySymbol));
     assert.match(instructions, /Importa browser.*únicamente si/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);
@@ -913,7 +929,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     const response = JSON.parse(fs.readFileSync(responseFile, 'utf8'));
     const screen = response.files.find(file => file.layer === 'screen');
     screen.content = screen.content.replace(
-        "'@screenobjects/commons/base.screen.ts'",
+        `'${CONTRACT.baseScreenImport}'`,
         "'../commons/base.screen.ts'"
     );
     fs.writeFileSync(responseFile, JSON.stringify(response));

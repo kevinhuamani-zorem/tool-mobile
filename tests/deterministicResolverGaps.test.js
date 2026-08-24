@@ -1,14 +1,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { DeterministicResolver } = require('../dist/core/deterministicResolver');
+const { inferredStrategy } = require('../dist/core/locatorStrategy');
 
 const SCREEN = 'screenobjects/payment/muestre-nombre-yapero-yapear.screen.ts';
 const LOCATORS = 'resources/locators/payment/muestre-nombre-yapero-yapear.locator.json';
 const STEPS = 'features/yape-steps-definitions/payment/muestre-nombre-yapero-yapear.steps.ts';
 
-function locator(name, selector) {
+// El getter del Screen Object declara la estrategia; sin ella el resolver no
+// puede afirmar que el locator sirva y no lo reutiliza.
+function locator(name, selector, strategy) {
     return {
         name, selector, androidSelector: selector, iosSelector: '',
+        androidStrategy: strategy || inferredStrategy(selector) || 'ID',
         file: LOCATORS, module: 'muestre-nombre-yapero-yapear',
         squad: 'payment', scope: 'squad', platform: 'android',
     };
@@ -138,16 +142,55 @@ test('avisa del método equivalente que ya existe en el módulo target', () => {
     assert.match(gap.description, /ya expone validarNombreDelYapero/);
 });
 
-test('reutiliza el método existente cuando la coincidencia es fuerte', () => {
+// Un nombre parecido no habilita reutilizar: `~lblOtroNodo` no es el locator de
+// `validarNombreDelYapero`, y darlo por bueno era afirmar sin evidencia que ese
+// identificador sirve para este caso.
+test('no reutiliza por parecido de nombre cuando el selector es otro', () => {
     const result = new DeterministicResolver(catalogWithExistingModule()).resolve(scenario([
         ...FLUJO_COMPLETO.slice(0, 3),
         action('VERIFICAR_TEXTO', 'validar nombre del yapero', '~lblOtroNodo', 'x'),
     ]));
 
     const assertion = result.plan.resolutions[3];
-    assert.equal(assertion.resolution, 'reuse');
-    assert.equal(assertion.existingMethod.name, 'validarNombreDelYapero');
-    assert.match(assertion.reason, /ya expone validarNombreDelYapero/);
+    assert.equal(assertion.resolution, 'create');
+    assert.equal(assertion.existingMethod.name, 'validarNombreDelYapero',
+        'el candidato se conserva como contexto');
+    const gap = result.unresolvedContext.gaps.find(item => item.id === 'gap-duplicate-4');
+    assert.ok(gap, 'se propone al QA, no se decide solo');
+    assert.match(gap.requiredOutput, /mismo identificador y la misma estrategia/);
+});
+
+// El mismo valor con la misma estrategia si es el mismo selector.
+test('reutiliza cuando el identificador y la estrategia coinciden', () => {
+    const result = new DeterministicResolver(catalogWithExistingModule()).resolve(scenario([
+        action('CLICK', 'yapear', '~Yapear'),
+        action('VERIFICAR_EXISTE', 'pantalla de yapeo', 'android=new UiSelector().text("Nuevo número")'),
+    ]));
+
+    assert.equal(result.plan.resolutions[0].resolution, 'reuse');
+    assert.equal(result.plan.resolutions[0].locatorName, 'yapear');
+    assert.match(result.plan.resolutions[0].reason, /misma estrategia \(ID\)/);
+    assert.equal(result.plan.resolutions[1].resolution, 'reuse');
+    assert.match(result.plan.resolutions[1].reason, /misma estrategia \(ANDROID\)/);
+});
+
+// Mismo texto, otra estrategia: es otro selector y no se puede dar por bueno.
+test('no reutiliza cuando el tipo difiere aunque el contenido coincida', () => {
+    const catalog = {
+        getCatalog: () => ({
+            squad: 'payment', featureScope: '', platform: 'android',
+            stepDefinitions: [], features: [], scenarios: [], screenMethods: [],
+            locators: [locator('shortcutTapp', 'Tapp', 'XPATH')],
+        }),
+    };
+    const result = new DeterministicResolver(catalog).resolve(scenario([
+        action('CLICK', 'ingresar a tapp', '~Tapp'),
+        action('VERIFICAR_EXISTE', 'pantalla tapp', 'android=new UiSelector().text("TAPP")'),
+    ]));
+
+    assert.equal(result.plan.resolutions[0].resolution, 'create');
+    // No se pierde: llega al QA como candidato a duplicado.
+    assert.ok(result.unresolvedContext.gaps.some(gap => /^gap-duplicate-element/.test(gap.id)));
 });
 
 test('no inventa duplicados cuando el módulo target no tiene nada parecido', () => {
@@ -156,6 +199,98 @@ test('no inventa duplicados cuando el módulo target no tiene nada parecido', ()
         action('CLICK', 'compartir constancia por correo', '~btnCompartirCorreo'),
     ]));
 
-    assert.equal(result.unresolvedContext.gaps.some(gap => gap.id.startsWith('gap-duplicate')), false);
+    assert.equal(result.unresolvedContext.gaps.some(gap => /^gap-duplicate-\d/.test(gap.id)), false);
     assert.equal(result.plan.resolutions[3].resolution, 'create');
+});
+
+
+// El PR de Tapp: `~Tapp` no se parecia como texto a
+// `//android.widget.Button[@content-desc="Tapp"]`, asi que el resolver creaba un
+// duplicado y reportaba `deterministic` sin avisar de nada.
+test('avisa del duplicado cuando el mismo elemento se grabo con otra estrategia', () => {
+    const existentes = [
+        {
+            name: 'shortcutTapp', selector: '//android.widget.Button[@content-desc="Tapp"]',
+            androidSelector: '//android.widget.Button[@content-desc="Tapp"]',
+            iosSelector: '//XCUIElementTypeButton[@name="Tapp"]',
+            file: 'resources/locators/home/home.locator.json', module: 'home/home',
+            squad: 'home', scope: 'home', platform: 'android',
+        },
+        {
+            // Vacio en Android: solo se ve si el indice lee las dos plataformas.
+            name: 'btnViewAllAccounts', selector: '', androidSelector: '',
+            iosSelector: '//XCUIElementTypeButton[@name="Ver todas"]',
+            file: 'resources/locators/interoperabilidad/tapp-subhome.locator.json',
+            module: 'interoperabilidad/tapp-subhome',
+            squad: 'interoperabilidad', scope: 'squad', platform: 'android',
+        },
+    ];
+    const catalog = {
+        getCatalog: (squad, platform) => ({
+            squad, platform, stepDefinitions: [], screenMethods: [], features: [],
+            locators: existentes,
+        }),
+    };
+    const scenario = {
+        schemaVersion: 1, pipelineVersion: '1.0.0', recordingId: 'rec-tapp', revision: 1,
+        fingerprint: 'f', createdAt: new Date(0).toISOString(), squad: 'interoperabilidad',
+        platform: 'android', environment: 'qa',
+        objective: 'ingresar a tapp y ver todas las cuentas',
+        acceptanceCriteria: 'se muestra la pantalla de todas las cuentas',
+        request: {
+            squad: 'interoperabilidad', featureName: '', scenarioName: '', fileName: '',
+            locatorModule: '', caseId: 'TC-10140', pathType: 'Happy Path', tag: 'interop',
+            dataName: 'QA', platform: 'android', examples: {}, scenarioRows: [],
+        },
+        actions: [
+            { action: 'CLICK', selector: '~Tapp', selectorVerified: true, contextHint: 'ingresar a tapp', value: '', sequence: 1 },
+            { action: 'CLICK', selector: '~Ver todas', selectorVerified: true, contextHint: 'ver todas las cuentas', value: '', sequence: 2 },
+            { action: 'VERIFICAR_EXISTE', selector: 'android=new UiSelector().text("Todas tus cuentas")', selectorVerified: true, contextHint: 'pantalla todas las cuentas', value: '', sequence: 3 },
+        ],
+    };
+
+    const result = new DeterministicResolver(catalog).resolve(scenario);
+    const duplicados = result.unresolvedContext.gaps.filter(gap => /^gap-duplicate-element/.test(gap.id));
+    assert.equal(duplicados.length, 2, 'una por cada elemento ya existente');
+    assert.match(duplicados[0].description, /home\/home\.shortcutTapp/);
+    assert.match(duplicados[1].description, /tapp-subhome\.btnViewAllAccounts/);
+    assert.match(duplicados[1].description, /sin valor Android/,
+        'reutilizarlo tal cual romperia Android: hay que completarlo primero');
+    // Deja de ser una generacion silenciosa.
+    assert.equal(result.plan.status, 'needs-agent');
+    // La ultima accion no comparte identidad con nada: no debe inventar un gap.
+    assert.equal(duplicados.some(gap => gap.sequence === 3), false);
+});
+
+test('no propone duplicado contra el modulo que se esta escribiendo', () => {
+    const propio = {
+        name: 'enterTappOption', selector: '~Tapp', androidSelector: '~Tapp', iosSelector: '',
+        file: 'resources/locators/interoperabilidad/tapp-accounts.locator.json',
+        module: 'interoperabilidad/tapp-accounts', squad: 'interoperabilidad',
+        scope: 'squad', platform: 'android',
+    };
+    const catalog = {
+        getCatalog: (squad, platform) => ({
+            squad, platform, stepDefinitions: [], screenMethods: [], features: [], locators: [propio],
+        }),
+    };
+    const scenario = {
+        schemaVersion: 1, pipelineVersion: '1.0.0', recordingId: 'rec-2', revision: 1,
+        fingerprint: 'f', createdAt: new Date(0).toISOString(), squad: 'interoperabilidad',
+        platform: 'android', environment: 'qa', objective: 'ingresar a tapp',
+        acceptanceCriteria: 'se muestra tapp',
+        request: {
+            squad: 'interoperabilidad', featureName: '', scenarioName: '', fileName: '',
+            locatorModule: 'tapp-accounts', caseId: 'TC-1', pathType: 'Happy Path',
+            tag: 'interop', dataName: 'QA', platform: 'android', examples: {}, scenarioRows: [],
+        },
+        actions: [
+            { action: 'VERIFICAR_EXISTE', selector: '~Tapp2', selectorVerified: true, contextHint: 'pantalla tapp dos', value: '', sequence: 1 },
+        ],
+    };
+    const result = new DeterministicResolver(catalog).resolve(scenario);
+    assert.equal(
+        result.unresolvedContext.gaps.some(gap => /^gap-duplicate-element/.test(gap.id)),
+        false
+    );
 });

@@ -24,7 +24,19 @@ export interface FrameworkContract {
     baseScreenImport: string;
     baseScreenClass: string;
     locatorFactoryImport: string;
+    /**
+     * Nombre real de la clase que resuelve locators. El framework la renombro de
+     * `LocatorFactory` a `LocatorProvider`, y el generador la escribe en cada
+     * getter: sin esto emite codigo que no compila.
+     */
+    locatorFactorySymbol: string;
     typeLocatorImport: string;
+    typeLocatorSymbol: string;
+    /**
+     * Extension con la que el framework importa Screen Objects. Es la que usan
+     * los Steps generados; los anclajes traen la suya, que puede diferir.
+     */
+    importExtension: string;
     /** Anclajes que no se encontraron y quedaron en su valor por defecto. */
     warnings: string[];
 }
@@ -47,7 +59,10 @@ const DEFAULTS = {
     baseScreenImport: '@screenobjects/commons/base.screen.ts',
     baseScreenClass: 'BaseScreen',
     locatorFactoryImport: '@utils/LocatorFactory.ts',
+    locatorFactorySymbol: 'LocatorFactory',
     typeLocatorImport: '@utils/Enums.ts',
+    typeLocatorSymbol: 'TypeLocator',
+    importExtension: '.ts',
 };
 
 const SCAN_ROOTS = ['screenobjects', 'support', 'features'];
@@ -88,6 +103,66 @@ function walk(directory: string, onFile: (file: string) => void): void {
     }
 }
 
+interface ExtensionCounts { '.ts': number; '.js': number }
+
+/**
+ * Como escribe el framework sus imports internos, por destino.
+ *
+ * `allowImportingTsExtensions` deja convivir `.ts` y `.js`, y este repo usa las
+ * dos con criterios distintos: los Screen Objects importan la infra comun con
+ * `.js` (74 de 74) pero los Steps importan Screen Objects con `.ts` (115 de
+ * 123). Una sola extension global generaria imports que no se parecen a los que
+ * ya estan, asi que se indexa por ruta y se cae al prefijo de alias.
+ */
+class ExtensionIndex {
+    private readonly byPath = new Map<string, ExtensionCounts>();
+    private readonly byAlias = new Map<string, ExtensionCounts>();
+    private readonly total: ExtensionCounts = { '.ts': 0, '.js': 0 };
+
+    constructor(frameworkRoot: string) {
+        for (const root of ['screenobjects', 'features', 'support']) {
+            walk(path.join(frameworkRoot, root), file => this.indexFile(file));
+        }
+    }
+
+    private indexFile(file: string): void {
+        let content: string;
+        try {
+            content = fs.readFileSync(file, 'utf-8');
+        } catch {
+            return;
+        }
+        for (const [, specifier] of content.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+            const extension = specifier.endsWith('.ts') ? '.ts' : specifier.endsWith('.js') ? '.js' : '';
+            if (!extension) continue;
+            const bare = specifier.slice(0, -extension.length);
+            this.bump(this.byPath, bare, extension);
+            this.total[extension]++;
+            const alias = specifier.startsWith('@') ? specifier.split('/')[0] : '';
+            if (alias) this.bump(this.byAlias, alias, extension);
+        }
+    }
+
+    private bump(target: Map<string, ExtensionCounts>, key: string, extension: '.ts' | '.js'): void {
+        const entry = target.get(key) || { '.ts': 0, '.js': 0 };
+        entry[extension]++;
+        target.set(key, entry);
+    }
+
+    private pick(counts?: ExtensionCounts): string | undefined {
+        if (!counts || counts['.ts'] === counts['.js']) return undefined;
+        return counts['.js'] > counts['.ts'] ? '.js' : '.ts';
+    }
+
+    /** Extension para un import por alias sin extension, del mas preciso al mas general. */
+    for(specifierWithoutExtension: string): string {
+        return this.pick(this.byPath.get(specifierWithoutExtension))
+            || this.pick(this.byAlias.get(specifierWithoutExtension.split('/')[0]))
+            || this.pick(this.total)
+            || '.ts';
+    }
+}
+
 /** Convierte una ruta relativa del framework en un import por alias. */
 export function aliasImport(relative: string, aliases: Record<string, string>): string | undefined {
     const normalized = relative.replace(/\\/g, '/').replace(/^\.\//, '');
@@ -114,8 +189,12 @@ function resolve(frameworkRoot: string): FrameworkContract {
     // Se busca por la declaracion, no por la ruta: asi mover el archivo no rompe.
     const anchors: Record<string, { pattern: RegExp; file?: string; capture?: string }> = {
         baseScreen: { pattern: /export\s+default\s+abstract\s+class\s+([A-Za-z_$][\w$]*)/ },
-        locatorFactory: { pattern: /export\s+default\s+class\s+LocatorFactory\b/ },
-        typeLocator: { pattern: /export\s+enum\s+TypeLocator\b/ },
+        // Por forma, no por nombre: la clase que expone `static getElement` es
+        // la que resuelve locators, se llame LocatorFactory o LocatorProvider.
+        locatorFactory: {
+            pattern: /export\s+default\s+class\s+([A-Za-z_$][\w$]*)[^]*?\bstatic\s+getElement\s*\(/,
+        },
+        typeLocator: { pattern: /export\s+enum\s+([A-Za-z_$][\w$]*Locator[\w$]*)\b/ },
     };
     const pending = new Set(Object.keys(anchors));
     for (const root of SCAN_ROOTS) {
@@ -138,6 +217,7 @@ function resolve(frameworkRoot: string): FrameworkContract {
         });
     }
 
+    const extensions = new ExtensionIndex(frameworkRoot);
     const importFor = (key: string, fallback: string): string => {
         const relative = anchors[key].file;
         const specifier = relative ? aliasImport(relative, aliases) : undefined;
@@ -145,7 +225,10 @@ function resolve(frameworkRoot: string): FrameworkContract {
             warnings.push(`No se encontró ${key} en el framework: se usa ${fallback}.`);
             return fallback;
         }
-        return specifier;
+        // El archivo en disco es .ts; el import se escribe como el framework
+        // escribe los imports de ESE destino.
+        const bare = specifier.replace(/\.tsx?$/, '');
+        return `${bare}${extensions.for(bare)}`;
     };
 
     return {
@@ -153,7 +236,10 @@ function resolve(frameworkRoot: string): FrameworkContract {
         baseScreenImport: importFor('baseScreen', DEFAULTS.baseScreenImport),
         baseScreenClass: anchors.baseScreen.capture || DEFAULTS.baseScreenClass,
         locatorFactoryImport: importFor('locatorFactory', DEFAULTS.locatorFactoryImport),
+        locatorFactorySymbol: anchors.locatorFactory.capture || DEFAULTS.locatorFactorySymbol,
         typeLocatorImport: importFor('typeLocator', DEFAULTS.typeLocatorImport),
+        typeLocatorSymbol: anchors.typeLocator.capture || DEFAULTS.typeLocatorSymbol,
+        importExtension: extensions.for('@screenobjects/'),
         warnings,
     };
 }

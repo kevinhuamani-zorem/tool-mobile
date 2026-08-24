@@ -404,6 +404,22 @@ export class AutomationResponseValidator {
                             ? [contract.locatorFactoryImport, contract.typeLocatorImport, expectedLocatorSource]
                             : []),
                     ];
+                    // El framework renombro la clase resolutora (LocatorFactory ->
+                    // LocatorProvider). Importar la ruta correcta pero invocar el
+                    // nombre viejo compila mal y el import queda sin uso.
+                    if (expectedLocatorSource) {
+                        for (const [symbol, label] of [
+                            [contract.locatorFactorySymbol, 'resolutor de locators'],
+                            [contract.typeLocatorSymbol, 'enum de estrategias'],
+                        ]) {
+                            if (new RegExp(`\\b${symbol}\\b`).test(screenContent)) continue;
+                            errors.push({
+                                code: 'framework-symbol',
+                                message: `El Screen Object no usa el ${label} de este framework: se llama ${symbol}.`,
+                                file: screenPlan.path,
+                            });
+                        }
+                    }
                     for (const requiredSource of requiredSources) {
                         if (!importsFrom(screenContent, requiredSource)) {
                             errors.push({

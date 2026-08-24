@@ -31,7 +31,9 @@ const CANONICAL = {
   }
 }`,
     'screenobjects/commons/base.screen.ts': 'export default abstract class BaseScreen {}\n',
-    'support/utils/LocatorFactory.ts': 'export default class LocatorFactory {}\n',
+    // La deteccion es por forma: la clase que expone `static getElement`.
+    'support/utils/LocatorFactory.ts':
+        'export default class LocatorFactory {\n  static getElement(a, b, c, d) { return b; }\n}\n',
     'support/utils/Enums.ts': 'export enum TypeLocator { XPATH }\n',
 };
 
@@ -53,7 +55,8 @@ test('sigue al ancla cuando el framework la mueve o la renombra', () => {
         'tsconfig.json': CANONICAL['tsconfig.json'].replace('"@utils/*": ["support/utils/*"]',
             '"@helpers/*": ["support/helpers/*"]'),
         'screenobjects/base/AbstractScreen.ts': 'export default abstract class AbstractScreen {}\n',
-        'support/helpers/LocatorFactory.ts': 'export default class LocatorFactory {}\n',
+        'support/helpers/LocatorProvider.ts':
+            'export default class LocatorProvider {\n  static getElement(a, b, c, d) { return b; }\n}\n',
         'support/helpers/Enums.ts': 'export enum TypeLocator { XPATH }\n',
     });
     fs.rmSync(path.join(root, 'screenobjects/commons/base.screen.ts'));
@@ -62,7 +65,9 @@ test('sigue al ancla cuando el framework la mueve o la renombra', () => {
     const contract = frameworkContract(root);
     assert.equal(contract.baseScreenImport, '@screenobjects/base/AbstractScreen.ts');
     assert.equal(contract.baseScreenClass, 'AbstractScreen');
-    assert.equal(contract.locatorFactoryImport, '@helpers/LocatorFactory.ts');
+    assert.equal(contract.locatorFactoryImport, '@helpers/LocatorProvider.ts');
+    assert.equal(contract.locatorFactorySymbol, 'LocatorProvider',
+        'el simbolo viaja: el generador lo escribe en cada getter');
     assert.equal(contract.typeLocatorImport, '@helpers/Enums.ts');
     assert.deepEqual(contract.warnings, []);
 });
@@ -103,6 +108,28 @@ test('sin tsconfig usa los alias por convención y lo dice', () => {
     const contract = frameworkContract(buildFramework(layout));
     assert.equal(contract.baseScreenImport, '@screenobjects/commons/base.screen.ts');
     assert.equal(contract.warnings.some(warning => /tsconfig/.test(warning)), true);
+});
+
+// El repo actualizado escribe sus imports internos con .js en los 74 Screen
+// Objects; el codigo generado tiene que parecerse al que ya esta.
+test('toma la extension de import que usa el framework', () => {
+    clearFrameworkContractCache();
+    const conJs = buildFramework({
+        ...CANONICAL,
+        'screenobjects/payment/a.screen.ts':
+            "import LocatorFactory from '@utils/LocatorFactory.js';\n" +
+            "import { TypeLocator } from '@utils/Enums.js';\n",
+        'screenobjects/payment/b.screen.ts':
+            "import LocatorFactory from '@utils/LocatorFactory.js';\n",
+    });
+    const contract = frameworkContract(conJs);
+    assert.equal(contract.importExtension, '.js');
+    assert.equal(contract.locatorFactoryImport, '@utils/LocatorFactory.js');
+    assert.equal(contract.baseScreenImport, '@screenobjects/commons/base.screen.js');
+
+    clearFrameworkContractCache();
+    // Sin evidencia gana .ts, que es lo que el recorder generaba hasta ahora.
+    assert.equal(frameworkContract(buildFramework(CANONICAL)).importExtension, '.ts');
 });
 
 test('elige el alias mas especifico', () => {

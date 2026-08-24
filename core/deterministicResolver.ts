@@ -19,6 +19,8 @@ import { normalizeFeatureScope } from './featureScope';
 import { TECHNICAL_STOP_WORDS } from './selectorNormalization';
 import { spanishTokens, translateToEnglish, translateToSlug } from './englishIdentifiers';
 import { frameworkContract } from './frameworkContract';
+import { ElementIdentityIndex } from './elementIdentity';
+import { inferredStrategy, strategyOf, strategyValue } from './locatorStrategy';
 import { detectRepetition } from './repetitionDetector';
 import { projectPaths } from './projectPaths';
 
@@ -162,12 +164,38 @@ function inputParameterName(intent: string, sequence: number): string {
     return translateToEnglish(parts.join(' ')).name || camel(parts.join(' '), `value${sequence}`);
 }
 
-function exactLocator(catalog: SquadReuseCatalog, selector: string): LocatorInfo | undefined {
-    const target = selectorAliases(selector, catalog.platform);
-    return catalog.locators.find(locator =>
-        (locator.scope === 'squad' || locator.scope === 'home') &&
-        [...selectorAliases(locator.selector, catalog.platform)].some(alias => target.has(alias))
-    );
+/**
+ * Reutiliza un locator existente SOLO si es el mismo identificador con la misma
+ * estrategia.
+ *
+ * Antes comparaba cadenas normalizadas quitando el prefijo, asi que `~Tapp`
+ * (accessibility id) y un valor `Tapp` declarado como XPATH colapsaban al mismo
+ * alias. Que dos locators compartan el texto no prueba que el identificador
+ * funcione para este caso: si el tipo difiere, es otro selector.
+ *
+ * Cuando ningun Screen Object declara la estrategia de una clave no se puede
+ * afirmar nada, y no afirmar es no reutilizar. Ese candidato igual llega al QA
+ * por el gap de duplicado.
+ */
+function exactLocator(
+    catalog: SquadReuseCatalog,
+    selector: string
+): { locator: LocatorInfo; strategy: string } | undefined {
+    const wantedStrategy = strategyOf(selector, catalog.platform);
+    const wantedValue = strategyValue(selector);
+    if (!wantedValue) return undefined;
+    for (const locator of catalog.locators) {
+        if (locator.scope !== 'squad' && locator.scope !== 'home') continue;
+        const value = catalog.platform === 'ios' ? locator.iosSelector : locator.androidSelector;
+        if (strategyValue(value) !== wantedValue) continue;
+        // La declaracion del getter manda; si no existe, solo vale cuando el
+        // valor determina la estrategia por si mismo.
+        const declared = (catalog.platform === 'ios' ? locator.iosStrategy : locator.androidStrategy)
+            || inferredStrategy(value);
+        if (!declared || declared !== wantedStrategy) continue;
+        return { locator, strategy: declared };
+    }
+    return undefined;
 }
 
 function normalizeStepText(value: string): string {
@@ -327,7 +355,10 @@ function similarExistingMethods(
         .sort((left, right) => right.score - left.score);
 }
 
-const REUSE_METHOD_THRESHOLD = 0.7;
+/**
+ * Un metodo parecido NO habilita reutilizar: que el nombre se parezca no prueba
+ * que su locator sirva para este caso. Solo se propone al QA para que decida.
+ */
 const REVIEW_METHOD_THRESHOLD = 0.35;
 
 function bestArtifactBundle(
@@ -446,14 +477,15 @@ export class DeterministicResolver {
             if (reused) {
                 return {
                     sequence, action: step.action, intent,
-                    resolution: 'reuse', locatorName: reused.name,
-                    selector: reused.selector, confidence: 1,
+                    resolution: 'reuse', locatorName: reused.locator.name,
+                    selector: reused.locator.selector, confidence: 1,
                     source: {
-                        file: reused.file,
-                        module: reused.module,
-                        scope: reused.scope as 'squad' | 'home',
+                        file: reused.locator.file,
+                        module: reused.locator.module,
+                        scope: reused.locator.scope as 'squad' | 'home',
                     },
-                    reason: 'Coincidencia exacta del selector normalizado en squad/Home.',
+                    reason: `Mismo identificador y misma estrategia (${reused.strategy}) que ` +
+                        `${reused.locator.module}.${reused.locator.name}.`,
                 };
             }
             if (selector && step.selectorVerified !== false) {
@@ -567,6 +599,47 @@ export class DeterministicResolver {
                 requiredOutput: 'Renombralos a ingles y usa el mismo nombre en las tres capas (clave del ' +
                     'locator, getter y metodo del Screen Object). El selector y la decision reuse/create no ' +
                     'cambian, solo el nombre. El Gherkin sigue en espanol.',
+            });
+        }
+
+        // Duplicados por identidad de elemento, no por cadena de selector. Es lo
+        // que dejo pasar el PR de Tapp: `~Tapp` y el `content-desc="Tapp"` de
+        // home apuntan al mismo boton pero no se parecen como texto.
+        const identityIndex = new ElementIdentityIndex(
+            catalog.locators.filter(locator => locator.scope === 'squad' || locator.scope === 'home')
+        );
+        const ownModule = `${rawScenario.squad}/${normalizedRequest.locatorModule}`;
+        for (const resolution of resolutions) {
+            if (resolution.resolution !== 'create' || !resolution.selector) continue;
+            const platformValue = (candidate: { androidSelector: string; iosSelector: string }) =>
+                rawScenario.platform === 'ios' ? candidate.iosSelector : candidate.androidSelector;
+            const matches = identityIndex
+                .find(resolution.selector, candidate => candidate.module === ownModule)
+                // Primero los que ya sirven en esta plataforma: reutilizarlos es
+                // un cambio de una linea. Los vacios exigen completarlos antes.
+                .sort((a, b) => Number(Boolean(platformValue(b))) - Number(Boolean(platformValue(a))));
+            if (!matches.length) continue;
+            const candidates = matches.slice(0, 4);
+            const omitted = matches.length - candidates.length;
+            const gapId = `gap-duplicate-element-${resolution.sequence}`;
+            resolution.gapId = resolution.gapId || gapId;
+            gaps.push({
+                id: gapId,
+                sequence: resolution.sequence,
+                type: 'semantic-naming',
+                description:
+                    `La accion ${resolution.sequence} crearia "${resolution.locatorName}" con el selector ` +
+                    `${resolution.selector}, pero ya existen locators que fijan el mismo valor: ` +
+                    candidates.map(candidate =>
+                        `${candidate.module}.${candidate.name} (${candidate.scope}, "${candidate.sharedValue}"` +
+                        `${candidate.androidSelector ? '' : ', sin valor Android'})`
+                    ).join('; ') +
+                    (omitted ? ` y ${omitted} mas.` : '.'),
+                requiredOutput:
+                    'Comprueba si alguno es el mismo elemento. Si lo es, reutilizalo en vez de crear otra ' +
+                    'fuente de verdad; si el candidato no tiene valor para esta plataforma, completa ese ' +
+                    'locator existente en lugar de duplicarlo. Si son elementos distintos que comparten el ' +
+                    'texto, explica en que se diferencian y conserva el locator nuevo.',
             });
         }
 
@@ -708,21 +781,18 @@ export class DeterministicResolver {
                 const [best] = similarExistingMethods(catalog, reuseTarget.screen, resolution);
                 if (!best || best.score < REVIEW_METHOD_THRESHOLD) continue;
                 resolution.existingMethod = best;
-                if (best.score >= REUSE_METHOD_THRESHOLD) {
-                    resolution.resolution = 'reuse';
-                    resolution.confidence = best.score;
-                    resolution.locatorName = best.locatorKeys[0] || resolution.locatorName;
-                    resolution.reason = `${reuseTarget.screen} ya expone ${best.signature} para esta intención.`;
-                    continue;
-                }
                 const gapId = `gap-duplicate-${resolution.sequence}`;
                 resolution.gapId = gapId;
                 gaps.push({
                     id: gapId,
                     sequence: resolution.sequence,
                     type: 'semantic-naming',
-                    description: `${reuseTarget.screen} ya expone ${best.signature}, parecido a "${resolution.intent}" (${best.score}).`,
-                    requiredOutput: `Reutiliza ${best.name} si valida lo mismo; si no, explica en qué se diferencia y usa un nombre que lo distinga.`,
+                    description: `${reuseTarget.screen} ya expone ${best.signature}, con un nombre parecido a ` +
+                        `"${resolution.intent}" (${best.score}). El parecido es solo del nombre: ` +
+                        'no dice nada sobre si su locator sirve para este caso.',
+                    requiredOutput: `Reutiliza ${best.name} unicamente si comprobaste que apunta al mismo ` +
+                        'elemento con el mismo identificador y la misma estrategia; si no, conserva el locator ' +
+                        'nuevo y usa un nombre que lo distinga.',
                 });
             }
         }

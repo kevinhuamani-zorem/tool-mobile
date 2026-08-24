@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
+const { frameworkContract } = require('../dist/core/frameworkContract');
+const { projectPaths } = require('../dist/core/projectPaths');
+
+const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
+const EXT = CONTRACT.importExtension;
 
 test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => {
     const actions = [
@@ -63,12 +68,15 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.match(preview.stepContent, /movementsScreen\.revisarMovimientos\(\)/);
     assert.match(preview.stepContent, /movementsScreen\.validarMovimiento\(movimiento\)/);
     assert.match(preview.stepContent, /import movementsScreen from/);
-    assert.match(preview.stepContent, /from '@screenobjects\/payment\/movements\.screen\.ts'/);
+    assert.ok(preview.stepContent.includes(`from '@screenobjects/payment/movements.screen${EXT}'`));
     assert.doesNotMatch(preview.stepContent, /generatedScreen/);
-    assert.match(preview.screenContent, /from '@screenobjects\/commons\/base\.screen\.ts'/);
+    // Imports y símbolos salen del framework real, no de una constante del test.
+    assert.ok(preview.screenContent.includes(`from '${CONTRACT.baseScreenImport}'`));
     assert.match(preview.screenContent, /^\/\/ Generado por Appium Visual Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
-    assert.match(preview.screenContent, /from '@utils\/LocatorFactory\.ts'/);
-    assert.match(preview.screenContent, /from '@utils\/Enums\.ts'/);
+    assert.ok(preview.screenContent.includes(`from '${CONTRACT.locatorFactoryImport}'`));
+    assert.ok(preview.screenContent.includes(`from '${CONTRACT.typeLocatorImport}'`));
+    assert.ok(preview.screenContent.includes(`${CONTRACT.locatorFactorySymbol}.getElement(`),
+        'el getter invoca la clase con el nombre que usa este framework');
     assert.match(preview.screenContent, /from '@locators\/payment\/movements\.locator\.json'/);
     assert.doesNotMatch(preview.screenContent, /@wdio\/globals/);
     assert.doesNotMatch(preview.screenContent, /from ['"]\.\.?\//);

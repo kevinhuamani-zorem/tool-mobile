@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { indexDeclaredStrategies } from './locatorStrategy';
 import ts from 'typescript';
 import path from 'path';
 import { projectPaths } from './projectPaths';
@@ -61,6 +62,12 @@ export interface LocatorInfo {
     iosSelector: string;
     androidBlock?: string;
     iosBlock?: string;
+    /**
+     * Estrategia declarada en el getter que consume la clave. El JSON solo
+     * guarda el valor; sin el tipo no se puede afirmar que un locator sirva.
+     */
+    androidStrategy?: string;
+    iosStrategy?: string;
     file: string;
     module: string;
     squad: string;
@@ -425,6 +432,7 @@ export class ReuseAnalyzer {
 
     private indexLocators(squad: string, platform: 'android' | 'ios'): LocatorInfo[] {
         const indexed: LocatorInfo[] = [];
+        const strategies = indexDeclaredStrategies();
         const sources: { directory: string; squad: string; scope: LocatorInfo['scope'] }[] = [
             { directory: projectPaths.locators, squad: 'global', scope: 'global' },
             { directory: path.join(projectPaths.locators, 'home'), squad: 'home', scope: 'home' },
@@ -475,6 +483,10 @@ export class ReuseAnalyzer {
                         ...Object.keys(iosBlock?.values || {})
                     ]);
                     for (const name of names) {
+                        const declared = strategies.get(`${path.relative(projectPaths.locators, file)
+                            .replace(/\\/g, '/')
+                            .replace(/\.locator\.json$/i, '')
+                            .replace(/\.json$/i, '')}#${name}`);
                         const androidValue = androidBlock?.values[name];
                         const iosValue = iosBlock?.values[name];
                         const androidSelector = typeof androidValue === 'string'
@@ -490,6 +502,8 @@ export class ReuseAnalyzer {
                             iosSelector,
                             androidBlock: androidBlock?.blockName,
                             iosBlock: iosBlock?.blockName,
+                            androidStrategy: declared?.android,
+                            iosStrategy: declared?.ios,
                             file: path.relative(projectPaths.frameworkRoot, file),
                             module: path.relative(projectPaths.locators, file)
                                 .replace(/\\/g, '/')

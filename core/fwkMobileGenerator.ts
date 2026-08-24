@@ -455,9 +455,9 @@ export class FwkMobileGenerator {
             const androidType = request.platform === 'android' ? activeType : 'XPATH';
             return [
                 `    private get ${name}(): string {`,
-                `        return LocatorFactory.getElement(`,
-                `            TypeLocator.${iosType}, Locators[${JSON.stringify(iosBlock)}].${name},`,
-                `            TypeLocator.${androidType}, Locators[${JSON.stringify(androidBlock)}].${name}`,
+                `        return ${contract.locatorFactorySymbol}.getElement(`,
+                `            ${contract.typeLocatorSymbol}.${iosType}, Locators[${JSON.stringify(iosBlock)}].${name},`,
+                `            ${contract.typeLocatorSymbol}.${androidType}, Locators[${JSON.stringify(androidBlock)}].${name}`,
                 `        );`,
                 `    }`
             ].join('\n');
@@ -488,8 +488,8 @@ export class FwkMobileGenerator {
             ...(usesBrowser ? [`import { browser } from '@wdio/globals';`] : []),
             `import ${contract.baseScreenClass} from '${baseImport}';`,
             ...(locators.length > 0 ? [
-                `import LocatorFactory from '${factoryImport}';`,
-                `import { TypeLocator } from '${enumsImport}';`,
+                `import ${contract.locatorFactorySymbol} from '${factoryImport}';`,
+                `import { ${contract.typeLocatorSymbol} } from '${enumsImport}';`,
                 `import Locators from '${locatorImport}' with { type: 'json' };`
             ] : []),
             '',
@@ -624,9 +624,12 @@ export class FwkMobileGenerator {
         if (!relative || relative === '..' || relative.startsWith('../')) {
             throw new Error(`No se puede crear alias fuera de ${root}: ${targetFile}`);
         }
+        const contract = frameworkContract(projectPaths.frameworkRoot);
         const fromRoot = path.relative(projectPaths.frameworkRoot, targetFile).replace(/\\/g, '/');
-        return aliasImport(fromRoot, frameworkContract(projectPaths.frameworkRoot).aliases)
-            || `${alias}/${relative}`;
+        const specifier = aliasImport(fromRoot, contract.aliases) || `${alias}/${relative}`;
+        // El Screen Object generado se importa como el framework importa los
+        // suyos; el JSON de locators conserva su extension.
+        return specifier.replace(/\.tsx?$/, contract.importExtension);
     }
 
     private stepExpression(text: string): string {

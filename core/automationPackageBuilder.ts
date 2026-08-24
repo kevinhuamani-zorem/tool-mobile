@@ -140,7 +140,7 @@ function instructions(result: ResolverResult): string {
         `- Si reuse-context.json contiene updateBaselines, abre únicamente su archivo reference dentro de baselines/, parte de ese contenido y añade solo lo faltante; no reemplaces ni borres APIs existentes.\n` +
         `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
-        `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion: ${contract.baseScreenClass} desde ${contract.baseScreenImport}, LocatorFactory desde ${contract.locatorFactoryImport} y TypeLocator desde ${contract.typeLocatorImport}. Copialos tal cual; no uses rutas relativas ni la ruta que recuerdes de otro caso.\n` +
+        `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion: ${contract.baseScreenClass} desde ${contract.baseScreenImport}, ${contract.locatorFactorySymbol} desde ${contract.locatorFactoryImport} y ${contract.typeLocatorSymbol} desde ${contract.typeLocatorImport}. Copialos tal cual, con esa extension: no uses rutas relativas ni el nombre que recuerdes de otro repo (la clase se llama ${contract.locatorFactorySymbol}, no LocatorFactory).\n` +
         `- Importa browser desde @wdio/globals únicamente si el Screen Object contiene una llamada browser.; no dejes imports sin uso.\n` +
         `- Incluye trazabilidad para las ${result.scenario.actions.length} acciones en orden.\n` +
         `- El Feature debe tener @tag, @${result.scenario.platform}, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
@@ -181,6 +181,8 @@ function regenerationInstructions(
 function verifierSource(contract: FrameworkContract): string {
     return `'use strict';\nconst FRAMEWORK_CONTRACT=${JSON.stringify({
         baseScreenClass: contract.baseScreenClass,
+        locatorFactorySymbol: contract.locatorFactorySymbol,
+        typeLocatorSymbol: contract.typeLocatorSymbol,
         requiredScreenImports: [
             contract.baseScreenImport,
             contract.locatorFactoryImport,
@@ -253,6 +255,7 @@ if(!new RegExp('class\\s+'+screenClass+'\\s+extends\\s+'+FRAMEWORK_CONTRACT.base
 const screenSources=[...screen.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
 const usesLocators=/Locators\s*[\[.]/.test(screen);
 for(const required of FRAMEWORK_CONTRACT.requiredScreenImports){if(!usesLocators&&required!==FRAMEWORK_CONTRACT.requiredScreenImports[0])continue;if(!screenSources.includes(required))errors.push('Falta el import del framework: '+required)}
+if(usesLocators){for(const [symbol,label] of [[FRAMEWORK_CONTRACT.locatorFactorySymbol,'resolutor de locators'],[FRAMEWORK_CONTRACT.typeLocatorSymbol,'enum de estrategias']]){if(!new RegExp('\\b'+symbol+'\\b').test(screen))errors.push('El Screen Object no usa el '+label+' del framework: se llama '+symbol)}}
 if(!new RegExp('export\\s+default\\s+new\\s+'+screenClass+'\\s*\\(').test(screen))errors.push('Singleton Screen Object inválido: esperado '+screenClass);
 if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bloque locator con guiones');
 const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
