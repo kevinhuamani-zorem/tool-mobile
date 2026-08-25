@@ -8,6 +8,7 @@ import {
 import { MobilePlatform } from './fwkMobileGenerator';
 import { projectPaths } from './projectPaths';
 
+import { roundTrip } from './locatorStrategy';
 export interface PlatformLocatorUpdate {
     recordingId: string;
     squad: string;
@@ -258,34 +259,26 @@ export class RecordingPlatformUpdater {
         return resolved;
     }
 
+    /**
+     * Esta es la puerta por la que el QA completa a mano el locator que falta
+     * en la otra plataforma, asi que escribe directo en el JSON del framework.
+     * El par (estrategia, valor) sale de `locatorStrategy` — antes habia aqui
+     * una tercera copia del recorte de prefijos, y arrastraba el mismo fallo:
+     * `id=com.yape.qa:id/btn` se guardaba como ID, o sea `~com.yape.qa:id/btn`,
+     * que es accesibilidad y no encuentra nada.
+     */
     private normalizeSelector(selector: string, platform: MobilePlatform): NormalizedSelector {
         const value = String(selector || '').trim();
         if (!value) throw new Error('El selector no puede estar vacío');
-        if (value.startsWith('android=')) {
-            if (platform !== 'android') throw new Error('Una estrategia Android no puede asignarse a iOS');
-            return { value: value.slice('android='.length), strategy: 'ANDROID' };
+        if (value.startsWith('android=') && platform !== 'android') {
+            throw new Error('Una estrategia Android no puede asignarse a iOS');
         }
-        if (value.startsWith('iosPredicate=')) {
-            if (platform !== 'ios') throw new Error('Una estrategia iOS no puede asignarse a Android');
-            return { value: value.slice('iosPredicate='.length), strategy: 'PREDICATESTRING' };
+        if ((value.startsWith('iosPredicate=') || value.startsWith('iosClassChain=')) && platform !== 'ios') {
+            throw new Error('Una estrategia iOS no puede asignarse a Android');
         }
-        if (value.startsWith('iosClassChain=')) {
-            if (platform !== 'ios') throw new Error('Una estrategia iOS no puede asignarse a Android');
-            return { value: value.slice('iosClassChain='.length), strategy: 'CLASSCHAIN' };
-        }
-        if (value.startsWith('class=')) {
-            return { value: value.slice('class='.length), strategy: 'CLASSNAME' };
-        }
-        if (value.startsWith('id=')) {
-            return { value: value.slice('id='.length), strategy: 'ID' };
-        }
-        if (value.startsWith('~')) {
-            return { value: value.slice(1), strategy: 'ID' };
-        }
-        if (platform === 'android' && /^(?:new UiSelector|new UiScrollable)\(/.test(value)) {
-            return { value, strategy: 'ANDROID' };
-        }
-        return { value, strategy: 'XPATH' };
+        const check = roundTrip(value, platform);
+        if (!check.ok) throw new Error(check.reason);
+        return { value: check.value, strategy: check.type };
     }
 
     private resolveBlock(document: Record<string, any>, request: PlatformLocatorUpdate): string {

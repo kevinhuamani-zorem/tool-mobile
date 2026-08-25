@@ -26,6 +26,11 @@ test('relaciona un canal IPC con los módulos internos del recorder', () => {
 });
 
 test('el cache del grafo interno vive en runtime y es incremental', () => {
+    // No dependas del orden/concurrencia de otros tests para calentar el cache.
+    new RecorderCodeGraph().query({
+        component: 'ScenarioBuilderModal',
+        limit: 30
+    });
     const graph = new RecorderCodeGraph().query({
         component: 'ScenarioBuilderModal',
         limit: 30

@@ -168,22 +168,34 @@ export class MobileInspector {
         this.lastTag = el.tagName.split('.').pop() || 'View';
 
         const candidates: SelectorCandidate[] = [];
+        let priority = 1;
 
         if (el.resourceId && !IGNORED_IDS.includes(el.resourceId)) {
+            // Nada de `id=<resource-id>`. WebdriverIO lo entiende al grabar,
+            // pero `TypeLocator` no tiene estrategia de resource-id: el codigo
+            // generado terminaba en `~com.yape.qa:id/btn` (accesibilidad) y no
+            // encontraba el elemento nunca. UiSelector si se reconstruye, y es
+            // la forma que este framework ya usa mayoritariamente para
+            // resource-id (33 usos contra 18 de XPath).
             const isComposeId = !el.resourceId.includes('/') && !el.resourceId.includes(':');
+            if (!isComposeId) {
+                candidates.push({
+                    label:    'resource-id (UiSelector)',
+                    selector: `android=new UiSelector().resourceId("${el.resourceId}")`,
+                    priority: priority++,
+                });
+            }
             candidates.push({
-                label:    isComposeId ? 'Compose resource-id' : 'resource-id',
-                selector: isComposeId
-                    ? `//*[@resource-id="${el.resourceId}"]`
-                    : `id=${el.resourceId}`,
-                priority: 1,
+                label:    isComposeId ? 'Compose resource-id' : 'resource-id (XPath)',
+                selector: `//*[@resource-id="${el.resourceId}"]`,
+                priority: priority++,
             });
             const idPart = el.resourceId.split('/')[1];
             if (idPart) {
                 candidates.push({
                     label:    'resource-id contains',
                     selector: `//*[contains(@resource-id,"${idPart}")]`,
-                    priority: 2,
+                    priority: priority++,
                 });
             }
         }
@@ -192,7 +204,7 @@ export class MobileInspector {
             candidates.push({
                 label:    'content-desc',
                 selector: `~${el.contentDesc}`,
-                priority: 3,
+                priority: priority++,
             });
         }
 
@@ -200,13 +212,13 @@ export class MobileInspector {
             candidates.push({
                 label:    'text',
                 selector: `//*[@text="${el.text}"]`,
-                priority: 4,
+                priority: priority++,
             });
             if (el.text.length > 10) {
                 candidates.push({
                     label:    'text contains',
                     selector: `//*[contains(@text,"${el.text.slice(0, 20)}")]`,
-                    priority: 5,
+                    priority: priority++,
                 });
             }
         }
@@ -214,7 +226,7 @@ export class MobileInspector {
         candidates.push({
             label:    'xpath',
             selector: `//${el.tagName}`,
-            priority: 6,
+            priority: priority++,
         });
 
         const suggested = this.suggestVariableName(candidates[0].selector, this.lastTag);

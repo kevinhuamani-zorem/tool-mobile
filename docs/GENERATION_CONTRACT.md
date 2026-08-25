@@ -111,11 +111,40 @@ El mismo nombre lógico aparece en bloques de plataforma del módulo:
 }
 ```
 
+Para una generación nueva solo es obligatorio el bloque de la plataforma
+grabada. Una ejecución Android puede entregar únicamente el bloque Android (o
+dejar iOS vacío), y una ejecución iOS puede hacer lo equivalente. La ausencia
+de la plataforma contraria se informa como cobertura pendiente, pero no bloquea
+la importación ni la generación. El Feature lleva solamente el tag de las
+plataformas con cobertura completa.
+
 Al completar cobertura solo se actualiza el bloque de la plataforma activa. El
-selector capturado conserva su semántica de estrategia (`id=`, `android=`, `~`,
-XPath, class chain o predicate, según corresponda): el JSON almacena el valor
-compatible con `LocatorFactory` y el getter sincroniza su `TypeLocator`. La
-normalización nunca convierte una estrategia Android en una de iOS.
+selector capturado se traduce al par `(TypeLocator, valor)` que la clase
+resolutora del framework sabe componer: el JSON almacena el valor y el getter
+declara la estrategia. La normalización nunca convierte una estrategia Android
+en una de iOS.
+
+La traducción no es un recorte de prefijos. `TypeLocator` no tiene estrategia de
+resource-id, así que un `id=` capturado por el inspector se convierte:
+
+| Capturado | `TypeLocator` | Valor en el JSON |
+|---|---|---|
+| `id=com.yape.qa:id/btnFiltrar` | `ANDROID` | `new UiSelector().resourceId("com.yape.qa:id/btnFiltrar")` |
+| `id=btnCompose` (Compose, sin paquete) | `XPATH` | `//*[@resource-id="btnCompose"]` |
+| `~Ver todos` | `ID` | `Ver todos` |
+| `iosPredicate=…` | `PREDICATESTRING` | el predicado |
+| `iosClassChain=…` | `CLASSCHAIN` | la cadena |
+
+`UiSelector` y no XPath para resource-id porque es la forma mayoritaria de este
+framework (33 usos contra 18), así que el código generado se parece al escrito
+a mano.
+
+Cada acción grabada guarda su `locatorType` y su `locatorValue` en
+`actions.json`, y el par se comprueba de ida y vuelta: se compone con la tabla
+real del framework —leída de la clase resolutora, no asumida— y se vuelve a
+interpretar. Si no sale el mismo par, la verificación lo dice en el momento de
+capturar y el resolver abre `gap-locator-roundtrip`, que es bloqueante: un
+locator que no resuelve no es algo que el agente pueda arreglar adivinando.
 
 Cuando un recording generado solo carece de iOS (o Android), el QA únicamente
 selecciona y verifica los locators pendientes en una sesión de esa plataforma.
@@ -236,3 +265,13 @@ otro archivo del squad/Home.
 - No enviar secretos, datasets ni el repositorio completo al proveedor de IA.
 - La IA solo resuelve gaps del plan y su salida nunca se escribe sin preview.
 - Si una validación falla, no debe quedar una generación parcial.
+
+## Conformidad con el review de PR
+
+El generador cumple el estándar que aplica el reviewer de `fwk-mobile-test`:
+
+- **Screen Object**: el getter es `public get x() { const locator = LocatorProvider.getElement(...); return $(locator); }` y devuelve el elemento. Las acciones operan sobre él: `waitForElementExistByLocator(elemento, true)` antes de cada interacción y `waitForElementDisplayedAndExpect(elemento, timeout, mensaje)` en las verificaciones — que afirma, no solo espera. `timeout` sale de `getTimeoutFromEnv()`, resuelto del framework y no de una ruta fija.
+- **Sin esperas por tiempo**: no se emite `browser.pause` ni `driver.pause` en ninguna capa. Una acción `ESPERAR` se traduce a espera explícita sobre el elemento siguiente; si no hay ninguno al que anclarla, el resolver abre `gap-fixed-wait-N` y no se genera código.
+- **Tags**: `@<squad>` sobre la línea `Feature:`, y en el `Scenario` `@<funcionalidad> @<tier> @<plataforma>`. El tier sale de `request.executionTag`; si no se indica, `Happy Path` → `@smoke_mobile` y cualquier otro → `@regression_mobile`.
+- **Imports de `@wdio/globals`** por uso real: `$` siempre que haya getters, `expect` cuando hay aserciones, `browser` solo si el Screen Object lo invoca.
+- **JSON de locators sin metadatos**: solo los bloques `<módulo>Android` y `<módulo>Ios`. JSON no admite comentarios y un `_metadata` es lo mismo con otro nombre; la traza de qué grabación aportó cada clave vive en `generated-files.json`, que es del recorder y no viaja en el PR.

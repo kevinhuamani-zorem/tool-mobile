@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-    frameworkContract, clearFrameworkContractCache, aliasImport,
+    frameworkContract, clearFrameworkContractCache, aliasImport, composeLocator,
 } = require('../dist/core/frameworkContract');
 
 function buildFramework(layout) {
@@ -15,6 +15,40 @@ function buildFramework(layout) {
         fs.writeFileSync(file, content);
     }
     return root;
+}
+
+// Prefijos deliberadamente distintos a los del framework real: si el contrato
+// devolviera los de la convencion en vez de leer estos, el test lo veria.
+const CONSTANTS = `export class Constants {
+  static ID: string = '@@';
+  static XPATH: string = '';
+  static ANDROID_LOCATOR: string = 'droid=';
+  static PREDICATE_STRING: string = '-pred:';
+}
+`;
+
+/** Clase resolutora con su `switch` real: es de donde sale la composicion. */
+function provider(name) {
+    // Sin extension a proposito: el fixture no debe votar en el conteo `.ts`/`.js`.
+    return `import { Constants } from './constants';
+export default class ${name} {
+  static getElement(a, b, c, d) { return b; }
+  private static getObjectAndroid(type, value) {
+    switch (type) {
+    case TypeLocator.ID: return Constants.ID + value;
+    case TypeLocator.ANDROID: return Constants.ANDROID_LOCATOR + value;
+    case TypeLocator.XPATH: return Constants.XPATH + value;
+    }
+  }
+  private static getObjectIos(type, value) {
+    switch (type) {
+    case TypeLocator.ID: return Constants.ID + value;
+    case TypeLocator.PREDICATESTRING: return Constants.PREDICATE_STRING + value;
+    case TypeLocator.XPATH: return Constants.XPATH + value;
+    }
+  }
+}
+`;
 }
 
 const CANONICAL = {
@@ -32,8 +66,8 @@ const CANONICAL = {
 }`,
     'screenobjects/commons/base.screen.ts': 'export default abstract class BaseScreen {}\n',
     // La deteccion es por forma: la clase que expone `static getElement`.
-    'support/utils/LocatorFactory.ts':
-        'export default class LocatorFactory {\n  static getElement(a, b, c, d) { return b; }\n}\n',
+    'support/utils/LocatorFactory.ts': provider('LocatorFactory'),
+    'support/utils/constants.ts': CONSTANTS,
     'support/utils/Enums.ts': 'export enum TypeLocator { XPATH }\n',
 };
 
@@ -55,8 +89,8 @@ test('sigue al ancla cuando el framework la mueve o la renombra', () => {
         'tsconfig.json': CANONICAL['tsconfig.json'].replace('"@utils/*": ["support/utils/*"]',
             '"@helpers/*": ["support/helpers/*"]'),
         'screenobjects/base/AbstractScreen.ts': 'export default abstract class AbstractScreen {}\n',
-        'support/helpers/LocatorProvider.ts':
-            'export default class LocatorProvider {\n  static getElement(a, b, c, d) { return b; }\n}\n',
+        'support/helpers/LocatorProvider.ts': provider('LocatorProvider'),
+        'support/helpers/constants.ts': CONSTANTS,
         'support/helpers/Enums.ts': 'export enum TypeLocator { XPATH }\n',
     });
     fs.rmSync(path.join(root, 'screenobjects/commons/base.screen.ts'));
@@ -137,4 +171,29 @@ test('elige el alias mas especifico', () => {
     assert.equal(aliasImport('resources/locators/payment/x.json', aliases), '@locators/payment/x.json');
     assert.equal(aliasImport('resources/data/x.json', aliases), '@resources/data/x.json');
     assert.equal(aliasImport('otro/x.ts', aliases), undefined);
+});
+
+// La composicion es parte del contrato: sin ella el recorder no puede afirmar
+// que `TypeLocator.<tipo> + valor` reconstruye el selector que grabo.
+test('lee la tabla de composicion del framework, no de una convencion', () => {
+    clearFrameworkContractCache();
+    const contract = frameworkContract(buildFramework(CANONICAL));
+    assert.deepEqual(contract.locatorComposition.android.ID, { prefix: '@@', suffix: '' });
+    assert.deepEqual(contract.locatorComposition.android.ANDROID, { prefix: 'droid=', suffix: '' });
+    assert.deepEqual(contract.locatorComposition.ios.PREDICATESTRING, { prefix: '-pred:', suffix: '' });
+    assert.equal(contract.locatorComposition.android.PREDICATESTRING, undefined,
+        'PREDICATESTRING no existe en Android: componerlo ahi seria inventar');
+    assert.equal(composeLocator(contract, 'ANDROID', 'new UiSelector()', 'android'), 'droid=new UiSelector()');
+    assert.equal(composeLocator(contract, 'CLASSCHAIN', '**/Button', 'android'), undefined);
+});
+
+test('avisa en vez de mentir cuando el framework no declara la composicion', () => {
+    clearFrameworkContractCache();
+    const layout = { ...CANONICAL };
+    layout['support/utils/LocatorFactory.ts'] =
+        'export default class LocatorFactory {\n  static getElement(a, b, c, d) { return b; }\n}\n';
+    const contract = frameworkContract(buildFramework(layout));
+    assert.equal(contract.warnings.some(warning => /composicion/.test(warning)), true);
+    // Cae a la convencion, nunca a una tabla vacia que dejaria pasar cualquier tipo.
+    assert.deepEqual(contract.locatorComposition.android.ID, { prefix: '~', suffix: '' });
 });

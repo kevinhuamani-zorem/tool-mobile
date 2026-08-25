@@ -96,9 +96,6 @@ export class AutomationPatchWriter {
         }
         const added: string[] = [];
         const skipped: string[] = [];
-        const metadata = (parsed._metadata && typeof parsed._metadata === 'object' ? parsed._metadata : {}) as Record<string, any>;
-        const generated = (metadata.generatedKeys && typeof metadata.generatedKeys === 'object'
-            ? metadata.generatedKeys : {}) as Record<string, unknown>;
         for (const addition of additions) {
             // Nunca se pisa una clave existente: si ya está, se reutiliza.
             if (Object.prototype.hasOwnProperty.call(parsed[android], addition.name) ||
@@ -108,13 +105,11 @@ export class AutomationPatchWriter {
             }
             parsed[android][addition.name] = addition.android;
             parsed[ios][addition.name] = addition.ios;
-            generated[addition.name] = { recordingId, addedAt: createdAt };
             added.push(addition.name);
         }
-        const next = {
-            _metadata: { ...metadata, ...(Object.keys(generated).length ? { generatedKeys: generated } : {}) },
-            ...Object.fromEntries(blocks.map(name => [name, parsed[name]])),
-        };
+        // Sin `_metadata`: que grabacion aporto cada clave queda en el ledger
+        // de `generated-files.json`, que es del recorder y no viaja en el PR.
+        const next = Object.fromEntries(blocks.map(name => [name, parsed[name]]));
         return { content: JSON.stringify(next, null, 4) + '\n', added, skipped };
     }
 

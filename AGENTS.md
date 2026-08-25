@@ -130,6 +130,9 @@ generadores, validadores o plantillas.
   mientras las otras capas se actualizan de forma aditiva en rutas existentes.
 - Los tags de plataforma reflejan cobertura completa: `@android` para Android
   y `@ios` solo cuando todos los locators requeridos de iOS estén disponibles.
+- Una propuesta solo debe cubrir la plataforma del recording. El bloque de la
+  plataforma contraria puede faltar o quedar vacío; es cobertura pendiente y
+  se completa después mediante **Completar una grabación**, nunca se inventa.
 - Nunca registres valores de los ambientes del framework, username/access key de BrowserStack ni
   datos sensibles en logs, previews o errores.
 

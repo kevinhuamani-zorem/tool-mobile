@@ -20,7 +20,7 @@ import { TECHNICAL_STOP_WORDS } from './selectorNormalization';
 import { spanishTokens, translateToEnglish, translateToSlug } from './englishIdentifiers';
 import { frameworkContract } from './frameworkContract';
 import { ElementIdentityIndex } from './elementIdentity';
-import { importsOf, indexModuleImports, inferredStrategy, strategyOf, strategyValue } from './locatorStrategy';
+import { importsOf, indexModuleImports, inferredStrategy, strategyOf, strategyValue, roundTrip } from './locatorStrategy';
 import { declareElements } from './elementDeclaration';
 import { CodeGraph } from './codeGraph';
 import { detectRepetition } from './repetitionDetector';
@@ -464,6 +464,13 @@ export class DeterministicResolver {
             });
         }
         const usedNames = new Set<string>();
+        // Locators que esta misma grabacion ya decidio crear, indexados por el
+        // par (TypeLocator, valor). `exactLocator` solo mira el catalogo del
+        // framework, asi que sin esto un boton pulsado cinco veces creaba cinco
+        // locators distintos —filterMovementsButton, filterMovements, filter…—
+        // apuntando todos a `~Botón de filtrar`. Es la misma regla de siempre:
+        // mismo identificador y misma estrategia es el mismo elemento.
+        const createdByLocator = new Map<string, { name: string; sequence: number }>();
         const resolutions: ActionResolution[] = rawScenario.actions.map((step, index) => {
             const sequence = index + 1;
             const intent = actionIntent(step, sequence);
@@ -491,11 +498,26 @@ export class DeterministicResolver {
                 };
             }
             if (selector && step.selectorVerified !== false) {
+                const pair = roundTrip(selector, rawScenario.platform);
+                const identity = `${pair.type}\u0000${pair.value}`;
+                const already = createdByLocator.get(identity);
+                if (already) {
+                    // Se conserva `create`: el locator es nuevo, solo que una
+                    // sola vez. El generador colapsa las entradas por nombre.
+                    return {
+                        sequence, action: step.action, intent,
+                        resolution: 'create', locatorName: already.name, selector,
+                        confidence: step.selectorVerified ? 1 : 0.9,
+                        reason: `Mismo identificador y misma estrategia (${pair.type}) que la accion ` +
+                            `${already.sequence}: es el mismo elemento, no se duplica el locator.`,
+                    };
+                }
                 // El intent lo escribe el QA en espanol; el nombre logico va en
                 // ingles como el resto del codigo del framework.
                 let locatorName = translateToEnglish(intent).name || camel(intent, `element${sequence}`);
                 while (usedNames.has(locatorName)) locatorName = `${locatorName}${sequence}`;
                 usedNames.add(locatorName);
+                createdByLocator.set(identity, { name: locatorName, sequence });
                 return {
                     sequence, action: step.action, intent,
                     resolution: 'create', locatorName, selector,
@@ -604,6 +626,65 @@ export class DeterministicResolver {
             });
         }
 
+        // Una espera fija es sincronizacion no determinista y el estandar la
+        // prohibe (`driver.pause`/`browser.pause`). Cuando la accion siguiente
+        // tiene locator, el generador la convierte en espera explicita sobre
+        // ese elemento; cuando no lo tiene no hay nada a que anclarla.
+        rawScenario.actions.forEach((step, index) => {
+            if (step.action !== 'ESPERAR') return;
+            const next = rawScenario.actions[index + 1];
+            if (next?.selector) return;
+            const sequence = index + 1;
+            gaps.push({
+                id: `gap-fixed-wait-${sequence}`,
+                sequence,
+                type: 'refinement',
+                description:
+                    `La accion ${sequence} es una espera fija y no hay una accion posterior con elemento ` +
+                    'a la que anclarla. Una pausa por tiempo pasa o falla segun la carga del dispositivo.',
+                requiredOutput:
+                    'Indica que elemento deberia aparecer al terminar esa espera y capturalo, o elimina la ' +
+                    'espera si el elemento siguiente ya la cubre. No se generara ninguna pausa por tiempo.',
+            });
+        });
+
+        // Red de seguridad del contrato de locators: el par (TypeLocator, valor)
+        // que se va a escribir tiene que reconstruir el selector grabado. Es
+        // bloqueante porque un locator que provablemente no resuelve no es algo
+        // que el agente pueda arreglar adivinando: hay que volver a capturarlo.
+        // Solo los locators que este caso va a escribir. Un `reuse` apunta a un
+        // valor que ya vive en el JSON, y ahi el tipo lo declara el getter del
+        // Screen Object, no la sintaxis del valor: `"Ver todos"` pelado es ID
+        // valido y XPath invalido a la vez, asi que reinferirlo daria un falso
+        // positivo sobre codigo que ya funciona.
+        const broken = resolutions
+            .filter(resolution => resolution.resolution === 'create' && resolution.selector)
+            .map(resolution => ({
+                resolution,
+                check: roundTrip(String(resolution.selector), rawScenario.platform),
+            }))
+            .filter(entry => !entry.check.ok);
+        if (broken.length) {
+            gaps.push({
+                id: 'gap-locator-roundtrip',
+                sequence: broken[0].resolution.sequence,
+                type: 'missing-selector',
+                blocking: true,
+                description:
+                    'Estos selectores no se pueden reconstruir con el contrato de locators del framework, ' +
+                    'asi que el codigo generado no encontraria el elemento: ' +
+                    broken.map(entry =>
+                        `accion ${entry.resolution.sequence} (${entry.resolution.selector}): ${entry.check.reason}`
+                    ).join('; ') + '.',
+                requiredOutput:
+                    'Vuelve a capturar esos elementos eligiendo un candidato que el framework sepa componer ' +
+                    `(${rawScenario.platform === 'ios'
+                        ? 'ID por accessibility id, XPATH, PREDICATESTRING o CLASSCHAIN'
+                        : 'ID por accessibility id, XPATH o ANDROID con UiSelector'}), ` +
+                    'o corrige el selector a mano y vuelve a verificarlo contra el dispositivo.',
+            });
+        }
+
         // Duplicados por identidad de elemento, no por cadena de selector. Es lo
         // que dejo pasar el PR de Tapp: `~Tapp` y el `content-desc="Tapp"` de
         // home apuntan al mismo boton pero no se parecen como texto.
@@ -612,8 +693,13 @@ export class DeterministicResolver {
             catalog.locators.filter(locator => locator.scope === 'squad' || locator.scope === 'home')
         );
         const ownModule = `${rawScenario.squad}/${normalizedRequest.locatorModule}`;
+        // Un locator que aparece en varias acciones se revisa una vez: cinco
+        // copias del mismo consejo solo gastan contexto del agente.
+        const reviewed = new Set<string>();
         for (const resolution of resolutions) {
             if (resolution.resolution !== 'create' || !resolution.selector) continue;
+            if (resolution.locatorName && reviewed.has(resolution.locatorName)) continue;
+            if (resolution.locatorName) reviewed.add(resolution.locatorName);
             const platformValue = (candidate: { androidSelector: string; iosSelector: string }) =>
                 rawScenario.platform === 'ios' ? candidate.iosSelector : candidate.androidSelector;
             const matches = identityIndex

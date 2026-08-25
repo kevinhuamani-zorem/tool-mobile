@@ -11,8 +11,10 @@ export interface OutputValidation {
     conflicts: string[];
 }
 
+type LocatorPlatform = 'android' | 'ios';
+
 export class OutputValidator {
-    validate(preview: GeneratedPreview): OutputValidation {
+    validate(preview: GeneratedPreview, platform?: LocatorPlatform): OutputValidation {
         const errors: string[] = [];
         const warnings: string[] = [];
         const conflicts = preview.files
@@ -21,7 +23,7 @@ export class OutputValidator {
 
         this.validatePaths(preview, errors);
         this.validateFeature(preview.featureContent, errors);
-        if (preview.locatorContent) this.validateJson(preview.locatorContent, errors, warnings);
+        if (preview.locatorContent) this.validateJson(preview.locatorContent, errors, warnings, platform);
         if (preview.stepContent) {
             this.validateTypeScript(preview.stepContent, 'Steps', errors);
             this.validateImports(preview.stepContent, 'Steps', errors);
@@ -67,15 +69,33 @@ export class OutputValidator {
         if (/\bundefined\b|\bnull\b/.test(content)) errors.push('Feature contiene valores indefinidos');
     }
 
-    private validateJson(content: string, errors: string[], warnings: string[]): void {
+    private validateJson(
+        content: string,
+        errors: string[],
+        warnings: string[],
+        platform?: LocatorPlatform
+    ): void {
         try {
             const document = JSON.parse(content) as Record<string, Record<string, string>>;
-            const blocks = Object.keys(document);
-            if (!blocks.some(block => block.endsWith('Android'))) {
-                errors.push('Locators sin bloque Android');
+            const blocks = Object.keys(document).filter(block => block !== '_metadata');
+            const hasBlock = (candidate: LocatorPlatform) => blocks.some(block =>
+                block.toLowerCase().endsWith(candidate)
+            );
+            if (platform && !hasBlock(platform)) {
+                errors.push(`Locators sin bloque ${platform === 'ios' ? 'iOS' : 'Android'} activo`);
+            } else if (!platform && !hasBlock('android') && !hasBlock('ios')) {
+                errors.push('Locators sin bloque Android o iOS');
             }
-            if (!blocks.some(block => block.endsWith('Ios'))) {
-                errors.push('Locators sin bloque Ios');
+            const pendingPlatform: LocatorPlatform | undefined = platform === 'android'
+                ? 'ios'
+                : platform === 'ios'
+                    ? 'android'
+                    : undefined;
+            if (pendingPlatform && !hasBlock(pendingPlatform)) {
+                warnings.push(
+                    `Cobertura ${pendingPlatform === 'ios' ? 'iOS' : 'Android'} pendiente; ` +
+                    'podrá completarse desde otra grabación.'
+                );
             }
             const entries = Object.entries(document)
                 .filter(([name]) => name !== '_metadata')

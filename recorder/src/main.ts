@@ -30,6 +30,7 @@ import { RecordingCoverageAnalyzer } from '../../core/recordingCoverageAnalyzer'
 import { RecordingPlatformUpdater } from '../../core/recordingPlatformUpdater';
 import { AutomationResponseValidator } from '../../core/automationResponseValidator';
 import { AutomationMemory } from '../../core/automationMemory';
+import { indexDeclaredStrategies, roundTrip } from '../../core/locatorStrategy';
 import {
     AutomationPatchWriter,
     featureAdditions,
@@ -299,13 +300,13 @@ ipcMain.handle('assign-locator-value', async (_, request: {
                 catalog: reuseAnalyzer.getCatalog(activeSquad, platform),
             };
         }
-        const selector = executableSelector
-            .replace(/^android=/, '')
-            .replace(/^iosPredicate=/, '')
-            .replace(/^iosClassChain=/, '')
-            .replace(/^id=/, '')
-            .replace(/^class=/, '')
-            .replace(/^~/, '');
+        // El valor que va al JSON sale del mismo traductor que usa el
+        // generador. Recortar prefijos a mano guardaba `id=com.yape.qa:id/btn`
+        // como `com.yape.qa:id/btn`, que el getter volvia a componer como
+        // accesibilidad y no encontraba nada.
+        const check = roundTrip(executableSelector, platform);
+        if (!check.ok) throw new Error(check.reason);
+        const selector = check.value;
 
         const relativeFile = String(request.file || '').replace(/\\/g, '/');
         if (!relativeFile.startsWith('resources/locators/') || !relativeFile.endsWith('.json')) {
@@ -341,6 +342,21 @@ ipcMain.handle('assign-locator-value', async (_, request: {
         }
         if (!document[blockName] || typeof document[blockName] !== 'object' || Array.isArray(document[blockName])) {
             throw new Error(`El bloque ${blockName} no es valido`);
+        }
+
+        // El getter del Screen Object ya declara una estrategia para esta clave.
+        // Escribir un valor de otra estrategia deja las dos capas en desacuerdo
+        // y el locator no resuelve, asi que se rechaza en vez de sobrescribir.
+        const locatorModule = relativeFile
+            .replace(/^resources\/locators\//, '')
+            .replace(/\.locator\.json$/, '');
+        const declared = indexDeclaredStrategies().get(`${locatorModule}#${name}`)?.[platform];
+        if (declared && declared !== check.type) {
+            throw new Error(
+                `El getter de "${name}" declara TypeLocator.${declared} para ${platform}, ` +
+                `pero este selector es TypeLocator.${check.type}. ` +
+                'Captura el elemento con esa estrategia o actualiza el getter primero.'
+            );
         }
 
         const previous = typeof document[blockName][name] === 'string'
@@ -821,15 +837,66 @@ ipcMain.handle('activate-inspector', async () => {
     return { success: false, error: 'Cancelado o timeout' };
 });
 
+/**
+ * Verificar el selector grabado no basta: WebdriverIO acepta formas que el
+ * framework no sabe componer, y el fallo aparecia recien al correr wdio. Aqui
+ * se prueban las dos cosas contra el dispositivo que ya esta delante — el
+ * selector tal como se grabo y el que saldra de `TypeLocator.<tipo> + valor` —
+ * para que el QA vea el problema en el momento de capturarlo.
+ */
 ipcMain.handle('verify-selector', async (_, selector: string) => {
     if (!inspector) return { success: false, summary: 'Sin sesion activa' };
+    const platform: MobilePlatform = recordingPlatform === 'ios' ? 'ios' : 'android';
+    let check: ReturnType<typeof roundTrip> | undefined;
+    try {
+        check = roundTrip(selector, platform);
+    } catch {
+        check = undefined;
+    }
+
     try {
         const el         = await activeDm.findElement(selector);
         await el.waitForDisplayed({ timeout: 5000 });
         const text       = await el.getText().catch(() => '');
         const tag        = await el.getTagName().catch(() => '');
         const screenshot = await inspector.captureScreenshot().catch(() => undefined);
-        return { success: true, summary: `✓ Encontrado: <${tag}>${text ? ` "${text}"` : ''}`, screenshot };
+        const base       = `✓ Encontrado: <${tag}>${text ? ` "${text}"` : ''}`;
+
+        if (!check) {
+            return { success: true, summary: base, screenshot };
+        }
+        if (!check.ok) {
+            return {
+                success: false,
+                locatorType: check.type,
+                locatorValue: check.value,
+                summary: `${base}\n✗ Pero el framework no lo reconstruye: ${check.reason}`,
+                screenshot,
+            };
+        }
+        // El selector compuesto es el que ejecutara el caso generado.
+        if (check.composed && check.composed !== selector) {
+            try {
+                const composedEl = await activeDm.findElement(check.composed);
+                await composedEl.waitForDisplayed({ timeout: 5000 });
+            } catch {
+                return {
+                    success: false,
+                    locatorType: check.type,
+                    locatorValue: check.value,
+                    summary: `${base}\n✗ Pero TypeLocator.${check.type} + valor produce `
+                        + `"${check.composed}", que no encuentra el elemento.`,
+                    screenshot,
+                };
+            }
+        }
+        return {
+            success: true,
+            locatorType: check.type,
+            locatorValue: check.value,
+            summary: `${base}\n✓ TypeLocator.${check.type} reconstruye el selector.`,
+            screenshot,
+        };
     } catch {
         return { success: false, summary: `✗ No encontrado: ${selector}` };
     }
@@ -886,7 +953,7 @@ ipcMain.handle('preview-fwk-files', async (_, request: Omit<GenerationRequest, '
     try {
         const prepared = prepareGenerationRequest(request);
         const preview = fwkMobileGenerator.preview(prepared, recordedSteps);
-        const validation = outputValidator.validate(preview);
+        const validation = outputValidator.validate(preview, prepared.platform);
         const managed = generatedFileRegistry.assess(preview, prepared.squad);
         validation.conflicts = managed.conflicts;
         validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;
@@ -929,7 +996,7 @@ ipcMain.handle('generate-fwk-files', async (
         if (reviewedContents) {
             preview = fwkMobileGenerator.withReviewedContents(preview, reviewedContents);
         }
-        const validation = outputValidator.validate(preview);
+        const validation = outputValidator.validate(preview, prepared.platform);
         const managed = generatedFileRegistry.assess(preview, prepared.squad);
         validation.conflicts = managed.conflicts;
         validation.valid = validation.errors.length === 0 && validation.conflicts.length === 0;

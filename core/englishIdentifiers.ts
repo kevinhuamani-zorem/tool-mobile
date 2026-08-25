@@ -197,8 +197,26 @@ export interface Translation {
  * pasan tal cual: solo se traduce lo que el diccionario reconoce y solo se
  * reporta lo que quedo marcado como espanol sin traduccion.
  */
+/**
+ * Tokenizacion para nombres de identificador.
+ *
+ * `words()` descarta todo token de un caracter, que es correcto para medir
+ * similitud pero pierde informacion al nombrar: "ultimos 7 dias" salia como
+ * `filterLastDays`, sin el 7, mientras 15/30/90 si sobrevivian. El nombre
+ * mentia y ademas podia chocar con otro periodo. Aqui se conservan los digitos
+ * sueltos y se siguen descartando las letras sueltas, que son ruido.
+ */
+function identifierTokens(value: string): string[] {
+    return String(value || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .split(/[^a-z0-9]+/)
+        .filter(word => word.length > 1 || /^[0-9]$/.test(word));
+}
+
 export function translateToEnglish(value: string): Translation {
-    const tokens = words(String(value || '')).filter(word => !DROPPED.has(word));
+    const tokens = identifierTokens(value).filter(word => !DROPPED.has(word));
     const translated = tokens.map(word => TRANSLATIONS[word] || word);
     const untranslated = tokens.filter(word => !TRANSLATIONS[word] && spanishTokens(word).length);
     const leading = translated.filter(word => !TRAILING_NOUNS.has(word));
@@ -218,7 +236,7 @@ export function translateToEnglish(value: string): Translation {
  */
 export function translateToSlug(value: string, fallback: string): string {
     const translated = translateToEnglish(value).name;
-    const parts = words(translated);
+    const parts = identifierTokens(translated);
     return parts.length ? parts.join('-').slice(0, 64).replace(/-+$/, '') : fallback;
 }
 

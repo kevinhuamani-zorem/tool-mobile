@@ -96,7 +96,8 @@ workspace para cambiar el target. Todas las rutas operativas nacen en
    el QA y selectores comprobados. El QA no asigna nombres técnicos de locator.
 2. El usuario define objetivo y aceptación; no redacta Gherkin manualmente.
 3. `ReuseAnalyzer` construye una vista compacta de escenarios, steps y locators
-   del squad, Home y commons. Normaliza prefijos Appium (`id=`, `~`, `android=`).
+   del squad, Home y commons. Normaliza los selectores al par
+   `(TypeLocator, valor)` que compone el framework (ver `locatorStrategy`).
 4. `DeterministicResolver` decide reuse/create/builtin, detecta casos equivalentes
    y fija las cuatro rutas.
 5. Se escriben `generation-plan.json`, `reuse-context.json`,

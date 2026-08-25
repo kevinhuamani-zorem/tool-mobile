@@ -37,9 +37,30 @@ export interface FrameworkContract {
      * los Steps generados; los anclajes traen la suya, que puede diferir.
      */
     importExtension: string;
+    /**
+     * Import del helper de timeout por entorno, o `undefined` si el framework
+     * no lo expone. El patron documentado de Screen Object lo usa para las
+     * verificaciones: sin el hay que caer a un helper con timeout por defecto.
+     */
+    timeoutHelperImport?: string;
+    timeoutHelperSymbol?: string;
+    /**
+     * Como compone el framework cada `TypeLocator`, leido del `switch` de la
+     * clase resolutora y de las constantes que concatena.
+     * `android.ANDROID` -> `{ prefix: 'android=', suffix: '' }`.
+     */
+    locatorComposition: LocatorComposition;
     /** Anclajes que no se encontraron y quedaron en su valor por defecto. */
     warnings: string[];
 }
+
+/** Envoltura literal alrededor del valor del locator. */
+export interface CompositionRule {
+    prefix: string;
+    suffix: string;
+}
+
+export type LocatorComposition = Record<'android' | 'ios', Record<string, CompositionRule>>;
 
 /**
  * Ultimo recurso cuando el framework no se deja leer (tsconfig ausente o
@@ -63,6 +84,21 @@ const DEFAULTS = {
     typeLocatorImport: '@utils/Enums.ts',
     typeLocatorSymbol: 'TypeLocator',
     importExtension: '.ts',
+    locatorComposition: {
+        android: {
+            ID:        { prefix: '~', suffix: '' },
+            XPATH:     { prefix: '', suffix: '' },
+            ANDROID:   { prefix: 'android=', suffix: '' },
+            CLASSNAME: { prefix: 'android=.className(', suffix: ')' },
+        },
+        ios: {
+            ID:              { prefix: '~', suffix: '' },
+            XPATH:           { prefix: '', suffix: '' },
+            PREDICATESTRING: { prefix: '-ios predicate string:', suffix: '' },
+            CLASSCHAIN:      { prefix: '-ios class chain:', suffix: '' },
+            CLASSNAME:       { prefix: 'ios=.className(', suffix: ')' },
+        },
+    } as LocatorComposition,
 };
 
 const SCAN_ROOTS = ['screenobjects', 'support', 'features'];
@@ -176,6 +212,168 @@ export function aliasImport(relative: string, aliases: Record<string, string>): 
     return `${alias}/${normalized.slice(directory.length + 1)}`;
 }
 
+/** Cuerpo `{...}` que empieza en `open`, balanceando llaves. */
+function bodyFrom(content: string, open: number): string {
+    let depth = 0;
+    for (let index = open; index < content.length; index++) {
+        if (content[index] === '{') depth++;
+        else if (content[index] === '}') {
+            depth--;
+            if (depth === 0) return content.slice(open + 1, index);
+        }
+    }
+    return '';
+}
+
+/**
+ * Constantes string visibles desde un archivo: las que declara y las que
+ * importa. Clave `Constants.ID`, valor `~`.
+ */
+function visibleStringConstants(
+    frameworkRoot: string,
+    file: string,
+    aliases: Record<string, string>
+): Map<string, string> {
+    const found = new Map<string, string>();
+    const collect = (content: string, qualifier: string): void => {
+        for (const [, name, , value] of content.matchAll(
+            /static\s+([A-Za-z_$][\w$]*)\s*(?::\s*string\s*)?=\s*(['"`])((?:\\.|(?!\2).)*)\2/g
+        )) {
+            found.set(`${qualifier}.${name}`, value.replace(/\\(.)/g, '$1'));
+        }
+    };
+
+    let content: string;
+    try {
+        content = fs.readFileSync(file, 'utf-8');
+    } catch {
+        return found;
+    }
+
+    const resolveSpecifier = (specifier: string): string | undefined => {
+        let base: string;
+        if (specifier.startsWith('.')) {
+            base = path.resolve(path.dirname(file), specifier);
+        } else {
+            const alias = Object.keys(aliases)
+                .filter(prefix => specifier === prefix || specifier.startsWith(`${prefix}/`))
+                .sort((a, b) => b.length - a.length)[0];
+            if (!alias) return undefined;
+            base = path.join(frameworkRoot, aliases[alias], specifier.slice(alias.length + 1));
+        }
+        // El import se escribe `.js`; en disco esta el `.ts`.
+        for (const candidate of [base.replace(/\.js$/, '.ts'), `${base}.ts`, base]) {
+            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+        }
+        return undefined;
+    };
+
+    const imports = [
+        ...[...content.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)]
+            .flatMap(([, names, specifier]) => names.split(',')
+                .map(name => name.split(/\s+as\s+/).pop()!.trim())
+                .filter(Boolean)
+                .map(name => [name, specifier] as const)),
+        ...[...content.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from\s*['"]([^'"]+)['"]/g)]
+            .map(([, name, specifier]) => [name, specifier] as const),
+    ];
+    for (const [name, specifier] of imports) {
+        const target = resolveSpecifier(specifier);
+        if (!target) continue;
+        try {
+            collect(fs.readFileSync(target, 'utf-8'), name);
+        } catch {
+            /* un import ilegible solo deja esa constante sin resolver */
+        }
+    }
+    // Una clase puede concatenar sus propias constantes.
+    for (const [, className] of content.matchAll(/class\s+([A-Za-z_$][\w$]*)/g)) collect(content, className);
+    return found;
+}
+
+/**
+ * Evalua `Constants.ID + selector_value` sin ejecutar nada: sustituye las
+ * constantes por su literal y parte por el identificador del valor.
+ */
+function compositionRule(
+    expression: string,
+    constants: Map<string, string>
+): CompositionRule | undefined {
+    const parts = expression.split('+').map(part => part.trim()).filter(Boolean);
+    if (!parts.length) return undefined;
+    const pieces: (string | null)[] = [];
+    for (const part of parts) {
+        const literal = part.match(/^(['"`])((?:\\.|(?!\1).)*)\1$/);
+        if (literal) { pieces.push(literal[2].replace(/\\(.)/g, '$1')); continue; }
+        if (constants.has(part)) { pieces.push(constants.get(part)!); continue; }
+        // Cualquier otro identificador es el valor del locator.
+        if (/^[A-Za-z_$][\w$.]*$/.test(part)) { pieces.push(null); continue; }
+        return undefined;
+    }
+    const slot = pieces.indexOf(null);
+    if (slot < 0 || pieces.lastIndexOf(null) !== slot) return undefined;
+    return {
+        prefix: pieces.slice(0, slot).join(''),
+        suffix: pieces.slice(slot + 1).join(''),
+    };
+}
+
+/**
+ * Tabla de composicion real, leida del `switch` de la clase resolutora.
+ *
+ * Se lee en vez de asumirse porque el recorder tiene que poder afirmar que
+ * `TypeLocator.X + valor` reconstruye el selector que grabo. Si el framework
+ * cambia un prefijo, el aviso sale aqui y no en la ejecucion de wdio.
+ */
+function readComposition(
+    frameworkRoot: string,
+    locatorFactoryFile: string | undefined,
+    typeLocatorSymbol: string
+, aliases: Record<string, string>): { composition: LocatorComposition; found: boolean } {
+    const empty = { android: {}, ios: {} } as LocatorComposition;
+    if (!locatorFactoryFile) return { composition: DEFAULTS.locatorComposition, found: false };
+    const absolute = path.join(frameworkRoot, locatorFactoryFile);
+    let content: string;
+    try {
+        content = fs.readFileSync(absolute, 'utf-8');
+    } catch {
+        return { composition: DEFAULTS.locatorComposition, found: false };
+    }
+    const constants = visibleStringConstants(frameworkRoot, absolute, aliases);
+
+    // Cada metodo cuyo nombre o firma nombra la plataforma aporta su switch.
+    const methods = /(?:private\s+)?static\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/g;
+    let match: RegExpExecArray | null;
+    while ((match = methods.exec(content))) {
+        const signature = `${match[1]} ${match[2]}`;
+        const platform: 'android' | 'ios' | undefined = /android/i.test(signature)
+            ? 'android'
+            : /ios/i.test(signature) ? 'ios' : undefined;
+        if (!platform) continue;
+        const body = bodyFrom(content, content.indexOf('{', match.index + match[0].length - 1));
+        for (const [, member, expression] of body.matchAll(
+            new RegExp(`case\\s+${typeLocatorSymbol}\\.([A-Za-z_$][\\w$]*)\\s*:\\s*return\\s+([^;]+);`, 'g')
+        )) {
+            const rule = compositionRule(expression, constants);
+            if (rule) empty[platform][member] = rule;
+        }
+    }
+    const found = Boolean(Object.keys(empty.android).length && Object.keys(empty.ios).length);
+    return found ? { composition: empty, found: true } : { composition: DEFAULTS.locatorComposition, found: false };
+}
+
+/** Selector que el framework producira para este par en tiempo de ejecucion. */
+export function composeLocator(
+    contract: Pick<FrameworkContract, 'locatorComposition'>,
+    type: string,
+    value: string,
+    platform: 'android' | 'ios'
+): string | undefined {
+    const rule = contract.locatorComposition?.[platform]?.[type];
+    if (!rule) return undefined;
+    return `${rule.prefix}${value}${rule.suffix}`;
+}
+
 function resolve(frameworkRoot: string): FrameworkContract {
     const { aliases, found } = readAliases(frameworkRoot);
     const warnings: string[] = [];
@@ -195,6 +393,10 @@ function resolve(frameworkRoot: string): FrameworkContract {
             pattern: /export\s+default\s+class\s+([A-Za-z_$][\w$]*)[^]*?\bstatic\s+getElement\s*\(/,
         },
         typeLocator: { pattern: /export\s+enum\s+([A-Za-z_$][\w$]*Locator[\w$]*)\b/ },
+        // Este si va por nombre: es la funcion que el codigo generado invoca,
+        // asi que el nombre ES el contrato. Si no esta, se cae a un helper con
+        // timeout por defecto en vez de inventar una ruta.
+        timeoutHelper: { pattern: /export\s+function\s+(getTimeoutFromEnv)\s*\(/ },
     };
     const pending = new Set(Object.keys(anchors));
     for (const root of SCAN_ROOTS) {
@@ -231,6 +433,16 @@ function resolve(frameworkRoot: string): FrameworkContract {
         return `${bare}${extensions.for(bare)}`;
     };
 
+    const typeLocatorSymbol = anchors.typeLocator.capture || DEFAULTS.typeLocatorSymbol;
+    const { composition, found: compositionFound } =
+        readComposition(frameworkRoot, anchors.locatorFactory.file, typeLocatorSymbol, aliases);
+    if (!compositionFound) {
+        warnings.push(
+            'No se pudo leer la tabla de composicion de locators del framework: ' +
+            'se usan los prefijos por convencion.'
+        );
+    }
+
     return {
         aliases,
         baseScreenImport: importFor('baseScreen', DEFAULTS.baseScreenImport),
@@ -238,8 +450,18 @@ function resolve(frameworkRoot: string): FrameworkContract {
         locatorFactoryImport: importFor('locatorFactory', DEFAULTS.locatorFactoryImport),
         locatorFactorySymbol: anchors.locatorFactory.capture || DEFAULTS.locatorFactorySymbol,
         typeLocatorImport: importFor('typeLocator', DEFAULTS.typeLocatorImport),
-        typeLocatorSymbol: anchors.typeLocator.capture || DEFAULTS.typeLocatorSymbol,
+        typeLocatorSymbol,
         importExtension: extensions.for('@screenobjects/'),
+        timeoutHelperImport: anchors.timeoutHelper.file
+            ? (() => {
+                const specifier = aliasImport(anchors.timeoutHelper.file!, aliases);
+                if (!specifier) return undefined;
+                const bare = specifier.replace(/\.tsx?$/, '');
+                return `${bare}${extensions.for(bare)}`;
+            })()
+            : undefined,
+        timeoutHelperSymbol: anchors.timeoutHelper.capture,
+        locatorComposition: composition,
         warnings,
     };
 }

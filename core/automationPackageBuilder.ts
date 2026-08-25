@@ -12,7 +12,7 @@ import {
 import { AutomationMemory } from './automationMemory';
 import { AutomationResponseValidator } from './automationResponseValidator';
 import { DeterministicResolver, ResolverResult } from './deterministicResolver';
-import { FwkMobileGenerator, GeneratedPreview, ReusedLocator } from './fwkMobileGenerator';
+import { domainTag, executionTag, FwkMobileGenerator, GeneratedPreview, ReusedLocator } from './fwkMobileGenerator';
 import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
@@ -143,9 +143,16 @@ function instructions(result: ResolverResult): string {
         `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
         `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion: ${contract.baseScreenClass} desde ${contract.baseScreenImport}, ${contract.locatorFactorySymbol} desde ${contract.locatorFactoryImport} y ${contract.typeLocatorSymbol} desde ${contract.typeLocatorImport}. Copialos tal cual, con esa extension: no uses rutas relativas ni el nombre que recuerdes de otro repo (la clase se llama ${contract.locatorFactorySymbol}, no LocatorFactory).\n` +
-        `- Importa browser desde @wdio/globals únicamente si el Screen Object contiene una llamada browser.; no dejes imports sin uso.\n` +
+        `- Cada getter del Screen Object resuelve el locator y devuelve \`$(locator)\`: \`public get x() { const locator = ${contract.locatorFactorySymbol}.getElement(...); return $(locator); }\`. Es el patron del framework y lo que revisa el PR. Importa de @wdio/globals solo lo que uses: \`$\` siempre que haya getters, \`expect\` si hay aserciones, \`browser\` solo si hay una llamada browser.; no dejes imports sin uso.\n` +
+        `- Ninguna espera por tiempo: nada de browser.pause ni driver.pause, en ningun getter, metodo ni step. Toda espera va anclada a un elemento con this.uiHelper.waitForElementExistByLocator(elemento, true) antes de interactuar${
+            contract.timeoutHelperSymbol
+                ? `, y las verificaciones con this.uiHelper.waitForElementDisplayedAndExpect(elemento, timeout, 'mensaje'), donde \`timeout\` sale de \`const timeout: number = ${contract.timeoutHelperSymbol}();\` importado de ${contract.timeoutHelperImport}`
+                : ''
+        }. El Then tiene que AFIRMAR, no solo esperar.\n` +
+        `- El archivo .locator.json contiene unicamente los bloques <modulo>Android y <modulo>Ios. Nada de \`_metadata\` ni ninguna otra clave: JSON no admite comentarios y el review lo marca.\n` +
         `- Incluye trazabilidad para las ${result.scenario.actions.length} acciones en orden.\n` +
-        `- El Feature debe tener @tag, @${result.scenario.platform}, [TC-N][Happy|Unhappy Path][AUTO-FRONT] y un Then real.\n` +
+        `- Tags del Feature, tal como los exige el estandar del repo: sobre la linea \`Feature:\` va el tag de dominio del producto (\`@${domainTag(result.scenario.squad)}\`); sobre el Scenario van el tag de funcionalidad (\`@${result.scenario.request.tag}\`), el tier de ejecucion (\`@${executionTag(result.scenario.request)}\`) y \`@${result.scenario.platform}\`. Falta de tier bloquea el merge. El nombre del Scenario lleva [TC-N][Happy|Unhappy Path][AUTO-FRONT] y el caso un Then real.\n` +
+        `- La grabacion solo exige cobertura ${result.scenario.platform.toUpperCase()}. No inventes ni completes la plataforma contraria: su bloque puede faltar o quedar vacio y se completara en otra ejecucion.\n` +
         `- Las filas de scenarioRows con status "reused" se copian LITERALES, caracter por caracter (tildes incluidas). Ya existen como step definition en el framework: si las reescribes o reemplazas su parametro por un literal, Cucumber las reporta como undefined al ejecutar. Ejemplo: \`Given el usuario <username> inicia sesión en Yape\` se copia tal cual, nunca con el nombre del usuario dentro.\n` +
         `- Todo <parametro> que dejes en un step obliga a \`Scenario Outline:\` y a una tabla \`Examples:\` con esa columna. Toma los valores de request.examples de scenario.json; si falta la columna, el parametro llega literal al step y no enlaza.\n` +
         `- Todo el codigo va en INGLES: metodos y getters del Screen Object, claves de locator, variables y parametros. El espanol se reserva para la prosa que lee el QA: la linea Feature, el nombre del Scenario y el texto de los steps. Ejemplo: el step "el usuario consulta todos sus movimientos" se resuelve con \`movementsScreen.openAllMovements()\`, nunca con \`elUsuarioConsultaTodosSusMovimientos()\`.\n` +
@@ -207,6 +214,7 @@ const feature=(response.files||[]).find(x=>x.layer==='feature')?.content||'';
 const steps=(response.files||[]).find(x=>x.layer==='steps')?.content||'';
 const screen=(response.files||[]).find(x=>x.layer==='screen')?.content||'';
 const locator=(response.files||[]).find(x=>x.layer==='locators')?.content||'';
+try{const document=JSON.parse(locator);const active=scenario.platform;const hasActive=Object.entries(document).some(([name,value])=>name.toLowerCase().endsWith(active)&&value&&typeof value==='object'&&!Array.isArray(value));if(!hasActive)errors.push('Locators sin bloque '+active+' activo')}catch(e){}
 for(const baseline of reuse.updateBaselines||[]){const proposed=(response.files||[]).find(x=>x.layer===baseline.layer)?.content||'';const content=fs.readFileSync(baseline.reference,'utf8');let tokens=[];if(baseline.layer==='steps')tokens=[...content.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(x=>x[1]);else if(baseline.layer==='screen')tokens=[...content.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(x=>x[1]);else if(baseline.layer==='locators'){try{tokens=Object.entries(JSON.parse(content)).filter(([name,value])=>name!=='_metadata'&&value&&typeof value==='object'&&!Array.isArray(value)).flatMap(([,value])=>Object.keys(value))}catch(e){}}const missing=tokens.filter(token=>!proposed.includes(token));if(missing.length)errors.push('Update destructivo '+baseline.path+': '+missing.slice(0,5).join(', '))}
 if(!/^\s*@[-A-Za-z0-9_]+/m.test(feature))errors.push('Feature sin tag válido');
 const requiredPlatforms=new Set([scenario.platform]);

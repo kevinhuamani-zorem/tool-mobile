@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { translateToEnglish } from './englishIdentifiers';
 import { aliasImport, frameworkContract } from './frameworkContract';
+import { frameworkLocator } from './locatorStrategy';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, toGherkinLine } from './models';
 import { screenObjectNames } from './semanticNaming';
@@ -22,6 +23,12 @@ export interface GenerationRequest {
     caseId: string;
     pathType: TestPathType;
     tag: string;
+    /**
+     * Tier de ejecucion (`smoke_mobile` / `regression_mobile`). El estandar del
+     * repo lo exige en cada Scenario y su ausencia bloquea el merge. Si no
+     * llega, se deriva de `pathType`.
+     */
+    executionTag?: string;
     dataName?: string;
     examples?: Record<string, string>;
     platform: MobilePlatform;
@@ -65,6 +72,27 @@ export interface GeneratedPreview {
     screenPath?: string;
     screenContent?: string;
     files: string[];
+}
+
+/**
+ * Tier de ejecucion del Scenario.
+ *
+ * El estandar exige `@smoke_mobile` o `@regression_mobile`. Cuando el QA no lo
+ * elige se deriva del tipo de camino: el Happy Path es el flujo que tiene que
+ * seguir vivo en cada build, los demas van a regresion.
+ */
+/** Tag de dominio del producto que va sobre la linea `Feature:`. */
+export function domainTag(squad: string): string {
+    return String(squad).trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+export function executionTag(request: Pick<GenerationRequest, 'executionTag' | 'pathType'>): string {
+    const chosen = String(request.executionTag || '').trim().replace(/^@/, '');
+    if (chosen) return chosen;
+    // `Unhappy Path` contiene "happy": el ancla al inicio es obligatoria.
+    return /^\s*happy\b/i.test(String(request.pathType || '')) ? 'smoke_mobile' : 'regression_mobile';
 }
 
 const safeSegment = /^[a-z0-9][a-z0-9_-]*$/;
@@ -325,12 +353,22 @@ export class FwkMobileGenerator {
         const scenarioLines = request.scenarioRows?.length
             ? request.scenarioRows.map(row => `    ${row.keyword} ${row.text.trim()}`)
             : steps.map((step, index) => `    ${toGherkinLine(step, index)}`);
+        // Tags segun el estandar del repo: dominio de producto sobre `Feature:`,
+        // y en el Scenario funcionalidad + tier de ejecucion. Faltar el tier es
+        // un hallazgo que bloquea el merge, asi que se emite siempre.
+        const featureTag = `@${domainTag(request.squad)}`;
+        const scenarioTags = [
+            `@${request.tag}`,
+            `@${executionTag(request)}`,
+            `@${request.platform}`,
+        ].join(' ');
         const lines = [
             `# locator-module: ${request.squad}/${request.locatorModule}`,
             '',
+            featureTag,
             `Feature: ${request.featureName}`,
             '',
-            `  @${request.tag} @${request.platform}`,
+            `  ${scenarioTags}`,
             `  Scenario${outline ? ' Outline' : ''}: [${request.caseId}][${request.pathType}][AUTO-FRONT] ${request.scenarioName}`,
             ...scenarioLines
         ];
@@ -375,13 +413,20 @@ export class FwkMobileGenerator {
             if (!row.actions || row.actions.length === 0) {
                 throw new Error(`El step faltante "${row.text}" no tiene acciones enlazadas`);
             }
-            for (const action of row.actions) {
+            for (let index = 0; index < row.actions.length; index++) {
+                const action = row.actions[index];
                 if (!withoutLocator.has(action.action) && (!action.variableName || !action.selector)) {
                     throw new Error(
                         `La acción ${action.action} del step "${row.text}" requiere nombre y selector`
                     );
                 }
-                const lines = this.actionLines(action, [], 0);
+                // ESPERAR se valida con su vecina: sin elemento posterior no hay
+                // nada a que anclar la espera, y una pausa por tiempo no es una
+                // salida aceptable. El resolver abre `gap-fixed-wait-N` y el QA
+                // decide; aqui simplemente no se emite nada.
+                const next = row.actions[index + 1];
+                if (action.action === 'ESPERAR' && !next?.variableName) continue;
+                const lines = this.actionLines(action, [], 0, { hasTimeout: false, next });
                 if (lines.length === 0) {
                     throw new Error(
                         `La acción ${action.action} del step "${row.text}" no genera código ejecutable`
@@ -397,7 +442,7 @@ export class FwkMobileGenerator {
     ): string {
         const active = Object.fromEntries(entries.map(([name, selector]) => [
             name,
-            this.locatorValue(selector)
+            this.locatorValue(selector, request.platform)
         ]));
         const inactive = Object.fromEntries(entries.map(([name]) => [name, '']));
         const android = request.platform === 'android' ? active : inactive;
@@ -493,31 +538,43 @@ export class FwkMobileGenerator {
                 .filter(name => reused.has(name))
         )].map(name => reused.get(name)!);
 
+        // Patron documentado del framework: el getter resuelve el locator y
+        // devuelve `$(locator)`. Es la forma mayoritaria del repo (601 getters
+        // contra 5 que devolvian string) y la que espera el review del PR.
+        const getterBody = (
+            iosType: string, iosReference: string,
+            androidType: string, androidReference: string
+        ): string[] => [
+            `        const locator = ${contract.locatorFactorySymbol}.getElement(`,
+            `            ${contract.typeLocatorSymbol}.${iosType}, ${iosReference},`,
+            `            ${contract.typeLocatorSymbol}.${androidType}, ${androidReference}`,
+            `        );`,
+            `        return $(locator);`,
+        ];
+
         const gettersFor = (name: string): string => {
             const external = reused.get(name);
             if (external) {
                 const fallback = external.reference.android || external.reference.ios || '';
-                const iosReference = external.reference.ios || fallback;
-                const androidReference = external.reference.android || fallback;
                 return [
-                    `    private get ${name}(): string {`,
-                    `        return ${contract.locatorFactorySymbol}.getElement(`,
-                    `            ${contract.typeLocatorSymbol}.${external.type.ios || 'XPATH'}, ${iosReference},`,
-                    `            ${contract.typeLocatorSymbol}.${external.type.android || 'XPATH'}, ${androidReference}`,
-                    `        );`,
+                    `    public get ${name}() {`,
+                    ...getterBody(
+                        external.type.ios || 'XPATH', external.reference.ios || fallback,
+                        external.type.android || 'XPATH', external.reference.android || fallback
+                    ),
                     `    }`
                 ].join('\n');
             }
             const selector = locators.find(([key]) => key === name)?.[1] || '';
             const activeType = this.locatorType(selector, request.platform);
-            const iosType = request.platform === 'ios' ? activeType : 'XPATH';
-            const androidType = request.platform === 'android' ? activeType : 'XPATH';
             return [
-                `    private get ${name}(): string {`,
-                `        return ${contract.locatorFactorySymbol}.getElement(`,
-                `            ${contract.typeLocatorSymbol}.${iosType}, Locators[${JSON.stringify(iosBlock)}].${name},`,
-                `            ${contract.typeLocatorSymbol}.${androidType}, Locators[${JSON.stringify(androidBlock)}].${name}`,
-                `        );`,
+                `    public get ${name}() {`,
+                ...getterBody(
+                    request.platform === 'ios' ? activeType : 'XPATH',
+                    `Locators[${JSON.stringify(iosBlock)}].${name}`,
+                    request.platform === 'android' ? activeType : 'XPATH',
+                    `Locators[${JSON.stringify(androidBlock)}].${name}`
+                ),
                 `    }`
             ].join('\n');
         };
@@ -526,12 +583,16 @@ export class FwkMobileGenerator {
             ...reusedInScreen.map(external => gettersFor(external.name)),
         ];
 
+        const hasTimeout = Boolean(contract.timeoutHelperImport && contract.timeoutHelperSymbol);
         const methods = rows.map((row, index) => {
             const parameters = [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
                 .map(match => match[1]);
             const args = parameters.map(name => `${name}: string`).join(', ');
-            const actions = (row.actions || []).flatMap((action, actionIndex) =>
-                this.actionLines(action, parameters, actionIndex)
+            const rowActions = row.actions || [];
+            const actions = rowActions.flatMap((action, actionIndex) =>
+                this.actionLines(action, parameters, actionIndex, {
+                    hasTimeout, next: rowActions[actionIndex + 1],
+                })
             );
             const methodName = this.rowMethodName(row, index);
             return {
@@ -545,10 +606,21 @@ export class FwkMobileGenerator {
         }).filter((method, index, all) =>
             all.findIndex(candidate => candidate.name === method.name) === index
         );
-        const usesBrowser = methods.some(method => /\bbrowser\./.test(method.content));
+        const body = methods.map(method => method.content).join('\n');
+        // El import de @wdio/globals se arma por uso real. `expect` faltaba y
+        // cualquier VERIFICAR_TEXTO generaba un Screen Object que no compila.
+        const globals = [
+            'browser',
+            'expect',
+            '$',
+        ].filter(symbol => symbol === '$'
+            ? getters.length > 0
+            : new RegExp(`\\b${symbol.replace('$', '\\$')}[.(]`).test(body))
+            .sort();
+        const usesTimeout = hasTimeout && /\btimeout\b/.test(body);
 
         return [
-            ...(usesBrowser ? [`import { browser } from '@wdio/globals';`] : []),
+            ...(globals.length ? [`import { ${globals.join(', ')} } from '@wdio/globals';`] : []),
             `import ${contract.baseScreenClass} from '${baseImport}';`,
             ...(locators.length > 0 || reusedInScreen.length > 0 ? [
                 `import ${contract.locatorFactorySymbol} from '${factoryImport}';`,
@@ -561,6 +633,10 @@ export class FwkMobileGenerator {
             ...[...new Map(reusedInScreen.map(external => [external.identifier, external])).values()]
                 .map(external =>
                     `import ${external.identifier} from '${external.import}' with { type: 'json' };`),
+            ...(usesTimeout
+                ? [`import { ${contract.timeoutHelperSymbol} } from '${contract.timeoutHelperImport}';`]
+                : []),
+            ...(usesTimeout ? ['', `const timeout: number = ${contract.timeoutHelperSymbol}();`] : []),
             '',
             `class ${className} extends ${contract.baseScreenClass} {`,
             ...getters.flatMap(getter => ['', getter]),
@@ -593,40 +669,64 @@ export class FwkMobileGenerator {
             words.slice(1).map(word => word[0].toUpperCase() + word.slice(1).toLowerCase()).join('');
     }
 
+    /**
+     * Lineas de un paso dentro del metodo del Screen Object.
+     *
+     * Con los getters devolviendo `$(locator)` las acciones operan sobre el
+     * elemento, que es lo que esperan `waitForElementExistByLocator` y
+     * `waitForElementDisplayedAndExpect`. Estas dos son ademas la espera
+     * explicita que exige el estandar: ningun `.click()` sale sin una espera
+     * delante.
+     *
+     * `next` es la accion siguiente y existe por `ESPERAR`: una pausa fija esta
+     * prohibida, asi que se traduce a esperar explicitamente el elemento que la
+     * pausa estaba esperando. Si no hay tal elemento, el resolver abre un gap y
+     * aqui no se emite nada — nunca un `browser.pause`.
+     */
     private actionLines(
         action: RecordedStep,
         parameters: string[],
-        actionIndex: number
+        actionIndex: number,
+        options: { hasTimeout: boolean; next?: RecordedStep } = { hasTimeout: false }
     ): string[] {
         const locator = action.variableName ? `this.${action.variableName}` : undefined;
         const value = this.codeValue(action.value || '', parameters);
         const element = `element${actionIndex + 1}`;
+        const ready = (target: string): string =>
+            `await this.uiHelper.waitForElementExistByLocator(${target}, true);`;
+        /** Espera con asercion: el Then tiene que afirmar, no solo esperar. */
+        const displayed = (target: string, message: string): string[] =>
+            options.hasTimeout
+                ? [`await this.uiHelper.waitForElementDisplayedAndExpect(${target}, timeout, '${message}');`]
+                : [ready(target), `await expect(${target}).toBeDisplayed();`];
+
         switch (action.action) {
             case 'CLICK':
-                return locator ? [`await this.uiHelper.interactWithElement(${locator}, 'click');`] : [];
+                return locator ? [ready(locator), `await ${locator}.click();`] : [];
             case 'ESCRIBIR':
-                return locator
-                    ? [`await this.uiHelper.interactWithElement(${locator}, 'setValue', ${value});`]
-                    : [];
+                return locator ? [ready(locator), `await ${locator}.setValue(${value});`] : [];
             case 'LIMPIAR':
-                return locator
-                    ? [
-                        `const ${element} = await this.uiHelper.waitForElementToBeReady(${locator});`,
-                        `await ${element}.clearValue();`
-                    ]
-                    : [];
+                return locator ? [ready(locator), `await ${locator}.clearValue();`] : [];
             case 'VERIFICAR_TEXTO':
                 return locator
                     ? [
-                        `const ${element} = await this.uiHelper.waitForElementToBeReady(${locator});`,
-                        `await expect(${element}).toHaveText(${value});`
+                        ...displayed(locator, 'The element to validate was not displayed'),
+                        `await expect(${locator}).toHaveText(${value});`
                     ]
                     : [];
             case 'VERIFICAR_EXISTE':
-                return locator ? [`await this.uiHelper.waitForDisplayed(${locator});`] : [];
-            case 'VERIFICAR_NO_EXISTE':
                 return locator
-                    ? [`expect(await this.uiHelper.isElementPresent(${locator})).toBe(false);`]
+                    ? displayed(locator, 'The expected element was not displayed')
+                    : [];
+            case 'VERIFICAR_NO_EXISTE':
+                // `isRequired: false` devuelve false al agotar el timeout y
+                // propaga cualquier otro error: no se traga fallos de
+                // infraestructura como si fueran una ausencia esperada.
+                return locator
+                    ? [
+                        `const ${element} = await this.uiHelper.waitForElementExistByLocator(${locator}, false);`,
+                        `await expect(${element}).toBe(false);`
+                    ]
                     : [];
             case 'SCROLL_DOWN':
                 return ['await this.gestureHelper.verticalScrollingToEnd();'];
@@ -643,14 +743,19 @@ export class FwkMobileGenerator {
             case 'PRESION_LARGA':
                 return locator
                     ? [
-                        `const ${element} = await this.uiHelper.waitForElementToBeReady(${locator});`,
+                        ready(locator),
+                        `const ${element} = await ${locator};`,
                         `await browser.execute('mobile: longClickGesture', { elementId: ${element}.elementId });`
                     ]
                     : [];
             case 'VOLVER':
                 return ['await browser.back();'];
-            case 'ESPERAR':
-                return [`await browser.pause(Number(${value}) * 1000);`];
+            case 'ESPERAR': {
+                const target = options.next?.variableName;
+                return target
+                    ? displayed(`this.${target}`, 'The element the wait was anchored to was not displayed')
+                    : [];
+            }
             case 'SCREENSHOT':
                 return [`await browser.saveScreenshot(${value});`];
             case 'ABRIR_APP':
@@ -660,27 +765,17 @@ export class FwkMobileGenerator {
         }
     }
 
-    private locatorValue(selector: string): string {
-        const shortId = selector.match(/^id=([^/:]+)$/)?.[1];
-        if (shortId) return `//*[@resource-id="${shortId}"]`;
-        return selector.trim()
-            .replace(/^android=/, '')
-            .replace(/^iosPredicate=/, '')
-            .replace(/^iosClassChain=/, '')
-            .replace(/^id=/, '')
-            .replace(/^class=/, '')
-            .replace(/^~/, '');
+    /**
+     * El par (valor, tipo) sale de `locatorStrategy`, no de una copia local.
+     * Estaban duplicados y divergieron: el JSON guardaba un valor que el tipo
+     * del getter no sabia recomponer.
+     */
+    private locatorValue(selector: string, platform: MobilePlatform): string {
+        return frameworkLocator(selector, platform).value;
     }
 
     private locatorType(selector: string, platform: MobilePlatform): string {
-        if (/^id=[^/:]+$/.test(selector)) return 'XPATH';
-        if (selector.startsWith('android=')) return 'ANDROID';
-        if (selector.startsWith('iosPredicate=')) return 'PREDICATESTRING';
-        if (selector.startsWith('iosClassChain=')) return 'CLASSCHAIN';
-        if (selector.startsWith('class=')) return 'CLASSNAME';
-        if (selector.startsWith('id=') || selector.startsWith('~')) return 'ID';
-        if (platform === 'android' && selector.includes('new UiSelector')) return 'ANDROID';
-        return 'XPATH';
+        return frameworkLocator(selector, platform).type;
     }
 
     /**

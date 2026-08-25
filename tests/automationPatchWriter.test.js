@@ -79,7 +79,9 @@ function fixture(t) {
 
 const BASE = { recordingId: 'rec-abc123', createdAt: '2026-08-21T17:00:00.000Z' };
 
-test('agrega la clave nueva a ambos bloques y deja traza en _metadata', t => {
+// El estandar del repo prohibe metadatos dentro del JSON de locators: la traza
+// de que grabacion aporto cada clave vive en el registro del recorder.
+test('agrega la clave nueva a ambos bloques sin ensuciar el JSON con _metadata', t => {
     const ctx = fixture(t);
     const [outcome] = ctx.writer.apply({
         ...BASE,
@@ -91,7 +93,8 @@ test('agrega la clave nueva a ambos bloques y deja traza en _metadata', t => {
     assert.equal(parsed.filtroAndroid.btnDescargar, 'Descargar');
     assert.equal(parsed.filtroIos.btnDescargar, '');
     assert.equal(parsed.filtroAndroid.mostrarMovimientos, 'new UiSelector().text("Mostrar")');
-    assert.equal(parsed._metadata.generatedKeys.btnDescargar.recordingId, 'rec-abc123');
+    assert.equal(Object.prototype.hasOwnProperty.call(parsed, '_metadata'), false,
+        'un `_metadata` es un comentario con otro nombre y el review lo marca');
 });
 
 test('nunca pisa una clave de locator existente', t => {

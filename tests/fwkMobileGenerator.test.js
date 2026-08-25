@@ -56,14 +56,15 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.equal(preview.files.length, 4);
     assert.match(preview.featureContent, /\[TC-10239\]\[Happy Path\]\[AUTO-FRONT\]/);
     assert.match(preview.featureContent, /^# Generado por Appium Visual Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
-    assert.match(preview.featureContent, /@movimientos @android/);
+    // Tags segun el estandar: dominio sobre `Feature:`, funcionalidad + tier de
+    // ejecucion en el Scenario. Sin tier el review bloquea el merge.
+    assert.match(preview.featureContent, /^@payment\nFeature: /m);
+    assert.match(preview.featureContent, /@movimientos @smoke_mobile @android/);
     assert.match(preview.locatorContent, /btnMostrarMovimientos/);
     const locatorDocument = JSON.parse(preview.locatorContent);
-    assert.deepEqual(locatorDocument._metadata, {
-        generator: 'Appium Visual Recorder',
-        author: 'Kevinarnold.zorem',
-        createdAt: '2026-08-21T18:30:00.000Z'
-    });
+    assert.equal(Object.prototype.hasOwnProperty.call(locatorDocument, '_metadata'), false,
+        'JSON no admite comentarios y `_metadata` es lo mismo con otro nombre');
+    assert.deepEqual(Object.keys(locatorDocument), ['movementsAndroid', 'movementsIos']);
     assert.match(preview.stepContent, /^\/\/ Generado por Appium Visual Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
     assert.match(preview.stepContent, /movementsScreen\.revisarMovimientos\(\)/);
     assert.match(preview.stepContent, /movementsScreen\.validarMovimiento\(movimiento\)/);
@@ -78,7 +79,13 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.ok(preview.screenContent.includes(`${CONTRACT.locatorFactorySymbol}.getElement(`),
         'el getter invoca la clase con el nombre que usa este framework');
     assert.match(preview.screenContent, /from '@locators\/payment\/movements\.locator\.json'/);
-    assert.doesNotMatch(preview.screenContent, /@wdio\/globals/);
+    // Patron documentado: el getter devuelve `$(locator)`, asi que `$` se
+    // importa siempre; `expect` solo cuando una verificacion lo usa. Faltaba y
+    // cualquier VERIFICAR_TEXTO generaba un Screen Object que no compilaba.
+    assert.match(preview.screenContent, /^import \{ \$, expect \} from '@wdio\/globals';$/m);
+    assert.match(preview.screenContent, /public get btnMostrarMovimientos\(\) \{/);
+    assert.match(preview.screenContent, /return \$\(locator\);/);
+    assert.doesNotMatch(preview.screenContent, /browser\.pause/);
     assert.doesNotMatch(preview.screenContent, /from ['"]\.\.?\//);
     assert.match(preview.screenContent, /public async revisarMovimientos/);
     assert.match(preview.screenContent, /public async validarMovimiento/);
@@ -200,7 +207,7 @@ test('referencia el locator reutilizado en vez de copiarlo a su módulo', () => 
     assert.match(preview.screenContent, /LocatorHome\.homeAndroid\.shortcutTapp/);
     assert.match(preview.screenContent, /LocatorHome\.homeIos\.shortcutTapp/);
     // Un solo getter, no uno por cada origen.
-    assert.equal((preview.screenContent.match(/private get shortcutTapp/g) || []).length, 1);
+    assert.equal((preview.screenContent.match(/public get shortcutTapp/g) || []).length, 1);
     // El locator propio sigue apuntando a su bloque.
     assert.match(preview.screenContent, /Locators\["tappAccountsAndroid"\]\.tappScreen/);
 });
@@ -237,4 +244,53 @@ test('ignora una reutilización sin referencia para la plataforma activa', () =>
     const locators = JSON.parse(preview.locatorContent);
     assert.ok(locators.tappAccountsAndroid.shortcutTapp, 'cae a crearlo');
     assert.doesNotMatch(preview.screenContent, /LocatorHome/);
+});
+
+// Reglas del review de PR que antes se incumplian y bloqueaban el merge:
+// pausa fija, falta del tier de ejecucion, falta del tag de dominio y
+// metadatos dentro del JSON de locators.
+function esperaYVerificacion(actions, rows) {
+    return new FwkMobileGenerator().preview({
+        squad: 'payment', featureName: 'Espera', scenarioName: 'Espera',
+        fileName: 'wait-case', locatorModule: 'wait-case', caseId: 'TC-1',
+        pathType: 'Unhappy Path', tag: 'espera', platform: 'android',
+        scenarioRows: rows,
+    }, actions);
+}
+
+test('una espera fija se convierte en espera explicita sobre el elemento siguiente', () => {
+    const actions = [
+        { action: 'ESPERAR', value: '3' },
+        { action: 'CLICK', variableName: 'continueButton', selector: '~Continuar' },
+    ];
+    const preview = esperaYVerificacion(actions, [{
+        keyword: 'When', text: 'el usuario continua', status: 'missing',
+        methodName: 'continueFlow', actions,
+    }]);
+    assert.doesNotMatch(preview.screenContent, /browser\.pause|driver\.pause/,
+        'una pausa por tiempo es un hallazgo High que bloquea el merge');
+    assert.match(preview.screenContent, /waitForElementDisplayedAndExpect\(this\.continueButton, timeout/);
+});
+
+test('un Unhappy Path va a regresion y el Feature lleva su tag de dominio', () => {
+    const actions = [{ action: 'VERIFICAR_EXISTE', variableName: 'errorLabel', selector: '~lblError' }];
+    const preview = esperaYVerificacion(actions, [{
+        keyword: 'Then', text: 'se muestra el error', status: 'missing',
+        methodName: 'showError', actions,
+    }]);
+    assert.match(preview.featureContent, /^@payment\nFeature: /m);
+    assert.match(preview.featureContent, /@espera @regression_mobile @android/);
+    // El Then afirma, no solo espera.
+    assert.match(preview.screenContent, /waitForElementDisplayedAndExpect/);
+});
+
+test('el tier de ejecucion se puede fijar desde la peticion', () => {
+    const actions = [{ action: 'VERIFICAR_EXISTE', variableName: 'errorLabel', selector: '~lblError' }];
+    const preview = new FwkMobileGenerator().preview({
+        squad: 'payment', featureName: 'X', scenarioName: 'X', fileName: 'x',
+        locatorModule: 'x', caseId: 'TC-2', pathType: 'Happy Path', tag: 'x',
+        executionTag: '@regression_mobile', platform: 'android',
+        scenarioRows: [{ keyword: 'Then', text: 'ok', status: 'missing', methodName: 'ok', actions }],
+    }, actions);
+    assert.match(preview.featureContent, /@x @regression_mobile @android/);
 });

@@ -698,6 +698,21 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     const validation = validator.validate(resolved.scenario, resolved.plan, validResponse(resolved.plan));
     assert.equal(validation.valid, true);
     assert.equal(validation.qualityScore, 100);
+
+    const androidOnly = validResponse(resolved.plan);
+    const androidOnlyLocators = JSON.parse(
+        androidOnly.files.find(file => file.layer === 'locators').content
+    );
+    delete androidOnlyLocators.consultaIos;
+    androidOnly.files.find(file => file.layer === 'locators').content =
+        JSON.stringify(androidOnlyLocators);
+    const androidOnlyValidation = validator.validate(resolved.scenario, resolved.plan, androidOnly);
+    assert.equal(androidOnlyValidation.valid, true);
+    assert.equal(
+        androidOnlyValidation.warnings.some(warning => warning.includes('Cobertura iOS pendiente')),
+        true
+    );
+
     const broken = validResponse(resolved.plan);
     broken.actionTrace = [];
     assert.equal(validator.validate(resolved.scenario, resolved.plan, broken).valid, false);
@@ -897,11 +912,12 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         generatedResponse.files.find(file => file.layer === 'feature').content,
         /^# Generado por Appium Visual Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación:/
     );
-    assert.equal(
-        JSON.parse(generatedResponse.files.find(file => file.layer === 'locators').content)
-            ._metadata.author,
-        'Kevinarnold.zorem'
+    // El JSON de locators viaja limpio: sin `_metadata`, solo los bloques.
+    const locatorDoc = JSON.parse(
+        generatedResponse.files.find(file => file.layer === 'locators').content
     );
+    assert.equal(Object.prototype.hasOwnProperty.call(locatorDoc, '_metadata'), false);
+    assert.equal(Object.keys(locatorDoc).every(block => /(?:Android|Ios)$/.test(block)), true);
     const instructions = fs.readFileSync(path.join(result.packageDirectory, 'instructions.md'), 'utf8');
     const verifier = fs.readFileSync(path.join(result.packageDirectory, 'verify-package.js'), 'utf8');
     assert.match(instructions, /Gherkin declarativo/);
@@ -914,7 +930,10 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(instructions.includes(contract.locatorFactoryImport));
     assert.ok(instructions.includes(contract.typeLocatorImport));
     assert.ok(instructions.includes(contract.locatorFactorySymbol));
-    assert.match(instructions, /Importa browser.*únicamente si/);
+    assert.match(instructions, /`browser` solo si hay una llamada browser\./);
+    assert.match(instructions, /Ninguna espera por tiempo/);
+    assert.match(instructions, /Nada de `_metadata`/);
+    assert.match(instructions, /tier de ejecucion \(`@smoke_mobile`\)/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);
     assert.match(verifier, /usa imports relativos/);

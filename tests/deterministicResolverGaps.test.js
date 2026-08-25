@@ -294,3 +294,75 @@ test('no propone duplicado contra el modulo que se esta escribiendo', () => {
         false
     );
 });
+
+// Red de seguridad del contrato de locators: si el par (TypeLocator, valor) no
+// reconstruye el selector, el codigo generado no encuentra el elemento. Se
+// bloquea en vez de delegarlo: no es algo que el agente pueda arreglar
+// adivinando, hay que volver a capturar el elemento.
+test('bloquea cuando un locator nuevo no se puede componer con TypeLocator', () => {
+    const result = new DeterministicResolver(emptyCatalog()).resolve(scenario([
+        action('CLICK', 'boton filtrar', 'Ver todos'),
+        action('VERIFICAR_EXISTE', 'filtro visible', '~lblFiltro'),
+    ]));
+
+    const gap = result.unresolvedContext.gaps.find(item => item.id === 'gap-locator-roundtrip');
+    assert.ok(gap, 'un valor pelado bajo XPATH llega a wdio sin prefijo y no es un XPath');
+    assert.equal(gap.blocking, true);
+    assert.match(gap.description, /Ver todos/);
+    assert.match(gap.requiredOutput, /UiSelector/);
+});
+
+test('no abre el gap de composicion cuando los selectores traen su sintaxis', () => {
+    const result = new DeterministicResolver(emptyCatalog()).resolve(scenario(FLUJO_COMPLETO));
+    assert.equal(
+        result.unresolvedContext.gaps.some(gap => gap.id === 'gap-locator-roundtrip'), false
+    );
+});
+
+// Un `reuse` apunta a un valor que ya vive en el JSON, y ahi la estrategia la
+// declara el getter, no la sintaxis: `"Yapear"` pelado es ID valido y XPath
+// invalido a la vez. Reinferirlo marcaria como roto codigo que funciona.
+test('no marca como roto un locator existente que se reutiliza', () => {
+    const result = new DeterministicResolver(catalogWithExistingModule()).resolve(
+        scenario([action('CLICK', 'yapear', '~Yapear')])
+    );
+    assert.equal(
+        result.unresolvedContext.gaps.some(gap => gap.id === 'gap-locator-roundtrip'), false
+    );
+});
+
+// Caso real: el QA pulsa el mismo boton de filtro entre cada opcion. Antes
+// salian cinco locators —filterMovementsButton, filterMovementsButton7,
+// filterMovements, filter, filter13— apuntando todos a `~Botón de filtrar`.
+test('el mismo elemento pulsado varias veces produce un solo locator', () => {
+    const result = new DeterministicResolver(emptyCatalog()).resolve(scenario([
+        action('CLICK', 'boton de filtro de movimientos', '~Botón de filtrar'),
+        action('CLICK', 'filtrar por solo hoy', 'android=new UiSelector().text("Solo hoy")'),
+        action('CLICK', 'filtro de movimientos', '~Botón de filtrar'),
+        action('CLICK', 'filtrar por ultimos 7 dias', 'android=new UiSelector().text("Últimos 7 días")'),
+        action('CLICK', 'filtrar', '~Botón de filtrar'),
+        action('VERIFICAR_EXISTE', 'contenedor de movimientos', '~lblContenedorMovimientos'),
+    ]));
+
+    const byName = result.plan.resolutions
+        .filter(item => item.resolution === 'create')
+        .map(item => item.locatorName);
+    assert.equal(new Set(byName).size, byName.length - 2, 'las tres pulsaciones comparten nombre');
+
+    const filterName = result.plan.resolutions.find(item => item.sequence === 1).locatorName;
+    assert.equal(result.plan.resolutions.find(item => item.sequence === 3).locatorName, filterName);
+    assert.equal(result.plan.resolutions.find(item => item.sequence === 5).locatorName, filterName);
+    assert.match(result.plan.resolutions.find(item => item.sequence === 3).reason, /mismo elemento/);
+});
+
+// El nombre no puede perder el numero: `filterLastDays` para "ultimos 7 dias"
+// miente y colisiona con cualquier otro periodo.
+test('el nombre logico conserva los digitos del intent', () => {
+    const result = new DeterministicResolver(emptyCatalog()).resolve(scenario([
+        action('CLICK', 'filtrar por ultimos 7 dias', 'android=new UiSelector().text("Últimos 7 días")'),
+        action('CLICK', 'ultimos 15 dias', 'android=new UiSelector().text("Últimos 15 días")'),
+        action('VERIFICAR_EXISTE', 'contenedor de movimientos', '~lblContenedorMovimientos'),
+    ]));
+    assert.equal(result.plan.resolutions.find(item => item.sequence === 1).locatorName, 'filterLast7Days');
+    assert.equal(result.plan.resolutions.find(item => item.sequence === 2).locatorName, 'last15Days');
+});

@@ -169,7 +169,7 @@ export class AutomationResponseValidator {
         if (!errors.some(error => ['missing-layer', 'path', 'extra-layer'].includes(error.code))) {
             try {
                 const preview = this.toPreview(response);
-                const output = this.outputValidator.validate(preview);
+                const output = this.outputValidator.validate(preview, scenario.platform);
                 output.errors.forEach(message => {
                     const layer = /^(?:Feature|Scenario)/.test(message)
                         ? 'feature'

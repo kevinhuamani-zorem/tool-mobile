@@ -5,6 +5,7 @@ import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERS
 import { GenerationRequest, MobilePlatform } from './fwkMobileGenerator';
 import { RecordedStep, recordedStepContext } from './models';
 import { projectPaths } from './projectPaths';
+import { roundTrip } from './locatorStrategy';
 
 interface RecordingContext {
     squad: string;
@@ -50,12 +51,37 @@ function isSensitiveInput(step: RecordedStep): boolean {
     return /(?:password|contrase(?:n|ñ)a|clave|pin|otp|token|secret|access\s*key|credential)/i.test(context);
 }
 
+/**
+ * Estrategia y valor con los que el framework reconstruira el selector.
+ *
+ * Se resuelve al guardar y no al generar porque la grabacion es la evidencia:
+ * si el par no reconstruye el selector, el aviso tiene que quedar escrito junto
+ * a la accion que lo produjo, no aparecer tres capas mas tarde.
+ */
+function locatorFields(step: RecordedStep, platform: MobilePlatform): Partial<RecordedStep> {
+    if (!step.selector) return {};
+    let check;
+    try {
+        check = roundTrip(step.selector, platform);
+    } catch {
+        // Sin framework legible se guarda el selector tal cual; el resolver
+        // vuelve a intentarlo con el contrato ya resuelto.
+        return {};
+    }
+    return {
+        locatorType: check.type,
+        locatorValue: check.value,
+        locatorWarning: check.ok ? undefined : check.reason,
+    };
+}
+
 function safeStep(step: RecordedStep, sequence: number, platform: MobilePlatform): RecordedStep & { sequence: number } {
     const sensitive = isSensitiveInput(step);
     return {
         ...step,
         sequence,
         platform,
+        ...locatorFields(step, platform),
         value: sensitive && step.value ? `<${step.variableName || 'valor'}>` : step.value,
         selectorVerified: Boolean(step.selectorVerified || step.selector),
     };

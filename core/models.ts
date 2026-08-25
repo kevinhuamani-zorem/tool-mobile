@@ -25,6 +25,17 @@ export interface RecordedStep {
     elementIntent?: string;
     selector?: string;
     selectorVerified?: boolean;
+    /**
+     * Miembro de `TypeLocator` con el que el framework compondra este selector.
+     * Se persiste — no se recalcula al generar — para que la grabacion sea
+     * auditable: el selector solo no dice si va como ID, XPATH o ANDROID, y de
+     * esa ambiguedad salian locators que no encontraban el elemento.
+     */
+    locatorType?: string;
+    /** Valor que ira al JSON de locators, sin el prefijo de la estrategia. */
+    locatorValue?: string;
+    /** Motivo por el que el par (tipo, valor) no reconstruye el selector grabado. */
+    locatorWarning?: string;
     platform?: 'android' | 'ios';
     value?: string;
     description?: string;

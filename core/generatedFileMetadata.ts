@@ -38,16 +38,13 @@ export function withGeneratedFileMetadata(
             // La validación posterior debe conservar el error original del JSON.
             return content;
         }
-        const previous = parsed._metadata && typeof parsed._metadata === 'object'
-            ? parsed._metadata as Record<string, unknown>
-            : {};
-        const metadata = {
-            generator: GENERATED_FILE_GENERATOR,
-            author: GENERATED_FILE_AUTHOR,
-            createdAt: validCreatedAt(String(previous.createdAt || createdAt)),
-        };
+        // El estandar del repo prohibe metadatos dentro del JSON de locators:
+        // JSON no admite comentarios y un `_metadata` es lo mismo con otro
+        // nombre. La trazabilidad (que grabacion aporto que clave) vive en el
+        // registro del recorder, fuera del framework. Se sigue eliminando el
+        // bloque para limpiar los archivos escritos por versiones anteriores.
         const { _metadata: _discarded, ...blocks } = parsed;
-        return JSON.stringify({ _metadata: metadata, ...blocks }, null, 4) + '\n';
+        return JSON.stringify(blocks, null, 4) + '\n';
     }
 
     const marker = layer === 'feature' ? '#' : '//';

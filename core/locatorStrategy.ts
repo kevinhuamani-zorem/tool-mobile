@@ -10,31 +10,149 @@
 import fs from 'fs';
 import path from 'path';
 import { projectPaths } from './projectPaths';
+import { composeLocator, frameworkContract, FrameworkContract } from './frameworkContract';
 
 export type MobilePlatform = 'android' | 'ios';
 
-/** Estrategia que le corresponde a un selector grabado. */
-export function strategyOf(selector: string, platform: MobilePlatform): string {
-    if (/^id=[^/:]+$/.test(selector)) return 'XPATH';
-    if (selector.startsWith('android=')) return 'ANDROID';
-    if (selector.startsWith('iosPredicate=')) return 'PREDICATESTRING';
-    if (selector.startsWith('iosClassChain=')) return 'CLASSCHAIN';
-    if (selector.startsWith('class=')) return 'CLASSNAME';
-    if (selector.startsWith('id=') || selector.startsWith('~')) return 'ID';
-    if (platform === 'android' && selector.includes('new UiSelector')) return 'ANDROID';
-    return 'XPATH';
+/**
+ * Miembros de `TypeLocator` que el recorder sabe emitir. Es un union y no
+ * `string` para que un tipo inventado no llegue al Screen Object generado; el
+ * framework decide como se llama el enum, pero no que estrategias existen.
+ */
+export type LocatorTypeName =
+    'ID' | 'XPATH' | 'ANDROID' | 'CLASSNAME' | 'PREDICATESTRING' | 'CLASSCHAIN';
+
+export interface FrameworkLocator {
+    /** Miembro de `TypeLocator` con el que el framework compone el selector. */
+    type: LocatorTypeName;
+    /** Valor tal cual va al JSON de locators, sin prefijo. */
+    value: string;
 }
 
 /**
- * Valor tal como se guarda en el JSON: el selector sin el prefijo que le pone
- * WebdriverIO. `~Tapp` -> `Tapp`; `android=new UiSelector()...` -> `new UiSelector()...`.
+ * Traduce un selector grabado al par `(TypeLocator, valor)` que el framework
+ * sabe componer.
+ *
+ * No es un simple recorte de prefijo. El inspector emitia `id=<resource-id>`
+ * porque WebdriverIO lo entiende al grabar, pero `TypeLocator` no tiene
+ * estrategia de resource-id: al reconstruirlo salia `~com.yape.qa:id/btn`
+ * (accesibilidad) o `com.yape.qa:id/btn` (XPath invalido), y el codigo generado
+ * no encontraba el elemento nunca. Aqui se convierte a la forma que el
+ * framework SI compone:
+ *
+ *   id=com.yape.qa:id/btnFiltrar -> ANDROID  new UiSelector().resourceId("...")
+ *   id=btnCompose                -> XPATH    //*[@resource-id="btnCompose"]
+ *
+ * La primera es la forma mayoritaria del framework para resource-id (33 usos
+ * de UiSelector contra 18 de XPath), asi que el codigo generado se parece al
+ * que ya esta escrito a mano.
  */
-export function strategyValue(selector = ''): string {
-    return String(selector)
-        .trim()
-        .replace(/^(?:~|id=|android=|iosPredicate=|iosClassChain=|class=)/, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+export function frameworkLocator(selector = '', platform: MobilePlatform = 'android'): FrameworkLocator {
+    const raw = String(selector).trim().replace(/\s+/g, ' ');
+    if (!raw) return { type: 'XPATH', value: '' };
+
+    if (raw.startsWith('id=')) {
+        const resourceId = raw.slice(3);
+        // Un id de Compose no lleva paquete ni `/`: UiAutomator lo resuelve
+        // igual, pero el XPath ya estaba probado en este repo, asi que se
+        // conserva.
+        const qualified = resourceId.includes('/') || resourceId.includes(':');
+        if (platform === 'android' && qualified) {
+            return { type: 'ANDROID', value: `new UiSelector().resourceId("${resourceId}")` };
+        }
+        return { type: 'XPATH', value: `//*[@resource-id="${resourceId}"]` };
+    }
+    if (raw.startsWith('~')) return { type: 'ID', value: raw.slice(1) };
+    if (raw.startsWith('android=')) return { type: 'ANDROID', value: raw.slice('android='.length) };
+    if (raw.startsWith('iosPredicate=')) {
+        return { type: 'PREDICATESTRING', value: raw.slice('iosPredicate='.length) };
+    }
+    if (raw.startsWith('iosClassChain=')) {
+        return { type: 'CLASSCHAIN', value: raw.slice('iosClassChain='.length) };
+    }
+    if (raw.startsWith('class=')) return { type: 'CLASSNAME', value: raw.slice('class='.length) };
+    // Formas nativas del framework: ya vienen compuestas.
+    if (raw.startsWith('-ios predicate string:')) {
+        return { type: 'PREDICATESTRING', value: raw.slice('-ios predicate string:'.length).trim() };
+    }
+    if (raw.startsWith('-ios class chain:')) {
+        return { type: 'CLASSCHAIN', value: raw.slice('-ios class chain:'.length).trim() };
+    }
+    if (/^new\s+(?:UiSelector|UiScrollable)\s*\(/.test(raw)) return { type: 'ANDROID', value: raw };
+    return { type: 'XPATH', value: raw };
+}
+
+/** Estrategia que le corresponde a un selector grabado. */
+export function strategyOf(selector: string, platform: MobilePlatform): LocatorTypeName {
+    return frameworkLocator(selector, platform).type;
+}
+
+/**
+ * Valor tal como se guarda en el JSON de locators.
+ *
+ * Es el complemento de `strategyOf`: el par que devuelven los dos tiene que
+ * recomponer el selector original. Por eso pasa por `frameworkLocator` en vez
+ * de recortar el prefijo — recortarlo dejaba `id=` sin traducir.
+ */
+export function strategyValue(selector = '', platform: MobilePlatform = 'android'): string {
+    return frameworkLocator(selector, platform).value;
+}
+
+export interface RoundTrip {
+    type: LocatorTypeName;
+    value: string;
+    /** Selector que el framework producira, o `undefined` si no sabe componerlo. */
+    composed?: string;
+    ok: boolean;
+    reason?: string;
+}
+
+/**
+ * Comprueba que el par `(TypeLocator, valor)` que se va a escribir en el Screen
+ * Object y en el JSON reconstruye un selector equivalente al grabado.
+ *
+ * La comprobacion es de ida y vuelta: se compone con la tabla real del
+ * framework y se vuelve a interpretar. Si al reinterpretarlo no sale el mismo
+ * par, el codigo generado apuntaria a otra cosa. Esto es lo que dejaba pasar
+ * `id=com.yape.qa:id/btn` -> `~com.yape.qa:id/btn`: dos strings distintos que
+ * nadie comparaba hasta que fallaba wdio.
+ *
+ * Es un chequeo offline y estructural; no sustituye a verificar contra el
+ * dispositivo, que es lo que hace `verify-selector`.
+ */
+export function roundTrip(
+    selector: string,
+    platform: MobilePlatform,
+    contract: Pick<FrameworkContract, 'locatorComposition'> = frameworkContract(projectPaths.frameworkRoot)
+): RoundTrip {
+    const { type, value } = frameworkLocator(selector, platform);
+    if (!value) {
+        return { type, value, ok: false, reason: 'El selector esta vacio.' };
+    }
+    const composed = composeLocator(contract, type, value, platform);
+    if (composed === undefined) {
+        return {
+            type, value, ok: false,
+            reason: `El framework no compone TypeLocator.${type} en ${platform}: `
+                + 'no hay caso para esa estrategia en la clase resolutora.',
+        };
+    }
+    if (type === 'XPATH' && !/^[(/]/.test(value)) {
+        return {
+            type, value, composed, ok: false,
+            reason: `XPATH se compone sin prefijo, asi que "${value}" llegaria a wdio tal cual `
+                + 'y no es un XPath valido.',
+        };
+    }
+    const again = frameworkLocator(composed, platform);
+    if (again.type !== type || again.value !== value) {
+        return {
+            type, value, composed, ok: false,
+            reason: `"${selector}" se compone como "${composed}", que se relee como `
+                + `TypeLocator.${again.type} en vez de TypeLocator.${type}.`,
+        };
+    }
+    return { type, value, composed, ok: true };
 }
 
 /**
@@ -219,6 +337,6 @@ export function importsOf(screenFile: string): Map<string, string> {
 }
 
 export const locatorStrategy = {
-    strategyOf, strategyValue, inferredStrategy, indexDeclaredStrategies,
-    indexModuleImports, importsOf,
+    frameworkLocator, roundTrip, strategyOf, strategyValue, inferredStrategy,
+    indexDeclaredStrategies, indexModuleImports, importsOf,
 };
