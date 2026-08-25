@@ -2,10 +2,11 @@
 
 ## Requisitos
 
-- Node.js 18 o superior.
-- El runtime Appium 3 y los drivers UiAutomator2/XCUITest se instalan de forma
-  aislada con las dependencias del recorder. No se reutiliza Appium desde el
-  `node_modules` del framework.
+- Node.js 24+ y npm 11+, siguiendo `engines` de `fwk-mobile-test`.
+- El runtime Appium 3 y los drivers UiAutomator2/XCUITest pertenecen a
+  `fwk-mobile-test` y se reutilizan desde su `node_modules`. El recorder valida
+  que los tres paquetes y una versión compatible de `@appium/base-driver`
+  estén instalados antes de iniciar.
 - Android local: Java 17+, Android SDK/ADB y UiAutomator2.
 - BrowserStack o iOS local no requieren Java por sí mismos.
 
@@ -16,8 +17,9 @@ cd tools/visual-recorder
 npm install
 ```
 
-En una instalación reproducible o después de actualizar usa `npm ci`. Esto
-evita que los `overrides` de dependencias del framework alteren Appium.
+En una instalación reproducible o después de actualizar usa `npm ci` tanto en
+la raíz del framework como dentro del recorder. El primer comando instala
+Appium y sus drivers; el segundo instala Electron, renderer y WebdriverIO.
 
 ## Comandos
 

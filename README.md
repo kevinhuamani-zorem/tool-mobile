@@ -47,10 +47,10 @@ contexto necesario para completar los gaps.
 Requisitos generales:
 
 - checkout local de `fwk-mobile-test`;
-- Node.js 20.19+ o 22.12+ y npm (lo exige Vite 8, que compila el renderer);
+- Node.js 24+ y npm 11+, alineados con `engines` de `fwk-mobile-test`;
 - Git con acceso SSH al repositorio privado del recorder;
-- Appium 3 y los drivers móviles se instalan dentro del recorder mediante su
-  lockfile; no se reutiliza el runtime Appium del framework.
+- Appium 3 y los drivers móviles deben estar declarados e instalados en
+  `fwk-mobile-test`; el recorder reutiliza ese único runtime.
 
 Requisitos según plataforma:
 
@@ -64,7 +64,7 @@ Comprobaciones frecuentes:
 ```bash
 node --version
 npm --version
-./tools/visual-recorder/node_modules/.bin/appium --version
+./node_modules/.bin/appium --version
 adb devices
 ```
 
@@ -82,7 +82,9 @@ El instalador:
 
 - valida que la carpeta actual sea la raíz de `fwk-mobile-test`;
 - instala el checkout en `tools/visual-recorder`;
-- ejecuta `npm ci` con el lockfile del recorder;
+- comprueba que el framework declare Appium, UiAutomator2 y XCUITest;
+- ejecuta `npm ci` con el lockfile del recorder para Electron, renderer y
+  WebdriverIO (Appium no se duplica);
 - agrega `npm run recorder` al `package.json` raíz del framework;
 - agrega `/tools/visual-recorder/` al `.gitignore` del framework;
 - rechaza actualizaciones si encuentra cambios locales sin guardar dentro del

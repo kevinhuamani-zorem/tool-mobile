@@ -21,11 +21,25 @@ compatible. No automatices un borrado indiscriminado de procesos.
 
 ### Appium falla con `AppiumIpc is not a constructor`
 
-Indica que Appium cargó un `@appium/base-driver` incompatible. El recorder usa
-su propio Appium y drivers para aislarse de los `overrides` del framework.
-Ejecuta `npm ci` dentro de `tools/visual-recorder` y vuelve a iniciar. `run.sh`
-valida `AppiumIpc` antes de abrir la sesión y nunca usa el binario Appium del
-framework. No copies `node_modules` entre ubicaciones distintas.
+Indica que el Appium de `fwk-mobile-test` cargó un `@appium/base-driver`
+incompatible. El recorder comparte el servidor y los drivers del framework;
+`run.sh` valida `AppiumIpc` antes de abrir la sesión y muestra las versiones
+detectadas. Ejecuta `npm ci` en la raíz del framework. Si persiste, revisa que
+un `override` de `@appium/base-driver` no fuerce una versión anterior a la que
+requieren Appium/UiAutomator2/XCUITest. No copies `node_modules` entre Macs.
+
+Comprueba el árbol efectivo desde la raíz:
+
+```bash
+npm ls appium @appium/base-driver appium-uiautomator2-driver appium-xcuitest-driver
+```
+
+El árbol no debe reportar paquetes `invalid` y `@appium/base-driver` debe
+exponer `AppiumIpc`. Después instala las dependencias propias del UI:
+
+```bash
+npm --prefix tools/visual-recorder ci
+```
 
 ### `unknown mobile command` o HTTP 404
 
@@ -148,8 +162,8 @@ Requisitos en la Mac:
 
 ```bash
 xcrun simctl list devices available     # debe listar al menos un simulador
-appium driver install xcuitest          # registra el driver en el manifest
-appium driver list --installed          # uiautomator2 y xcuitest
+./node_modules/.bin/appium driver install xcuitest # registra el driver del framework
+./node_modules/.bin/appium driver list --installed # uiautomator2 y xcuitest
 ```
 
 `appium-xcuitest-driver` puede estar en `node_modules` y aun así no estar

@@ -23,22 +23,60 @@ if [[ ! -f "${FRAMEWORK_ROOT}/package.json" ]] ||
     exit 1
 fi
 
-if [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/electron" ]] ||
-   [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/appium" ]]; then
+if [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/electron" ]]; then
     echo "Faltan las dependencias del recorder." >&2
     echo "Ejecuta: cd \"${SCRIPT_DIR}\" && npm ci" >&2
     exit 1
 fi
 
-# Appium pertenece al recorder. No debe resolverse desde node_modules del
-# framework porque sus overrides de seguridad pueden forzar una versión de
-# @appium/base-driver incompatible con el servidor y sus drivers.
-if ! node -e '
-    const baseDriver = require("@appium/base-driver");
-    process.exit(typeof baseDriver.AppiumIpc === "function" ? 0 : 1);
-'; then
-    echo "Las dependencias Appium del recorder son incompatibles (AppiumIpc ausente)." >&2
-    echo "Reinstala el runtime aislado: cd \"${SCRIPT_DIR}\" && npm ci" >&2
+FRAMEWORK_APPIUM_BIN="${FRAMEWORK_ROOT}/node_modules/.bin/appium"
+if [[ ! -x "${FRAMEWORK_APPIUM_BIN}" ]]; then
+    echo "Falta Appium en las dependencias de fwk-mobile-test." >&2
+    echo "Ejecuta npm ci desde la raíz: ${FRAMEWORK_ROOT}" >&2
+    exit 1
+fi
+
+# El recorder está acoplado al framework y comparte su servidor y drivers.
+# La validación evita iniciar una sesión cuando un override del framework dejó
+# @appium/base-driver en una versión incompatible con Appium o sus drivers.
+if ! node - "${FRAMEWORK_ROOT}" <<'NODE'
+const path = require('node:path');
+const { createRequire } = require('node:module');
+
+const frameworkRoot = process.argv[2];
+const frameworkRequire = createRequire(path.join(frameworkRoot, 'package.json'));
+const requiredPackages = [
+    'appium',
+    'appium-uiautomator2-driver',
+    'appium-xcuitest-driver',
+];
+
+try {
+    const versions = Object.fromEntries(requiredPackages.map(packageName => [
+        packageName,
+        frameworkRequire(`${packageName}/package.json`).version,
+    ]));
+    const baseDriverPackage = frameworkRequire('@appium/base-driver/package.json');
+    const baseDriver = frameworkRequire('@appium/base-driver');
+
+    if (typeof baseDriver.AppiumIpc !== 'function') {
+        throw new Error(
+            `@appium/base-driver ${baseDriverPackage.version} no expone AppiumIpc`,
+        );
+    }
+
+    process.stdout.write(
+        `Runtime Appium del framework: ${versions.appium}; ` +
+        `UiAutomator2: ${versions['appium-uiautomator2-driver']}; ` +
+        `XCUITest: ${versions['appium-xcuitest-driver']}\n`,
+    );
+} catch (error) {
+    process.stderr.write(`Runtime Appium incompatible en fwk-mobile-test: ${error.message}\n`);
+    process.exit(1);
+}
+NODE
+then
+    echo "Corrige las versiones/overrides de Appium en fwk-mobile-test y ejecuta npm ci en su raíz." >&2
     exit 1
 fi
 
@@ -49,7 +87,7 @@ fi
 
 cd "${SCRIPT_DIR}"
 
-APPIUM_HOME_ROOT="${SCRIPT_DIR}"
+APPIUM_HOME_ROOT="${FRAMEWORK_ROOT}"
 APPIUM_CACHE_DIR="${APPIUM_HOME_ROOT}/node_modules/.cache/appium"
 APPIUM_EXTENSIONS="${APPIUM_CACHE_DIR}/extensions.yaml"
 APPIUM_PACKAGE_HASH="${APPIUM_CACHE_DIR}/package.hash"
@@ -82,7 +120,7 @@ fi
 echo "Proyecto destino: ${FRAMEWORK_ROOT}"
 echo "Iniciando Appium..."
 
-"${APPIUM_HOME_ROOT}/node_modules/.bin/appium" \
+"${FRAMEWORK_APPIUM_BIN}" \
     --port 4723 --log-level error --relaxed-security &
 APPIUM_PID=$!
 

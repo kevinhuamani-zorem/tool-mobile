@@ -30,7 +30,14 @@ function createFixture() {
 
     fs.mkdirSync(path.join(framework, 'features', 'yape-features'), { recursive: true });
     fs.mkdirSync(path.join(framework, 'screenobjects'), { recursive: true });
-    fs.writeFileSync(path.join(framework, 'package.json'), '{"name":"fwk-mobile-test"}\n');
+    fs.writeFileSync(path.join(framework, 'package.json'), JSON.stringify({
+        name: 'fwk-mobile-test',
+        devDependencies: {
+            appium: '3.5.0',
+            'appium-uiautomator2-driver': '8.4.0',
+            'appium-xcuitest-driver': '12.3.3',
+        },
+    }) + '\n');
     fs.writeFileSync(path.join(framework, '.gitignore'), 'node_modules/\n');
 
     return { root, source, framework };

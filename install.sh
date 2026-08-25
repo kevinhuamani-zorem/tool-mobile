@@ -94,6 +94,25 @@ const fs = require('fs');
 const packagePath = process.argv[2];
 const recorderCommand = process.argv[3];
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+const frameworkPackages = {
+    ...(packageJson.dependencies || {}),
+    ...(packageJson.devDependencies || {}),
+};
+const requiredAppiumPackages = [
+    'appium',
+    'appium-uiautomator2-driver',
+    'appium-xcuitest-driver',
+];
+const missingAppiumPackages = requiredAppiumPackages.filter(
+    packageName => !frameworkPackages[packageName],
+);
+
+if (missingAppiumPackages.length > 0) {
+    process.stderr.write(
+        `fwk-mobile-test debe declarar: ${missingAppiumPackages.join(', ')}\n`,
+    );
+    process.exit(1);
+}
 
 packageJson.scripts = packageJson.scripts || {};
 if (packageJson.scripts.recorder !== recorderCommand) {
