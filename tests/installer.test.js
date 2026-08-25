@@ -32,18 +32,19 @@ function createFixture() {
     fs.mkdirSync(path.join(framework, 'screenobjects'), { recursive: true });
     fs.writeFileSync(path.join(framework, 'package.json'), JSON.stringify({
         name: 'fwk-mobile-test',
-        devDependencies: {
-            appium: '3.5.0',
-            'appium-uiautomator2-driver': '8.4.0',
-            'appium-xcuitest-driver': '12.3.3',
-        },
+        scripts: { test: 'framework-test' },
     }) + '\n');
+    fs.writeFileSync(
+        path.join(framework, 'package-lock.json'),
+        '{"name":"fwk-mobile-test","lockfileVersion":3,"packages":{}}\n',
+    );
     fs.writeFileSync(path.join(framework, '.gitignore'), 'node_modules/\n');
+    git(framework, 'init', '-b', 'main');
 
     return { root, source, framework };
 }
 
-test('instala el recorder en tools y conserva la configuración al actualizar', () => {
+test('instala y actualiza el recorder sin modificar el framework', () => {
     const fixture = createFixture();
     const environment = {
         ...process.env,
@@ -51,6 +52,10 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
         VISUAL_RECORDER_BRANCH: 'visual-recorder',
         VISUAL_RECORDER_SKIP_NPM_CI: '1',
     };
+
+    const packageBefore = fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8');
+    const lockBefore = fs.readFileSync(path.join(fixture.framework, 'package-lock.json'), 'utf8');
+    const gitignoreBefore = fs.readFileSync(path.join(fixture.framework, '.gitignore'), 'utf8');
 
     execFileSync('bash', [installer], {
         cwd: fixture.framework,
@@ -61,16 +66,12 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
     const target = path.join(fixture.framework, 'tools', 'visual-recorder');
     assert.equal(fs.existsSync(path.join(target, '.git')), true);
     assert.equal(fs.existsSync(path.join(target, '.env')), false);
-    assert.equal(
-        JSON.parse(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'))
-            .scripts.recorder,
-        './tools/visual-recorder/run.sh',
-    );
-    assert.equal(
-        fs.readFileSync(path.join(fixture.framework, '.gitignore'), 'utf8')
-            .split('\n')
-            .filter(line => line === '/tools/visual-recorder/').length,
-        1,
+    assert.equal(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'), packageBefore);
+    assert.equal(fs.readFileSync(path.join(fixture.framework, 'package-lock.json'), 'utf8'), lockBefore);
+    assert.equal(fs.readFileSync(path.join(fixture.framework, '.gitignore'), 'utf8'), gitignoreBefore);
+    assert.match(
+        fs.readFileSync(path.join(fixture.framework, '.git', 'info', 'exclude'), 'utf8'),
+        /^\/tools\/visual-recorder\/$/m,
     );
 
     execFileSync('bash', [installer], {
@@ -78,11 +79,9 @@ test('instala el recorder en tools y conserva la configuración al actualizar', 
         env: environment,
         stdio: 'pipe',
     });
-    assert.equal(
-        JSON.parse(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'))
-            .scripts.recorder,
-        './tools/visual-recorder/run.sh',
-    );
+    assert.equal(fs.readFileSync(path.join(fixture.framework, 'package.json'), 'utf8'), packageBefore);
+    assert.equal(fs.readFileSync(path.join(fixture.framework, 'package-lock.json'), 'utf8'), lockBefore);
+    assert.equal(fs.readFileSync(path.join(fixture.framework, '.gitignore'), 'utf8'), gitignoreBefore);
 });
 
 test('rechaza una carpeta que no es fwk-mobile-test', () => {

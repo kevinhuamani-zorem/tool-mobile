@@ -84,8 +84,9 @@ generadores, validadores o plantillas.
 12. **Local y BrowserStack son caminos soportados.** Un cambio de gestos,
     capabilities, selectores o sesión debe considerar Android/iOS y ambos tipos
     de conexión.
-    En local, Appium/UiAutomator2/XCUITest pertenecen al framework padre; el
-    recorder no duplica ese runtime y debe validar su compatibilidad al iniciar.
+    En local, Appium/UiAutomator2/XCUITest pertenecen al recorder y están
+    fijados en su lockfile. Nunca uses ni modifiques las dependencias Appium del
+    framework padre para iniciar una sesión.
 13. **La memoria no aprende de fallos.** Solo una propuesta generada, revisada
     y validada con score 100 puede promocionarse a `runtime/automation-memory`.
 14. **Regenerar conserva identidad y rutas.** Un refinamiento parte del último

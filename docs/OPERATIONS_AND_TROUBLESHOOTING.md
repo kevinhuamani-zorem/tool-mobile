@@ -3,7 +3,7 @@
 ## Inicio rápido
 
 ```bash
-npm run recorder
+npm --prefix tools/visual-recorder run recorder
 ```
 
 Ejecuta el comando desde la raíz de `fwk-mobile-test`. El recorder resuelve el
@@ -13,6 +13,19 @@ la sesión.
 
 ## Diagnóstico por síntomas
 
+### Electron failed to install correctly
+
+El paquete JavaScript existe, pero falta `Electron.app`; normalmente se instaló
+con `--ignore-scripts`. Repara la instalación con:
+
+```bash
+npm --prefix tools/visual-recorder rebuild electron
+```
+
+Para una reinstalación reproducible usa `npm --prefix tools/visual-recorder ci`
+sin `--ignore-scripts`. `run.sh` comprueba tanto el wrapper como el binario antes
+de compilar o iniciar Appium.
+
 ### El puerto 4723 está ocupado
 
 `run.sh` se detiene para no matar una sesión desconocida. Localiza y cierra la
@@ -21,21 +34,19 @@ compatible. No automatices un borrado indiscriminado de procesos.
 
 ### Appium falla con `AppiumIpc is not a constructor`
 
-Indica que el Appium de `fwk-mobile-test` cargó un `@appium/base-driver`
-incompatible. El recorder comparte el servidor y los drivers del framework;
+Indica que el runtime aislado del recorder quedó incompleto o fue alterado.
 `run.sh` valida `AppiumIpc` antes de abrir la sesión y muestra las versiones
-detectadas. Ejecuta `npm ci` en la raíz del framework. Si persiste, revisa que
-un `override` de `@appium/base-driver` no fuerce una versión anterior a la que
-requieren Appium/UiAutomator2/XCUITest. No copies `node_modules` entre Macs.
+detectadas. Restaura exactamente el lockfile de la herramienta; no cambies
+overrides ni dependencias del framework padre.
 
 Comprueba el árbol efectivo desde la raíz:
 
 ```bash
-npm ls appium @appium/base-driver appium-uiautomator2-driver appium-xcuitest-driver
+npm --prefix tools/visual-recorder ls appium @appium/base-driver appium-uiautomator2-driver appium-xcuitest-driver
 ```
 
 El árbol no debe reportar paquetes `invalid` y `@appium/base-driver` debe
-exponer `AppiumIpc`. Después instala las dependencias propias del UI:
+exponer `AppiumIpc`. Reinstala todo el runtime del recorder con:
 
 ```bash
 npm --prefix tools/visual-recorder ci
@@ -162,11 +173,11 @@ Requisitos en la Mac:
 
 ```bash
 xcrun simctl list devices available     # debe listar al menos un simulador
-./node_modules/.bin/appium driver install xcuitest # registra el driver del framework
-./node_modules/.bin/appium driver list --installed # uiautomator2 y xcuitest
+./tools/visual-recorder/node_modules/.bin/appium driver install xcuitest
+./tools/visual-recorder/node_modules/.bin/appium driver list --installed
 ```
 
-`appium-xcuitest-driver` puede estar en `node_modules` y aun así no estar
+`appium-xcuitest-driver` puede estar en el `node_modules` del recorder y aun así no estar
 registrado: Appium lee los drivers del manifest, no del `package.json`.
 
 En la pantalla de conexión local, el desplegable lista dispositivos Android y

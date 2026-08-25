@@ -3,10 +3,9 @@
 ## Requisitos
 
 - Node.js 24+ y npm 11+, siguiendo `engines` de `fwk-mobile-test`.
-- El runtime Appium 3 y los drivers UiAutomator2/XCUITest pertenecen a
-  `fwk-mobile-test` y se reutilizan desde su `node_modules`. El recorder valida
-  que los tres paquetes y una versión compatible de `@appium/base-driver`
-  estén instalados antes de iniciar.
+- El runtime Appium 3, `@appium/base-driver` y los drivers
+  UiAutomator2/XCUITest pertenecen a `tools/visual-recorder`, están fijados por
+  su lockfile y no dependen del árbol npm del framework padre.
 - Android local: Java 17+, Android SDK/ADB y UiAutomator2.
 - BrowserStack o iOS local no requieren Java por sí mismos.
 
@@ -17,15 +16,22 @@ cd tools/visual-recorder
 npm install
 ```
 
-En una instalación reproducible o después de actualizar usa `npm ci` tanto en
-la raíz del framework como dentro del recorder. El primer comando instala
-Appium y sus drivers; el segundo instala Electron, renderer y WebdriverIO.
+En una instalación reproducible o después de actualizar usa únicamente
+`npm --prefix tools/visual-recorder ci` desde la raíz del framework. Este
+comando instala el runtime móvil y la interfaz sin modificar el proyecto padre.
+El instalador solo puede añadir una regla local a `.git/info/exclude`; nunca
+edita archivos versionados del framework.
+
+No uses `--ignore-scripts`: Electron necesita su script de instalación para
+descargar el binario nativo de macOS. Si una instalación anterior lo omitió,
+puede repararse con `npm --prefix tools/visual-recorder rebuild electron`.
 
 ## Comandos
 
 | Comando | Uso |
 |---|---|
-| `./run.sh` | Inicia Appium en 4723, compila y abre Electron |
+| `npm --prefix tools/visual-recorder run recorder` | Inicia Appium en 4723, compila y abre Electron desde la raíz del framework |
+| `./run.sh` | Equivalente cuando el directorio actual es `tools/visual-recorder` |
 | `npm start` | Compila y abre Electron |
 | `npm run build` | Compila main y renderer |
 | `npm run typecheck` | Valida TypeScript de ambos procesos |

@@ -49,8 +49,9 @@ Requisitos generales:
 - checkout local de `fwk-mobile-test`;
 - Node.js 24+ y npm 11+, alineados con `engines` de `fwk-mobile-test`;
 - Git con acceso SSH al repositorio privado del recorder;
-- Appium 3 y los drivers móviles deben estar declarados e instalados en
-  `fwk-mobile-test`; el recorder reutiliza ese único runtime.
+- Appium 3, UiAutomator2 y XCUITest se instalan dentro del recorder con
+  versiones fijadas; el framework padre no necesita declararlos para usar la
+  herramienta.
 
 Requisitos según plataforma:
 
@@ -64,7 +65,7 @@ Comprobaciones frecuentes:
 ```bash
 node --version
 npm --version
-./node_modules/.bin/appium --version
+./tools/visual-recorder/node_modules/.bin/appium --version
 adb devices
 ```
 
@@ -82,11 +83,11 @@ El instalador:
 
 - valida que la carpeta actual sea la raíz de `fwk-mobile-test`;
 - instala el checkout en `tools/visual-recorder`;
-- comprueba que el framework declare Appium, UiAutomator2 y XCUITest;
-- ejecuta `npm ci` con el lockfile del recorder para Electron, renderer y
-  WebdriverIO (Appium no se duplica);
-- agrega `npm run recorder` al `package.json` raíz del framework;
-- agrega `/tools/visual-recorder/` al `.gitignore` del framework;
+- ejecuta `npm ci` con el lockfile del recorder para Appium, drivers, Electron,
+  renderer y WebdriverIO;
+- no modifica `package.json`, `package-lock.json` ni `.gitignore` del framework;
+- agrega la exclusión solo local `/tools/visual-recorder/` en
+  `.git/info/exclude` cuando el framework es un checkout Git;
 - rechaza actualizaciones si encuentra cambios locales sin guardar dentro del
   recorder.
 
@@ -127,13 +128,15 @@ recorder.
 Desde la raíz del framework:
 
 ```bash
-npm run recorder
+npm --prefix tools/visual-recorder run recorder
 ```
 
 El comando inicia Appium, compila el proceso principal y el renderer React, y
 abre Electron. Si el puerto `4723` ya está ocupado, el recorder se detiene para
 no cerrar una sesión ajena. Appium y sus drivers se cargan siempre desde
 `tools/visual-recorder/node_modules`, aislados de los `overrides` del framework.
+No instales con `--ignore-scripts`, porque Electron necesita descargar su
+binario nativo durante `npm ci`.
 
 ## Configuración inicial
 

@@ -23,28 +23,33 @@ if [[ ! -f "${FRAMEWORK_ROOT}/package.json" ]] ||
     exit 1
 fi
 
-if [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/electron" ]]; then
-    echo "Faltan las dependencias del recorder." >&2
-    echo "Ejecuta: cd \"${SCRIPT_DIR}\" && npm ci" >&2
+if [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/electron" ]] ||
+   ! node -e '
+       const fs = require("node:fs");
+       const electron = require(process.argv[1]);
+       process.exit(typeof electron === "string" && fs.existsSync(electron) ? 0 : 1);
+   ' "${SCRIPT_DIR}/node_modules/electron" >/dev/null 2>&1; then
+    echo "Electron no está instalado completamente en el recorder." >&2
+    echo "Ejecuta sin --ignore-scripts: npm --prefix \"${SCRIPT_DIR}\" ci" >&2
     exit 1
 fi
 
-FRAMEWORK_APPIUM_BIN="${FRAMEWORK_ROOT}/node_modules/.bin/appium"
-if [[ ! -x "${FRAMEWORK_APPIUM_BIN}" ]]; then
-    echo "Falta Appium en las dependencias de fwk-mobile-test." >&2
-    echo "Ejecuta npm ci desde la raíz: ${FRAMEWORK_ROOT}" >&2
+RECORDER_APPIUM_BIN="${SCRIPT_DIR}/node_modules/.bin/appium"
+if [[ ! -x "${RECORDER_APPIUM_BIN}" ]]; then
+    echo "Falta el runtime Appium aislado del recorder." >&2
+    echo "Ejecuta: npm --prefix \"${SCRIPT_DIR}\" ci" >&2
     exit 1
 fi
 
-# El recorder está acoplado al framework y comparte su servidor y drivers.
-# La validación evita iniciar una sesión cuando un override del framework dejó
-# @appium/base-driver en una versión incompatible con Appium o sus drivers.
-if ! node - "${FRAMEWORK_ROOT}" <<'NODE'
+# El recorder está acoplado funcionalmente al framework, pero Appium y sus
+# drivers pertenecen al checkout de la herramienta. Así ningún override ni
+# instalación del proyecto destino puede alterar sus sesiones.
+if ! node - "${SCRIPT_DIR}" <<'NODE'
 const path = require('node:path');
 const { createRequire } = require('node:module');
 
-const frameworkRoot = process.argv[2];
-const frameworkRequire = createRequire(path.join(frameworkRoot, 'package.json'));
+const recorderRoot = process.argv[2];
+const recorderRequire = createRequire(path.join(recorderRoot, 'package.json'));
 const requiredPackages = [
     'appium',
     'appium-uiautomator2-driver',
@@ -54,10 +59,10 @@ const requiredPackages = [
 try {
     const versions = Object.fromEntries(requiredPackages.map(packageName => [
         packageName,
-        frameworkRequire(`${packageName}/package.json`).version,
+        recorderRequire(`${packageName}/package.json`).version,
     ]));
-    const baseDriverPackage = frameworkRequire('@appium/base-driver/package.json');
-    const baseDriver = frameworkRequire('@appium/base-driver');
+    const baseDriverPackage = recorderRequire('@appium/base-driver/package.json');
+    const baseDriver = recorderRequire('@appium/base-driver');
 
     if (typeof baseDriver.AppiumIpc !== 'function') {
         throw new Error(
@@ -66,17 +71,17 @@ try {
     }
 
     process.stdout.write(
-        `Runtime Appium del framework: ${versions.appium}; ` +
+        `Runtime Appium aislado del recorder: ${versions.appium}; ` +
         `UiAutomator2: ${versions['appium-uiautomator2-driver']}; ` +
         `XCUITest: ${versions['appium-xcuitest-driver']}\n`,
     );
 } catch (error) {
-    process.stderr.write(`Runtime Appium incompatible en fwk-mobile-test: ${error.message}\n`);
+    process.stderr.write(`Runtime Appium incompatible en visual-recorder: ${error.message}\n`);
     process.exit(1);
 }
 NODE
 then
-    echo "Corrige las versiones/overrides de Appium en fwk-mobile-test y ejecuta npm ci en su raíz." >&2
+    echo "Ejecuta npm --prefix \"${SCRIPT_DIR}\" ci para restaurar el runtime fijado." >&2
     exit 1
 fi
 
@@ -87,7 +92,7 @@ fi
 
 cd "${SCRIPT_DIR}"
 
-APPIUM_HOME_ROOT="${FRAMEWORK_ROOT}"
+APPIUM_HOME_ROOT="${SCRIPT_DIR}"
 APPIUM_CACHE_DIR="${APPIUM_HOME_ROOT}/node_modules/.cache/appium"
 APPIUM_EXTENSIONS="${APPIUM_CACHE_DIR}/extensions.yaml"
 APPIUM_PACKAGE_HASH="${APPIUM_CACHE_DIR}/package.hash"
@@ -120,7 +125,7 @@ fi
 echo "Proyecto destino: ${FRAMEWORK_ROOT}"
 echo "Iniciando Appium..."
 
-"${FRAMEWORK_APPIUM_BIN}" \
+APPIUM_HOME="${APPIUM_HOME_ROOT}" "${RECORDER_APPIUM_BIN}" \
     --port 4723 --log-level error --relaxed-security &
 APPIUM_PID=$!
 

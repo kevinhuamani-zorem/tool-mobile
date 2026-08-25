@@ -88,56 +88,25 @@ else
         "${REPOSITORY}" "${INSTALL_DIR}"
 fi
 
-RECORDER_NPM_COMMAND='./tools/visual-recorder/run.sh'
-node - "${FRAMEWORK_ROOT}/package.json" "${RECORDER_NPM_COMMAND}" <<'NODE'
-const fs = require('fs');
-const packagePath = process.argv[2];
-const recorderCommand = process.argv[3];
-const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-const frameworkPackages = {
-    ...(packageJson.dependencies || {}),
-    ...(packageJson.devDependencies || {}),
-};
-const requiredAppiumPackages = [
-    'appium',
-    'appium-uiautomator2-driver',
-    'appium-xcuitest-driver',
-];
-const missingAppiumPackages = requiredAppiumPackages.filter(
-    packageName => !frameworkPackages[packageName],
-);
-
-if (missingAppiumPackages.length > 0) {
-    process.stderr.write(
-        `fwk-mobile-test debe declarar: ${missingAppiumPackages.join(', ')}\n`,
-    );
-    process.exit(1);
-}
-
-packageJson.scripts = packageJson.scripts || {};
-if (packageJson.scripts.recorder !== recorderCommand) {
-    packageJson.scripts.recorder = recorderCommand;
-    fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-    process.stdout.write('Comando agregado al framework: npm run recorder\n');
-}
-NODE
-
-FRAMEWORK_GITIGNORE="${FRAMEWORK_ROOT}/.gitignore"
-IGNORE_RULE='/tools/visual-recorder/'
-if [[ ! -f "${FRAMEWORK_GITIGNORE}" ]] ||
-   ! grep -Fqx "${IGNORE_RULE}" "${FRAMEWORK_GITIGNORE}"; then
-    printf '\n# Appium Visual Recorder instalado localmente\n%s\n' "${IGNORE_RULE}" \
-        >> "${FRAMEWORK_GITIGNORE}"
-fi
-
 if [[ "${VISUAL_RECORDER_SKIP_NPM_CI:-0}" != "1" ]]; then
     echo "Instalando dependencias reproducibles..."
     npm --prefix "${INSTALL_DIR}" ci
 fi
 
+# Mantiene limpio `git status` sin editar el .gitignore versionado del target.
+# Si el framework no es un checkout Git, la instalación sigue funcionando.
+FRAMEWORK_LOCAL_EXCLUDE="${FRAMEWORK_ROOT}/.git/info/exclude"
+IGNORE_RULE='/tools/visual-recorder/'
+if [[ -f "${FRAMEWORK_LOCAL_EXCLUDE}" ]] &&
+   ! grep -Fqx "${IGNORE_RULE}" "${FRAMEWORK_LOCAL_EXCLUDE}"; then
+    printf '\n# Appium Visual Recorder instalado localmente\n%s\n' "${IGNORE_RULE}" \
+        >> "${FRAMEWORK_LOCAL_EXCLUDE}"
+fi
+
 echo
 echo "Appium Visual Recorder está listo en: ${INSTALL_DIR}"
-echo "Para iniciarlo desde el framework: npm run recorder"
+echo "El framework no fue modificado. Para iniciarlo desde su raíz:"
+echo "npm --prefix tools/visual-recorder run recorder"
 
 if [[ "${START_RECORDER}" == "true" ]]; then
     exec "${INSTALL_DIR}/run.sh"
