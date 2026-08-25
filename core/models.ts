@@ -56,9 +56,15 @@ export interface DeviceConfig {
     deviceName: string;
     udid: string;
     platformVersion: string;
+    /** Android; en iOS se usa `bundleId`. */
     appPackage: string;
     appActivity: string;
+    /** APK o .app; en simulador iOS reemplaza a `bundleId`. */
     appPath?: string;
+    /** Por defecto 'android' para no romper sesiones ya guardadas. */
+    platform?: 'android' | 'ios';
+    /** iOS: identificador de la app ya instalada en el simulador. */
+    bundleId?: string;
 }
 
 export function toGherkinLine(step: RecordedStep, index: number): string {

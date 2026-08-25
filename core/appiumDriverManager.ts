@@ -2,6 +2,7 @@ import { remote, Browser } from 'webdriverio';
 import { DeviceConfig } from './models';
 import { exec } from 'child_process';
 import * as path from 'path';
+import { parseSimulators, SimulatorDevice } from './iosSimulators';
 
 export class AppiumDriverManager {
     protected driver: Browser | null = null;
@@ -30,8 +31,49 @@ export class AppiumDriverManager {
 
     async init(config: DeviceConfig): Promise<void> {
         this.config = config;
-        console.log('[AppiumDriverManager] Conectando:', config.deviceName);
+        console.log('[AppiumDriverManager] Conectando:', config.deviceName, `(${config.platform || 'android'})`);
 
+        const capabilities: any = config.platform === 'ios'
+            ? this.iosCapabilities(config)
+            : this.androidCapabilities(config);
+
+        this.driver = await remote({
+            protocol:               'http',
+            hostname:               '127.0.0.1',
+            port:                   4723,
+            path:                   '/',
+            capabilities,
+            logLevel:               'error',
+            connectionRetryCount:   3,
+            connectionRetryTimeout: 60000,
+        });
+
+        console.log('[AppiumDriverManager] Conectado');
+    }
+
+    /**
+     * Simulador iOS. No lleva firma de WebDriverAgent: Appium la compila y la
+     * instala en el simulador sin provisioning, que es la razon por la que el
+     * soporte local arranca por simulador y no por dispositivo fisico.
+     */
+    private iosCapabilities(config: DeviceConfig): Record<string, unknown> {
+        const capabilities: Record<string, unknown> = {
+            platformName:               'iOS',
+            'appium:deviceName':        config.deviceName,
+            'appium:udid':              config.udid,
+            'appium:platformVersion':   config.platformVersion,
+            'appium:automationName':    'XCUITest',
+            'appium:noReset':           true,
+            'appium:newCommandTimeout': 300,
+            'appium:wdaLaunchTimeout':  120000,
+            'appium:wdaConnectionTimeout': 120000,
+        };
+        if (config.appPath) capabilities['appium:app'] = path.resolve(config.appPath);
+        else if (config.bundleId) capabilities['appium:bundleId'] = config.bundleId;
+        return capabilities;
+    }
+
+    private androidCapabilities(config: DeviceConfig): Record<string, unknown> {
         const capabilities: any = {
             platformName:                              'Android',
             'appium:deviceName':                       config.deviceName,
@@ -52,19 +94,7 @@ export class AppiumDriverManager {
             capabilities['appium:appPackage']  = config.appPackage;
             capabilities['appium:appActivity'] = config.appActivity;
         }
-
-        this.driver = await remote({
-            protocol:               'http',
-            hostname:               '127.0.0.1',
-            port:                   4723,
-            path:                   '/',
-            capabilities,
-            logLevel:               'error',
-            connectionRetryCount:   3,
-            connectionRetryTimeout: 60000,
-        });
-
-        console.log('[AppiumDriverManager] Conectado');
+        return capabilities;
     }
 
     getDriver(): Browser {
@@ -232,6 +262,20 @@ export class AppiumDriverManager {
     }
 
     isActive(): boolean { return this.driver !== null; }
+
+    /**
+     * Simuladores iOS disponibles. Si no hay `xcrun` —cualquier maquina que no
+     * sea macOS— devuelve vacio en vez de fallar: la conexion Android tiene que
+     * seguir funcionando igual.
+     */
+    static async getIosSimulators(): Promise<SimulatorDevice[]> {
+        return new Promise((resolve) => {
+            exec('xcrun simctl list devices available --json', { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+                if (err) { resolve([]); return; }
+                resolve(parseSimulators(stdout));
+            });
+        });
+    }
 
     static async getConnectedDevices(): Promise<Array<{udid: string, status: string}>> {
         return new Promise((resolve) => {

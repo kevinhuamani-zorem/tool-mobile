@@ -6,9 +6,12 @@ const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
 const { projectPaths } = require('../dist/core/projectPaths');
 
 test('relaciona un canal IPC con los módulos internos del recorder', () => {
+    // `query` rankea y corta: el límite tiene que dar aire para que el nodo del
+    // controller entre. Con 50 se caía cada vez que ese archivo crecía, y lo que
+    // el test comprueba es la relación, no el ranking.
     const graph = new RecorderCodeGraph().query({
         ipc: 'preview-fwk-files',
-        limit: 50
+        limit: 120
     });
     const channel = graph.nodes.find(node =>
         node.type === 'ipcChannel' && node.name === 'preview-fwk-files'

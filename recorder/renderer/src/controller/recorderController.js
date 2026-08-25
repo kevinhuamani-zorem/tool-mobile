@@ -36,11 +36,19 @@ export async function initializeRecorder() {
     const localPanel      = document.getElementById('localPanel');
     const cmbDevices      = document.getElementById('cmbDevices');
     const lblDeviceInfo   = document.getElementById('lblDeviceInfo');
+    // [visual-recorder] Campos que cambian entre Android y simulador iOS.
+    const localAndroidFields = document.getElementById('localAndroidFields');
+    const localIosFields     = document.getElementById('localIosFields');
+    const txtBundleId        = document.getElementById('txtBundleId');
+    const lblPlatformVersion = document.getElementById('lblPlatformVersion');
+    const lblAppPath         = document.getElementById('lblAppPath');
     const btnRefreshDev   = document.getElementById('btnRefreshDevices');
     const txtPackage      = document.getElementById('txtPackage');
     const txtActivity     = document.getElementById('txtActivity');
     const txtPlatformV    = document.getElementById('txtPlatformVersion');
     const txtApkPath      = document.getElementById('txtApkPath');
+    const btnChooseLocalApp = document.getElementById('btnChooseLocalApp');
+    const lblLocalAppHint = document.getElementById('lblLocalAppHint');
     const btnDetectApp    = document.getElementById('btnDetectApp');
     const btnStart        = document.getElementById('btnStartSession');
     const lblConfigSt     = document.getElementById('lblConfigStatus');
@@ -242,17 +250,40 @@ export async function initializeRecorder() {
         updateSavedFrameworkSummary();
     }
 
+    /** Plataforma del dispositivo elegido; el listado la trae en `data-platform`. */
+    function selectedLocalPlatform() {
+        return cmbDevices.options[cmbDevices.selectedIndex]?.dataset?.platform === 'ios'
+            ? 'ios' : 'android';
+    }
+
+    function syncLocalPlatformFields() {
+        const ios = selectedLocalPlatform() === 'ios';
+        if (localAndroidFields) localAndroidFields.style.display = ios ? 'none' : '';
+        if (localIosFields) localIosFields.style.display = ios ? '' : 'none';
+        if (lblPlatformVersion) lblPlatformVersion.textContent = ios ? 'Versión iOS:' : 'Versión Android:';
+        if (lblAppPath) lblAppPath.textContent = ios ? 'Aplicación iOS opcional:' : 'APK opcional:';
+        if (txtApkPath) txtApkPath.placeholder = ios ? 'Ruta al .app o .ipa' : 'Ruta al .apk';
+        if (lblLocalAppHint && !txtApkPath?.value) lblLocalAppHint.textContent = '';
+    }
+
     function syncLocalDeviceSummary() {
+        syncLocalPlatformFields();
         const selected = cmbDevices.options[cmbDevices.selectedIndex];
         if (lblLocalDeviceName) {
-            lblLocalDeviceName.textContent = selected?.textContent?.replace(/\s+\(Android.*$/, '') ||
+            lblLocalDeviceName.textContent = selected?.textContent?.replace(/\s+\((?:Android|iOS).*$/, '') ||
                 'Dispositivo local';
         }
         if (lblLocalPlatform) {
-            const match = selected?.textContent?.match(/\((Android[^)]*)\)/);
-            lblLocalPlatform.textContent = match?.[1] || `Android ${txtPlatformV.value || ''}`.trim();
+            const match = selected?.textContent?.match(/\(((?:Android|iOS)[^)]*)\)/);
+            const etiqueta = selectedLocalPlatform() === 'ios' ? 'iOS' : 'Android';
+            lblLocalPlatform.textContent = match?.[1] || `${etiqueta} ${txtPlatformV.value || ''}`.trim();
         }
-        if (lblLocalPackage) lblLocalPackage.textContent = txtPackage.value.trim() || 'Sin paquete';
+        if (lblLocalPackage) {
+            const identificador = selectedLocalPlatform() === 'ios'
+                ? (txtBundleId?.value || '').trim()
+                : txtPackage.value.trim();
+            lblLocalPackage.textContent = identificador || 'Sin paquete';
+        }
     }
 
     scenarioLocatorQueue.tabIndex = 0;
@@ -1422,7 +1453,13 @@ export async function initializeRecorder() {
     });
 
     cmbFrameworkApp.addEventListener('change', () => {
-        if (cmbFrameworkApp.value) txtApkPath.value = cmbFrameworkApp.value;
+        if (!cmbFrameworkApp.value) return;
+        txtApkPath.value = cmbFrameworkApp.value;
+        if (lblLocalAppHint) {
+            lblLocalAppHint.textContent = selectedLocalPlatform() === 'ios' && /\.ipa$/i.test(txtApkPath.value)
+                ? '⚠ Un .ipa de dispositivo no funciona en Simulator; debe contener una build compatible con iOS Simulator.'
+                : `✓ ${cmbFrameworkApp.options[cmbFrameworkApp.selectedIndex]?.textContent || 'Aplicación seleccionada'}`;
+        }
     });
 
     function setVerify(msg, type) {
@@ -1737,7 +1774,8 @@ export async function initializeRecorder() {
     function switchTab(mode) {
         activeMode = mode;
         if (mode === 'local') {
-            sessionPlatform = 'android';
+            // La local ya no es Android por definición: la fija el dispositivo elegido.
+            sessionPlatform = selectedLocalPlatform();
             tabLocal.classList.add('active');
             tabBS.classList.remove('active');
             localPanel.style.display = 'flex';
@@ -2122,11 +2160,17 @@ export async function initializeRecorder() {
         }
         result.devices.forEach(d => {
             const opt = document.createElement('option');
+            const ios = d.platform === 'ios';
             opt.value = d.udid;
-            opt.textContent = (d.model || d.udid) + ' (Android ' + (d.version || '?') + ')';
+            opt.dataset.platform = ios ? 'ios' : 'android';
+            opt.dataset.version = d.version || '';
+            const estado = ios && d.status !== 'booted' ? ' · apagado' : '';
+            opt.textContent = (d.model || d.udid) +
+                ' (' + (ios ? 'iOS ' : 'Android ') + (d.version || '?') + estado + ')';
             cmbDevices.appendChild(opt);
         });
         currentUdid = result.devices[0].udid;
+        txtPlatformV.value = result.devices[0].version || txtPlatformV.value;
         lblDeviceInfo.textContent = '✓ ' + result.devices.length + ' dispositivo(s)';
         lblDeviceInfo.className = 'device-info ok';
         syncLocalDeviceSummary();
@@ -2134,11 +2178,31 @@ export async function initializeRecorder() {
 
     cmbDevices.addEventListener('change', () => {
         currentUdid = cmbDevices.value;
+        const option = cmbDevices.options[cmbDevices.selectedIndex];
+        if (option?.dataset?.version) txtPlatformV.value = option.dataset.version;
         syncLocalDeviceSummary();
     });
     txtPackage.addEventListener('input', syncLocalDeviceSummary);
     txtPlatformV.addEventListener('input', syncLocalDeviceSummary);
     btnRefreshDev.addEventListener('click', loadDevices);
+
+    btnChooseLocalApp.addEventListener('click', async () => {
+        disableBtn(btnChooseLocalApp, '⏳');
+        const result = await api.selectLocalApp(selectedLocalPlatform());
+        enableBtn(btnChooseLocalApp);
+        if (result?.canceled) return;
+        if (!result?.success) {
+            setConfigStatus('✗ ' + (result?.error || 'No se pudo seleccionar la aplicación'), 'err');
+            return;
+        }
+        txtApkPath.value = result.path;
+        if (lblLocalAppHint) {
+            lblLocalAppHint.textContent = result.simulatorWarning
+                ? '⚠ Un .ipa de dispositivo no funciona en Simulator; debe contener una build compatible con iOS Simulator.'
+                : `✓ ${result.filename}`;
+        }
+        setConfigStatus('✓ Aplicación seleccionada: ' + result.filename, 'ok');
+    });
 
     btnDetectApp.addEventListener('click', async () => {
         if (!currentUdid) return;
@@ -2162,8 +2226,21 @@ export async function initializeRecorder() {
         const version = txtPlatformV.value.trim();
         const apk     = txtApkPath.value.trim();
 
+        const platform = selectedLocalPlatform();
+        const bundleId = (txtBundleId?.value || '').trim();
         if (!udid) { setConfigStatus('⚠ Selecciona dispositivo', 'err'); return; }
-        if (!pkg)  { setConfigStatus('⚠ Ingresa el package', 'err');     return; }
+        if (platform === 'ios') {
+            if (apk && !/\.(app|ipa)$/i.test(apk)) {
+                setConfigStatus('⚠ Para iOS selecciona un archivo .app o .ipa', 'err');
+                return;
+            }
+        } else if (!pkg) {
+            setConfigStatus('⚠ Ingresa el package', 'err');
+            return;
+        } else if (apk && !/\.(apk|aab|xapk)$/i.test(apk)) {
+            setConfigStatus('⚠ Para Android selecciona un archivo .apk, .aab o .xapk', 'err');
+            return;
+        }
 
         const deviceName = cmbDevices.options[cmbDevices.selectedIndex].text;
 
@@ -2174,18 +2251,19 @@ export async function initializeRecorder() {
         setStatus('🔄 Conectando con Appium...', '#FF6600');
         resetSessionReady();
         setRecorderConnecting(true);
-        sessionPlatform = 'android';
+        sessionPlatform = platform;
         await loadExistingScenarios();
         showSessionOnboarding();
 
         await new Promise(r => setTimeout(r, 50));
 
         const config = {
-            deviceName, udid, platformVersion: version,
+            deviceName, udid, platformVersion: version, platform,
             appPackage: pkg, appActivity: act || '.MainActivity',
             squad: cmbFrameworkSquad.value || 'payment',
             featureScope: cmbFrameworkFeatureScope?.value || '',
             environment: cmbFrameworkEnv.value,
+            ...(platform === 'ios' && bundleId ? { bundleId } : {}),
             ...(apk ? { appPath: apk } : {})
         };
 
@@ -2194,11 +2272,17 @@ export async function initializeRecorder() {
             if (result.success) {
                 markSessionReady();
                 setRecorderConnecting(false);
-                sessionPlatform = 'android';
+                sessionPlatform = platform;
                 cmbFrameworkSquad.disabled = true;
                 if (cmbFrameworkFeatureScope) cmbFrameworkFeatureScope.disabled = true;
                 lblDevice.textContent = deviceName;
-                setStatus('✓ Sesion activa — ' + deviceName, '#00CC00');
+                const manualIosApp = platform === 'ios' && !bundleId && !apk;
+                setStatus(
+                    manualIosApp
+                        ? '✓ Sesion iOS activa — abre la app manualmente en Simulator y refresca la captura'
+                        : '✓ Sesion activa — ' + deviceName,
+                    '#00CC00'
+                );
                 if (result.screenshot) updateDeviceScreen(result.screenshot);
                 await loadSquadCatalog(sessionPlatform);
             } else {

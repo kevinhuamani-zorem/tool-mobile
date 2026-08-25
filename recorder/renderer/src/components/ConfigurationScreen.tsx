@@ -56,20 +56,35 @@ export function ConfigurationScreen() {
             <details id="localAdvanced" className="connection-advanced">
               <summary>Configuración avanzada</summary>
               <div className="connection-advanced-body">
-                <label className="field-label">Package de la app:</label>
-                <div className="input-row">
-                  <input type="text" id="txtPackage" className="field-input" defaultValue="com.yape.qa" />
-                  <button className="btn btn-dark" id="btnDetectApp">🔍 Detectar</button>
+                {/* [visual-recorder] Android pide package + activity; el simulador
+                    iOS pide el bundleId de la app ya instalada. */}
+                <div id="localAndroidFields">
+                  <label className="field-label">Package de la app:</label>
+                  <div className="input-row">
+                    <input type="text" id="txtPackage" className="field-input" defaultValue="com.yape.qa" />
+                    <button className="btn btn-dark" id="btnDetectApp">🔍 Detectar</button>
+                  </div>
+                  <label className="field-label">Activity principal:</label>
+                  <input type="text" id="txtActivity" className="field-input" defaultValue="com.yape.activity.MainActivity" />
                 </div>
-                <label className="field-label">Activity principal:</label>
-                <input type="text" id="txtActivity" className="field-input" defaultValue="com.yape.activity.MainActivity" />
-                <label className="field-label">Versión Android:</label>
+                <div id="localIosFields" style={{display: 'none'}}>
+                  <label className="field-label">Bundle ID de la app (opcional):</label>
+                  <input type="text" id="txtBundleId" className="field-input" placeholder="com.yape.qa" />
+                  <small className="field-hint">
+                    Déjalo vacío para conectar primero y abrir manualmente una app instalada en Simulator.
+                  </small>
+                </div>
+                <label className="field-label" id="lblPlatformVersion">Versión Android:</label>
                 <input type="text" id="txtPlatformVersion" className="field-input" defaultValue={16} />
-                <label className="field-label">APK opcional:</label>
+                <label className="field-label" id="lblAppPath">APK opcional:</label>
                 <select id="cmbFrameworkApp" className="field-select">
                   <option value>— Seleccionar app del framework —</option>
                 </select>
-                <input type="text" id="txtApkPath" className="field-input" placeholder="Ruta al .apk" />
+                <div className="input-row">
+                  <input type="text" id="txtApkPath" className="field-input" placeholder="Ruta al .apk" />
+                  <button className="btn btn-dark" id="btnChooseLocalApp" type="button">📂 Seleccionar</button>
+                </div>
+                <small id="lblLocalAppHint" className="field-hint" />
               </div>
             </details>
             <div id="lblConfigStatus" className="config-status" />

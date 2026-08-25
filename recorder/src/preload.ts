@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
     // ── Local ────────────────────────────────────────────────────────────────
     getDevices:          ()                     => ipcRenderer.invoke('get-devices'),
     getForegroundApp:    (udid: string)         => ipcRenderer.invoke('get-foreground-app', udid),
+    selectLocalApp:      (platform: string)     => ipcRenderer.invoke('select-local-app', platform),
     startSession:        (config: any)          => ipcRenderer.invoke('start-session', config),
 
     // ── BrowserStack ─────────────────────────────────────────────────────────

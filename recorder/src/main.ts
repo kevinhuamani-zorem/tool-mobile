@@ -370,11 +370,52 @@ ipcMain.handle('assign-locator-value', async (_, request: {
 
 ipcMain.handle('get-devices', async () => {
     const devices = await AppiumDriverManager.getConnectedDevices();
-    const enriched = await Promise.all(devices.map(async d => {
+    const android = await Promise.all(devices.map(async d => {
         const info = await AppiumDriverManager.getDeviceInfo(d.udid);
-        return { ...d, ...info };
+        return { ...d, ...info, platform: 'android' as const };
     }));
-    return { devices: enriched };
+    // Los simuladores conviven con los dispositivos Android en la misma lista;
+    // `platform` decide las capacidades y los campos que pide la UI.
+    const simulators = (await AppiumDriverManager.getIosSimulators()).map(simulator => ({
+        udid: simulator.udid,
+        status: simulator.booted ? 'booted' : 'shutdown',
+        model: simulator.name,
+        version: simulator.version,
+        platform: 'ios' as const,
+    }));
+    return { devices: [...android, ...simulators] };
+});
+
+ipcMain.handle('select-local-app', async (_, requestedPlatform: string) => {
+    const platform = requestedPlatform === 'ios' ? 'ios' : 'android';
+    const allowedExtensions = platform === 'ios'
+        ? new Set(['.app', '.ipa'])
+        : new Set(['.apk', '.aab', '.xapk']);
+    const selection = await dialog.showOpenDialog(mainWindow!, {
+        title: platform === 'ios'
+            ? 'Seleccionar aplicación iOS (.app o .ipa)'
+            : 'Seleccionar aplicación Android',
+        filters: platform === 'ios'
+            ? [{ name: 'Aplicaciones iOS', extensions: ['app', 'ipa'] }]
+            : [{ name: 'Aplicaciones Android', extensions: ['apk', 'aab', 'xapk'] }],
+        properties: ['openFile'],
+    });
+    if (selection.canceled || selection.filePaths.length === 0) {
+        return { success: false, canceled: true };
+    }
+
+    const appPath = path.resolve(selection.filePaths[0]);
+    const extension = path.extname(appPath).toLowerCase();
+    if (!allowedExtensions.has(extension) || !fs.existsSync(appPath)) {
+        return { success: false, error: `Aplicación ${platform} no válida` };
+    }
+    return {
+        success: true,
+        path: appPath,
+        filename: path.basename(appPath),
+        extension,
+        simulatorWarning: platform === 'ios' && extension === '.ipa',
+    };
 });
 
 ipcMain.handle('get-foreground-app', async (_, udid: string) => {
@@ -384,12 +425,14 @@ ipcMain.handle('get-foreground-app', async (_, udid: string) => {
 ipcMain.handle('start-session', async (_, config: any) => {
     try {
         activeDm = dm;
-        recordingPlatform = 'android';
+        // La sesion local ya no asume Android: el simulador iOS usa XCUITest y
+        // sus propios bloques de locators.
+        recordingPlatform = config.platform === 'ios' ? 'ios' : 'android';
         activeSquad = config.squad || 'payment';
         activeEnvironment = config.environment || '';
         await dm.startAppiumServer();
-        await dm.init(config);
-        locatorManager = new LocatorManager(projectPaths.locators, 'global', 'android');
+        await dm.init({ ...config, platform: recordingPlatform });
+        locatorManager = new LocatorManager(projectPaths.locators, 'global', recordingPlatform);
         inspector  = new MobileInspector(activeDm);
         executor   = new MobileStepExecutor(activeDm, locatorManager);
         sessionActive = true;
@@ -403,7 +446,7 @@ ipcMain.handle('start-session', async (_, config: any) => {
         // Persistir configuración para test.sh / steps.ts
         saveSessionConfig({
             type:            'local',
-            platform:        'android',
+            platform:        recordingPlatform,
             squad:           activeSquad,
             environment:     activeEnvironment,
             deviceName:      config.deviceName,
@@ -411,6 +454,7 @@ ipcMain.handle('start-session', async (_, config: any) => {
             platformVersion: config.platformVersion,
             appPackage:      config.appPackage,
             appActivity:     config.appActivity,
+            ...(config.bundleId ? { bundleId: config.bundleId } : {}),
             ...(config.appPath ? { appPath: config.appPath } : {}),
         });
         return { success: true, screenshot };

@@ -138,3 +138,33 @@ La escritura normal es atómica. Si una generación falla:
 - selector con estrategia, si aplica;
 - screenshot/XML de la misma captura;
 - resultado de `npm run typecheck`, prueba focalizada y `git status --short`.
+
+## Sesión local en simulador iOS
+
+El soporte local arranca por **simulador**, no por dispositivo físico: el
+simulador no necesita firmar WebDriverAgent, que es la parte que más fricción da.
+
+Requisitos en la Mac:
+
+```bash
+xcrun simctl list devices available     # debe listar al menos un simulador
+appium driver install xcuitest          # registra el driver en el manifest
+appium driver list --installed          # uiautomator2 y xcuitest
+```
+
+`appium-xcuitest-driver` puede estar en `node_modules` y aun así no estar
+registrado: Appium lee los drivers del manifest, no del `package.json`.
+
+En la pantalla de conexión local, el desplegable lista dispositivos Android y
+simuladores iOS juntos; la plataforma la fija el que elijas. Para iOS pide el
+**bundle ID** de una app ya instalada, o permite seleccionar un `.app`/`.ipa`
+con el diálogo nativo. Un IPA compilado para dispositivo físico no puede
+ejecutarse en Simulator: para ese caso se necesita la build `.app` destinada a
+`iphonesimulator` (o un IPA que realmente empaquete esa build compatible).
+
+El bundle ID y el archivo son opcionales. Si ambos quedan vacíos, XCUITest
+inicia WebDriverAgent sin una aplicación predeterminada. El QA puede instalar y
+abrir la app manualmente en Simulator; después debe volver al recorder y
+refrescar screenshot/XML antes de inspeccionar o grabar acciones.
+
+Si el simulador aparece como `apagado`, Appium lo arranca al iniciar la sesión.
