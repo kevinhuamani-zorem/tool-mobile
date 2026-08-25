@@ -31,6 +31,9 @@
   },
   "dependencies": {
     "@wdio/appium-service": "^8.0.0",
+    "appium": "3.5.0",
+    "appium-uiautomator2-driver": "8.4.0",
+    "appium-xcuitest-driver": "12.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "typescript": "^5.0.0",

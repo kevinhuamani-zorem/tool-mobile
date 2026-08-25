@@ -155,3 +155,86 @@ test('aplica ediciones revisadas únicamente a archivos incluidos en el preview'
         /fuera del preview/
     );
 });
+
+
+// El camino sin agente copiaba el valor a su propio modulo aunque el plan dijera
+// `reuse`: el duplicado del PR lo producia el recorder, y ahi no hay nadie que
+// lo note porque el agente no llega a correr.
+const REUTILIZADO = [{
+    name: 'shortcutTapp',
+    import: '@locators/home/home.locator.json',
+    identifier: 'LocatorHome',
+    reference: {
+        android: 'LocatorHome.homeAndroid.shortcutTapp',
+        ios: 'LocatorHome.homeIos.shortcutTapp',
+    },
+    type: { android: 'XPATH', ios: 'XPATH' },
+}];
+
+function conReutilizacion(reused) {
+    const actions = [
+        { action: 'CLICK', selector: '//android.widget.Button[@content-desc="Tapp"]',
+          variableName: 'shortcutTapp', value: '', contextHint: 'ingresar a tapp' },
+        { action: 'VERIFICAR_EXISTE', selector: 'android=new UiSelector().text("TAPP")',
+          variableName: 'tappScreen', value: '', contextHint: 'pantalla tapp' },
+    ];
+    return new FwkMobileGenerator().preview({
+        squad: 'interoperabilidad', featureName: 'F', scenarioName: 'S',
+        fileName: 'tapp-accounts', locatorModule: 'tapp-accounts', caseId: 'TC-1',
+        pathType: 'Happy Path', tag: 't', dataName: 'A', platform: 'android',
+        scenarioRows: [{ keyword: 'When', text: 'el usuario ingresa a tapp', status: 'missing', actions }],
+    }, actions, reused);
+}
+
+test('referencia el locator reutilizado en vez de copiarlo a su módulo', () => {
+    const preview = conReutilizacion(REUTILIZADO);
+
+    // No se copia el valor.
+    const locators = JSON.parse(preview.locatorContent);
+    assert.equal(locators.tappAccountsAndroid.shortcutTapp, undefined);
+    assert.ok(locators.tappAccountsAndroid.tappScreen, 'el locator nuevo sí se crea');
+
+    // Se importa el módulo de origen y se usa su expresión.
+    assert.ok(preview.screenContent.includes(
+        `import LocatorHome from '@locators/home/home.locator.json' with { type: 'json' };`));
+    assert.match(preview.screenContent, /LocatorHome\.homeAndroid\.shortcutTapp/);
+    assert.match(preview.screenContent, /LocatorHome\.homeIos\.shortcutTapp/);
+    // Un solo getter, no uno por cada origen.
+    assert.equal((preview.screenContent.match(/private get shortcutTapp/g) || []).length, 1);
+    // El locator propio sigue apuntando a su bloque.
+    assert.match(preview.screenContent, /Locators\["tappAccountsAndroid"\]\.tappScreen/);
+});
+
+test('sin reutilización el comportamiento no cambia', () => {
+    const preview = conReutilizacion([]);
+    const locators = JSON.parse(preview.locatorContent);
+    assert.ok(locators.tappAccountsAndroid.shortcutTapp, 'se crea en su propio módulo');
+    assert.doesNotMatch(preview.screenContent, /LocatorHome/);
+});
+
+// El contrato son cuatro capas; el módulo conserva su archivo aunque hoy no
+// tenga locators propios, que es donde irán los próximos.
+test('conserva el archivo de locators aunque todo se reutilice', () => {
+    const actions = [{ action: 'CLICK', selector: '//android.widget.Button[@content-desc="Tapp"]',
+        variableName: 'shortcutTapp', value: '', contextHint: 'ingresar a tapp' }];
+    const preview = new FwkMobileGenerator().preview({
+        squad: 'interoperabilidad', featureName: 'F', scenarioName: 'S',
+        fileName: 'tapp-accounts', locatorModule: 'tapp-accounts', caseId: 'TC-1',
+        pathType: 'Happy Path', tag: 't', dataName: 'A', platform: 'android',
+        scenarioRows: [{ keyword: 'When', text: 'el usuario ingresa a tapp', status: 'missing', actions }],
+    }, actions, REUTILIZADO);
+
+    assert.equal(preview.files.length, 4);
+    const locators = JSON.parse(preview.locatorContent);
+    assert.deepEqual(locators.tappAccountsAndroid, {});
+    assert.deepEqual(locators.tappAccountsIos, {});
+});
+
+// Si el plan no trae referencia para la plataforma del caso no hay nada que
+// escribir: es mas seguro crear el locator que emitir una referencia vacía.
+test('ignora una reutilización sin referencia para la plataforma activa', () => {
+    const preview = conReutilizacion([{ ...REUTILIZADO[0], reference: { ios: 'LocatorHome.homeIos.shortcutTapp' } }]);
+    const locators = JSON.parse(preview.locatorContent);
+    assert.ok(locators.tappAccountsAndroid.shortcutTapp, 'cae a crearlo');
+    assert.doesNotMatch(preview.screenContent, /LocatorHome/);
+});

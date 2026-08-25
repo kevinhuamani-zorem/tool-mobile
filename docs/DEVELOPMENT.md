@@ -3,7 +3,9 @@
 ## Requisitos
 
 - Node.js 18 o superior.
-- Appium 3+ y el driver correspondiente para sesiones locales.
+- El runtime Appium 3 y los drivers UiAutomator2/XCUITest se instalan de forma
+  aislada con las dependencias del recorder. No se reutiliza Appium desde el
+  `node_modules` del framework.
 - Android local: Java 17+, Android SDK/ADB y UiAutomator2.
 - BrowserStack o iOS local no requieren Java por sí mismos.
 
@@ -13,6 +15,9 @@ Instalación:
 cd tools/visual-recorder
 npm install
 ```
+
+En una instalación reproducible o después de actualizar usa `npm ci`. Esto
+evita que los `overrides` de dependencias del framework alteren Appium.
 
 ## Comandos
 

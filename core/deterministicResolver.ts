@@ -20,7 +20,9 @@ import { TECHNICAL_STOP_WORDS } from './selectorNormalization';
 import { spanishTokens, translateToEnglish, translateToSlug } from './englishIdentifiers';
 import { frameworkContract } from './frameworkContract';
 import { ElementIdentityIndex } from './elementIdentity';
-import { inferredStrategy, strategyOf, strategyValue } from './locatorStrategy';
+import { importsOf, indexModuleImports, inferredStrategy, strategyOf, strategyValue } from './locatorStrategy';
+import { declareElements } from './elementDeclaration';
+import { CodeGraph } from './codeGraph';
 import { detectRepetition } from './repetitionDetector';
 import { projectPaths } from './projectPaths';
 
@@ -605,6 +607,7 @@ export class DeterministicResolver {
         // Duplicados por identidad de elemento, no por cadena de selector. Es lo
         // que dejo pasar el PR de Tapp: `~Tapp` y el `content-desc="Tapp"` de
         // home apuntan al mismo boton pero no se parecen como texto.
+        const duplicateCandidates = new Set<string>();
         const identityIndex = new ElementIdentityIndex(
             catalog.locators.filter(locator => locator.scope === 'squad' || locator.scope === 'home')
         );
@@ -621,6 +624,8 @@ export class DeterministicResolver {
             if (!matches.length) continue;
             const candidates = matches.slice(0, 4);
             const omitted = matches.length - candidates.length;
+            candidates.forEach(candidate =>
+                duplicateCandidates.add(`${candidate.module}#${candidate.name}`));
             const gapId = `gap-duplicate-element-${resolution.sequence}`;
             resolution.gapId = resolution.gapId || gapId;
             gaps.push({
@@ -796,6 +801,50 @@ export class DeterministicResolver {
                 });
             }
         }
+        // Elementos existentes que este caso toca: los que reutiliza, los que se
+        // le proponen como duplicado y los del modulo que va a actualizar. El
+        // catalogo completo son 700 claves y el paquete tiene 20 KB.
+        const touched = new Set<string>([
+            ...resolutions
+                .filter(item => item.resolution === 'reuse' && item.source)
+                .map(item => `${item.source!.module}#${item.locatorName}`),
+            ...duplicateCandidates,
+        ]);
+        const targetScreen = files.find(file => file.layer === 'screen' && file.operation === 'update');
+        const targetImports = targetScreen
+            ? importsOf(path.join(projectPaths.frameworkRoot, targetScreen.path))
+            : new Map<string, string>();
+
+        // Acotar por modulo dejaba huecos: 14 de los 104 Screen Objects importan
+        // mas de un JSON de locators, y el agente puede duplicar justamente los
+        // que su pantalla ya usa desde otro modulo. El subgrafo los trae todos.
+        const graph = new CodeGraph();
+        if (targetScreen) {
+            for (const node of graph.subgraphOf({ files: [targetScreen.path], depth: 3 }).nodes) {
+                if (node.type !== 'locator') continue;
+                const module = node.file
+                    .replace(/^resources\/locators\//, '')
+                    .replace(/\.locator\.json$/i, '');
+                touched.add(`${module}#${node.name}`);
+            }
+        }
+        const declarations = declareElements(
+            catalog.locators.filter(locator => touched.has(`${locator.module}#${locator.name}`)),
+            indexModuleImports(),
+            targetImports,
+            locator => {
+                // Solo cuenta lo que queda FUERA del caso: que sus propios
+                // archivos lo usen no es radio de impacto, es ruido que ademas
+                // se paga en contexto.
+                const own = new Set(files.map(file => file.path));
+                const dependents = graph.dependentsOfLocator(locator.file, locator.name);
+                return {
+                    screens: dependents.screens.filter(file => !own.has(file)),
+                    steps: dependents.steps.filter(file => !own.has(file)),
+                };
+            }
+        );
+
         const planId = `plan-${crypto.createHash('sha256').update(JSON.stringify({
             recordingId: scenario.recordingId,
             fingerprint: scenario.fingerprint,
@@ -831,6 +880,7 @@ export class DeterministicResolver {
                 recordingId: scenario.recordingId,
                 planId,
                 reusedLocators: resolutions.filter(item => item.resolution === 'reuse'),
+                elementDeclarations: declarations,
                 frameworkAwareness: {
                     candidates,
                     exactStepDefinitions: catalog.stepDefinitions.filter(definition =>

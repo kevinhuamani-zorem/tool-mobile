@@ -1084,6 +1084,54 @@ test('rechaza identificadores en español y no toca el Gherkin ni lo heredado', 
     assert.match(instructions, /Todo el codigo va en INGLES/);
 });
 
+// Sin type/group/reference el agente sabe que debe reutilizar pero no puede
+// escribir el getter, y su unica salida es copiar el valor a un modulo nuevo.
+test('reuse-context declara los elementos existentes que el caso toca', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-elements-'));
+    const existente = {
+        name: 'shortcutTapp', module: 'home/home', squad: 'home', scope: 'home', platform: 'android',
+        file: 'resources/locators/home/home.locator.json',
+        androidSelector: '//android.widget.Button[@content-desc="Tapp"]',
+        iosSelector: '', androidBlock: 'homeAndroid', iosBlock: 'homeIos',
+        androidStrategy: 'XPATH',
+    };
+    const catalog = {
+        getCatalog: (squad, platform) => ({
+            squad, platform, stepDefinitions: [], screenMethods: [], features: [],
+            locators: [existente],
+        }),
+    };
+    const builder = new AutomationPackageBuilder(
+        new DeterministicResolver(catalog),
+        new AutomationMemory(path.join(root, 'memory'))
+    );
+    const result = builder.prepare(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: '//android.widget.Button[@content-desc="Tapp"]',
+        selectorVerified: true, elementIntent: 'acceso a tapp'
+    }]), root);
+
+    const reuse = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'reuse-context.json'), 'utf8'
+    ));
+    // Agrupado por módulo: import e identificador se dicen una vez.
+    const grupo = reuse.elements.find(item => item.module === 'home/home');
+    assert.ok(grupo, 'el módulo del locator reutilizado debe llegar declarado');
+    assert.match(grupo.import, /^@locators\/home\/home\.locator\.json$/);
+    const declarado = grupo.elements.find(element => element.name === 'shortcutTapp');
+    assert.ok(declarado, 'el locator reutilizado debe llegar declarado');
+    assert.equal(declarado.locators.android.type, 'XPATH');
+    assert.equal(grupo.groups.android, 'homeAndroid');
+    assert.equal(declarado.locators.android.reference, `${grupo.identifier}.homeAndroid.shortcutTapp`);
+    assert.equal(declarado.locators.ios.status, 'missing');
+
+    const instructions = fs.readFileSync(
+        path.join(result.packageDirectory, 'instructions.md'), 'utf8'
+    );
+    assert.match(instructions, /NUNCA copiar el `value`/);
+    assert.match(instructions, /La lista es completa/);
+    assert.match(instructions, /status: "missing"/);
+});
+
 test('package builder mantiene baselines grandes fuera del contexto mínimo', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-update-package-'));
     const framework = path.join(root, 'framework');

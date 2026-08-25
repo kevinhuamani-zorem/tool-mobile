@@ -35,6 +35,26 @@ export interface GenerationRequest {
     }[];
 }
 
+/**
+ * Locator que ya existe en otro modulo y NO debe copiarse.
+ *
+ * El generador solo recibia el nombre y el valor del locator, asi que aunque el
+ * plan dijera `reuse` de `home/home.shortcutTapp` terminaba escribiendo el valor
+ * en su propio JSON. Con esto puede importar el modulo y referenciarlo.
+ */
+export interface ReusedLocator {
+    /** Como se llama el locator; coincide con el `variableName` de la accion. */
+    name: string;
+    /** Especificador por alias del JSON donde vive. */
+    import: string;
+    /** Identificador con el que se importa: `LocatorHome`. */
+    identifier: string;
+    /** Expresion completa por plataforma: `LocatorHome.homeAndroid.shortcutTapp`. */
+    reference: Partial<Record<'android' | 'ios', string>>;
+    /** TypeLocator declarado por plataforma. */
+    type: Partial<Record<'android' | 'ios', string>>;
+}
+
 export interface GeneratedPreview {
     featurePath: string;
     locatorPath?: string;
@@ -75,8 +95,17 @@ function locatorBlockName(moduleName: string, platform: MobilePlatform): string 
 }
 
 export class FwkMobileGenerator {
-    preview(request: GenerationRequest, steps: RecordedStep[]): GeneratedPreview {
+    preview(
+        request: GenerationRequest,
+        steps: RecordedStep[],
+        reused: ReusedLocator[] = []
+    ): GeneratedPreview {
         const normalized = this.normalizeRequest(request);
+        // Solo sirven los que traen referencia para la plataforma del caso: sin
+        // eso no hay nada que escribir y es mas seguro crear el locator.
+        const reusedByName = new Map(reused
+            .filter(item => item.reference[normalized.platform === 'ios' ? 'ios' : 'android'])
+            .map(item => [item.name, item]));
         if (steps.length === 0) throw new Error('No hay steps grabados');
 
         const featurePath = path.join(
@@ -88,9 +117,13 @@ export class FwkMobileGenerator {
             ? missingRows.flatMap(row => row.actions || [])
             : steps;
         this.validateGenerationActions(missingRows);
-        const locatorEntries = this.collectLocators(generationActions);
+        const locatorEntries = this.collectLocators(generationActions)
+            .filter(([name]) => !reusedByName.has(name));
         const createdAt = normalized.createdAt || new Date().toISOString();
-        const locatorPath = locatorEntries.length > 0
+        // El modulo conserva su archivo aunque TODOS sus locators se reutilicen:
+        // el contrato de cuatro capas lo exige y ahi es donde iran los proximos.
+        const ownsLocatorFile = locatorEntries.length > 0 || reusedByName.size > 0;
+        const locatorPath = ownsLocatorFile
             ? path.join(
                 projectPaths.locators,
                 normalized.squad,
@@ -134,7 +167,7 @@ export class FwkMobileGenerator {
             screenContent: screenPath
                 ? withGeneratedFileMetadata(
                     'screen',
-                    this.buildScreenObject(normalized, missingRows, screenPath, locatorPath),
+                    this.buildScreenObject(normalized, missingRows, screenPath, locatorPath, reusedByName),
                     createdAt
                 )
                 : undefined,
@@ -433,7 +466,8 @@ export class FwkMobileGenerator {
         request: GenerationRequest,
         rows: NonNullable<GenerationRequest['scenarioRows']>,
         screenPath: string,
-        locatorPath?: string
+        locatorPath?: string,
+        reused: Map<string, ReusedLocator> = new Map()
     ): string {
         // Resueltos contra el framework en disco, no fijos: si BaseScreen o
         // LocatorFactory se mueven, el import generado se mueve con ellos.
@@ -445,11 +479,36 @@ export class FwkMobileGenerator {
             ? this.frameworkAlias(locatorPath, projectPaths.locators, '@locators')
             : undefined;
         const className = screenObjectNames(screenPath).className;
-        const locators = this.collectLocators(rows.flatMap(row => row.actions || []));
+        // Los reutilizados quedan fuera del bloque propio: se referencian, no se crean.
+        const locators = this.collectLocators(rows.flatMap(row => row.actions || []))
+            .filter(([name]) => !reused.has(name));
         const androidBlock = locatorBlockName(request.locatorModule, 'android');
         const iosBlock = locatorBlockName(request.locatorModule, 'ios');
 
-        const getters = locators.map(([name, selector]) => {
+        // Un locator reutilizado se referencia en su modulo de origen; copiarlo
+        // aqui crearia una segunda fuente de verdad para el mismo elemento.
+        const reusedInScreen = [...new Set(
+            rows.flatMap(row => row.actions || [])
+                .map(action => action.variableName || '')
+                .filter(name => reused.has(name))
+        )].map(name => reused.get(name)!);
+
+        const gettersFor = (name: string): string => {
+            const external = reused.get(name);
+            if (external) {
+                const fallback = external.reference.android || external.reference.ios || '';
+                const iosReference = external.reference.ios || fallback;
+                const androidReference = external.reference.android || fallback;
+                return [
+                    `    private get ${name}(): string {`,
+                    `        return ${contract.locatorFactorySymbol}.getElement(`,
+                    `            ${contract.typeLocatorSymbol}.${external.type.ios || 'XPATH'}, ${iosReference},`,
+                    `            ${contract.typeLocatorSymbol}.${external.type.android || 'XPATH'}, ${androidReference}`,
+                    `        );`,
+                    `    }`
+                ].join('\n');
+            }
+            const selector = locators.find(([key]) => key === name)?.[1] || '';
             const activeType = this.locatorType(selector, request.platform);
             const iosType = request.platform === 'ios' ? activeType : 'XPATH';
             const androidType = request.platform === 'android' ? activeType : 'XPATH';
@@ -461,7 +520,11 @@ export class FwkMobileGenerator {
                 `        );`,
                 `    }`
             ].join('\n');
-        });
+        };
+        const getters = [
+            ...locators.map(([name]) => gettersFor(name)),
+            ...reusedInScreen.map(external => gettersFor(external.name)),
+        ];
 
         const methods = rows.map((row, index) => {
             const parameters = [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
@@ -487,11 +550,17 @@ export class FwkMobileGenerator {
         return [
             ...(usesBrowser ? [`import { browser } from '@wdio/globals';`] : []),
             `import ${contract.baseScreenClass} from '${baseImport}';`,
-            ...(locators.length > 0 ? [
+            ...(locators.length > 0 || reusedInScreen.length > 0 ? [
                 `import ${contract.locatorFactorySymbol} from '${factoryImport}';`,
                 `import { ${contract.typeLocatorSymbol} } from '${enumsImport}';`,
-                `import Locators from '${locatorImport}' with { type: 'json' };`
             ] : []),
+            ...(locators.length > 0 && locatorImport
+                ? [`import Locators from '${locatorImport}' with { type: 'json' };`]
+                : []),
+            // Un import por cada modulo ajeno del que se reutiliza algo.
+            ...[...new Map(reusedInScreen.map(external => [external.identifier, external])).values()]
+                .map(external =>
+                    `import ${external.identifier} from '${external.import}' with { type: 'json' };`),
             '',
             `class ${className} extends ${contract.baseScreenClass} {`,
             ...getters.flatMap(getter => ['', getter]),

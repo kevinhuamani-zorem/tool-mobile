@@ -49,7 +49,8 @@ Requisitos generales:
 - checkout local de `fwk-mobile-test`;
 - Node.js 20.19+ o 22.12+ y npm (lo exige Vite 8, que compila el renderer);
 - Git con acceso SSH al repositorio privado del recorder;
-- Appium 3 y el driver requerido para sesiones locales.
+- Appium 3 y los drivers móviles se instalan dentro del recorder mediante su
+  lockfile; no se reutiliza el runtime Appium del framework.
 
 Requisitos según plataforma:
 
@@ -63,7 +64,7 @@ Comprobaciones frecuentes:
 ```bash
 node --version
 npm --version
-appium --version
+./tools/visual-recorder/node_modules/.bin/appium --version
 adb devices
 ```
 
@@ -129,7 +130,8 @@ npm run recorder
 
 El comando inicia Appium, compila el proceso principal y el renderer React, y
 abre Electron. Si el puerto `4723` ya está ocupado, el recorder se detiene para
-no cerrar una sesión ajena.
+no cerrar una sesión ajena. Appium y sus drivers se cargan siempre desde
+`tools/visual-recorder/node_modules`, aislados de los `overrides` del framework.
 
 ## Configuración inicial
 

@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, recordedStepContext } from './models';
+import { locatorKeysIn } from './reuseAnalyzer';
+import { importsOf } from './locatorStrategy';
 
 export type CodeNodeType =
     | 'feature' | 'scenario' | 'gherkinStep'
@@ -74,6 +76,59 @@ function walk(root: string): string[] {
     return output.sort();
 }
 
+
+/**
+ * Cuerpo de una llamada empezando en `openIndex`, balanceando llaves.
+ * Sirve para quedarse con el cuerpo de UN step definition o de UN metodo, en vez
+ * de mirar el archivo entero.
+ */
+/** Palabras clave con forma de metodo: `if (...) {`, `catch (e) {`. */
+const CONTROL_KEYWORDS = new Set([
+    'if', 'else', 'for', 'while', 'do', 'switch', 'catch', 'try', 'finally',
+    'return', 'function', 'typeof', 'await', 'new', 'delete', 'void',
+]);
+
+function bodyFrom(content: string, openIndex: number): string {
+    const start = content.indexOf('{', openIndex);
+    if (start < 0) return '';
+    let depth = 0;
+    for (let index = start; index < content.length; index++) {
+        const character = content[index];
+        if (character === '{') depth++;
+        else if (character === '}') {
+            depth--;
+            if (depth === 0) return content.slice(start + 1, index);
+        }
+    }
+    return content.slice(start + 1);
+}
+
+/** `@screenobjects/x/y.screen.js` o `../x/y.screen.ts` -> `screenobjects/x/y.screen.ts`. */
+function resolveScreenSpecifier(fromFile: string, specifier: string): string | undefined {
+    if (!/\.screen\.(?:ts|js)$/.test(specifier)) return undefined;
+    const normalized = specifier.replace(/\.js$/, '.ts');
+    if (normalized.startsWith('.')) {
+        return path.posix.normalize(
+            path.posix.join(path.posix.dirname(fromFile.replace(/\\/g, '/')), normalized)
+        );
+    }
+    // Cualquier alias que apunte a screenobjects: se conserva desde ese segmento.
+    const match = normalized.match(/screenobjects\/(.+)$/);
+    return match ? `screenobjects/${match[1]}` : undefined;
+}
+
+/** Alias importado -> archivo del Screen Object, para un archivo de steps. */
+function screenImports(fromFile: string, content: string): Map<string, string> {
+    const found = new Map<string, string>();
+    for (const [, identifier, specifier] of content.matchAll(
+        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]/g
+    )) {
+        const file = resolveScreenSpecifier(fromFile, specifier);
+        if (file) found.set(identifier, file);
+    }
+    return found;
+}
+
 function nodeId(type: CodeNodeType, file: string, name: string, index = 0): string {
     return `${type}:${file}:${name}:${index}`;
 }
@@ -101,6 +156,11 @@ function words(value: string): Set<string> {
 export class CodeGraph {
     private cache: CodeGraphCache = { version: 1, builtAt: '', files: {} };
     private reindexedFiles = 0;
+    private dependentsIndex?: {
+        allNodes: CodeGraphNode[];
+        allEdges: CodeGraphEdge[];
+        byId: Map<string, CodeGraphNode>;
+    };
 
     build(): void {
         const previous = this.readCache();
@@ -142,6 +202,97 @@ export class CodeGraph {
             this.addDerivedEdges();
         }
         this.writeCache();
+    }
+
+    /**
+     * Travesia determinista desde unas semillas.
+     *
+     * A diferencia de `query`, que rankea por coincidencia de palabras, aqui se
+     * sigue el grafo: se parte de archivos concretos y se recorren sus aristas.
+     * Con las relaciones resueltas por sentencia el subgrafo de una pantalla se
+     * queda en su squad, asi que sirve para acotar contexto sin recortar nada
+     * relevante.
+     */
+    subgraphOf(input: { files?: string[]; ids?: string[]; depth?: number }): CodeSubgraph {
+        this.build();
+        const allNodes = Object.values(this.cache.files).flatMap(file => file.nodes);
+        const allEdges = Object.values(this.cache.files).flatMap(file => file.edges);
+        const byId = new Map(allNodes.map(node => [node.id, node]));
+        const wanted = new Set((input.files || []).map(file => file.replace(/\\/g, '/')));
+        const seeds = new Set<string>(input.ids || []);
+        for (const node of allNodes) {
+            if (wanted.has(node.file)) seeds.add(node.id);
+        }
+        const adjacency = new Map<string, string[]>();
+        for (const edge of allEdges) {
+            if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
+            if (!adjacency.has(edge.to)) adjacency.set(edge.to, []);
+            adjacency.get(edge.from)!.push(edge.to);
+            adjacency.get(edge.to)!.push(edge.from);
+        }
+        const visited = new Set(seeds);
+        let frontier = [...seeds];
+        const depth = Math.max(1, Math.min(input.depth ?? 2, 6));
+        for (let hop = 0; hop < depth; hop++) {
+            const next: string[] = [];
+            for (const id of frontier) {
+                for (const neighbour of adjacency.get(id) || []) {
+                    if (visited.has(neighbour)) continue;
+                    visited.add(neighbour);
+                    next.push(neighbour);
+                }
+            }
+            frontier = next;
+        }
+        const nodes = [...visited].map(id => byId.get(id)).filter((node): node is CodeGraphNode => Boolean(node));
+        const edges = allEdges.filter(edge => visited.has(edge.from) && visited.has(edge.to));
+        return {
+            nodes,
+            edges,
+            metrics: {
+                totalNodes: allNodes.length,
+                selectedNodes: nodes.length,
+                totalEdges: allEdges.length,
+                selectedEdges: edges.length,
+                contextReduction: allNodes.length === 0 ? 0 : Math.max(0, 1 - nodes.length / allNodes.length),
+                indexedFiles: Object.keys(this.cache.files).filter(file => file !== '__derived__').length,
+                reindexedFiles: this.reindexedFiles,
+            },
+        };
+    }
+
+    /**
+     * Quien mas depende de un locator: Screen Objects que lo usan y Steps que
+     * llaman a esos metodos. Es el radio de impacto de reutilizarlo o cambiarlo.
+     */
+    dependentsOfLocator(locatorFile: string, name: string): { screens: string[]; steps: string[] } {
+        this.build();
+        // Se memoiza: declarar veinte elementos hacia veinte recorridos completos.
+        if (!this.dependentsIndex) {
+            const allNodes = Object.values(this.cache.files).flatMap(file => file.nodes);
+            const allEdges = Object.values(this.cache.files).flatMap(file => file.edges);
+            this.dependentsIndex = { allNodes, allEdges, byId: new Map(allNodes.map(node => [node.id, node])) };
+        }
+        const { allNodes, allEdges, byId } = this.dependentsIndex;
+        const target = allNodes.find(node =>
+            node.type === 'locator' && node.name === name && node.file === locatorFile);
+        if (!target) return { screens: [], steps: [] };
+        const methodIds = allEdges
+            .filter(edge => edge.type === 'uses' && edge.to === target.id)
+            .map(edge => edge.from);
+        const screens = new Set<string>();
+        for (const id of methodIds) {
+            const method = byId.get(id);
+            if (method) screens.add(method.file);
+        }
+        const steps = new Set<string>();
+        const methods = new Set(methodIds);
+        for (const edge of allEdges) {
+            if (edge.type !== 'calls' || !methods.has(edge.to)) continue;
+            const definition = byId.get(edge.from);
+            if (definition) steps.add(definition.file);
+        }
+        return { screens: [...screens].sort(), steps: [...steps].sort() };
     }
 
     query(input: {
@@ -293,7 +444,9 @@ export class CodeGraph {
         let match: RegExpExecArray | null;
         let index = 0;
         while ((match = pattern.exec(content))) {
-            if (match[1] === 'constructor') continue;
+            // `if (x) {`, `catch (e) {` y `for (...) {` tienen la misma forma que
+            // un metodo: sin este filtro el grafo indexaba 388 nodos falsos.
+            if (match[1] === 'constructor' || CONTROL_KEYWORDS.has(match[1])) continue;
             index += 1;
             const id = nodeId('method', file, match[1], index);
             nodes.push({ id, type: 'method', name: match[1], file, squad });
@@ -335,14 +488,35 @@ export class CodeGraph {
         return { nodes, edges: [] };
     }
 
+    /**
+     * Relaciones derivadas entre capas.
+     *
+     * `calls` y `uses` se resolvian por ARCHIVO: si un Screen Object importaba
+     * dos JSON de locators, cada metodo quedaba unido a todos los locators de
+     * ambos, y un archivo de steps unia cada definicion a todo metodo cuyo
+     * nombre apareciera en el texto. Eso producia 52.239 aristas `uses` para
+     * 2.044 metodos y hacia que el subgrafo de una pantalla llegara a squads sin
+     * relacion. Ahora se resuelven por sentencia y contra los imports reales.
+     */
     private addDerivedEdges(): void {
         const files = Object.values(this.cache.files);
         const nodes = files.flatMap(file => file.nodes);
         const edges = files.flatMap(file => file.edges);
         const definitions = nodes.filter(node => node.type === 'stepDefinition');
         const steps = nodes.filter(node => node.type === 'gherkinStep');
-        const methods = nodes.filter(node => node.type === 'method');
-        const locators = nodes.filter(node => node.type === 'locator');
+
+        const methodsByFile = new Map<string, CodeGraphNode[]>();
+        for (const node of nodes.filter(item => item.type === 'method')) {
+            const grouped = methodsByFile.get(node.file) || [];
+            grouped.push(node);
+            methodsByFile.set(node.file, grouped);
+        }
+        const locatorsByFile = new Map<string, Map<string, CodeGraphNode>>();
+        for (const node of nodes.filter(item => item.type === 'locator')) {
+            const grouped = locatorsByFile.get(node.file) || new Map<string, CodeGraphNode>();
+            grouped.set(node.name, node);
+            locatorsByFile.set(node.file, grouped);
+        }
 
         for (const step of steps) {
             for (const definition of definitions) {
@@ -353,35 +527,90 @@ export class CodeGraph {
                 } catch { /* expresión inválida: se ignora */ }
             }
         }
-        for (const file of files) {
-            const definitionsInFile = file.nodes.filter(node => node.type === 'stepDefinition');
-            if (!definitionsInFile.length) continue;
-            const sourceFile = definitionsInFile[0].file;
-            const content = fs.readFileSync(path.join(projectPaths.frameworkRoot, sourceFile), 'utf-8');
-            for (const method of methods) {
-                if (new RegExp(`\\.${method.name}\\s*\\(`).test(content)) {
-                    definitionsInFile.forEach(definition =>
-                        edges.push({ from: definition.id, to: method.id, type: 'calls' })
-                    );
+
+        const read = (relative: string): string => {
+            try {
+                return fs.readFileSync(path.join(projectPaths.frameworkRoot, relative), 'utf-8');
+            } catch {
+                return '';
+            }
+        };
+
+        // calls: cada definición enlaza solo con los métodos que su propio cuerpo
+        // invoca, sobre el Screen Object que el alias importa.
+        const definitionsByFile = new Map<string, CodeGraphNode[]>();
+        for (const definition of definitions) {
+            const grouped = definitionsByFile.get(definition.file) || [];
+            grouped.push(definition);
+            definitionsByFile.set(definition.file, grouped);
+        }
+        for (const [file, fileDefinitions] of definitionsByFile) {
+            const content = read(file);
+            if (!content) continue;
+            const aliases = screenImports(file, content);
+            if (!aliases.size) continue;
+            const pattern = /\b(?:Given|When|Then)\s*\(\s*\/((?:\\\/|[^/])+)\/[dgimsuvy]*\s*,/g;
+            let match: RegExpExecArray | null;
+            let index = 0;
+            while ((match = pattern.exec(content))) {
+                index += 1;
+                const definition = fileDefinitions[index - 1];
+                if (!definition) continue;
+                const body = bodyFrom(content, match.index + match[0].length);
+                for (const [, alias, methodName] of body.matchAll(
+                    /\b([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g
+                )) {
+                    const screenFile = aliases.get(alias);
+                    if (!screenFile) continue;
+                    for (const method of methodsByFile.get(screenFile) || []) {
+                        if (method.name === methodName) {
+                            edges.push({ from: definition.id, to: method.id, type: 'calls' });
+                        }
+                    }
                 }
             }
         }
-        const methodsByFile = new Map<string, CodeGraphNode[]>();
-        for (const method of methods) {
-            const grouped = methodsByFile.get(method.file) || [];
-            grouped.push(method);
-            methodsByFile.set(method.file, grouped);
-        }
-        for (const [methodFile, fileMethods] of methodsByFile) {
-            const content = fs.readFileSync(path.join(projectPaths.frameworkRoot, methodFile), 'utf-8');
-            for (const locator of locators) {
-                if (new RegExp(`\\b${locator.name}\\b`).test(content)) {
-                    fileMethods.forEach(method =>
-                        edges.push({ from: method.id, to: locator.id, type: 'uses' })
-                    );
+
+        // uses: cada método enlaza con las claves que su cuerpo referencia —
+        // incluidas las de los getters que usa— dentro de los módulos que el
+        // Screen Object realmente importa.
+        for (const [screenFile, fileMethods] of methodsByFile) {
+            const content = read(screenFile);
+            if (!content) continue;
+            const modules = [...importsOf(path.join(projectPaths.frameworkRoot, screenFile)).keys()];
+            const available = modules
+                .map(module => `resources/locators/${module}.locator.json`)
+                .filter(file => locatorsByFile.has(file));
+            if (!available.length) continue;
+
+            // Un getter traduce `this.x` a claves del JSON; sin resolverlo, un
+            // método parecería no usar ningún locator.
+            const memberBodies = new Map<string, string>();
+            const memberPattern = /\b(?:public\s+|private\s+|protected\s+)?(?:async\s+)?(?:get\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*(?::[^{]+)?\{/g;
+            let member: RegExpExecArray | null;
+            while ((member = memberPattern.exec(content))) {
+                if (member[1] === 'constructor') continue;
+                memberBodies.set(member[1], bodyFrom(content, member.index + member[0].length - 1));
+            }
+            for (const method of fileMethods) {
+                const body = memberBodies.get(method.name) || '';
+                if (!body) continue;
+                const keys = new Set(locatorKeysIn(body));
+                for (const [name, memberBody] of memberBodies) {
+                    if (name === method.name) continue;
+                    if (new RegExp(`this\\.${name}\\b`).test(body)) {
+                        locatorKeysIn(memberBody).forEach(key => keys.add(key));
+                    }
+                }
+                for (const key of keys) {
+                    for (const file of available) {
+                        const locator = locatorsByFile.get(file)?.get(key);
+                        if (locator) edges.push({ from: method.id, to: locator.id, type: 'uses' });
+                    }
                 }
             }
         }
+
         // Las relaciones derivadas viven en una entrada interna del cache local.
         this.cache.files['__derived__'] = {
             mtimeMs: 0,

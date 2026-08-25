@@ -21,10 +21,11 @@ compatible. No automatices un borrado indiscriminado de procesos.
 
 ### Appium falla con `AppiumIpc is not a constructor`
 
-Suele indicar versiones incompatibles o una caché de drivers que apunta a otra
-ruta del proyecto. Confirma versiones de Appium/WebdriverIO, ejecuta instalación
-desde esta carpeta y deja que `run.sh` regenere su caché. No copies `node_modules`
-entre ubicaciones distintas.
+Indica que Appium cargó un `@appium/base-driver` incompatible. El recorder usa
+su propio Appium y drivers para aislarse de los `overrides` del framework.
+Ejecuta `npm ci` dentro de `tools/visual-recorder` y vuelve a iniciar. `run.sh`
+valida `AppiumIpc` antes de abrir la sesión y nunca usa el binario Appium del
+framework. No copies `node_modules` entre ubicaciones distintas.
 
 ### `unknown mobile command` o HTTP 404
 

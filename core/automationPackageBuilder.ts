@@ -12,7 +12,8 @@ import {
 import { AutomationMemory } from './automationMemory';
 import { AutomationResponseValidator } from './automationResponseValidator';
 import { DeterministicResolver, ResolverResult } from './deterministicResolver';
-import { FwkMobileGenerator, GeneratedPreview } from './fwkMobileGenerator';
+import { FwkMobileGenerator, GeneratedPreview, ReusedLocator } from './fwkMobileGenerator';
+import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
 import { withGeneratedResponseMetadata } from './generatedFileMetadata';
@@ -137,6 +138,7 @@ function instructions(result: ResolverResult): string {
         `- contextHint/elementIntent es solo una pista libre escrita por el QA para comprender el elemento. No la copies literalmente ni la conviertas uno-a-uno en un Step; sintetiza comportamientos declarativos usando el objetivo, criterio de aceptación y secuencia completa.\n` +
         `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
+        `- \`reuse-context.json\` trae \`elements\`: los locators que ya existen y que este caso toca, agrupados por modulo. Cada modulo dice su \`import\`, su \`identifier\` y sus \`groups\` (el bloque por plataforma); cada elemento su \`name\` y, por plataforma, \`type\`, \`value\` y la expresion \`reference\` lista para escribir. La clave del JSON es el \`name\`. Reutilizar significa importar ese modulo y usar \`reference\` en el getter; NUNCA copiar el \`value\` a un bloque nuevo. Reutilizar tambien implica adoptar el nombre existente. Si una plataforma trae \`status: "missing"\`, ese locator todavia no existe ahi: completalo en su archivo original en vez de duplicar el elemento. La lista es completa: si un elemento no esta, no existe en el squad ni en Home. Si un elemento trae \`usedBy\`, otros Screen Objects o Steps ya dependen de el: reutilizarlo esta bien, cambiar su valor los afecta.\n` +
         `- Si reuse-context.json contiene updateBaselines, abre únicamente su archivo reference dentro de baselines/, parte de ese contenido y añade solo lo faltante; no reemplaces ni borres APIs existentes.\n` +
         `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
@@ -302,6 +304,44 @@ export class BlockingGapError extends Error {
         super(gaps.map(gap => `${gap.description} ${gap.requiredOutput}`).join(' | '));
         this.name = 'BlockingGapError';
     }
+}
+
+
+/**
+ * Traduce las resoluciones `reuse` a lo que el generador necesita para
+ * referenciar el locator en su modulo de origen en vez de copiarlo.
+ *
+ * Sale de las mismas declaraciones que ya viajan al agente en
+ * `reuse-context.json`: una sola fuente para los dos caminos.
+ */
+function reusedLocators(result: ResolverResult): ReusedLocator[] {
+    const declarations = (result.resolvedContext.elementDeclarations || []) as ModuleDeclaration[];
+    const byName = new Map<string, ReusedLocator>();
+    for (const group of declarations) {
+        for (const element of group.elements) {
+            byName.set(`${group.module}#${element.name}`, {
+                name: element.name,
+                import: group.import,
+                identifier: group.identifier,
+                reference: {
+                    android: element.locators.android?.reference,
+                    ios: element.locators.ios?.reference,
+                },
+                type: {
+                    android: element.locators.android?.type,
+                    ios: element.locators.ios?.type,
+                },
+            });
+        }
+    }
+    const own = result.plan.files.find(file => file.layer === 'locators')?.path;
+    return result.plan.resolutions
+        .filter(resolution => resolution.resolution === 'reuse' && resolution.source && resolution.locatorName)
+        // Si el locator ya vive en el archivo que este caso escribe, no hay nada
+        // que importar: se referencia con el bloque propio como siempre.
+        .filter(resolution => resolution.source!.file !== own)
+        .map(resolution => byName.get(`${resolution.source!.module}#${resolution.locatorName}`))
+        .filter((item): item is ReusedLocator => Boolean(item));
 }
 
 export class AutomationPackageBuilder {
@@ -514,6 +554,10 @@ export class AutomationPackageBuilder {
             existingCase: result.plan.existingCase,
             reuseTarget: result.plan.reuseTarget,
             candidates: reuseCandidates,
+            // Tipo, bloque, valor y expresión exacta de cada elemento existente
+            // que el caso toca, agrupados por módulo: es lo que permite
+            // referenciarlo en vez de copiar su valor a un módulo nuevo.
+            elements: result.resolvedContext.elementDeclarations || [],
             updateBaselines,
         });
         writeJson(path.join(packageDirectory, 'collision-report.json'), {
@@ -546,7 +590,14 @@ export class AutomationPackageBuilder {
         } else if (result.plan.existingCase) {
             response = responseFromExistingFiles(result.scenario, result.plan);
         } else if (!result.plan.unresolvedGapIds.length) {
-            const preview = this.generator.preview(result.scenario.request, result.scenario.actions);
+            // El camino sin agente tambien tiene que reutilizar: hasta ahora
+            // copiaba el valor a su propio modulo, o sea que el duplicado lo
+            // producia el propio recorder y nadie estaba ahi para notarlo.
+            const preview = this.generator.preview(
+                result.scenario.request,
+                result.scenario.actions,
+                reusedLocators(result)
+            );
             response = responseFromPreview(result.scenario, result.plan, preview);
         }
 

@@ -23,9 +23,22 @@ if [[ ! -f "${FRAMEWORK_ROOT}/package.json" ]] ||
     exit 1
 fi
 
-if [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/electron" ]]; then
+if [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/electron" ]] ||
+   [[ ! -x "${SCRIPT_DIR}/node_modules/.bin/appium" ]]; then
     echo "Faltan las dependencias del recorder." >&2
-    echo "Ejecuta: cd \"${SCRIPT_DIR}\" && npm install" >&2
+    echo "Ejecuta: cd \"${SCRIPT_DIR}\" && npm ci" >&2
+    exit 1
+fi
+
+# Appium pertenece al recorder. No debe resolverse desde node_modules del
+# framework porque sus overrides de seguridad pueden forzar una versión de
+# @appium/base-driver incompatible con el servidor y sus drivers.
+if ! node -e '
+    const baseDriver = require("@appium/base-driver");
+    process.exit(typeof baseDriver.AppiumIpc === "function" ? 0 : 1);
+'; then
+    echo "Las dependencias Appium del recorder son incompatibles (AppiumIpc ausente)." >&2
+    echo "Reinstala el runtime aislado: cd \"${SCRIPT_DIR}\" && npm ci" >&2
     exit 1
 fi
 
@@ -37,9 +50,6 @@ fi
 cd "${SCRIPT_DIR}"
 
 APPIUM_HOME_ROOT="${SCRIPT_DIR}"
-if [[ -x "${FRAMEWORK_ROOT}/node_modules/.bin/appium" ]]; then
-    APPIUM_HOME_ROOT="${FRAMEWORK_ROOT}"
-fi
 APPIUM_CACHE_DIR="${APPIUM_HOME_ROOT}/node_modules/.cache/appium"
 APPIUM_EXTENSIONS="${APPIUM_CACHE_DIR}/extensions.yaml"
 APPIUM_PACKAGE_HASH="${APPIUM_CACHE_DIR}/package.hash"
@@ -72,12 +82,8 @@ fi
 echo "Proyecto destino: ${FRAMEWORK_ROOT}"
 echo "Iniciando Appium..."
 
-if [[ -x "${APPIUM_HOME_ROOT}/node_modules/.bin/appium" ]]; then
-    "${APPIUM_HOME_ROOT}/node_modules/.bin/appium" \
-        --port 4723 --log-level error --relaxed-security &
-else
-    appium --port 4723 --log-level error --relaxed-security &
-fi
+"${APPIUM_HOME_ROOT}/node_modules/.bin/appium" \
+    --port 4723 --log-level error --relaxed-security &
 APPIUM_PID=$!
 
 echo "Compilando e iniciando el recorder..."

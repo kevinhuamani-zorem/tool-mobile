@@ -10,6 +10,8 @@
   sesiones, diagnósticos y fallos frecuentes.
 - [Aseguramiento de calidad](GENERATION_QUALITY_ASSURANCE.md): métricas,
   pruebas unitarias y controles manuales.
+- [Algoritmos](ALGORITHMS.md): grafos, índices, similitud, hits y gaps; qué
+  decide cada uno y con qué costo medido.
 
 Las reglas vinculantes para agentes están en [`../AGENTS.md`](../AGENTS.md).
 Cuando documentación y código difieran, detén el cambio, confirma el contrato

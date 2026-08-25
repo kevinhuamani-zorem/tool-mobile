@@ -161,4 +161,64 @@ export function indexDeclaredStrategies(
     return index;
 }
 
-export const locatorStrategy = { strategyOf, strategyValue, inferredStrategy, indexDeclaredStrategies };
+export interface ModuleImport {
+    /** Especificador tal como lo escriben los Screen Objects del framework. */
+    specifier: string;
+    /** Identificador -> cuantos Screen Objects lo usan. Hay modulos con dos. */
+    identifiers: Map<string, number>;
+}
+
+/**
+ * Como importa el framework cada modulo de locators.
+ *
+ * `reference` no es global: 6 de los 71 modulos de este repo se importan con dos
+ * identificadores distintos (`home/home` es `HomeLocator` en un Screen Object y
+ * `LocatorHome` en otro). Se guardan todos con su frecuencia para poder elegir
+ * el del archivo destino y, si no lo importa todavia, el mas usado.
+ */
+export function indexModuleImports(screensRoot = projectPaths.screenobjects): Map<string, ModuleImport> {
+    const index = new Map<string, ModuleImport>();
+    walkScreens(screensRoot, file => {
+        let content: string;
+        try {
+            content = fs.readFileSync(file, 'utf-8');
+        } catch {
+            return;
+        }
+        for (const [, identifier, specifier] of content.matchAll(
+            /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.locator\.json)['"]/g
+        )) {
+            const module = moduleFromSpecifier(specifier);
+            if (!module) continue;
+            const entry = index.get(module) || { specifier, identifiers: new Map<string, number>() };
+            // Se prefiere el especificador por alias sobre el relativo.
+            if (specifier.startsWith('@') && !entry.specifier.startsWith('@')) entry.specifier = specifier;
+            entry.identifiers.set(identifier, (entry.identifiers.get(identifier) || 0) + 1);
+            index.set(module, entry);
+        }
+    });
+    return index;
+}
+
+/** Identificadores que un Screen Object concreto ya tiene importados, por modulo. */
+export function importsOf(screenFile: string): Map<string, string> {
+    const found = new Map<string, string>();
+    let content: string;
+    try {
+        content = fs.readFileSync(screenFile, 'utf-8');
+    } catch {
+        return found;
+    }
+    for (const [, identifier, specifier] of content.matchAll(
+        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.locator\.json)['"]/g
+    )) {
+        const module = moduleFromSpecifier(specifier);
+        if (module) found.set(module, identifier);
+    }
+    return found;
+}
+
+export const locatorStrategy = {
+    strategyOf, strategyValue, inferredStrategy, indexDeclaredStrategies,
+    indexModuleImports, importsOf,
+};

@@ -128,6 +128,14 @@ export interface ResolvedContext {
     recordingId: string;
     planId: string;
     reusedLocators: ActionResolution[];
+    /**
+     * [visual-recorder] TODOS los elementos ya existentes que el caso toca, con
+     * su tipo, bloque, valor y la expresión exacta para referenciarlos.
+     * Agrupados por módulo para no repetir import e identificador en cada uno.
+     * Sin esto el agente sabe que debe reutilizar pero no puede escribir el
+     * getter; y omitir uno lo lleva a duplicar, así que nunca se recorta.
+     */
+    elementDeclarations?: unknown[];
     frameworkAwareness?: {
         candidates: FrameworkReuseCandidate[];
         exactStepDefinitions: Array<{
