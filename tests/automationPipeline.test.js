@@ -903,6 +903,9 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'reuse-context.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'collision-report.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'verify-package.js')));
+    // El verificador del sandbox carga las reglas del modulo compartido; sin la
+    // copia se quedaria sin comprobar el contrato del Screen Object.
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'screen-object-contract.js')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'agent-response.json')));
     const generatedResponse = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'agent-response.json'),
@@ -932,6 +935,9 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(instructions.includes(contract.locatorFactorySymbol));
     assert.match(instructions, /`browser` solo si hay una llamada browser\./);
     assert.match(instructions, /Ninguna espera por tiempo/);
+    assert.match(instructions, /getElement\(TypeLocator\.<IOS>, <valor ios>, TypeLocator\.<ANDROID>, <valor android>\)/);
+    assert.match(instructions, /with \{ type: 'json' \}/);
+    assert.match(instructions, /Copialos literalmente en vez de componerlos/);
     assert.match(instructions, /Nada de `_metadata`/);
     assert.match(instructions, /tier de ejecucion \(`@smoke_mobile`\)/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);

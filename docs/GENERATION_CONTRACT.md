@@ -275,3 +275,35 @@ El generador cumple el estándar que aplica el reviewer de `fwk-mobile-test`:
 - **Tags**: `@<squad>` sobre la línea `Feature:`, y en el `Scenario` `@<funcionalidad> @<tier> @<plataforma>`. El tier sale de `request.executionTag`; si no se indica, `Happy Path` → `@smoke_mobile` y cualquier otro → `@regression_mobile`.
 - **Imports de `@wdio/globals`** por uso real: `$` siempre que haya getters, `expect` cuando hay aserciones, `browser` solo si el Screen Object lo invoca.
 - **JSON de locators sin metadatos**: solo los bloques `<módulo>Android` y `<módulo>Ios`. JSON no admite comentarios y un `_metadata` es lo mismo con otro nombre; la traza de qué grabación aportó cada clave vive en `generated-files.json`, que es del recorder y no viaja en el PR.
+
+### Contrato del Screen Object
+
+`core/screenObjectContract.ts` reúne las reglas mecánicas que el agente rompía y
+nadie comprobaba. Corre en dos sitios con una sola implementación: el validador
+al importar la propuesta, y `verify-package.js` dentro del sandbox — que carga
+`screen-object-contract.js`, copiado al paquete, para que el agente se
+autocorrija antes de devolver nada.
+
+| Regla | Evidencia en el framework |
+|---|---|
+| Todo import de `.locator.json` lleva atributo de tipo | 114 / 114 |
+| Todo import de locators usa alias, también los reutilizados | derivado del propio especificador |
+| `getElement` recibe siempre 4 argumentos | 860 / 860 |
+| Argumentos 1 y 3 son `TypeLocator.<ESTRATEGIA>` | 860 / 860 |
+| El valor de iOS va antes que el de Android | 858 / 860 |
+
+La firma se lee de la declaración real de `getElement` (`locatorSignature`), no
+de una constante: si el framework reordena los parámetros, la instrucción y la
+regla que la verifica se mueven con él.
+
+La última regla atrapa además un fallo silencioso: **intercambiar los valores de
+iOS y Android** mantiene los 4 argumentos, compila y pasa el review, pero ejecuta
+el locator de la plataforma equivocada.
+
+Los mensajes traen la línea ya corregida. El agente tiene un solo intento de
+reparación (`maxRepairAttempts: 1`) y estos cuatro errores son mecánicos:
+gastarlo copiando una línea escrita es buen uso, gastarlo adivinando no.
+
+Y antes de eso, `reuse-context.json` trae por módulo su `importLine` y por
+elemento su `getter` **completos**. El trabajo del agente para los elementos que
+el recorder conoce pasa de componer a copiar, que es donde no puede equivocarse.

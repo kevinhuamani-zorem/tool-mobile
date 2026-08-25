@@ -12,6 +12,7 @@ import { projectPaths } from './projectPaths';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
 import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
+import { screenObjectProblems } from './screenObjectContract';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
@@ -428,6 +429,27 @@ export class AutomationResponseValidator {
                                 file: screenPlan.path,
                             });
                         }
+                    }
+                    // Reglas mecanicas: atributo de tipo en los imports de JSON,
+                    // alias tambien en los modulos reutilizados —su forma se
+                    // deriva del propio especificador— y `getElement` con sus
+                    // cuatro argumentos en el orden de la firma. Misma
+                    // implementacion que corre dentro del sandbox del agente.
+                    const expectedImports: Record<string, string> = {};
+                    if (expectedLocatorSource) {
+                        expectedImports[expectedLocatorSource.split('/').pop()!] = expectedLocatorSource;
+                    }
+                    for (const problem of screenObjectProblems(screenContent, {
+                        typeLocatorSymbol: contract.typeLocatorSymbol,
+                        platformOrder: contract.locatorSignature.platformOrder,
+                        parameterCount: contract.locatorSignature.parameterCount,
+                        expectedImports,
+                    })) {
+                        errors.push({
+                            code: problem.code,
+                            message: problem.message,
+                            file: screenPlan.path,
+                        });
                     }
                     if (!new RegExp(`class\\s+${expected.className}\\s+extends\\s+${contract.baseScreenClass}\\b`).test(screenContent)) {
                         errors.push({

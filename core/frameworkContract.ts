@@ -38,6 +38,12 @@ export interface FrameworkContract {
      */
     importExtension: string;
     /**
+     * Firma real de `getElement`: cuantos argumentos recibe y en que orden van
+     * las plataformas. El agente la adivinaba —a veces mandaba el locator antes
+     * que el TypeLocator, a veces omitia iOS— y nadie lo comprobaba.
+     */
+    locatorSignature: LocatorSignature;
+    /**
      * Import del helper de timeout por entorno, o `undefined` si el framework
      * no lo expone. El patron documentado de Screen Object lo usa para las
      * verificaciones: sin el hay que caer a un helper con timeout por defecto.
@@ -61,6 +67,18 @@ export interface CompositionRule {
 }
 
 export type LocatorComposition = Record<'android' | 'ios', Record<string, CompositionRule>>;
+
+export interface LocatorSignature {
+    /** Numero de argumentos: 2 por plataforma (tipo y valor). */
+    parameterCount: number;
+    /** Orden en que la firma espera las plataformas. */
+    platformOrder: ('android' | 'ios')[];
+}
+
+const DEFAULT_SIGNATURE: LocatorSignature = {
+    parameterCount: 4,
+    platformOrder: ['ios', 'android'],
+};
 
 /**
  * Ultimo recurso cuando el framework no se deja leer (tsconfig ausente o
@@ -362,6 +380,35 @@ function readComposition(
     return found ? { composition: empty, found: true } : { composition: DEFAULTS.locatorComposition, found: false };
 }
 
+/**
+ * Lee la firma de `getElement` del framework en vez de asumirla.
+ *
+ * El orden sale del nombre de cada parametro, no de una constante: si algun dia
+ * el framework pone Android primero, las instrucciones del agente y la regla
+ * que las verifica se mueven con el.
+ */
+function readSignature(locatorFactoryFile: string | undefined, frameworkRoot: string): LocatorSignature {
+    if (!locatorFactoryFile) return DEFAULT_SIGNATURE;
+    let content: string;
+    try {
+        content = fs.readFileSync(path.join(frameworkRoot, locatorFactoryFile), 'utf-8');
+    } catch {
+        return DEFAULT_SIGNATURE;
+    }
+    const match = content.match(/\bstatic\s+getElement\s*\(([^)]*)\)/);
+    if (!match) return DEFAULT_SIGNATURE;
+    const parameters = match[1].split(',').map(part => part.trim()).filter(Boolean);
+    if (!parameters.length) return DEFAULT_SIGNATURE;
+    const platformOrder: ('android' | 'ios')[] = [];
+    for (let index = 0; index < parameters.length; index += 2) {
+        const name = parameters[index].toLowerCase();
+        const platform = /android/.test(name) ? 'android' : /ios/.test(name) ? 'ios' : undefined;
+        if (!platform || platformOrder.includes(platform)) return DEFAULT_SIGNATURE;
+        platformOrder.push(platform);
+    }
+    return { parameterCount: parameters.length, platformOrder };
+}
+
 /** Selector que el framework producira para este par en tiempo de ejecucion. */
 export function composeLocator(
     contract: Pick<FrameworkContract, 'locatorComposition'>,
@@ -452,6 +499,7 @@ function resolve(frameworkRoot: string): FrameworkContract {
         typeLocatorImport: importFor('typeLocator', DEFAULTS.typeLocatorImport),
         typeLocatorSymbol,
         importExtension: extensions.for('@screenobjects/'),
+        locatorSignature: readSignature(anchors.locatorFactory.file, frameworkRoot),
         timeoutHelperImport: anchors.timeoutHelper.file
             ? (() => {
                 const specifier = aliasImport(anchors.timeoutHelper.file!, aliases);

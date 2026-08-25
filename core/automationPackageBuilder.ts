@@ -13,6 +13,7 @@ import { AutomationMemory } from './automationMemory';
 import { AutomationResponseValidator } from './automationResponseValidator';
 import { DeterministicResolver, ResolverResult } from './deterministicResolver';
 import { domainTag, executionTag, FwkMobileGenerator, GeneratedPreview, ReusedLocator } from './fwkMobileGenerator';
+import { signatureHint } from './screenObjectContract';
 import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
@@ -143,6 +144,9 @@ function instructions(result: ResolverResult): string {
         `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
         `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion: ${contract.baseScreenClass} desde ${contract.baseScreenImport}, ${contract.locatorFactorySymbol} desde ${contract.locatorFactoryImport} y ${contract.typeLocatorSymbol} desde ${contract.typeLocatorImport}. Copialos tal cual, con esa extension: no uses rutas relativas ni el nombre que recuerdes de otro repo (la clase se llama ${contract.locatorFactorySymbol}, no LocatorFactory).\n` +
+        `- \`getElement\` tiene UNA firma y no admite variantes: \`${signatureHint({ typeLocatorSymbol: contract.typeLocatorSymbol, platformOrder: contract.locatorSignature.platformOrder })}\`. Son ${contract.locatorSignature.parameterCount} argumentos SIEMPRE, tambien cuando una plataforma todavia no tiene locator: en ese caso su valor queda vacio, pero el argumento se escribe. El ${contract.locatorSignature.platformOrder[0]} va primero, y el tipo va antes que el valor — nunca al reves.\n` +
+        `- Todo import de un .locator.json se escribe con alias y con atributo de tipo: \`import <Identificador> from '@locators/<squad>/<modulo>.locator.json' with { type: 'json' };\`. Sin el atributo Node lanza al cargar el JSON y el caso no corre. Aplica igual a los modulos reutilizados: nunca rutas relativas.\n` +
+        `- \`reuse-context.json\` trae, por cada modulo, \`importLine\` y, por cada elemento, \`getter\`: son el import y el getter COMPLETOS, ya escritos con la firma y el atributo correctos. Copialos literalmente en vez de componerlos.\n` +
         `- Cada getter del Screen Object resuelve el locator y devuelve \`$(locator)\`: \`public get x() { const locator = ${contract.locatorFactorySymbol}.getElement(...); return $(locator); }\`. Es el patron del framework y lo que revisa el PR. Importa de @wdio/globals solo lo que uses: \`$\` siempre que haya getters, \`expect\` si hay aserciones, \`browser\` solo si hay una llamada browser.; no dejes imports sin uso.\n` +
         `- Ninguna espera por tiempo: nada de browser.pause ni driver.pause, en ningun getter, metodo ni step. Toda espera va anclada a un elemento con this.uiHelper.waitForElementExistByLocator(elemento, true) antes de interactuar${
             contract.timeoutHelperSymbol
@@ -187,11 +191,28 @@ function regenerationInstructions(
         `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
 }
 
+/**
+ * Escribe el verificador y, a su lado, el modulo de reglas del Screen Object.
+ *
+ * Se copia el compilado en vez de reescribir las reglas dentro del verificador:
+ * duplicar logica entre el sandbox y el validador fue lo que dejo divergir el
+ * resto del pipeline.
+ */
+function writeVerifier(packageDirectory: string): void {
+    const contract = frameworkContract(projectPaths.frameworkRoot);
+    fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource(contract));
+    fs.copyFileSync(
+        path.join(__dirname, 'screenObjectContract.js'),
+        path.join(packageDirectory, 'screen-object-contract.js')
+    );
+}
+
 function verifierSource(contract: FrameworkContract): string {
     return `'use strict';\nconst FRAMEWORK_CONTRACT=${JSON.stringify({
         baseScreenClass: contract.baseScreenClass,
         locatorFactorySymbol: contract.locatorFactorySymbol,
         typeLocatorSymbol: contract.typeLocatorSymbol,
+        locatorSignature: contract.locatorSignature,
         requiredScreenImports: [
             contract.baseScreenImport,
             contract.locatorFactoryImport,
@@ -268,6 +289,10 @@ for(const required of FRAMEWORK_CONTRACT.requiredScreenImports){if(!usesLocators
 if(usesLocators){for(const [symbol,label] of [[FRAMEWORK_CONTRACT.locatorFactorySymbol,'resolutor de locators'],[FRAMEWORK_CONTRACT.typeLocatorSymbol,'enum de estrategias']]){if(!new RegExp('\\b'+symbol+'\\b').test(screen))errors.push('El Screen Object no usa el '+label+' del framework: se llama '+symbol)}}
 if(!new RegExp('export\\s+default\\s+new\\s+'+screenClass+'\\s*\\(').test(screen))errors.push('Singleton Screen Object inválido: esperado '+screenClass);
 if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bloque locator con guiones');
+// Reglas mecanicas del Screen Object. Se cargan del modulo compartido que se
+// copia junto a este verificador: la misma implementacion que corre al importar
+// la propuesta, no una segunda copia que pueda divergir.
+try{const {screenObjectProblems}=require('./screen-object-contract.js');const expectedImports={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');expectedImports[spec.split('/').pop()]=spec}for(const mod of (reuse.elements||[])){if(mod&&mod.import)expectedImports[String(mod.import).split('/').pop()]=mod.import}for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
 const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
 for(const [label,content] of [['Steps',steps],['ScreenObject',screen]]){const relative=importSources(content).filter(source=>source.startsWith('.'));if(relative.length)errors.push(label+' usa imports relativos: '+relative.join(', '))}
 const importsBrowser=/import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(screen);
@@ -471,7 +496,7 @@ export class AutomationPackageBuilder {
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions);
-        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource(frameworkContract(projectPaths.frameworkRoot)));
+        writeVerifier(packageDirectory);
         for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -580,7 +605,7 @@ export class AutomationPackageBuilder {
         });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions(result));
-        fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource(frameworkContract(projectPaths.frameworkRoot)));
+        writeVerifier(packageDirectory);
         for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);

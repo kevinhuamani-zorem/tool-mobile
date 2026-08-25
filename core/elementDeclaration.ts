@@ -58,6 +58,43 @@ export interface ElementDeclaration {
     locators: Partial<Record<MobilePlatform, PlatformDeclaration>>;
 }
 
+/** `import HomeLocator from '@locators/home/home.locator.json' with { type: 'json' };`. */
+function importLineFor(identifier: string, specifier: string): string {
+    return `import ${identifier} from '${specifier}' with { type: 'json' };`;
+}
+
+/**
+ * Getter completo de un elemento reutilizado.
+ *
+ * El orden de las plataformas sale de la firma real de `getElement`, no de una
+ * constante: si el framework la reordena, esto la sigue. Cuando una plataforma
+ * no tiene locator igual se escribe su argumento —la firma no admite omitirlo—
+ * apuntando a la referencia disponible, y `status: "missing"` en `locators` le
+ * dice al agente que ese valor todavia esta vacio.
+ */
+function getterFor(declaration: ElementDeclaration): string {
+    const contract = frameworkContract(projectPaths.frameworkRoot);
+    const { platformOrder } = contract.locatorSignature;
+    const fallback = declaration.locators.android?.reference
+        || declaration.locators.ios?.reference
+        || `${declaration.identifier}.${declaration.name}`;
+    const argumentLines = platformOrder.map((platform, index) => {
+        const entry = declaration.locators[platform];
+        const type = entry?.type || 'XPATH';
+        const reference = entry?.reference || fallback;
+        const comma = index === platformOrder.length - 1 ? '' : ',';
+        return `            ${contract.typeLocatorSymbol}.${type}, ${reference}${comma}`;
+    });
+    return [
+        `    public get ${declaration.name}() {`,
+        `        const locator = ${contract.locatorFactorySymbol}.getElement(`,
+        ...argumentLines,
+        `        );`,
+        `        return $(locator);`,
+        `    }`,
+    ].join('\n');
+}
+
 /** El identificador mas usado del modulo; empata por orden de aparicion. */
 function preferredIdentifier(entry: ModuleImport | undefined, fallback: string): string {
     if (!entry || !entry.identifiers.size) return fallback;
@@ -130,6 +167,14 @@ export interface ModuleDeclaration {
     module: string;
     /** Import por alias; el codigo generado nunca usa rutas relativas. */
     import: string;
+    /**
+     * La sentencia de import completa, con el atributo de tipo incluido.
+     *
+     * Viaja escrita y no como partes porque componerla era donde se rompia: el
+     * agente omitia `with { type: 'json' }` —sin el, Node lanza al cargar el
+     * JSON— y caia a rutas relativas en los modulos reutilizados.
+     */
+    importLine: string;
     /** Identificador con el que referenciarlo en el Screen Object destino. */
     identifier: string;
     /** El Screen Object destino todavia no importa este modulo. */
@@ -139,6 +184,13 @@ export interface ModuleDeclaration {
     elements: Array<{
         name: string;
         locators: Partial<Record<MobilePlatform, PlatformDeclaration>>;
+        /**
+         * El getter completo, listo para pegar. `getElement` recibe siempre los
+         * cuatro argumentos en el orden que declara la firma del framework;
+         * dejar que el agente lo compusiera producia llamadas de dos argumentos
+         * y con el valor antes del TypeLocator.
+         */
+        getter: string;
         /**
          * Screen Objects y Steps que ya dependen de este locator. Reutilizarlo
          * esta bien; cambiarlo afecta a estos archivos.
@@ -176,6 +228,7 @@ export function declareElements(
             group = {
                 module: declaration.module,
                 import: declaration.import,
+                importLine: importLineFor(declaration.identifier, declaration.import),
                 identifier: declaration.identifier,
                 ...(declaration.needsImport ? { needsImport: true } : {}),
                 groups: declaration.groups,
@@ -191,6 +244,7 @@ export function declareElements(
         group.elements.push({
             name: declaration.name,
             locators: declaration.locators,
+            getter: getterFor(declaration),
             // Solo cuando aporta: que su propio Screen Object lo use es obvio.
             ...(dependents && (dependents.screens.length + dependents.steps.length)
                 ? { usedBy: dependents }
@@ -200,4 +254,4 @@ export function declareElements(
     return [...byModule.values()];
 }
 
-export const elementDeclarations = { declareElement, declareElements };
+export const elementDeclarations = { declareElement, declareElements, getterFor, importLineFor };
