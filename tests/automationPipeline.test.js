@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { execFileSync } = require('node:child_process');
 const { AutomationRecordingStore } = require('../dist/core/automationRecordingStore');
 const { DeterministicResolver } = require('../dist/core/deterministicResolver');
@@ -906,6 +907,12 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     // El verificador del sandbox carga las reglas del modulo compartido; sin la
     // copia se quedaria sin comprobar el contrato del Screen Object.
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'screen-object-contract.js')));
+    // El verificador se genera como texto: tsc no lo revisa, asi que un error de
+    // sintaxis solo aparecia cuando el agente lo ejecutaba.
+    assert.doesNotThrow(
+        () => new vm.Script(fs.readFileSync(path.join(result.packageDirectory, 'verify-package.js'), 'utf8')),
+        'verify-package.js tiene que ser JavaScript valido'
+    );
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'agent-response.json')));
     const generatedResponse = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'agent-response.json'),

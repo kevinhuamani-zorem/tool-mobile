@@ -319,3 +319,54 @@ test('registerPatch deja traza sin reclamar el archivo', t => {
     assert.deepEqual(registry.listPatches(file).map(entry => entry.recordingId), ['rec-abc123']);
     assert.deepEqual(registry.listPatches(file)[0].symbols, ['btnDescargar']);
 });
+
+// El caso de tapp-subhome: el modulo se escribio grabando en iOS y ahora se
+// graba en Android. La clave existe en los dos bloques y Android esta vacio.
+// 387 de las 1001 claves compartidas de este framework estan asi.
+test('completar rellena el hueco de una clave existente', t => {
+    const ctx = fixture(t);
+    const [outcome] = ctx.writer.apply({
+        ...BASE,
+        locators: {
+            file: ctx.files.locators,
+            additions: [],
+            completions: [{ name: 'mostrarMovimientos', platform: 'ios', value: '//XCUIElementTypeButton[@name="Mostrar"]' }],
+        },
+    }, ctx.root);
+
+    const parsed = JSON.parse(ctx.read('locators'));
+    assert.deepEqual(outcome.added, ['mostrarMovimientos']);
+    assert.equal(parsed.filtroIos.mostrarMovimientos, '//XCUIElementTypeButton[@name="Mostrar"]');
+    // La otra plataforma no se toca.
+    assert.equal(parsed.filtroAndroid.mostrarMovimientos, 'new UiSelector().text("Mostrar")');
+});
+
+test('completar nunca pisa un valor real', t => {
+    const ctx = fixture(t);
+    const [outcome] = ctx.writer.apply({
+        ...BASE,
+        locators: {
+            file: ctx.files.locators,
+            additions: [],
+            completions: [{ name: 'mostrarMovimientos', platform: 'android', value: 'otro' }],
+        },
+    }, ctx.root);
+
+    assert.deepEqual(outcome.added, []);
+    assert.deepEqual(outcome.skipped, ['mostrarMovimientos']);
+    assert.equal(JSON.parse(ctx.read('locators')).filtroAndroid.mostrarMovimientos, 'new UiSelector().text("Mostrar")');
+});
+
+// Tu regla: verificar que la clave exista en el bloque de la plataforma grabada.
+// Si no esta, ese modulo no declara el elemento ahi y no es una decision del patch.
+test('completar una clave que el bloque no declara es un error', t => {
+    const ctx = fixture(t);
+    assert.throws(() => ctx.writer.apply({
+        ...BASE,
+        locators: {
+            file: ctx.files.locators,
+            additions: [],
+            completions: [{ name: 'noDeclarada', platform: 'android', value: 'x' }],
+        },
+    }, ctx.root), AdditivePatchError);
+});

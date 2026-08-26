@@ -728,9 +728,22 @@ export class DeterministicResolver {
                     (omitted ? ` y ${omitted} mas.` : '.'),
                 requiredOutput:
                     'Comprueba si alguno es el mismo elemento. Si lo es, reutilizalo en vez de crear otra ' +
-                    'fuente de verdad; si el candidato no tiene valor para esta plataforma, completa ese ' +
-                    'locator existente en lugar de duplicarlo. Si son elementos distintos que comparten el ' +
-                    'texto, explica en que se diferencian y conserva el locator nuevo.',
+                    'fuente de verdad. Si son elementos distintos que comparten el texto, explica en que ' +
+                    'se diferencian y conserva el locator nuevo.' +
+                    // Adoptar una clave vacia en la plataforma grabada deja el
+                    // getter resolviendo a "" y el caso falla al ejecutar, no al
+                    // generar. La salida es rellenarla, no duplicar el elemento.
+                    (candidates.some(candidate => !platformValue(candidate))
+                        ? ' Los candidatos sin valor en ' + rawScenario.platform + ' no se adoptan tal cual: ' +
+                          'para usarlos hay que rellenar su hueco declarandolo en `completions`, por ejemplo ' +
+                          candidates.filter(candidate => !platformValue(candidate)).slice(0, 2).map(candidate =>
+                              `{ "file": "${candidate.file}", "name": "${candidate.name}", ` +
+                              `"platform": "${rawScenario.platform}", "sequence": ${resolution.sequence} }`
+                          ).join(' , ') +
+                          '. El selector lo copia el recorder de esa accion: no lo escribas tu. Si la clave ' +
+                          'no existe en el bloque de ' + rawScenario.platform + ', ese modulo no declara el ' +
+                          'elemento ahi y hay que crear el locator en el modulo de este caso.'
+                        : ''),
             });
         }
 
@@ -845,6 +858,47 @@ export class DeterministicResolver {
             screen: reusableBundle.bundle.screens[0],
             locators: reusableBundle.bundle.locators[0],
         } : undefined;
+        // Cobertura de plataforma del modulo que se va a extender.
+        //
+        // Casi el 40% de las claves compartidas de este framework tienen una
+        // plataforma vacia: un modulo escrito grabando en iOS y reutilizado
+        // grabando en Android es el caso normal. Adoptar esas claves sin
+        // rellenarlas deja el getter apuntando a "" y el caso falla en
+        // ejecucion, no al generar. El bundle no se descarta —reutilizar sigue
+        // siendo lo correcto— pero las claves vacias se ponen sobre la mesa.
+        if (reuseTarget?.locators) {
+            const targetModule = reuseTarget.locators
+                .replace(/^resources\/locators\//, '')
+                .replace(/\.locator\.json$/, '');
+            const empty = catalog.locators
+                .filter(locator => locator.module === targetModule)
+                .filter(locator => {
+                    const block = rawScenario.platform === 'ios' ? locator.iosBlock : locator.androidBlock;
+                    const value = rawScenario.platform === 'ios' ? locator.iosSelector : locator.androidSelector;
+                    // Sin bloque, el modulo ni siquiera declara esa plataforma:
+                    // eso no se completa, se decide aparte.
+                    return Boolean(block) && !value;
+                })
+                .map(locator => locator.name);
+            if (empty.length) {
+                gaps.push({
+                    id: 'gap-platform-coverage',
+                    type: 'missing-selector',
+                    blocking: true,
+                    description:
+                        `El modulo ${targetModule} que este caso extiende tiene ${empty.length} clave(s) ` +
+                        `sin valor en ${rawScenario.platform}: ${empty.join(', ')}. ` +
+                        'Adoptar una de ellas sin rellenarla deja el getter apuntando a "" y el caso ' +
+                        'falla al ejecutar, no al generar.',
+                    requiredOutput:
+                        'Si adoptas alguna de esas claves, declara su relleno en `completions` de la ' +
+                        'respuesta: `{ file, name, platform, sequence }`, donde `sequence` es la accion ' +
+                        'de la grabacion que capturo ese elemento. El selector lo copia el recorder de ' +
+                        'esa accion — no lo escribas tu. Si ninguna corresponde a un elemento que ' +
+                        'grabaste, no la adoptes: crea el locator en el modulo de este caso.',
+                });
+            }
+        }
         if (reuseTarget && !gaps.some(gap => gap.id === 'gap-extend-existing-artifacts')) {
             gaps.push({
                 id: 'gap-extend-existing-artifacts',

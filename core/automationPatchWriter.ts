@@ -18,6 +18,21 @@ export interface LocatorAddition {
     ios: string;
 }
 
+/**
+ * Relleno del hueco de una clave que YA existe.
+ *
+ * Es distinto de una adicion: la clave esta en los dos bloques y una plataforma
+ * la tiene vacia. 387 de las 1001 claves compartidas de este framework estan
+ * asi, casi el 40%, asi que grabar en la plataforma vacia es lo normal, no un
+ * caso borde. Antes `patchLocators` saltaba cualquier clave existente y el
+ * relleno salia como `skipped` en silencio; el getter quedaba apuntando a "".
+ */
+export interface LocatorCompletionEdit {
+    name: string;
+    platform: 'android' | 'ios';
+    value: string;
+}
+
 export interface MemberAddition {
     name: string;
     code: string;
@@ -26,7 +41,11 @@ export interface MemberAddition {
 export interface PatchInput {
     recordingId: string;
     createdAt: string;
-    locators?: { file: string; additions: LocatorAddition[] };
+    locators?: {
+        file: string;
+        additions: LocatorAddition[];
+        completions?: LocatorCompletionEdit[];
+    };
     screen?: { file: string; getters: MemberAddition[]; methods: MemberAddition[] };
     steps?: { file: string; definitions: MemberAddition[]; screenImport?: string };
     feature?: { file: string; scenario: string };
@@ -86,7 +105,13 @@ function atomicWrite(file: string, content: string): void {
 
 export class AutomationPatchWriter {
     /** Fusiona claves nuevas en el par <módulo>Android/<módulo>Ios ya existente. */
-    patchLocators(content: string, additions: LocatorAddition[], recordingId: string, createdAt: string) {
+    patchLocators(
+        content: string,
+        additions: LocatorAddition[],
+        recordingId: string,
+        createdAt: string,
+        completions: LocatorCompletionEdit[] = []
+    ) {
         const parsed = JSON.parse(content) as Record<string, any>;
         const blocks = Object.keys(parsed).filter(name => name !== '_metadata');
         const android = blocks.find(name => /Android$/i.test(name));
@@ -96,6 +121,27 @@ export class AutomationPatchWriter {
         }
         const added: string[] = [];
         const skipped: string[] = [];
+
+        // Rellenar el hueco de una clave existente. La clave tiene que estar ya
+        // en el bloque de esa plataforma: si no esta, ese modulo nunca declaro
+        // el elemento ahi y anadirla es una decision del QA, no del patch.
+        for (const completion of completions) {
+            const block = completion.platform === 'ios' ? ios : android;
+            if (!Object.prototype.hasOwnProperty.call(parsed[block], completion.name)) {
+                throw new AdditivePatchError(
+                    `La clave "${completion.name}" no existe en el bloque ${block}: ` +
+                    'no se puede completar una plataforma que el modulo no declara.'
+                );
+            }
+            // Un valor real nunca se pisa; completar es solo llenar el vacio.
+            if (String(parsed[block][completion.name] || '').trim()) {
+                skipped.push(completion.name);
+                continue;
+            }
+            parsed[block][completion.name] = completion.value;
+            added.push(completion.name);
+        }
+
         for (const addition of additions) {
             // Nunca se pisa una clave existente: si ya está, se reutiliza.
             if (Object.prototype.hasOwnProperty.call(parsed[android], addition.name) ||
@@ -207,7 +253,10 @@ export class AutomationPatchWriter {
 
         if (input.locators) {
             run('locators', input.locators.file, before =>
-                this.patchLocators(before, input.locators!.additions, input.recordingId, input.createdAt));
+                this.patchLocators(
+                    before, input.locators!.additions, input.recordingId, input.createdAt,
+                    input.locators!.completions
+                ));
         }
         if (input.screen) {
             run('screen', input.screen.file, before =>

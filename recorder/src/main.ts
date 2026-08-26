@@ -30,7 +30,7 @@ import { RecordingCoverageAnalyzer } from '../../core/recordingCoverageAnalyzer'
 import { RecordingPlatformUpdater } from '../../core/recordingPlatformUpdater';
 import { AutomationResponseValidator } from '../../core/automationResponseValidator';
 import { AutomationMemory } from '../../core/automationMemory';
-import { indexDeclaredStrategies, roundTrip } from '../../core/locatorStrategy';
+import { frameworkLocator, indexDeclaredStrategies, roundTrip } from '../../core/locatorStrategy';
 import {
     AutomationPatchWriter,
     featureAdditions,
@@ -1241,10 +1241,29 @@ function applyAdditiveUpdates(
     const createdAt = new Date().toISOString();
     const input: any = { recordingId: scenario.recordingId, createdAt };
 
+    // Rellenos de claves existentes. El valor NUNCA sale de la respuesta: se
+    // copia del selector que el QA verifico en esa accion de la grabacion, asi
+    // que por esta via no puede entrar un selector inventado.
+    const completionsByFile = new Map<string, { name: string; platform: 'android' | 'ios'; value: string }[]>();
+    for (const completion of response.completions || []) {
+        const action = scenario.actions.find(step => step.sequence === completion.sequence);
+        const value = action?.locatorValue
+            || (action?.selector ? frameworkLocator(action.selector, completion.platform).value : '');
+        if (!value) continue;
+        const bucket = completionsByFile.get(completion.file) || [];
+        bucket.push({ name: completion.name, platform: completion.platform, value });
+        completionsByFile.set(completion.file, bucket);
+    }
+
     const locatorsPath = updates.get('locators');
     const locatorsProposed = contentOf('locators');
     if (locatorsPath && locatorsProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, locatorsPath))) {
-        input.locators = { file: locatorsPath, additions: locatorAdditions(read(locatorsPath), locatorsProposed) };
+        input.locators = {
+            file: locatorsPath,
+            additions: locatorAdditions(read(locatorsPath), locatorsProposed),
+            completions: completionsByFile.get(locatorsPath) || [],
+        };
+        completionsByFile.delete(locatorsPath);
     }
     const screenPath = updates.get('screen');
     const screenProposed = contentOf('screen');
@@ -1265,6 +1284,16 @@ function applyAdditiveUpdates(
     }
 
     const outcomes = automationPatchWriter.apply(input, projectPaths.frameworkRoot);
+    // Un relleno puede caer en un modulo que este caso no escribe —el clasico es
+    // grabar en Android sobre un modulo que se hizo grabando en iOS—, asi que va
+    // en su propia pasada sobre ese archivo.
+    for (const [file, completions] of completionsByFile) {
+        if (!fs.existsSync(path.join(projectPaths.frameworkRoot, file))) continue;
+        outcomes.push(...automationPatchWriter.apply(
+            { recordingId: scenario.recordingId, createdAt, locators: { file, additions: [], completions } },
+            projectPaths.frameworkRoot
+        ));
+    }
     for (const outcome of outcomes) absolute.add(path.join(projectPaths.frameworkRoot, outcome.file));
     return { outcomes, absolute };
 }

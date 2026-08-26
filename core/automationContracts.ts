@@ -210,7 +210,26 @@ export interface AutomationAgentResponse {
         locatorName?: string;
     }>;
     files: AgentGeneratedFile[];
+    /**
+     * Locators existentes cuyo hueco de la plataforma grabada se rellena con el
+     * selector de una accion de la grabacion.
+     *
+     * El agente NO escribe el selector: solo dice que clave adopta y de que
+     * accion sale el valor. El recorder lo copia de `actions[sequence]`, asi que
+     * un selector inventado no puede entrar por aqui.
+     */
+    completions?: LocatorCompletion[];
     assumptions?: string[];
+}
+
+export interface LocatorCompletion {
+    /** Archivo de locators, relativo al framework. */
+    file: string;
+    /** Clave existente que se adopta; tiene que estar ya en el bloque destino. */
+    name: string;
+    platform: 'android' | 'ios';
+    /** Accion de la grabacion que aporta el selector verificado. */
+    sequence: number;
 }
 
 export interface AutomationValidation {

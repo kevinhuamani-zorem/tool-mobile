@@ -307,3 +307,31 @@ gastarlo copiando una línea escrita es buen uso, gastarlo adivinando no.
 Y antes de eso, `reuse-context.json` trae por módulo su `importLine` y por
 elemento su `getter` **completos**. El trabajo del agente para los elementos que
 el recorder conoce pasa de componer a copiar, que es donde no puede equivocarse.
+
+### Completar un locator a medias
+
+Casi el **40%** de las claves compartidas de este framework (387 de 1001) tienen
+una plataforma vacía: un módulo escrito grabando en iOS y reutilizado grabando en
+Android es lo normal, no un caso borde. Adoptar una de esas claves sin rellenarla
+deja el getter resolviendo a `""` — compila, pasa el review y falla al ejecutar.
+
+La salida es **completar en sitio**, no duplicar el elemento:
+
+- La clave tiene que existir ya en el bloque de la plataforma grabada y estar
+  vacía. Si no está en ese bloque, ese módulo no declara el elemento para esa
+  plataforma y hay que crear el locator en el módulo del caso.
+- Un valor real nunca se pisa; completar solo llena el hueco.
+- El agente declara `completions: [{ file, name, platform, sequence }]` y **no
+  escribe el selector**: el recorder lo copia de `actions[sequence]`, que es un
+  elemento que el QA verificó contra el dispositivo. Por esta vía no puede entrar
+  un selector inventado, que es el riesgo de dejarle escribir en un archivo de
+  otra feature.
+
+Se comprueba en tres sitios: el gap de duplicado ya trae el `completions` de
+ejemplo con su `file` y `name`; el verificador del sandbox cruza el Screen Object
+contra los `status: "missing"` de `reuse-context.json`; y el validador lee los
+archivos reales y evalúa cómo quedarán **después** del patch.
+
+Descartada la prueba de tokens de identidad como requisito para completar: medida
+sobre 455 pares que ya funcionan en ambas plataformas, los tokens coinciden solo
+en el 75%. Exigirla habría bloqueado uno de cada cuatro casos válidos.

@@ -366,3 +366,68 @@ test('el nombre logico conserva los digitos del intent', () => {
     assert.equal(result.plan.resolutions.find(item => item.sequence === 1).locatorName, 'filterLast7Days');
     assert.equal(result.plan.resolutions.find(item => item.sequence === 2).locatorName, 'last15Days');
 });
+
+// Casuistica de tapp-subhome: el modulo existe con iOS relleno y Android vacio,
+// y la grabacion se hace en Android. Adoptar esas claves sin rellenarlas deja el
+// getter resolviendo a "" y el caso falla al ejecutar, no al generar.
+function catalogoConPlataformaAMedias() {
+    const file = 'resources/locators/payment/tapp-subhome.locator.json';
+    const half = (name, iosSelector) => ({
+        name, selector: iosSelector, androidSelector: '', iosSelector,
+        androidBlock: 'tappSubhomeAndroid', iosBlock: 'tappSubhomeIos',
+        iosStrategy: 'XPATH',
+        file, module: 'payment/tapp-subhome', squad: 'payment', scope: 'squad', platform: 'ios',
+    });
+    return {
+        getCatalog: () => ({
+            squad: 'payment', featureScope: '', platform: 'android',
+            locators: [
+                half('txtTitle', '//XCUIElementTypeStaticText[@name="TAPP"]'),
+                half('btnViewAllAccounts', '//XCUIElementTypeButton[@name="Ver todas"]'),
+            ],
+            stepDefinitions: [], features: [], scenarios: [],
+            screenMethods: [{
+                name: 'validateSubhomeIsDisplayed', file: 'screenobjects/payment/tapp-subhome.screen.ts',
+                squad: 'payment', locatorFiles: [file], className: 'S',
+                signature: 'validateSubhomeIsDisplayed(): Promise<void>',
+                locatorKeys: ['txtTitle', 'btnViewAllAccounts'],
+            }],
+            artifactBundles: [{
+                steps: 'features/yape-steps-definitions/payment/tapp-subhome.steps.ts',
+                screens: ['screenobjects/payment/tapp-subhome.screen.ts'],
+                locators: [file],
+                stepExpressions: ['el usuario visualiza el subhome de tapp'],
+                screenMethods: ['validateSubhomeIsDisplayed'],
+            }],
+        }),
+    };
+}
+
+test('un candidato sin valor en la plataforma grabada exige rellenarlo, no duplicarlo', () => {
+    const recorded = scenario([
+        action('CLICK', 'ver todas las cuentas de tapp', '~Ver todas'),
+        action('VERIFICAR_EXISTE', 'titulo del subhome de tapp', '~TAPP'),
+    ]);
+    recorded.objective = 'el usuario visualiza el subhome de tapp';
+    recorded.acceptanceCriteria = 'se muestra el subhome de tapp con sus cuentas';
+    const result = new DeterministicResolver(catalogoConPlataformaAMedias()).resolve(recorded);
+
+    // La identidad cruza plataformas: `~Ver todas` reconoce el XPath de iOS.
+    const gap = result.unresolvedContext.gaps.find(item => /^gap-duplicate-element-/.test(item.id));
+    assert.ok(gap, 'el candidato existente tiene que salir a la superficie');
+    assert.match(gap.description, /sin valor Android/);
+    assert.match(gap.requiredOutput, /no se adoptan tal cual/);
+    assert.match(gap.requiredOutput, /"completions"|`completions`/);
+    assert.match(gap.requiredOutput, /"file": "resources\/locators\/payment\/tapp-subhome\.locator\.json"/);
+    assert.match(gap.requiredOutput, /"platform": "android"/);
+    assert.match(gap.requiredOutput, /no lo escribas tu/);
+});
+
+// La ruta determinista nunca produjo este fallo: exactLocator compara valores y
+// "" no iguala a ningun selector grabado. El fallo era del agente.
+test('el resolver no reutiliza un locator vacio en la plataforma grabada', () => {
+    const result = new DeterministicResolver(catalogoConPlataformaAMedias()).resolve(scenario([
+        action('VERIFICAR_EXISTE', 'titulo del subhome', '~TAPP'),
+    ]));
+    assert.equal(result.plan.resolutions[0].resolution, 'create');
+});

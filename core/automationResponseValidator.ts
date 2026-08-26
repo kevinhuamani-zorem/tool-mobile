@@ -102,6 +102,45 @@ function plannedAlias(file: string, root: string, alias: string): string | undef
     return normalized.startsWith(prefix) ? `${alias}/${normalized.slice(prefix.length)}` : undefined;
 }
 
+/**
+ * Claves que el Screen Object referencia y que quedarian vacias en la
+ * plataforma de la grabacion.
+ *
+ * Es el cierre del contrato de cobertura: un getter contra "" compila, pasa el
+ * review y falla al ejecutar. Se evalua el archivo COMO QUEDARA, aplicando las
+ * completions declaradas, para no marcar como roto lo que el propio paquete va
+ * a rellenar.
+ */
+export function emptyOnRecordedPlatform(
+    screenContent: string,
+    platform: 'android' | 'ios',
+    documentFor: (identifier: string) => Record<string, any> | undefined,
+    completed: Set<string>
+): string[] {
+    const problems: string[] = [];
+    const seen = new Set<string>();
+    // `LocatorHome.homeAndroid.shortcutTapp` y `Locators["blockIos"].name`.
+    const references = [
+        ...screenContent.matchAll(/\b([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)/g),
+        ...screenContent.matchAll(/\b([A-Za-z_$][\w$]*)\s*\[\s*['"]([^'"]+)['"]\s*\]\s*\.\s*([A-Za-z_$][\w$]*)/g),
+    ];
+    for (const [, identifier, block, key] of references) {
+        if (!block.toLowerCase().endsWith(platform)) continue;
+        const unique = `${identifier}.${block}.${key}`;
+        if (seen.has(unique)) continue;
+        seen.add(unique);
+        const document = documentFor(identifier);
+        if (!document) continue;
+        const target = document[block];
+        if (!target || typeof target !== 'object') continue;
+        if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
+        if (String(target[key] || '').trim()) continue;
+        if (completed.has(`${identifier}#${key}`) || completed.has(key)) continue;
+        problems.push(unique);
+    }
+    return problems;
+}
+
 function importsFrom(content: string, source: string): boolean {
     return [...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)]
         .some(match => match[1] === source);
@@ -144,6 +183,69 @@ export class AutomationResponseValidator {
         if (response.schemaVersion !== 1) errors.push({ code: 'schema', message: 'schemaVersion no soportado' });
         if (response.recordingId !== scenario.recordingId) errors.push({ code: 'recording-id', message: 'recordingId no coincide' });
         if (response.planId !== plan.planId) errors.push({ code: 'plan-id', message: 'planId no coincide' });
+
+        // `completions`: adoptar una clave existente y rellenar su hueco.
+        //
+        // El agente solo dice QUE clave y de QUE accion sale el valor; el
+        // selector lo copia el recorder de la grabacion. Asi un selector
+        // inventado no puede entrar por esta via, que es justo el riesgo de
+        // dejarle escribir en un archivo de otra feature.
+        for (const completion of response.completions || []) {
+            const label = `${completion.file}#${completion.name} (${completion.platform})`;
+            const action = scenario.actions.find(step => step.sequence === completion.sequence);
+            if (!action) {
+                errors.push({
+                    code: 'completion-sequence',
+                    message: `Completar ${label} apunta a la accion ${completion.sequence}, que no existe en la grabacion.`,
+                });
+                continue;
+            }
+            if (!action.selector) {
+                errors.push({
+                    code: 'completion-sequence',
+                    message: `Completar ${label} apunta a la accion ${completion.sequence}, que no capturo ningun elemento.`,
+                });
+                continue;
+            }
+            if (action.platform && action.platform !== completion.platform) {
+                errors.push({
+                    code: 'completion-platform',
+                    message: `Completar ${label} toma el valor de una accion grabada en ${action.platform}: `
+                        + 'una plataforma no se completa con el selector de la otra.',
+                });
+                continue;
+            }
+            const absolute = path.resolve(projectPaths.frameworkRoot, completion.file);
+            let document: Record<string, any>;
+            try {
+                document = JSON.parse(fs.readFileSync(absolute, 'utf-8'));
+            } catch {
+                errors.push({
+                    code: 'completion-file',
+                    message: `Completar ${label} apunta a un archivo de locators que no se puede leer.`,
+                });
+                continue;
+            }
+            const block = Object.keys(document).find(name =>
+                name.toLowerCase().endsWith(completion.platform) &&
+                document[name] && typeof document[name] === 'object');
+            if (!block || !Object.prototype.hasOwnProperty.call(document[block], completion.name)) {
+                errors.push({
+                    code: 'completion-key',
+                    message: `Completar ${label}: la clave no existe en el bloque de ${completion.platform}. `
+                        + 'Ese modulo no declara el elemento para esa plataforma, asi que no se completa: '
+                        + 'crea el locator en el modulo de este caso.',
+                });
+                continue;
+            }
+            if (String(document[block][completion.name] || '').trim()) {
+                errors.push({
+                    code: 'completion-occupied',
+                    message: `Completar ${label}: la clave ya tiene valor en esa plataforma. `
+                        + 'Completar solo llena un hueco vacio; un valor real nunca se pisa.',
+                });
+            }
+        }
 
         const planned = new Map(plan.files.map(file => [file.layer, file.path]));
         const receivedLayers = new Set(response.files.map(file => file.layer));
@@ -448,6 +550,50 @@ export class AutomationResponseValidator {
                         errors.push({
                             code: problem.code,
                             message: problem.message,
+                            file: screenPlan.path,
+                        });
+                    }
+                    // Cobertura de plataforma: ninguna clave referenciada puede
+                    // quedar vacia en la plataforma que se grabo.
+                    const completedKeys = new Set(
+                        (response.completions || [])
+                            .filter(completion => completion.platform === scenario.platform)
+                            .map(completion => completion.name)
+                    );
+                    const documents = new Map<string, Record<string, any> | undefined>();
+                    const documentFor = (identifier: string): Record<string, any> | undefined => {
+                        if (documents.has(identifier)) return documents.get(identifier);
+                        let document: Record<string, any> | undefined;
+                        const ownContent = response.files.find(file => file.layer === 'locators')?.content;
+                        const importMatch = screenContent.match(new RegExp(
+                            `import\\s+${identifier}\\s+from\\s+['"]([^'"]+\\.locator\\.json)['"]`
+                        ));
+                        try {
+                            if (importMatch && expectedLocatorSource && importMatch[1] === expectedLocatorSource) {
+                                // El modulo propio todavia no esta en disco: su
+                                // contenido es el que trae la respuesta.
+                                document = ownContent ? JSON.parse(ownContent) : undefined;
+                            } else if (importMatch) {
+                                const relative = importMatch[1].replace(/^@locators\//, 'resources/locators/');
+                                document = JSON.parse(fs.readFileSync(
+                                    path.join(projectPaths.frameworkRoot, relative), 'utf-8'
+                                ));
+                            }
+                        } catch {
+                            document = undefined;
+                        }
+                        documents.set(identifier, document);
+                        return document;
+                    };
+                    for (const reference of emptyOnRecordedPlatform(
+                        screenContent, scenario.platform, documentFor, completedKeys
+                    )) {
+                        errors.push({
+                            code: 'platform-coverage',
+                            message: `${reference} no tiene valor en ${scenario.platform}: el getter resolveria `
+                                + 'a un selector vacio y el caso fallaria al ejecutar. Rellena la clave '
+                                + 'declarandola en `completions` con la accion que capturo ese elemento, '
+                                + 'o usa un locator del modulo de este caso.',
                             file: screenPlan.path,
                         });
                     }
