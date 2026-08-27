@@ -256,6 +256,13 @@ operación `update` y conserva el contenido actual sin invocar al agente. La
 validación rechaza expresiones Gherkin, escenarios o selectores duplicados en
 otro archivo del squad/Home.
 
+Si una respuesta del agente entrega un módulo de locators sin claves porque
+todas las acciones con elemento fueron resueltas como `reuse`, el recorder no lo
+trata como un JSON accidentalmente vacío ni consume un intento de reparación.
+Informa que la automatización ya existe y bloquea volver a crear el mismo caso.
+Un archivo vacío que todavía tenga alguna resolución `create` conserva el error
+de salida incompleta.
+
 ## Restricciones de seguridad
 
 - Rechazar rutas absolutas suministradas por UI, `..`, symlinks de escape y

@@ -34,6 +34,36 @@ function responseLocatorValues(content: string): Array<{ name: string; selector:
     }
 }
 
+function hasNoLocatorEntries(content: string): boolean {
+    try {
+        const document = JSON.parse(content) as Record<string, unknown>;
+        return Object.entries(document)
+            .filter(([name]) => name !== '_metadata')
+            .every(([, block]) =>
+                Boolean(block) &&
+                typeof block === 'object' &&
+                !Array.isArray(block) &&
+                Object.keys(block as Record<string, unknown>).length === 0
+            );
+    } catch {
+        return false;
+    }
+}
+
+function reusesEveryRecordedLocator(
+    scenario: AutomationScenario,
+    plan: GenerationPlan,
+    response: AutomationAgentResponse
+): boolean {
+    if ((response.completions || []).length > 0) return false;
+    const locatorSequences = scenario.actions
+        .filter(action => Boolean(action.selector?.trim()))
+        .map(action => action.sequence);
+    if (locatorSequences.length === 0) return false;
+    const resolutions = new Map(plan.resolutions.map(item => [item.sequence, item.resolution]));
+    return locatorSequences.every(sequence => resolutions.get(sequence) === 'reuse');
+}
+
 function responseScenarioSteps(content: string): string[][] {
     const scenarios: string[][] = [];
     let current: string[] | undefined;
@@ -269,7 +299,20 @@ export class AutomationResponseValidator {
             if (!traced.has(action.sequence)) errors.push({ code: 'trace', message: `Acción ${action.sequence} sin trazabilidad` });
         }
 
-        if (!errors.some(error => ['missing-layer', 'path', 'extra-layer'].includes(error.code))) {
+        const locatorFile = response.files.find(file => file.layer === 'locators');
+        const existingAutomationWithoutNewLocators = Boolean(locatorFile) &&
+            hasNoLocatorEntries(locatorFile!.content) &&
+            (Boolean(plan.existingCase) || reusesEveryRecordedLocator(scenario, plan, response));
+        if (existingAutomationWithoutNewLocators) {
+            errors.push({
+                code: 'existing-automation',
+                message: 'El agente reutilizó todos los locators. Esta automatización ya existe y no se puede volver a crear.',
+                file: locatorFile?.path,
+            });
+        }
+
+        if (!existingAutomationWithoutNewLocators &&
+            !errors.some(error => ['missing-layer', 'path', 'extra-layer'].includes(error.code))) {
             try {
                 const preview = this.toPreview(response);
                 const output = this.outputValidator.validate(preview, scenario.platform);

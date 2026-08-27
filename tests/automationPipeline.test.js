@@ -773,6 +773,57 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     ), true);
 });
 
+test('informa caso existente cuando el agente reutiliza todos los locators', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]));
+    resolved.plan.resolutions = resolved.plan.resolutions.map(item => ({
+        ...item,
+        resolution: 'reuse',
+        source: {
+            file: 'resources/locators/home/home.locator.json',
+            module: 'home/home',
+            scope: 'home'
+        }
+    }));
+    const response = validResponse(resolved.plan);
+    response.files.find(file => file.layer === 'locators').content = JSON.stringify({
+        consultaAndroid: {},
+        consultaIos: {}
+    });
+
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+
+    assert.equal(validation.valid, false);
+    assert.deepEqual(validation.errors, [{
+        code: 'existing-automation',
+        message: 'El agente reutilizó todos los locators. Esta automatización ya existe y no se puede volver a crear.',
+        file: resolved.plan.files.find(file => file.layer === 'locators').path
+    }]);
+});
+
+test('conserva el error de locator vacío cuando todavía hay locators por crear', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]));
+    const response = validResponse(resolved.plan);
+    response.files.find(file => file.layer === 'locators').content = JSON.stringify({
+        consultaAndroid: {},
+        consultaIos: {}
+    });
+
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+
+    assert.equal(validation.errors.some(error =>
+        error.message === 'El archivo de locators no contiene ningún locator'
+    ), true);
+    assert.equal(validation.errors.some(error => error.code === 'existing-automation'), false);
+});
+
 test('validator rechaza Gherkin procedimental que narra acciones de interfaz', () => {
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
         action: 'CLICK', selector: 'id=movimientos', selectorVerified: true,

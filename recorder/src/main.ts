@@ -1191,6 +1191,20 @@ ipcMain.handle('import-automation-response', async () => {
             JSON.stringify(validation, null, 2) + '\n'
         );
         if (!validation.valid) {
+            const existingAutomation = validation.errors.find(item => item.code === 'existing-automation');
+            if (existingAutomation) {
+                fs.writeFileSync(statusFile, JSON.stringify({
+                    ...status,
+                    state: 'existing-automation',
+                    updatedAt: new Date().toISOString(),
+                }, null, 2) + '\n');
+                return {
+                    success: false,
+                    validation,
+                    repairAvailable: false,
+                    error: existingAutomation.message,
+                };
+            }
             if (repairAttempts >= plan.budgets.maxRepairAttempts) {
                 return { success: false, validation, error: 'Se agotó la única reparación permitida: ' + validation.errors.map(item => item.message).join(' | ') };
             }
