@@ -63,7 +63,9 @@ host y el bundle mediante orígenes locales `appium-recorder://host` y
 `appium-recorder://inspector`; no acepta navegación ni ventanas nuevas. El
 renderer principal nunca recibe WebDriver ni datos de sesión: solo el selector
 confirmado explícitamente por el protocolo `appium-inspector:embedded` versión
-2 mediante `appium-inspector:element-used`.
+2 mediante `appium-inspector:element-used`. El host delega al iframe únicamente
+`clipboard-write` para copiar selectores; no concede lectura del portapapeles ni
+otras capacidades y conserva sandbox, CSP y orígenes distintos.
 
 ### Dominio (`core/`)
 

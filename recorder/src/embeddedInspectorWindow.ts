@@ -5,7 +5,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { projectPaths } from '../../core/projectPaths';
 
-export const EMBEDDED_INSPECTOR_COMMIT = '0ce9ca5562c9781ebca32bab9ffbf4c74787d39e';
+export const EMBEDDED_INSPECTOR_COMMIT = '4cbf81677b8a9c514f8ebbff896348ad07409086';
 export const EMBEDDED_INSPECTOR_SCHEME = 'appium-recorder';
 export const EMBEDDED_INSPECTOR_HOST_ORIGIN = `${EMBEDDED_INSPECTOR_SCHEME}://host`;
 export const EMBEDDED_INSPECTOR_ORIGIN = `${EMBEDDED_INSPECTOR_SCHEME}://inspector`;
@@ -132,7 +132,7 @@ export function registerEmbeddedInspectorScheme(): void {
     }]);
 }
 
-function hostDocument(): string {
+export function embeddedInspectorHostDocument(): string {
     return `<!doctype html>
 <html>
 <head>
@@ -143,6 +143,7 @@ function hostDocument(): string {
 </head>
 <body>
   <iframe id="embedded-inspector" sandbox="allow-scripts allow-same-origin allow-downloads"
+    allow="clipboard-write"
     src="${EMBEDDED_INSPECTOR_ORIGIN}/embedded.html"></iframe>
 </body>
 </html>`;
@@ -154,7 +155,7 @@ export async function registerEmbeddedInspectorProtocol(
     await protocol.handle(EMBEDDED_INSPECTOR_SCHEME, async request => {
         const url = new URL(request.url);
         if (url.host === 'host' && url.pathname === '/index.html') {
-            return new Response(hostDocument(), {
+            return new Response(embeddedInspectorHostDocument(), {
                 headers: { 'content-type': 'text/html; charset=utf-8' },
             });
         }

@@ -33,6 +33,11 @@ de verificación, oculta la ventana y conserva la sesión para reabrirla. El bot
 inferior **Inspeccionar** activa exclusivamente la inspección local sobre la
 captura/XML del recorder.
 
+Al copiar un selector, el Inspector confirma éxito solo cuando
+`navigator.clipboard.writeText` termina correctamente. Si la API no está
+disponible o rechaza la escritura, muestra **Copy failed** y no simula éxito. El
+host concede exclusivamente `clipboard-write` al iframe.
+
 ## Diagnóstico por síntomas
 
 ### Electron failed to install correctly

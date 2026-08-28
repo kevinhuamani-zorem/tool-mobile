@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const source = path.join(root, 'vendor', 'appium-inspector');
-const commit = '0ce9ca5562c9781ebca32bab9ffbf4c74787d39e';
+const commit = '4cbf81677b8a9c514f8ebbff896348ad07409086';
 const hostOrigin = 'appium-recorder://host';
 const cacheRoot = path.join(root, 'node_modules', '.cache', 'appium-inspector', commit);
 const output = path.join(cacheRoot, 'dist-browser');

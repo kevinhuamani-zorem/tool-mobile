@@ -13,6 +13,7 @@ const {
     EMBEDDED_INSPECTOR_ORIGIN,
     EMBEDDED_INSPECTOR_URL,
     embeddedInspectorAssetsPath,
+    embeddedInspectorHostDocument,
     embeddedInspectorWindowOptions,
     embeddedInspectorAssetsAvailable,
     focusEmbeddedInspectorWindow,
@@ -71,6 +72,24 @@ test('uses a sandboxed Inspector window and denies external navigation', () => {
     assert.equal(isAllowedInspectorNavigation(`${EMBEDDED_INSPECTOR_ORIGIN}/embedded.html`), true);
     assert.equal(isAllowedInspectorNavigation('https://example.com'), false);
     assert.equal(EMBEDDED_INSPECTOR_HOST_ORIGIN, 'appium-recorder://host');
+});
+
+test('host delegates only clipboard writes while preserving iframe and document isolation', () => {
+    const document = embeddedInspectorHostDocument();
+    const delegatedPermissions = [...document.matchAll(/\sallow="([^"]*)"/g)]
+        .map(match => match[1]);
+    assert.match(
+        document,
+        /<iframe id="embedded-inspector" sandbox="allow-scripts allow-same-origin allow-downloads"\s+allow="clipboard-write"/,
+    );
+    assert.deepEqual(delegatedPermissions, ['clipboard-write']);
+    assert.match(
+        document,
+        /Content-Security-Policy" content="default-src 'none'; frame-src appium-recorder:\/\/inspector; style-src 'unsafe-inline'"/,
+    );
+    assert.doesNotMatch(document, /clipboard-read/);
+    assert.doesNotMatch(document, /allow="[^"]*(?:\*|camera|microphone|geolocation)/);
+    assert.doesNotMatch(document, /allow-(?:forms|modals|popups|top-navigation)/);
 });
 
 test('defaults to embedded only with assets and preserves actionable legacy fallback', () => {
@@ -244,7 +263,7 @@ test('pins and builds the controlled fork without a committed bundle or plugin',
     const runScript = fs.readFileSync(path.join(toolRoot, 'run.sh'), 'utf8');
 
     assert.match(gitmodules, /kevinhuamani-zorem\/appium-inspector\.git/);
-    assert.match(gitmodules, /kevinhuamani-zorem-expanded-locator-candidates/);
+    assert.match(gitmodules, /kevinhuamani-zorem-reliable-selector-copy/);
     assert.match(buildScript, new RegExp(EMBEDDED_INSPECTOR_COMMIT));
     assert.match(buildScript, /npm', \['run', 'build:browser'\]/);
     assert.match(buildScript, /VITE_EMBEDDED_HOST_ORIGIN: hostOrigin/);
