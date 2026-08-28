@@ -13,6 +13,8 @@ function locator(name, selector, strategy) {
     return {
         name, selector, androidSelector: selector, iosSelector: '',
         androidStrategy: strategy || inferredStrategy(selector) || 'ID',
+        androidBlock: 'muestreNombreYaperoYapearAndroid',
+        iosBlock: 'muestreNombreYaperoYapearIos',
         file: LOCATORS, module: 'muestre-nombre-yapero-yapear',
         squad: 'payment', scope: 'squad', platform: 'android',
     };
@@ -181,6 +183,32 @@ test('conserva el primary como selector de create cuando ningún candidato exist
     }]));
     assert.equal(result.plan.resolutions[0].resolution, 'create');
     assert.equal(result.plan.resolutions[0].selector, '~Nuevo');
+});
+
+test('completionTargets conserva file, bloque y key exactos del candidato reuse', () => {
+    const provider = {
+        getCatalog: () => ({
+            ...emptyCatalog().getCatalog(),
+            locators: [{
+                ...locator('yapear', '', 'ID'),
+                androidSelector: '',
+                iosSelector: '//XCUIElementTypeButton[@name="Yapear"]',
+            }],
+        }),
+    };
+    const result = new DeterministicResolver(provider).resolve(scenario([{
+        ...action('CLICK', 'acceso yapear', '~Yapear'),
+        selectorVerified: true,
+        selectorCandidates: [verifiedCandidate('primary', '~Yapear', { primary: true })],
+    }]));
+
+    assert.deepEqual(result.plan.resolutions[0].completionTargets, [{
+        file: LOCATORS,
+        module: 'muestre-nombre-yapero-yapear',
+        name: 'yapear',
+        platform: 'android',
+        block: 'muestreNombreYaperoYapearAndroid',
+    }]);
 });
 
 test('ranking prefiere estabilidad y deja auditoría del candidato que causó reuse', () => {

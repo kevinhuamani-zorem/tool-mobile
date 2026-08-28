@@ -1508,6 +1508,7 @@ ipcMain.handle('import-automation-response', async () => {
  */
 function applyAdditiveUpdates(
     scenario: AutomationScenario,
+    plan: GenerationPlan,
     response: AutomationAgentResponse,
     updates: Map<string, string>
 ): { outcomes: ReturnType<AutomationPatchWriter['apply']>; absolute: Set<string> } {
@@ -1521,14 +1522,38 @@ function applyAdditiveUpdates(
     // Rellenos de claves existentes. El valor NUNCA sale de la respuesta: se
     // copia del selector que el QA verifico en esa accion de la grabacion, asi
     // que por esta via no puede entrar un selector inventado.
-    const completionsByFile = new Map<string, { name: string; platform: 'android' | 'ios'; value: string }[]>();
+    const completionsByFile = new Map<
+        string,
+        { name: string; platform: 'android' | 'ios'; block: string; value: string }[]
+    >();
     for (const completion of response.completions || []) {
+        const targets = plan.resolutions
+            .find(resolution => resolution.sequence === completion.sequence)
+            ?.completionTargets?.filter(candidate =>
+                candidate.file === completion.file
+                && candidate.name === completion.name
+                && candidate.platform === completion.platform
+                && candidate.block.toLowerCase().endsWith(completion.platform)
+            ) || [];
+        const target = targets.length === 1 ? targets[0] : undefined;
+        if (!target) {
+            throw new Error(`Completion no autorizado para ${completion.file}#${completion.name}.`);
+        }
         const action = scenario.actions.find(step => step.sequence === completion.sequence);
-        const value = action?.locatorValue
+        const primary = action?.selectorCandidates?.find(candidate => candidate.primary);
+        const value = primary?.locatorValue
+            || action?.locatorValue
             || (action?.selector ? frameworkLocator(action.selector, completion.platform).value : '');
-        if (!value) continue;
+        if (!value) {
+            throw new Error(`La acción ${completion.sequence} no contiene un locator primario aplicable.`);
+        }
         const bucket = completionsByFile.get(completion.file) || [];
-        bucket.push({ name: completion.name, platform: completion.platform, value });
+        bucket.push({
+            name: completion.name,
+            platform: completion.platform,
+            block: target.block,
+            value,
+        });
         completionsByFile.set(completion.file, bucket);
     }
 
@@ -1604,7 +1629,7 @@ ipcMain.handle('generate-automation-response', async (
         const updates = new Map(plan.files
             .filter(file => file.operation === 'update')
             .map(file => [file.layer, file.path]));
-        const patched = applyAdditiveUpdates(scenario, response, updates);
+        const patched = applyAdditiveUpdates(scenario, plan, response, updates);
         const createOnly: GeneratedPreview = {
             ...preview,
             files: preview.files.filter(file => !patched.absolute.has(file)),

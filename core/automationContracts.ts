@@ -32,6 +32,14 @@ export interface ActionResolution {
     /** Candidato verificado que justificó reuse; audita alternativas sin escribirlas. */
     matchedCandidateId?: string;
     matchedPrimaryCandidate?: boolean;
+    /** Huecos existentes que esta accion puede completar sin elegir otra key. */
+    completionTargets?: Array<{
+        file: string;
+        module: string;
+        name: string;
+        platform: MobilePlatform;
+        block: string;
+    }>;
     source?: {
         file: string;
         module: string;

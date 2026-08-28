@@ -146,6 +146,9 @@ convierte por sí solo un selector manual en verificado.
    máximo de 20 KB, con objetivo operativo de 5 min.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
+   Los rellenos de plataforma solo aceptan la identidad determinista completa
+   `(file, module, block, name, platform, sequence)` y el método trazado debe
+   consumir ese getter; el patch conserva esa misma identidad hasta la escritura.
 9. Puede emitirse una sola reparación dirigida a archivos afectados.
 10. El usuario revisa el preview, genera y recién entonces se promociona memoria.
 

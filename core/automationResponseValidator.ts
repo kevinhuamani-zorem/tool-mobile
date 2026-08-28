@@ -78,12 +78,10 @@ function screenLocatorTypes(
     contract: Pick<FrameworkContract,
         'locatorFactoryImport' | 'locatorFactorySymbol' |
         'typeLocatorImport' | 'typeLocatorSymbol' | 'locatorSignature'>,
-    locatorPath: string,
     expectedClassName: string,
 ): Map<string, Set<string>> {
     const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const expectedImport = `@locators/${locatorPath.replace(/^resources\/locators\//, '')}`;
-    const locatorIdentifiers = new Set<string>();
+    const locatorFilesByIdentifier = new Map<string, string>();
     const locatorFactoryIdentifiers = new Set<string>();
     const typeLocatorIdentifiers = new Set<string>();
     source.statements.forEach(statement => {
@@ -91,8 +89,11 @@ function screenLocatorTypes(
         if (statement.importClause?.isTypeOnly) return;
         const specifier = statement.moduleSpecifier.text;
         const defaultIdentifier = statement.importClause?.name?.text;
-        if (specifier === expectedImport && defaultIdentifier) {
-            locatorIdentifiers.add(defaultIdentifier);
+        if (specifier.startsWith('@locators/') && specifier.endsWith('.locator.json') && defaultIdentifier) {
+            locatorFilesByIdentifier.set(
+                defaultIdentifier,
+                specifier.replace(/^@locators\//, 'resources/locators/'),
+            );
         }
         if (specifier === contract.locatorFactoryImport && defaultIdentifier) {
             locatorFactoryIdentifiers.add(defaultIdentifier);
@@ -114,7 +115,7 @@ function screenLocatorTypes(
         }
     });
     const trustedBindings = new Set([
-        ...locatorIdentifiers,
+        ...locatorFilesByIdentifier.keys(),
         ...locatorFactoryIdentifiers,
         ...typeLocatorIdentifiers,
     ]);
@@ -195,12 +196,14 @@ function screenLocatorTypes(
                 || !typeLocatorIdentifiers.has(typeChain.root)
                 || typeChain.properties.length !== 1
                 || !reference
-                || !locatorIdentifiers.has(reference.root)
+                || !locatorFilesByIdentifier.has(reference.root)
                 || reference.properties.length < 2
             ) return;
             const blockName = reference.properties[reference.properties.length - 2];
             const name = reference.properties[reference.properties.length - 1];
-            const key = `${getterName}\u0000${platform}\u0000${blockName}\u0000${name}`;
+            const file = locatorFilesByIdentifier.get(reference.root)!;
+            const key =
+                `${getterName}\u0000${platform}\u0000${file}\u0000${blockName}\u0000${name}`;
             const referencedTypes = types.get(key) || new Set<string>();
             referencedTypes.add(typeChain.properties[0]);
             types.set(key, referencedTypes);
@@ -273,6 +276,7 @@ function screenMethodGetterUsage(
             || !(ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name))
         ) return;
         const aliases = new Map<string, string>();
+        const derivedValues = new Map<string, string>();
         member.body.statements.forEach(statement => {
             if (
                 !ts.isVariableStatement(statement)
@@ -320,12 +324,32 @@ function screenMethodGetterUsage(
                 const getter = directGetter(node);
                 if (getter) found.add(getter);
                 if (ts.isIdentifier(node) && aliases.has(node.text)) found.add(aliases.get(node.text)!);
+                if (ts.isIdentifier(node) && derivedValues.has(node.text)) {
+                    found.add(derivedValues.get(node.text)!);
+                }
             }
             ts.forEachChild(node, child => {
                 getterReferences(child, false).forEach(getter => found.add(getter));
             });
             return found;
         };
+        member.body.statements.forEach(statement => {
+            if (
+                !ts.isVariableStatement(statement)
+                || (statement.declarationList.flags & ts.NodeFlags.Const) === 0
+            ) return;
+            statement.declarationList.declarations.forEach(declaration => {
+                if (
+                    !ts.isIdentifier(declaration.name)
+                    || !declaration.initializer
+                    || aliases.has(declaration.name.text)
+                ) return;
+                const sources = getterReferences(declaration.initializer);
+                if (sources.size === 1) {
+                    derivedValues.set(declaration.name.text, [...sources][0]);
+                }
+            });
+        });
         const isEffectful = (call: ts.CallExpression): boolean => {
             let current: ts.Node = call;
             while (current.parent && !ts.isStatement(current.parent)) {
@@ -336,6 +360,27 @@ function screenMethodGetterUsage(
                 current.parent
                 && (ts.isExpressionStatement(current.parent) || ts.isReturnStatement(current.parent))
             );
+        };
+        const isDiscardedValueRead = (call: ts.CallExpression): boolean => {
+            if (
+                !ts.isPropertyAccessExpression(call.expression)
+                || !new Set([
+                    'getText',
+                    'getAttribute',
+                    'getValue',
+                    'isDisplayed',
+                    'isEnabled',
+                    'isExisting',
+                    'isSelected',
+                    'getCSSProperty',
+                    'getLocation',
+                    'getSize',
+                ]).has(call.expression.name.text)
+                || getterReferences(call.expression.expression).size === 0
+            ) return false;
+            let current: ts.Node = call;
+            while (current.parent && !ts.isStatement(current.parent)) current = current.parent;
+            return Boolean(current.parent && ts.isExpressionStatement(current.parent));
         };
         const visit = (node: ts.Node): void => {
             if (
@@ -351,7 +396,7 @@ function screenMethodGetterUsage(
                     || ts.isClassExpression(node)
                 )
             ) return;
-            if (ts.isCallExpression(node) && isEffectful(node)) {
+            if (ts.isCallExpression(node) && isEffectful(node) && !isDiscardedValueRead(node)) {
                 getterReferences(node).forEach(getter => usage.getters.add(getter));
             }
             ts.forEachChild(node, visit);
@@ -365,6 +410,21 @@ function screenMethodGetterUsage(
 function unexpectedFields(value: object, allowed: string[]): string[] {
     const accepted = new Set(allowed);
     return Object.keys(value).filter(key => !accepted.has(key));
+}
+
+function completionTarget(
+    plan: GenerationPlan,
+    completion: { file: string; name: string; platform: 'android' | 'ios'; sequence: number },
+) {
+    const targets = plan.resolutions
+        .find(resolution => resolution.sequence === completion.sequence)
+        ?.completionTargets?.filter(target =>
+            target.file === completion.file
+            && target.name === completion.name
+            && target.platform === completion.platform
+            && target.block.toLowerCase().endsWith(completion.platform)
+        ) || [];
+    return targets.length === 1 ? targets[0] : undefined;
 }
 
 function hasNoLocatorEntries(content: string): boolean {
@@ -498,7 +558,7 @@ export function emptyOnRecordedPlatform(
         if (!target || typeof target !== 'object') continue;
         if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
         if (String(target[key] || '').trim()) continue;
-        if (completed.has(`${identifier}#${key}`) || completed.has(key)) continue;
+        if (completed.has(unique)) continue;
         problems.push(unique);
     }
     return problems;
@@ -591,6 +651,14 @@ export class AutomationResponseValidator {
                 continue;
             }
             const label = `${completion.file}#${completion.name} (${completion.platform})`;
+            const authorizedTarget = completionTarget(plan, completion);
+            if (!authorizedTarget) {
+                errors.push({
+                    code: 'completion-unauthorized',
+                    message: `Completar ${label} no coincide con un target de reuse verificado para la acción.`,
+                });
+                continue;
+            }
             const action = scenario.actions.find(step => step.sequence === completion.sequence);
             if (!action) {
                 errors.push({
@@ -625,10 +693,13 @@ export class AutomationResponseValidator {
                 });
                 continue;
             }
-            const block = Object.keys(document).find(name =>
-                name.toLowerCase().endsWith(completion.platform) &&
-                document[name] && typeof document[name] === 'object');
-            if (!block || !Object.prototype.hasOwnProperty.call(document[block], completion.name)) {
+            const block = authorizedTarget.block;
+            if (
+                !block
+                || !document[block]
+                || typeof document[block] !== 'object'
+                || !Object.prototype.hasOwnProperty.call(document[block], completion.name)
+            ) {
                 errors.push({
                     code: 'completion-key',
                     message: `Completar ${label}: la clave no existe en el bloque de ${completion.platform}. `
@@ -677,13 +748,25 @@ export class AutomationResponseValidator {
                 if (fs.existsSync(absolute)) baseline = fs.readFileSync(absolute, 'utf-8');
             }
             const actionBySequence = new Map(scenario.actions.map(action => [action.sequence, action]));
+            const completionBySequence = new Map<number, NonNullable<AutomationAgentResponse['completions']>[number]>();
+            for (const completion of response.completions || []) {
+                if (!completionTarget(plan, completion)) continue;
+                if (completionBySequence.has(completion.sequence)) {
+                    errors.push({
+                        code: 'completion-duplicate',
+                        message: `La acción ${completion.sequence} declara más de un completion.`,
+                    });
+                    continue;
+                }
+                completionBySequence.set(completion.sequence, completion);
+            }
             const primaryByLocator = new Map<string, Set<string>>();
             const addPrimary = (name: string | undefined, sequence: number): void => {
                 if (!name) return;
                 const action = actionBySequence.get(sequence);
                 if (!action) return;
                 const resolution = plan.resolutions.find(item => item.sequence === sequence);
-                if (resolution?.resolution !== 'create') return;
+                if (resolution?.resolution !== 'create' || completionBySequence.has(sequence)) return;
                 const allowed = primaryByLocator.get(name) || new Set<string>();
                 candidateAllowlist(action, scenario.platform)
                     .filter(candidate => candidate.primary)
@@ -695,12 +778,13 @@ export class AutomationResponseValidator {
             plan.resolutions.forEach(resolution => addPrimary(resolution.locatorName, resolution.sequence));
             response.actionTrace.forEach(trace => {
                 const planned = plan.resolutions.find(resolution => resolution.sequence === trace.sequence);
-                if (planned?.locatorName && trace.locatorName && trace.locatorName !== planned.locatorName) {
+                const expectedName = completionBySequence.get(trace.sequence)?.name || planned?.locatorName;
+                if (expectedName && trace.locatorName !== expectedName) {
                     errors.push({
                         code: 'trace-locator',
                         message:
                             `La acción ${trace.sequence} traza ${trace.locatorName}, pero el plan exige ` +
-                            `${planned.locatorName}.`,
+                            `${expectedName}.`,
                         file: locatorFile.path,
                     });
                     return;
@@ -713,7 +797,6 @@ export class AutomationResponseValidator {
             const referencedTypes = screenLocatorTypes(
                 screenContent,
                 contract,
-                locatorFile.path,
                 screenFile ? screenObjectNames(screenFile.path).className : '',
             );
             const methodUsage = screenMethodGetterUsage(
@@ -724,14 +807,19 @@ export class AutomationResponseValidator {
             response.actionTrace.forEach(trace => {
                 if (!trace.screenMethod) return;
                 const resolution = plan.resolutions.find(item => item.sequence === trace.sequence);
-                if (!resolution?.locatorName || trace.locatorName !== resolution.locatorName) return;
+                const expectedName = completionBySequence.get(trace.sequence)?.name || resolution?.locatorName;
+                if (!expectedName || trace.locatorName !== expectedName) return;
                 const getters = tracedGettersByMethod.get(trace.screenMethod) || new Set<string>();
-                getters.add(resolution.locatorName);
+                getters.add(expectedName);
                 tracedGettersByMethod.set(trace.screenMethod, getters);
             });
             const currentLocators = responseLocatorValues(locatorFile.content);
             const createNames = new Set(plan.resolutions
-                .filter(resolution => resolution.resolution === 'create' && resolution.locatorName)
+                .filter(resolution =>
+                    resolution.resolution === 'create'
+                    && resolution.locatorName
+                    && !completionBySequence.has(resolution.sequence)
+                )
                 .map(resolution => resolution.locatorName!));
             for (const name of createNames) {
                 const pairs = primaryByLocator.get(name) || new Set<string>();
@@ -740,7 +828,9 @@ export class AutomationResponseValidator {
                     && entry.blockName.toLowerCase().endsWith(scenario.platform)
                 );
                 const exact = entries.filter(entry => {
-                    const key = `${name}\u0000${scenario.platform}\u0000${entry.blockName}\u0000${name}`;
+                    const key =
+                        `${name}\u0000${scenario.platform}\u0000${locatorFile.path}\u0000` +
+                        `${entry.blockName}\u0000${name}`;
                     const types = referencedTypes.get(key) || new Set<string>();
                     return types.size === 1
                         && pairs.has(`${[...types][0]}\u0000${entry.selector.trim()}`);
@@ -760,6 +850,8 @@ export class AutomationResponseValidator {
             )) {
                 const traces = response.actionTrace.filter(trace => trace.sequence === resolution.sequence);
                 const trace = traces.length === 1 ? traces[0] : undefined;
+                const completion = completionBySequence.get(resolution.sequence);
+                const expectedGetter = completion?.name || resolution.locatorName!;
                 const usage = trace?.screenMethod
                     ? methodUsage.get(trace.screenMethod)
                     : undefined;
@@ -767,23 +859,36 @@ export class AutomationResponseValidator {
                     ? tracedGettersByMethod.get(trace.screenMethod)
                     : undefined;
                 const action = actionBySequence.get(resolution.sequence);
-                const candidateLiterals = action
-                    ? candidateAllowlist(action, scenario.platform)
-                        .flatMap(candidate => [candidate.selector, candidate.locatorValue])
-                    : [];
+                const candidates = action ? candidateAllowlist(action, scenario.platform) : [];
+                const candidateLiterals = candidates
+                    .flatMap(candidate => [candidate.selector, candidate.locatorValue]);
+                const primary = candidates.find(candidate => candidate.primary);
+                const completionMappingValid = !completion || Boolean(
+                    primary
+                    && (() => {
+                        const target = completionTarget(plan, completion);
+                        if (!target) return false;
+                        const key =
+                            `${expectedGetter}\u0000${scenario.platform}\u0000${target.file}\u0000` +
+                            `${target.block}\u0000${target.name}`;
+                        const types = referencedTypes.get(key) || new Set<string>();
+                        return types.size === 1 && types.has(primary.locatorType);
+                    })()
+                );
                 if (
                     !trace?.screenMethod
                     || !usage
                     || usage.hardcodedSelector
                     || candidateLiterals.some(value => usage.literals.has(value))
-                    || !usage.getters.has(resolution.locatorName!)
+                    || !completionMappingValid
+                    || !usage.getters.has(expectedGetter)
                     || [...usage.getters].some(getter => !tracedGetters?.has(getter))
                 ) {
                     errors.push({
                         code: 'trace-screen-method',
                         message:
                             `La acción ${resolution.sequence} debe trazar un único screenMethod que consuma ` +
-                            `el getter ${resolution.locatorName} sin selectores literales ni rutas alternativas.`,
+                            `el getter ${expectedGetter} sin selectores literales ni rutas alternativas.`,
                         file: screenFile?.path,
                     });
                 }
@@ -792,7 +897,7 @@ export class AutomationResponseValidator {
                 const recordedPlatformBlock = proposed.blockName.toLowerCase().endsWith(scenario.platform);
                 const key =
                     `${proposed.name}\u0000${scenario.platform}\u0000` +
-                    `${proposed.blockName}\u0000${proposed.name}`;
+                    `${locatorFile.path}\u0000${proposed.blockName}\u0000${proposed.name}`;
                 const types = referencedTypes.get(key) || new Set<string>();
                 const pairs = primaryByLocator.get(proposed.name) || new Set<string>();
                 const exactTypes = [...types].filter(type =>
@@ -1125,11 +1230,18 @@ export class AutomationResponseValidator {
                     }
                     // Cobertura de plataforma: ninguna clave referenciada puede
                     // quedar vacia en la plataforma que se grabo.
-                    const completedKeys = new Set(
-                        (response.completions || [])
-                            .filter(completion => completion.platform === scenario.platform)
-                            .map(completion => completion.name)
-                    );
+                    const locatorImports = [...screenContent.matchAll(
+                        /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"](@locators\/[^'"]+\.locator\.json)['"]/g
+                    )].map(match => ({
+                        identifier: match[1],
+                        file: match[2].replace(/^@locators\//, 'resources/locators/'),
+                    }));
+                    const completedKeys = new Set((response.completions || []).flatMap(completion => {
+                        const target = completionTarget(plan, completion);
+                        if (!target || target.platform !== scenario.platform) return [];
+                        const imported = locatorImports.find(item => item.file === target.file);
+                        return imported ? [`${imported.identifier}.${target.block}.${target.name}`] : [];
+                    }));
                     const documents = new Map<string, Record<string, any> | undefined>();
                     const documentFor = (identifier: string): Record<string, any> | undefined => {
                         if (documents.has(identifier)) return documents.get(identifier);

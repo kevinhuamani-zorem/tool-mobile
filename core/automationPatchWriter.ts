@@ -30,6 +30,7 @@ export interface LocatorAddition {
 export interface LocatorCompletionEdit {
     name: string;
     platform: 'android' | 'ios';
+    block: string;
     value: string;
 }
 
@@ -126,7 +127,16 @@ export class AutomationPatchWriter {
         // en el bloque de esa plataforma: si no esta, ese modulo nunca declaro
         // el elemento ahi y anadirla es una decision del QA, no del patch.
         for (const completion of completions) {
-            const block = completion.platform === 'ios' ? ios : android;
+            const block = completion.block;
+            if (
+                !block.toLowerCase().endsWith(completion.platform)
+                || !parsed[block]
+                || typeof parsed[block] !== 'object'
+            ) {
+                throw new AdditivePatchError(
+                    `El bloque ${block} no es el bloque ${completion.platform} autorizado del módulo.`
+                );
+            }
             if (!Object.prototype.hasOwnProperty.call(parsed[block], completion.name)) {
                 throw new AdditivePatchError(
                     `La clave "${completion.name}" no existe en el bloque ${block}: ` +

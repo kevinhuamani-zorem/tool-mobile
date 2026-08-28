@@ -178,9 +178,11 @@ valor intercambiado entre acciones se rechazan aunque cada componente exista
 por separado en la grabación. Además, cada acción `create` declara
 `actionTrace.screenMethod`: el validator analiza el método real de la clase
 esperada y exige que consuma el getter de `locatorName`, directamente o mediante
-una variable local. Un selector inline, otro getter o una ruta alternativa no
-pueden sustituirlo; varias acciones pueden compartir el mismo método cuando este
-consume todos sus getters.
+una variable local. Para lecturas, sigue de forma acotada el valor derivado del
+getter (`const text = await this.title.getText()`) hasta el sink de aserción o
+interacción; una lectura descartada o una variable señuelo no cuentan. Un selector
+inline, otro getter o una ruta alternativa no pueden sustituirlo; varias acciones
+pueden compartir el mismo método cuando este consume todos sus getters.
 
 ## Acciones soportadas
 
@@ -369,11 +371,17 @@ La salida es **completar en sitio**, no duplicar el elemento:
   elemento que el QA verificó contra el dispositivo. Por esta vía no puede entrar
   un selector inventado, que es el riesgo de dejarle escribir en un archivo de
   otra feature.
+- Cada completion debe coincidir con un `completionTargets` determinista exacto:
+  `(file, module, block, name, platform, sequence)`. El Screen Object trazado debe
+  importar ese archivo y consumir ese getter con el `TypeLocator` del primary.
+  Keys homónimas en archivos o bloques distintos son identidades diferentes.
+- El patch recibe el bloque autorizado; nunca elige el primer bloque Android/iOS
+  por basename o por nombre de key.
 
 Se comprueba en tres sitios: el gap de duplicado ya trae el `completions` de
-ejemplo con su `file` y `name`; el verificador del sandbox cruza el Screen Object
-contra los `status: "missing"` de `reuse-context.json`; y el validador lee los
-archivos reales y evalúa cómo quedarán **después** del patch.
+ejemplo con su `file` y `name`; el verificador del sandbox cruza identidad completa
+y Screen Object contra los `status: "missing"` de `reuse-context.json`; y el
+validador lee los archivos reales y evalúa cómo quedarán **después** del patch.
 
 Descartada la prueba de tokens de identidad como requisito para completar: medida
 sobre 455 pares que ya funcionan en ambas plataformas, los tokens coinciden solo

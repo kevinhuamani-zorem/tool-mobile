@@ -758,6 +758,20 @@ export class DeterministicResolver {
                 .sort((a, b) => Number(Boolean(platformValue(b))) - Number(Boolean(platformValue(a))));
             if (!matches.length) continue;
             const candidates = matches.slice(0, 4);
+            resolution.completionTargets = candidates
+                .filter(candidate => !platformValue(candidate))
+                .flatMap(candidate => {
+                    const block = rawScenario.platform === 'ios'
+                        ? candidate.iosBlock
+                        : candidate.androidBlock;
+                    return block ? [{
+                        file: candidate.file,
+                        module: candidate.module,
+                        name: candidate.name,
+                        platform: rawScenario.platform,
+                        block,
+                    }] : [];
+                });
             const omitted = matches.length - candidates.length;
             candidates.forEach(candidate =>
                 duplicateCandidates.add(`${candidate.module}#${candidate.name}`));

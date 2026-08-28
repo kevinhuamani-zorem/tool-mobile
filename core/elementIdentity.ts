@@ -78,6 +78,8 @@ export interface IdentityCandidate {
     sharedValue: string;
     androidSelector: string;
     iosSelector: string;
+    androidBlock?: string;
+    iosBlock?: string;
 }
 
 interface IndexableLocator {
@@ -87,6 +89,8 @@ interface IndexableLocator {
     scope?: string;
     androidSelector?: string;
     iosSelector?: string;
+    androidBlock?: string;
+    iosBlock?: string;
     selector?: string;
 }
 
@@ -116,6 +120,8 @@ export class ElementIdentityIndex {
                     sharedValue: value,
                     androidSelector: locator.androidSelector || '',
                     iosSelector: locator.iosSelector || '',
+                    androidBlock: locator.androidBlock,
+                    iosBlock: locator.iosBlock,
                 });
                 this.byValue.set(value, entry);
             }

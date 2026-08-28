@@ -42,7 +42,12 @@ test('detecta las claves que quedarian vacias en la plataforma grabada', () => {
 // error, o el agente no podria resolverlo nunca.
 test('una clave declarada en completions ya no cuenta como vacia', () => {
     assert.deepEqual(
-        emptyOnRecordedPlatform(SCREEN, 'android', documentFor, new Set(['txtTitle'])),
+        emptyOnRecordedPlatform(
+            SCREEN,
+            'android',
+            documentFor,
+            new Set(['TappSubhomeLocator.tappSubhomeAndroid.txtTitle'])
+        ),
         ['TappSubhomeLocator.tappSubhomeAndroid.btnViewAllAccounts']
     );
 });

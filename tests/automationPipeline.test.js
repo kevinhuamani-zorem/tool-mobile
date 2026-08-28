@@ -1163,6 +1163,32 @@ test('validator exige el par primary exacto para create y verifica el TypeLocato
         false,
     );
 
+    const getterValueRead = validResponse(resolved.plan);
+    getterValueRead.files.find(file => file.layer === 'screen').content =
+        getterValueRead.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'const text = await this.movementsList.getText(); ' +
+            'await expect(text).toBe("Movimientos disponibles");',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, getterValueRead).errors
+            .some(error => error.code === 'trace-screen-method'),
+        false,
+    );
+
+    const decoyValueRead = validResponse(resolved.plan);
+    decoyValueRead.files.find(file => file.layer === 'screen').content =
+        decoyValueRead.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'const text = "Movimientos disponibles"; await this.movementsList.getText(); ' +
+            'await expect(text).toBe("Movimientos disponibles");',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, decoyValueRead).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
     const backupLocalLiteral = validResponse(resolved.plan);
     backupLocalLiteral.files.find(file => file.layer === 'screen').content =
         backupLocalLiteral.files.find(file => file.layer === 'screen').content.replace(
@@ -1272,6 +1298,105 @@ test('validator permite un screenMethod agrupado que consume varios getters crea
     const errors = new AutomationResponseValidator(undefined, emptyCatalog)
         .validate(resolved.scenario, resolved.plan, response).errors;
     assert.equal(errors.some(error => error.code === 'trace-screen-method'), false);
+});
+
+test('validator autoriza completions solo por identidad exacta y getter trazado', () => {
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+        selectorCandidates: [selectorCandidate(
+            'primary-movements',
+            'id=movimientos',
+            'XPATH',
+            '//*[@resource-id="movimientos"]',
+        )],
+    }]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    const targetFile = 'resources/locators/payment/shared.locator.json';
+    const homonymFile = 'resources/locators/commons/shared.locator.json';
+    resolved.plan.resolutions[0].completionTargets = [{
+        file: targetFile,
+        module: 'payment/shared',
+        name: 'sharedMovements',
+        platform: 'android',
+        block: 'sharedAndroid',
+    }];
+    const locatorPlan = resolved.plan.files.find(file => file.layer === 'locators');
+    locatorPlan.path = targetFile;
+    locatorPlan.operation = 'update';
+    const response = validResponse(resolved.plan);
+    response.files.find(file => file.layer === 'feature').content =
+        response.files.find(file => file.layer === 'feature').content
+            .replace('@miflujo @android', '@miflujo @android @ios');
+    const locatorContent = JSON.stringify({
+        sharedAndroid: { sharedMovements: '' },
+        sharedIos: { sharedMovements: '//XCUIElementTypeStaticText[@name="Movimientos"]' },
+    });
+    response.files.find(file => file.layer === 'locators').content = locatorContent;
+    const screen = response.files.find(file => file.layer === 'screen');
+    screen.content = screen.content
+        .replace(/Locators\.consultaIos\.movementsList/g, 'Locators.sharedIos.sharedMovements')
+        .replace(/Locators\.consultaAndroid\.movementsList/g, 'Locators.sharedAndroid.sharedMovements')
+        .replace(/movementsList/g, 'sharedMovements');
+    response.actionTrace[0].locatorName = 'sharedMovements';
+    response.completions = [{
+        file: targetFile,
+        name: 'sharedMovements',
+        platform: 'android',
+        sequence: 1,
+    }];
+
+    const absoluteTarget = path.resolve(projectPaths.frameworkRoot, targetFile);
+    const originalExistsSync = fs.existsSync;
+    const originalReadFileSync = fs.readFileSync;
+    fs.existsSync = file => path.resolve(String(file)) === absoluteTarget || originalExistsSync(file);
+    fs.readFileSync = (file, ...args) =>
+        path.resolve(String(file)) === absoluteTarget
+            ? locatorContent
+            : originalReadFileSync(file, ...args);
+    try {
+        const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+        const acceptedErrors = validator.validate(resolved.scenario, resolved.plan, response).errors;
+        assert.deepEqual(acceptedErrors, []);
+
+        const arbitraryEmptyKey = structuredClone(response);
+        arbitraryEmptyKey.completions[0].name = 'otraClave';
+        assert.equal(
+            validator.validate(resolved.scenario, resolved.plan, arbitraryEmptyKey).errors
+                .some(error => error.code === 'completion-unauthorized'),
+            true,
+        );
+
+        const homonymousModule = structuredClone(response);
+        homonymousModule.completions[0].file = homonymFile;
+        assert.equal(
+            validator.validate(resolved.scenario, resolved.plan, homonymousModule).errors
+                .some(error => error.code === 'completion-unauthorized'),
+            true,
+        );
+
+        const untracedGetter = structuredClone(response);
+        untracedGetter.files.find(file => file.layer === 'screen').content =
+            untracedGetter.files.find(file => file.layer === 'screen').content
+                .replace(
+                    'await this.uiHelper.waitForDisplayed(this.sharedMovements);',
+                    'await this.uiHelper.waitForDisplayed(this.otherElement);',
+                )
+                .replace(
+                    ' public async verifyMovementsList',
+                    ' private get otherElement(): string { return "~Otro"; } public async verifyMovementsList',
+                );
+        assert.equal(
+            validator.validate(resolved.scenario, resolved.plan, untracedGetter).errors
+                .some(error => error.code === 'trace-screen-method'),
+            true,
+        );
+    } finally {
+        fs.existsSync = originalExistsSync;
+        fs.readFileSync = originalReadFileSync;
+    }
 });
 
 test('informa caso existente cuando el agente reutiliza todos los locators', () => {
@@ -1508,12 +1633,16 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /Nada de `_metadata`/);
     assert.match(instructions, /allowlist verificada e inmutable/);
     assert.match(instructions, /candidateId/);
+    assert.match(instructions, /completionTargets/);
+    assert.match(instructions, /key homonima de otro archivo o bloque no autoriza/);
     assert.match(instructions, /tier de ejecucion \(`@smoke_mobile`\)/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);
     assert.match(verifier, /usa imports relativos/);
     assert.match(verifier, /importa browser pero no lo utiliza/);
     assert.match(verifier, /Pista contextual copiada literalmente como Step/);
+    assert.match(verifier, /Completion no autorizado/);
+    assert.match(verifier, /x\.target\.block/);
     assert.doesNotThrow(() => execFileSync(process.execPath, ['verify-package.js'], {
         cwd: result.packageDirectory,
         stdio: 'pipe'

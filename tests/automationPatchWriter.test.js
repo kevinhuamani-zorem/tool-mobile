@@ -330,7 +330,12 @@ test('completar rellena el hueco de una clave existente', t => {
         locators: {
             file: ctx.files.locators,
             additions: [],
-            completions: [{ name: 'mostrarMovimientos', platform: 'ios', value: '//XCUIElementTypeButton[@name="Mostrar"]' }],
+            completions: [{
+                name: 'mostrarMovimientos',
+                platform: 'ios',
+                block: 'filtroIos',
+                value: '//XCUIElementTypeButton[@name="Mostrar"]',
+            }],
         },
     }, ctx.root);
 
@@ -348,7 +353,12 @@ test('completar nunca pisa un valor real', t => {
         locators: {
             file: ctx.files.locators,
             additions: [],
-            completions: [{ name: 'mostrarMovimientos', platform: 'android', value: 'otro' }],
+            completions: [{
+                name: 'mostrarMovimientos',
+                platform: 'android',
+                block: 'filtroAndroid',
+                value: 'otro',
+            }],
         },
     }, ctx.root);
 
@@ -366,7 +376,24 @@ test('completar una clave que el bloque no declara es un error', t => {
         locators: {
             file: ctx.files.locators,
             additions: [],
-            completions: [{ name: 'noDeclarada', platform: 'android', value: 'x' }],
+            completions: [{ name: 'noDeclarada', platform: 'android', block: 'filtroAndroid', value: 'x' }],
+        },
+    }, ctx.root), AdditivePatchError);
+});
+
+test('completar rechaza un bloque distinto del mapping autorizado', t => {
+    const ctx = fixture(t);
+    assert.throws(() => ctx.writer.apply({
+        ...BASE,
+        locators: {
+            file: ctx.files.locators,
+            additions: [],
+            completions: [{
+                name: 'mostrarMovimientos',
+                platform: 'ios',
+                block: 'filtroAndroid',
+                value: '//XCUIElementTypeButton[@name="Mostrar"]',
+            }],
         },
     }, ctx.root), AdditivePatchError);
 });
