@@ -30,7 +30,7 @@ puede repararse con `npm --prefix tools/visual-recorder rebuild electron`.
 
 El fork controlado está fijado en
 `4cbf81677b8a9c514f8ebbff896348ad07409086` de la rama
-`kevinhuamani-zorem-reliable-selector-copy`. No se usa
+`kevinhuamani-zorem-embedded-inspector-mode`. No se usa
 `appium-inspector-plugin`, una instalación global ni un bundle opaco
 versionado. `inspector:build` ejecuta `npm ci` y `npm run build:browser` dentro
 del submódulo, compila `VITE_EMBEDDED_HOST_ORIGIN=appium-recorder://host` y
