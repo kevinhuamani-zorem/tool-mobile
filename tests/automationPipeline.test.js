@@ -5,7 +5,10 @@ const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const { execFileSync } = require('node:child_process');
-const { AutomationRecordingStore } = require('../dist/core/automationRecordingStore');
+const {
+    AutomationRecordingStore,
+    prepareRecordedStep,
+} = require('../dist/core/automationRecordingStore');
 const { DeterministicResolver } = require('../dist/core/deterministicResolver');
 const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
 const { AutomationMemory } = require('../dist/core/automationMemory');
@@ -211,6 +214,58 @@ test('recording descarta backups derivados de secretos y rechaza un primary sens
         contextHint: 'PIN',
         value: '123',
     }], context), /selector que contiene el valor sensible/);
+});
+
+test('prevalidación sensible ocurre antes de ejecutar o mutar el recording', () => {
+    let executed = false;
+    const recorded = [];
+    assert.throws(() => {
+        const prepared = prepareRecordedStep({
+            action: 'ESCRIBIR',
+            selector: '~123',
+            selectorVerified: true,
+            variableName: 'pin',
+            contextHint: 'PIN',
+            value: '123',
+        }, 1, 'android', false);
+        executed = true;
+        recorded.push(prepared);
+    }, /selector que contiene el valor sensible/);
+    assert.equal(executed, false);
+    assert.deepEqual(recorded, []);
+});
+
+test('replaceActions revierte actions y manifest si falla la persistencia', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-recording-rollback-'));
+    const store = new AutomationRecordingStore(root);
+    const context = { squad: 'payment', platform: 'android', environment: 'qa' };
+    store.start(context);
+    store.replaceActions([{ action: 'CLICK', selector: '~Inicial' }], context);
+    const directory = store.getActiveDirectory();
+    const actionsFile = path.join(directory, 'actions.json');
+    const manifestFile = path.join(directory, 'manifest.json');
+    const beforeActions = fs.readFileSync(actionsFile, 'utf-8');
+    const beforeManifest = fs.readFileSync(manifestFile, 'utf-8');
+    const originalRename = fs.renameSync;
+    let failed = false;
+    fs.renameSync = (source, target) => {
+        if (!failed && target === manifestFile) {
+            failed = true;
+            throw new Error('disk full');
+        }
+        return originalRename(source, target);
+    };
+    try {
+        assert.throws(
+            () => store.replaceActions([{ action: 'CLICK', selector: '~Nuevo' }], context),
+            /disk full/,
+        );
+    } finally {
+        fs.renameSync = originalRename;
+    }
+    assert.equal(fs.readFileSync(actionsFile, 'utf-8'), beforeActions);
+    assert.equal(fs.readFileSync(manifestFile, 'utf-8'), beforeManifest);
+    assert.equal(store.replaceActions([{ action: 'CLICK', selector: '~Final' }], context).revision, 2);
 });
 
 test('al iniciar elimina únicamente placeholders sin scenario ni acciones', () => {

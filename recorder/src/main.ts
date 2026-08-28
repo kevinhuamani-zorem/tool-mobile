@@ -24,7 +24,10 @@ import { OutputValidator } from '../../core/outputValidator';
 import { GeneratedFileRegistry } from '../../core/generatedFileRegistry';
 import crypto from 'crypto';
 import { getWorkspaceAdapter } from '../../core/workspaceAdapter';
-import { AutomationRecordingStore } from '../../core/automationRecordingStore';
+import {
+    AutomationRecordingStore,
+    prepareRecordedStep,
+} from '../../core/automationRecordingStore';
 import { AutomationPackageBuilder } from '../../core/automationPackageBuilder';
 import { AutomationAgentLauncher } from '../../core/automationAgentLauncher';
 import { RecordingCoverageAnalyzer } from '../../core/recordingCoverageAnalyzer';
@@ -1131,23 +1134,56 @@ ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
         ...baseStep,
         ...(trustedCandidates ? { selectorCandidates: trustedCandidates } : {}),
     };
-    if (executableStep.variableName && executableStep.selector) {
-        if (!locatorManager.exists(executableStep.variableName)) {
-            locatorManager.add(executableStep.variableName, executableStep.selector, false);
-        }
+    let preparedStep: RecordedStep;
+    let persistedStep: RecordedStep;
+    try {
+        preparedStep = prepareRecordedStep(
+            executableStep,
+            recordedSteps.length + 1,
+            recordingPlatform,
+            false,
+        );
+        persistedStep = prepareRecordedStep(
+            {
+                ...preparedStep,
+                elementIntent: preparedStep.elementIntent
+                    || preparedStep.description
+                    || preparedStep.variableName,
+                selectorVerified:
+                    preparedStep.selectorVerified === true
+                    || Boolean(trustedCandidates),
+            },
+            recordedSteps.length + 1,
+            recordingPlatform,
+        );
+    } catch (error) {
+        return {
+            success: false,
+            message: error instanceof Error ? error.message : 'El step no superó la validación previa',
+            totalSteps: recordedSteps.length,
+        };
     }
-    const result = await executor.execute(executableStep);
+    const result = await executor.execute(preparedStep);
     if (result.success) {
-        recordedSteps.push({
-            ...executableStep,
-            elementIntent: executableStep.elementIntent || executableStep.description || executableStep.variableName,
-            selectorVerified:
-                executableStep.selectorVerified === true
-                || Boolean(trustedCandidates),
-            platform: recordingPlatform,
-        });
+        recordedSteps.push(persistedStep);
+        try {
+            syncRecording();
+        } catch (error) {
+            recordedSteps.pop();
+            return {
+                success: false,
+                message:
+                    'La acción se ejecutó, pero no pudo persistirse y se revirtió del recording: '
+                    + (error instanceof Error ? error.message : String(error)),
+                totalSteps: recordedSteps.length,
+            };
+        }
+        if (preparedStep.variableName && preparedStep.selector) {
+            if (!locatorManager.exists(preparedStep.variableName)) {
+                locatorManager.add(preparedStep.variableName, preparedStep.selector, false);
+            }
+        }
         pendingInspectorCandidates = null;
-        syncRecording();
         const screenshot = await inspector?.captureScreenshot().catch(() => undefined);
         return { ...result, totalSteps: recordedSteps.length, screenshot };
     }
@@ -1513,7 +1549,6 @@ function applyAdditiveUpdates(
     updates: Map<string, string>
 ): { outcomes: ReturnType<AutomationPatchWriter['apply']>; absolute: Set<string> } {
     const absolute = new Set<string>();
-    if (!updates.size) return { outcomes: [], absolute };
     const contentOf = (layer: string) => response.files.find(file => file.layer === layer)?.content;
     const read = (relative: string) => fs.readFileSync(path.join(projectPaths.frameworkRoot, relative), 'utf-8');
     const createdAt = new Date().toISOString();
@@ -1590,7 +1625,9 @@ function applyAdditiveUpdates(
     // grabar en Android sobre un modulo que se hizo grabando en iOS—, asi que va
     // en su propia pasada sobre ese archivo.
     for (const [file, completions] of completionsByFile) {
-        if (!fs.existsSync(path.join(projectPaths.frameworkRoot, file))) continue;
+        if (!fs.existsSync(path.join(projectPaths.frameworkRoot, file))) {
+            throw new Error(`No existe el archivo externo autorizado para completion: ${file}`);
+        }
         outcomes.push(...automationPatchWriter.apply(
             { recordingId: scenario.recordingId, createdAt, locators: { file, additions: [], completions } },
             projectPaths.frameworkRoot

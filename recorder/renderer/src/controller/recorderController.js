@@ -2888,22 +2888,26 @@ export async function initializeRecorder() {
         disableBtn(btnExecute, '⏳ Ejecutando...');
         setStatus('⚡ Ejecutando...', '#FF6600');
 
-        const result = await api.executeStep(step);
-        enableBtn(btnExecute);
-
-        if (result.success) {
-            if (result.screenshot) updateDeviceScreen(result.screenshot);
-            setStatus('✓ Step ' + result.totalSteps + ' guardado', '#00CC00');
-            clearStepFields();
-            const sr = await api.getSteps();
-            renderSteps(sr.steps);
-            const pr = await api.previewGherkin(
-                txtFeature.value.trim() || 'Flujo mobile',
-                txtScenario.value.trim() || 'Escenario'
-            );
-            if (pr.success && txtGherkin) txtGherkin.value = pr.preview;
-        } else {
-            setStatus('✗ ' + result.message, '#CC0000');
+        try {
+            const result = await api.executeStep(step);
+            if (result.success) {
+                if (result.screenshot) updateDeviceScreen(result.screenshot);
+                setStatus('✓ Step ' + result.totalSteps + ' guardado', '#00CC00');
+                clearStepFields();
+                const sr = await api.getSteps();
+                renderSteps(sr.steps);
+                const pr = await api.previewGherkin(
+                    txtFeature.value.trim() || 'Flujo mobile',
+                    txtScenario.value.trim() || 'Escenario'
+                );
+                if (pr.success && txtGherkin) txtGherkin.value = pr.preview;
+            } else {
+                setStatus('✗ ' + (result.message || 'No se pudo ejecutar el step'), '#CC0000');
+            }
+        } catch (error) {
+            setStatus('✗ ' + (error?.message || 'No se pudo ejecutar el step'), '#CC0000');
+        } finally {
+            enableBtn(btnExecute);
         }
     });
 

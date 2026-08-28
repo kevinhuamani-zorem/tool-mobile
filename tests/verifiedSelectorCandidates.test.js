@@ -97,6 +97,42 @@ test('rejects an invalid primary instead of importing it', async () => {
     );
 });
 
+test('omits an unsupported backup strategy without aborting the primary', async () => {
+    let calls = 0;
+    const result = await independentlyVerifySelectorCandidates({
+        candidates: [
+            candidate('primary', 'accessibility id', 'Pagar', { stability: 'manual' }),
+            candidate('future-backup', '-future strategy', 'future-selector'),
+        ],
+        selectedElementId: 'element-1',
+        platform: 'android',
+        recorderSelector: recorderSelectorFromInspector,
+        findElementIds: async () => {
+            calls += 1;
+            return ['element-1'];
+        },
+    });
+
+    assert.deepEqual(result.candidates.map(item => item.candidateId), ['primary']);
+    assert.match(result.warnings.join('\n'), /future-backup.*no soportada/i);
+    assert.equal(calls, 1);
+});
+
+test('blocks an unsupported primary strategy visibly', async () => {
+    await assert.rejects(
+        independentlyVerifySelectorCandidates({
+            candidates: [candidate('primary', '-future strategy', 'future-selector')],
+            selectedElementId: 'element-1',
+            platform: 'android',
+            recorderSelector: recorderSelectorFromInspector,
+            findElementIds: async () => {
+                throw new Error('no debe ejecutar Appium');
+            },
+        }),
+        /Selector primario rechazado.*no soportada/i,
+    );
+});
+
 test('validates all received candidates before applying the compact deterministic cap', async () => {
     let calls = 0;
     const candidates = [

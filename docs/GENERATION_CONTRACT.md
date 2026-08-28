@@ -157,7 +157,10 @@ par `(TypeLocator, valor)` y se ordena primary primero; luego
 persisten como máximo cuatro. Editar el selector o elegir otro borra los backups.
 En una entrada sensible se descarta cualquier backup que contenga el valor
 capturado; si el primary depende de la credencial, la acción se rechaza para no
-persistir el secreto dentro de un selector.
+persistir el secreto dentro de un selector. Esta validación y sanitización ocurre
+antes de ejecutar o mutar el recording. Si la persistencia falla después de una
+acción válida, `actions.json`, manifest y estado en memoria vuelven al baseline;
+el renderer restaura siempre el botón en `finally` y muestra el error.
 
 Cuando un recording generado solo carece de iOS (o Android), el QA únicamente
 selecciona y verifica los locators pendientes en una sesión de esa plataforma.
@@ -383,6 +386,9 @@ La salida es **completar en sitio**, no duplicar el elemento:
   Keys homónimas en archivos o bloques distintos son identidades diferentes.
 - El patch recibe el bloque autorizado; nunca elige el primer bloque Android/iOS
   por basename o por nombre de key.
+- Un completion puede apuntar a un módulo externo aunque las cuatro capas del
+  caso sean `create`; se procesa por su propio patch aditivo con escritura
+  atómica y comprobación de baseline.
 
 Se comprueba en tres sitios: el gap de duplicado ya trae el `completions` de
 ejemplo con su `file` y `name`; el verificador del sandbox cruza identidad completa

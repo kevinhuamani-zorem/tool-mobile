@@ -29,11 +29,19 @@ export interface EmptyRecordingCleanup {
     skipped: number;
 }
 
-function atomicJson(file: string, value: unknown): void {
+function atomicText(file: string, content: string): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n');
-    fs.renameSync(temporary, file);
+    try {
+        fs.writeFileSync(temporary, content);
+        fs.renameSync(temporary, file);
+    } finally {
+        if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
+    }
+}
+
+function atomicJson(file: string, value: unknown): void {
+    atomicText(file, JSON.stringify(value, null, 2) + '\n');
 }
 
 function readJson<T>(file: string): T | undefined {
@@ -91,7 +99,12 @@ function locatorFields(step: RecordedStep, platform: MobilePlatform): Partial<Re
     };
 }
 
-function safeStep(step: RecordedStep, sequence: number, platform: MobilePlatform): RecordedStep & { sequence: number } {
+export function prepareRecordedStep(
+    step: RecordedStep,
+    sequence: number,
+    platform: MobilePlatform,
+    redactSensitiveValue = true,
+): RecordedStep & { sequence: number } {
     const sensitive = isSensitiveInput(step);
     const selectorVerified = step.selectorVerified === undefined
         ? Boolean(step.selector)
@@ -124,7 +137,9 @@ function safeStep(step: RecordedStep, sequence: number, platform: MobilePlatform
         contextHint: step.contextHint,
         elementIntent: step.elementIntent,
         selector: step.selector,
-        value: sensitive && step.value ? `<${step.variableName || 'valor'}>` : step.value,
+        value: redactSensitiveValue && sensitive && step.value
+            ? `<${step.variableName || 'valor'}>`
+            : step.value,
         description: step.description,
         locatorSource: step.locatorSource ? {
             file: step.locatorSource.file,
@@ -279,17 +294,46 @@ export class AutomationRecordingStore {
 
     replaceActions(actions: RecordedStep[], context: RecordingContext): RecordingManifest {
         if (!this.manifest) this.start(context);
-        const normalized = actions.map((step, index) => safeStep(step, index + 1, context.platform));
-        this.manifest = {
+        const normalized = actions.map((step, index) =>
+            prepareRecordedStep(step, index + 1, context.platform)
+        );
+        const nextManifest = {
             ...this.manifest!,
             ...context,
             revision: this.manifest!.revision + 1,
             updatedAt: new Date().toISOString(),
             actionCount: normalized.length,
         };
-        atomicJson(path.join(this.activeDirectory, 'actions.json'), normalized);
-        atomicJson(path.join(this.activeDirectory, 'manifest.json'), this.manifest);
-        return this.manifest;
+        const actionsFile = path.join(this.activeDirectory, 'actions.json');
+        const manifestFile = path.join(this.activeDirectory, 'manifest.json');
+        const previousActions = fs.existsSync(actionsFile) ? fs.readFileSync(actionsFile, 'utf-8') : undefined;
+        const previousManifest = fs.existsSync(manifestFile) ? fs.readFileSync(manifestFile, 'utf-8') : undefined;
+        try {
+            atomicJson(actionsFile, normalized);
+            atomicJson(manifestFile, nextManifest);
+            this.manifest = nextManifest;
+            return nextManifest;
+        } catch (error) {
+            const restore = (file: string, content: string | undefined): void => {
+                if (content === undefined) {
+                    fs.rmSync(file, { force: true });
+                } else {
+                    atomicText(file, content);
+                }
+            };
+            try {
+                restore(actionsFile, previousActions);
+                restore(manifestFile, previousManifest);
+            } catch (rollbackError) {
+                throw new Error(
+                    `Falló la persistencia (${error instanceof Error ? error.message : String(error)}) `
+                    + `y también el rollback (${rollbackError instanceof Error
+                        ? rollbackError.message
+                        : String(rollbackError)}).`
+                );
+            }
+            throw error;
+        }
     }
 
     buildScenario(input: {
@@ -305,7 +349,9 @@ export class AutomationRecordingStore {
             environment: input.environment,
         };
         const manifest = this.replaceActions(input.actions, context);
-        const actions = input.actions.map((step, index) => safeStep(step, index + 1, input.request.platform));
+        const actions = input.actions.map((step, index) =>
+            prepareRecordedStep(step, index + 1, input.request.platform)
+        );
         const createdAt = new Date().toISOString();
         const request = { ...input.request, createdAt };
         const scenario: AutomationScenario = {

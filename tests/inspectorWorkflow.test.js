@@ -95,8 +95,30 @@ test('clears stale backups on edits or alternative selection and persists only t
     );
     assert.match(execute, /selectorVerified:\s*verifiedSelector === selector/);
     assert.match(execute, /selectorCandidateToken/);
+    assert.match(execute, /try\s*\{[\s\S]*api\.executeStep\(step\)[\s\S]*catch \(error\)[\s\S]*finally\s*\{[\s\S]*enableBtn\(btnExecute\)/);
+    assert.match(execute, /catch \(error\) \{[\s\S]*setStatus\('✗ '/);
     assert.match(main, /selectorCandidateToken === pendingInspectorCandidates\.token/);
     assert.match(main, /selectorCandidates:\s*_untrustedCandidates/);
-    assert.match(main, /executableStep\.selectorVerified === true[\s\S]*Boolean\(trustedCandidates\)/);
+    assert.match(main, /preparedStep\.selectorVerified === true[\s\S]*Boolean\(trustedCandidates\)/);
+    const executeHandler = between(
+        main,
+        "ipcMain.handle('execute-step'",
+        "ipcMain.handle('delete-step'",
+    );
+    assert.ok(executeHandler.indexOf('prepareRecordedStep(') < executeHandler.indexOf('executor.execute('));
+    assert.ok(executeHandler.indexOf('executor.execute(') < executeHandler.indexOf('recordedSteps.push('));
+    assert.match(executeHandler, /catch \(error\) \{[\s\S]*recordedSteps\.pop\(\)/);
     assert.match(main, /scenario\.json fue modificado o no coincide con la grabación original/);
+});
+
+test('aplica completions externos aunque el plan no tenga capas update', () => {
+    const additiveUpdates = between(
+        main,
+        'function applyAdditiveUpdates(',
+        "ipcMain.handle('generate-automation-response'",
+    );
+    assert.doesNotMatch(additiveUpdates, /if \(!updates\.size\) return/);
+    assert.match(additiveUpdates, /for \(const \[file, completions\] of completionsByFile\)/);
+    assert.match(additiveUpdates, /automationPatchWriter\.apply\([\s\S]*additions: \[\], completions/);
+    assert.match(additiveUpdates, /No existe el archivo externo autorizado para completion/);
 });

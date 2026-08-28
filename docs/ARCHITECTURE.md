@@ -115,7 +115,9 @@ el límite de confianza: `main` vuelve a ejecutar todos los candidatos
 secuencialmente contra la sesión activa, exige una sola coincidencia con el
 `elementId` seleccionado y comprueba que el par real `(TypeLocator, valor)`
 reconstruya el mismo elemento. El primary inválido rechaza la importación; las
-alternativas inválidas se omiten con diagnóstico. Solo se conservan cuatro
+alternativas inválidas o con estrategia todavía no soportada se aíslan y omiten
+con diagnóstico. Una estrategia no soportada en el primary bloquea visiblemente.
+Solo se conservan cuatro
 candidatos compactos y nunca atributos, XML, screenshots, source, capabilities
 o credenciales. Validaciones solapadas llevan una generación monotónica: solo
 la selección más reciente puede publicar candidatos. Ejecutar una acción no
@@ -149,6 +151,8 @@ convierte por sí solo un selector manual en verificado.
    Los rellenos de plataforma solo aceptan la identidad determinista completa
    `(file, module, block, name, platform, sequence)` y el método trazado debe
    consumir ese getter; el patch conserva esa misma identidad hasta la escritura.
+   Los completions externos se aplican incluso cuando las cuatro capas del caso
+   son `create`; no dependen de que exista un `update` en el plan.
 9. Puede emitirse una sola reparación dirigida a archivos afectados.
 10. El usuario revisa el preview, genera y recién entonces se promociona memoria.
 

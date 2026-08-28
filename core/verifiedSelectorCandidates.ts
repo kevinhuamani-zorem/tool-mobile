@@ -36,10 +36,12 @@ export async function independentlyVerifySelectorCandidates(input: {
     const verifiedAt = input.verifiedAt || new Date().toISOString();
     const warnings: string[] = [];
     const validated: SelectorCandidate[] = [];
+    let primarySelector = '';
 
     for (const [index, candidate] of input.candidates.entries()) {
-        const canonicalSelector = input.recorderSelector(candidate);
         try {
+            const canonicalSelector = input.recorderSelector(candidate);
+            if (index === 0) primarySelector = canonicalSelector;
             const check = roundTrip(canonicalSelector, input.platform);
             if (!check.ok || !check.composed) {
                 throw new Error(check.reason || 'el framework no puede representar el selector');
@@ -82,7 +84,6 @@ export async function independentlyVerifySelectorCandidates(input: {
             warnings.push(`${candidate.candidateId}: ${reason}`);
         }
     }
-    const primarySelector = input.recorderSelector(input.candidates[0]);
     const candidates = compactSelectorCandidates(validated, primarySelector, input.platform);
     if (!candidates.length || !candidates[0].primary) {
         throw new Error('El selector primario no superó la validación compacta del recorder');
