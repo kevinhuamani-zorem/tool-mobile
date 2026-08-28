@@ -1,0 +1,4 @@
+[submodule "vendor/appium-inspector"]
+	path = vendor/appium-inspector
+	url = https://github.com/kevinhuamani-zorem/appium-inspector.git
+	branch = kevinhuamani-zorem-embedded-inspector-mode

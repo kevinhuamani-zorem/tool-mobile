@@ -9,6 +9,8 @@
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc",
     "build:renderer": "vite build",
+    "inspector:build": "node scripts/build-embedded-inspector.js",
+    "inspector:check": "node scripts/build-embedded-inspector.js --check",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json",
     "test": "npm run build:main && node --test tests/*.test.js",

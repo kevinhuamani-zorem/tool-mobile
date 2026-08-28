@@ -14,6 +14,8 @@ Instalación:
 ```bash
 cd tools/visual-recorder
 npm install
+git submodule update --init --recursive vendor/appium-inspector
+npm run inspector:build
 ```
 
 En una instalación reproducible o después de actualizar usa únicamente
@@ -26,6 +28,13 @@ No uses `--ignore-scripts`: Electron necesita su script de instalación para
 descargar el binario nativo de macOS. Si una instalación anterior lo omitió,
 puede repararse con `npm --prefix tools/visual-recorder rebuild electron`.
 
+El fork controlado está fijado en
+`c98bb47be2f52aa1a765b03b6ea31761c6e7d190`. No se usa
+`appium-inspector-plugin`, una instalación global ni un bundle opaco
+versionado. `inspector:build` ejecuta `npm ci` y `npm run build:browser` dentro
+del submódulo, compila `VITE_EMBEDDED_HOST_ORIGIN=appium-recorder://host` y
+copia el resultado a `node_modules/.cache`.
+
 ## Comandos
 
 | Comando | Uso |
@@ -34,6 +43,8 @@ puede repararse con `npm --prefix tools/visual-recorder rebuild electron`.
 | `./run.sh` | Equivalente cuando el directorio actual es `tools/visual-recorder` |
 | `npm start` | Compila y abre Electron |
 | `npm run build` | Compila main y renderer |
+| `npm run inspector:build` | Instala y compila el fork fijado en la caché local |
+| `npm run inspector:check` | Comprueba el commit y los assets embebidos |
 | `npm run typecheck` | Valida TypeScript de ambos procesos |
 | `npm test` | Compila main y ejecuta pruebas Node |
 | `npm run quality:metrics` | Calcula métricas y umbrales |

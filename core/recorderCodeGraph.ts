@@ -27,7 +27,7 @@ interface RecorderGraphCache {
 }
 
 const ignoredDirectories = new Set([
-    'node_modules', 'dist', 'runtime', 'workspace', '.git'
+    'node_modules', 'dist', 'runtime', 'vendor', 'workspace', '.git'
 ]);
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.sh']);
 

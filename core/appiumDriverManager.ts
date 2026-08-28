@@ -4,9 +4,46 @@ import { exec } from 'child_process';
 import * as path from 'path';
 import { parseSimulators, SimulatorDevice } from './iosSimulators';
 
+export type AppiumSessionState = 'idle' | 'connecting' | 'active' | 'closing';
+export type AppiumSessionProvider = 'local' | 'browserstack';
+
+export interface AppiumSessionMetadata {
+    serverUrl: string;
+    sessionId: string;
+    capabilities: Record<string, unknown>;
+    platform: 'android' | 'ios';
+    provider: AppiumSessionProvider;
+    state: AppiumSessionState;
+}
+
+const SENSITIVE_CAPABILITY_KEYS = new Set([
+    'accesskey',
+    'access-key',
+    'password',
+    'token',
+    'username',
+    'user',
+]);
+
+function sanitizedCapabilities(value: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+        Object.entries(value).flatMap(([key, item]) => {
+            if (SENSITIVE_CAPABILITY_KEYS.has(key.toLowerCase())) return [];
+            if (Array.isArray(item)) return [[key, [...item]]];
+            if (typeof item === 'object' && item !== null) {
+                return [[key, sanitizedCapabilities(item as Record<string, unknown>)]];
+            }
+            return [[key, item]];
+        }),
+    );
+}
+
 export class AppiumDriverManager {
     protected driver: Browser | null = null;
     protected config: DeviceConfig | null = null;
+    protected sessionState: AppiumSessionState = 'idle';
+    protected sessionProvider: AppiumSessionProvider = 'local';
+    protected serverUrl = 'http://127.0.0.1:4723';
 
     async startAppiumServer(): Promise<void> {
         console.log('[AppiumDriverManager] Verificando servidor Appium en 4723...');
@@ -31,22 +68,31 @@ export class AppiumDriverManager {
 
     async init(config: DeviceConfig): Promise<void> {
         this.config = config;
+        this.sessionState = 'connecting';
+        this.sessionProvider = 'local';
+        this.serverUrl = 'http://127.0.0.1:4723';
         console.log('[AppiumDriverManager] Conectando:', config.deviceName, `(${config.platform || 'android'})`);
 
         const capabilities: any = config.platform === 'ios'
             ? this.iosCapabilities(config)
             : this.androidCapabilities(config);
 
-        this.driver = await remote({
-            protocol:               'http',
-            hostname:               '127.0.0.1',
-            port:                   4723,
-            path:                   '/',
-            capabilities,
-            logLevel:               'error',
-            connectionRetryCount:   3,
-            connectionRetryTimeout: 60000,
-        });
+        try {
+            this.driver = await remote({
+                protocol:               'http',
+                hostname:               '127.0.0.1',
+                port:                   4723,
+                path:                   '/',
+                capabilities,
+                logLevel:               'error',
+                connectionRetryCount:   3,
+                connectionRetryTimeout: 60000,
+            });
+            this.sessionState = 'active';
+        } catch (error) {
+            this.sessionState = 'idle';
+            throw error;
+        }
 
         console.log('[AppiumDriverManager] Conectado');
     }
@@ -103,6 +149,27 @@ export class AppiumDriverManager {
     }
 
     getConfig(): DeviceConfig | null { return this.config; }
+
+    getSessionMetadata(): AppiumSessionMetadata {
+        if (!this.driver || this.sessionState !== 'active') {
+            throw new Error('No hay una sesión Appium activa');
+        }
+        const capabilities = this.driver.capabilities as Record<string, unknown>;
+        const platformName = String(
+            capabilities.platformName ||
+            capabilities.platform ||
+            this.config?.platform ||
+            '',
+        ).toLowerCase();
+        return {
+            serverUrl: this.serverUrl,
+            sessionId: this.driver.sessionId,
+            capabilities: sanitizedCapabilities(capabilities),
+            platform: platformName.includes('ios') ? 'ios' : 'android',
+            provider: this.sessionProvider,
+            state: this.sessionState,
+        };
+    }
 
     async getPageSource(retries = 3): Promise<string> {
         for (let i = 0; i < retries; i++) {
@@ -255,9 +322,11 @@ export class AppiumDriverManager {
 
     async quit(): Promise<void> {
         if (this.driver) {
+            this.sessionState = 'closing';
             try { await this.driver.deleteSession(); } catch (_) {}
             this.driver = null;
         }
+        this.sessionState = 'idle';
         console.log('[AppiumDriverManager] Sesion cerrada');
     }
 

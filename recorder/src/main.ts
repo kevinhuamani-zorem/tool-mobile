@@ -39,8 +39,25 @@ import {
     stepsAdditions,
 } from '../../core/automationPatchWriter';
 import { AutomationAgentResponse, AutomationScenario, GenerationPlan } from '../../core/automationContracts';
+import {
+    EmbeddedInspectorHandshake,
+    recorderSelectorFromInspector,
+} from './embeddedInspectorProtocol';
+import {
+    createEmbeddedInspectorWindow,
+    embeddedInspectorAssetsAvailable,
+    registerEmbeddedInspectorProtocol,
+    registerEmbeddedInspectorScheme,
+    resolveInspectorMode,
+} from './embeddedInspectorWindow';
+import { EmbeddedInspectorProxy } from './embeddedInspectorProxy';
+
+registerEmbeddedInspectorScheme();
 
 let mainWindow: BrowserWindow | null = null;
+let embeddedInspectorWindow: BrowserWindow | null = null;
+let embeddedInspectorHandshake: EmbeddedInspectorHandshake | null = null;
+const embeddedInspectorProxy = new EmbeddedInspectorProxy();
 
 const workspaceAdapter = getWorkspaceAdapter();
 workspaceAdapter.initialize();
@@ -140,7 +157,12 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+    if (embeddedInspectorAssetsAvailable()) {
+        await registerEmbeddedInspectorProtocol();
+    } else if (!process.env.RECORDER_INSPECTOR) {
+        console.warn('[Inspector] Assets embebidos ausentes; se usará el inspector legacy. Ejecuta npm run inspector:build.');
+    }
     const cleanup = automationRecordingStore.pruneEmptyRecordings();
     if (cleanup.removed.length) {
         console.log(`[Main] Grabaciones vacías eliminadas: ${cleanup.removed.length}`);
@@ -151,6 +173,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', async () => {
+    embeddedInspectorWindow?.destroy();
+    await embeddedInspectorProxy.stop();
     if (sessionActive) await activeDm.quit();
     app.quit();
 });
@@ -765,6 +789,98 @@ ipcMain.handle('bs-start-session', async (_, config: BrowserStackConfig) => {
 });
 
 // ─── IPC HANDLERS — COMUNES ───────────────────────────────────────────────────
+
+ipcMain.on('embedded-inspector-message', (event, data: unknown) => {
+    if (!embeddedInspectorWindow || event.sender !== embeddedInspectorWindow.webContents) return;
+    try {
+        embeddedInspectorHandshake?.handle(data);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Mensaje inválido del Inspector';
+        mainWindow?.webContents.send('embedded-inspector-error', message);
+    }
+});
+
+ipcMain.handle('open-inspector', async () => {
+    if (!sessionActive) return { success: false, error: 'Sin sesión activa' };
+
+    let resolution;
+    try {
+        resolution = resolveInspectorMode(
+            process.env.RECORDER_INSPECTOR,
+            embeddedInspectorAssetsAvailable(),
+        );
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Configuración de Inspector inválida',
+        };
+    }
+
+    const metadata = activeDm.getSessionMetadata();
+    if (resolution.mode === 'legacy' || metadata.provider === 'browserstack') {
+        return {
+            success: true,
+            mode: 'legacy',
+            warning: resolution.warning || (
+                metadata.provider === 'browserstack'
+                    ? 'El protocolo embebido no transporta credenciales de BrowserStack; se mantiene el inspector legacy.'
+                    : undefined
+            ),
+        };
+    }
+
+    if (embeddedInspectorWindow && !embeddedInspectorWindow.isDestroyed()) {
+        if (embeddedInspectorWindow.isMinimized()) embeddedInspectorWindow.restore();
+        embeddedInspectorWindow.show();
+        embeddedInspectorWindow.focus();
+        return { success: true, mode: 'embedded', focused: true };
+    }
+
+    let inspectorServerUrl: string;
+    try {
+        inspectorServerUrl = await embeddedInspectorProxy.start(metadata.serverUrl, metadata.sessionId);
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'No se pudo iniciar el proxy seguro del Inspector',
+        };
+    }
+
+    embeddedInspectorWindow = createEmbeddedInspectorWindow();
+    embeddedInspectorHandshake = new EmbeddedInspectorHandshake(
+        { ...metadata, serverUrl: inspectorServerUrl },
+        message => embeddedInspectorWindow?.webContents.send(
+            'embedded-inspector-connect',
+            message,
+        ),
+        () => mainWindow?.webContents.send('embedded-inspector-connected'),
+        selection => {
+            const selector = recorderSelectorFromInspector(selection);
+            mainWindow?.webContents.send('embedded-inspector-element-selected', {
+                selector,
+                strategy: selection.strategy,
+                tag: selection.tag,
+                attributes: selection.attributes,
+                screenshot: selection.screenshot,
+                source: selection.source,
+            });
+            mainWindow?.show();
+            mainWindow?.focus();
+        },
+        error => mainWindow?.webContents.send(
+            'embedded-inspector-error',
+            `${error.code}: ${error.message}`,
+        ),
+    );
+    embeddedInspectorWindow.on('closed', () => {
+        embeddedInspectorWindow = null;
+        embeddedInspectorHandshake = null;
+        embeddedInspectorProxy.stop().catch(error => {
+            console.warn('[Inspector] No se pudo cerrar el proxy:', error.message);
+        });
+    });
+    return { success: true, mode: 'embedded', focused: false };
+});
 
 ipcMain.handle('get-screenshot', async () => {
     if (!inspector) return { success: false, error: 'Sin sesion' };
@@ -1389,6 +1505,8 @@ ipcMain.handle('get-automation-memory-stats', async () => ({
 ipcMain.handle('get-steps', async () => ({ steps: recordedSteps }));
 
 ipcMain.handle('close-session', async () => {
+    embeddedInspectorWindow?.close();
+    await embeddedInspectorProxy.stop();
     if (sessionActive) {
         await activeDm.quit();
         sessionActive = false;

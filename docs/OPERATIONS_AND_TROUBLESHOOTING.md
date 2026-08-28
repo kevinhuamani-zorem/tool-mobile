@@ -11,6 +11,21 @@ framework padre automáticamente y usa Copilot como agente. No requiere `.env`,
 `TARGET_PROJECT` ni selección de proveedor. La plataforma queda fija al crear
 la sesión.
 
+Para usar el Inspector embebido en un checkout nuevo:
+
+```bash
+git submodule update --init --recursive tools/visual-recorder/vendor/appium-inspector
+npm --prefix tools/visual-recorder run inspector:build
+RECORDER_INSPECTOR=embedded npm --prefix tools/visual-recorder run recorder
+```
+
+`RECORDER_INSPECTOR=legacy` conserva el inspector visual previo. Sin variable,
+se usa el modo embebido cuando sus assets están presentes y se vuelve a legacy
+con una advertencia visible cuando faltan. Si se solicita `embedded`
+explícitamente sin assets, la apertura falla indicando el comando de build.
+BrowserStack conserva legacy porque el protocolo fijado no transporta
+credenciales; estas nunca se exponen al bundle.
+
 ## Diagnóstico por síntomas
 
 ### Electron failed to install correctly
@@ -31,6 +46,19 @@ de compilar o iniciar Appium.
 `run.sh` se detiene para no matar una sesión desconocida. Localiza y cierra la
 instancia Appium que posee el puerto, o reutiliza conscientemente un servidor
 compatible. No automatices un borrado indiscriminado de procesos.
+
+### Faltan assets del Inspector embebido
+
+Inicializa el submódulo y recompila la caché:
+
+```bash
+git submodule update --init --recursive tools/visual-recorder/vendor/appium-inspector
+npm --prefix tools/visual-recorder run inspector:build
+```
+
+El recorder no habilita CORS global en Appium. Abre un proxy loopback efímero
+que solo acepta el origen `appium-recorder://inspector` y rutas de la sesión
+activa. No se relaja la navegación, el sandbox ni el bridge de Electron.
 
 ### Appium falla con `AppiumIpc is not a constructor`
 

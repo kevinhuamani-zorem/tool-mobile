@@ -14,6 +14,7 @@ flowchart LR
     RC -->|window.api| PL[Electron preload]
     PL -->|IPC invoke| MAIN[Electron main]
     MAIN --> SESSION[Local / BrowserStack managers]
+    MAIN --> EI[Embedded Appium Inspector]
     SESSION --> APPIUM[Appium / WebDriver]
     MAIN --> SCAN[Scanner, CodeGraph, coverage]
     MAIN --> PIPE[Deterministic automation pipeline]
@@ -55,6 +56,14 @@ debe hacer una segunda migración total ni duplicar listeners.
 `BrowserWindow` debe conservar `nodeIntegration: false` y
 `contextIsolation: true`.
 
+El Inspector oficial se consume desde el fork controlado fijado como submódulo
+en `vendor/appium-inspector`. Su bundle browser no se versiona: se compila en la
+caché local con `npm run inspector:build`. Una `BrowserWindow` aislada sirve un
+host y el bundle mediante orígenes locales `appium-recorder://host` y
+`appium-recorder://inspector`; no acepta navegación ni ventanas nuevas. El
+renderer principal nunca recibe WebDriver ni datos de sesión: solo el selector
+ya validado por el protocolo `appium-inspector:embedded` versión 1.
+
 ### Dominio (`core/`)
 
 | Área | Módulos principales | Responsabilidad |
@@ -89,6 +98,11 @@ workspace para cambiar el target. Todas las rutas operativas nacen en
 4. El usuario elige conexión local o BrowserStack.
 5. `main` crea el driver correspondiente y fija la plataforma de la sesión.
 6. Screenshot, XML, taps, swipes y ejecución pasan siempre por IPC.
+7. En modo embebido, `main` entrega al Inspector la sesión local ya creada. El
+   recorder conserva propiedad exclusiva y cierra la sesión; el Inspector solo
+   se adjunta mediante un proxy loopback efímero que acepta exclusivamente el
+   origen local del Inspector y las rutas de la sesión activa. El Inspector
+   emite luego la selección comprobada.
 
 ### Caso nuevo con agente de automatización
 
@@ -156,6 +170,8 @@ Las familias públicas son:
   `get-scenario-coverage`, `assign-locator-value`;
 - sesión local y BrowserStack: devices, apps, credenciales y start/close;
 - interacción: screenshot, page source, element-at, tap, swipe, verify y execute;
+- Inspector embebido: abrir/focalizar y eventos acotados de conexión, error y
+  selección;
 - automatización: preparar paquete, lanzar agente, importar respuesta, generar
   con token, preparar regeneración y consultar memoria;
 - generación heredada: preview Gherkin, preview de archivos y generación.

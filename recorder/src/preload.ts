@@ -35,6 +35,36 @@ contextBridge.exposeInMainWorld('api', {
     swipeFromTo:         (sx: number, sy: number, ex: number, ey: number) =>
         ipcRenderer.invoke('swipe-from-to', sx, sy, ex, ey),
     activateInspector:   ()                     => ipcRenderer.invoke('activate-inspector'),
+    openInspector:       ()                     => ipcRenderer.invoke('open-inspector'),
+    onInspectorConnected:(listener: () => void) => {
+        const wrapped = () => listener();
+        ipcRenderer.on('embedded-inspector-connected', wrapped);
+        return () => ipcRenderer.removeListener('embedded-inspector-connected', wrapped);
+    },
+    onInspectorError:    (listener: (message: string) => void) => {
+        const wrapped = (_event: Electron.IpcRendererEvent, message: string) => listener(message);
+        ipcRenderer.on('embedded-inspector-error', wrapped);
+        return () => ipcRenderer.removeListener('embedded-inspector-error', wrapped);
+    },
+    onInspectorElementSelected: (listener: (selection: {
+        selector: string;
+        strategy: string;
+        tag?: string;
+        attributes: Record<string, string>;
+        screenshot?: string;
+        source?: string;
+    }) => void) => {
+        const wrapped = (_event: Electron.IpcRendererEvent, selection: {
+            selector: string;
+            strategy: string;
+            tag?: string;
+            attributes: Record<string, string>;
+            screenshot?: string;
+            source?: string;
+        }) => listener(selection);
+        ipcRenderer.on('embedded-inspector-element-selected', wrapped);
+        return () => ipcRenderer.removeListener('embedded-inspector-element-selected', wrapped);
+    },
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),
     deleteStep:          (idx: number)          => ipcRenderer.invoke('delete-step', idx),

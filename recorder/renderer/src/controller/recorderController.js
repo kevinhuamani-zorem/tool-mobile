@@ -1474,6 +1474,38 @@ export async function initializeRecorder() {
         lblInspect.className = 'inspect-status' + (type ? ' ' + type : '');
     }
 
+    api.onInspectorConnected(() => {
+        setInspect('✓ Inspector embebido conectado a la sesión', 'ok');
+        setStatus('✓ Inspector listo', '#00CC00');
+    });
+
+    api.onInspectorError(message => {
+        setInspect('✗ Inspector embebido: ' + message, 'err');
+        setStatus('✗ Error del Inspector', '#CC0000');
+    });
+
+    api.onInspectorElementSelected(selection => {
+        if (inspectorActive) exitInspectorMode();
+        clearSelectorChips();
+        selectedCatalogLocator = null;
+        renderSelectedLocatorCoverage();
+        txtSelector.value = selection.selector;
+        txtVarName.value = currentAssignment?.name || txtVarName.value;
+        verifiedSelector = '';
+        if (selection.screenshot) {
+            updateDeviceScreen(
+                selection.screenshot.startsWith('data:')
+                    ? selection.screenshot
+                    : 'data:image/png;base64,' + selection.screenshot
+            );
+        }
+        renderAssignmentTarget();
+        updateAssignmentButton();
+        setVerify('— Selector capturado; verifícalo antes de usarlo');
+        setInspect('✓ Elemento seleccionado en Appium Inspector', 'ok');
+        setStatus('✓ Selector cargado desde Appium Inspector', '#00CC00');
+    });
+
     function setGenerate(msg, type) {
         if (!lblGenerate) return;
         lblGenerate.textContent = msg;
@@ -2656,6 +2688,22 @@ export async function initializeRecorder() {
             setInspect('— Inspección cancelada', '');
             setStatus('—', '#888AAA');
             return;
+        }
+
+        const inspectorLaunch = await api.openInspector();
+        if (!inspectorLaunch.success) {
+            setInspect('✗ ' + (inspectorLaunch.error || 'No se pudo abrir el Inspector'), 'err');
+            setStatus('✗ Error del Inspector', '#CC0000');
+            return;
+        }
+        if (inspectorLaunch.mode === 'embedded') {
+            if (interactionActive) exitInteractionMode();
+            setInspect('⏳ Esperando selección en Appium Inspector...', 'active');
+            setStatus('🔍 Appium Inspector abierto', '#2E75B6');
+            return;
+        }
+        if (inspectorLaunch.warning) {
+            setInspect('⚠ ' + inspectorLaunch.warning, 'err');
         }
 
         // Activar modo inspección

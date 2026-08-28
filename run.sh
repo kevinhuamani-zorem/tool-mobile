@@ -126,7 +126,7 @@ echo "Proyecto destino: ${FRAMEWORK_ROOT}"
 echo "Iniciando Appium..."
 
 APPIUM_HOME="${APPIUM_HOME_ROOT}" "${RECORDER_APPIUM_BIN}" \
-    --port 4723 --log-level error --relaxed-security &
+    --address 127.0.0.1 --port 4723 --log-level error --relaxed-security &
 APPIUM_PID=$!
 
 echo "Compilando e iniciando el recorder..."

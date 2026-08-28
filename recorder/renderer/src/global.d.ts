@@ -1,7 +1,28 @@
 export {};
 
+interface EmbeddedInspectorSelection {
+    selector: string;
+    strategy: string;
+    tag?: string;
+    attributes: Record<string, string>;
+    screenshot?: string;
+    source?: string;
+}
+
 declare global {
     interface Window {
-        api: Record<string, (...args: any[]) => Promise<any>>;
+        api: Record<string, (...args: any[]) => any> & {
+            openInspector(): Promise<{
+                success: boolean;
+                mode?: 'legacy' | 'embedded';
+                warning?: string;
+                error?: string;
+            }>;
+            onInspectorConnected(listener: () => void): () => void;
+            onInspectorError(listener: (message: string) => void): () => void;
+            onInspectorElementSelected(
+                listener: (selection: EmbeddedInspectorSelection) => void,
+            ): () => void;
+        };
     }
 }

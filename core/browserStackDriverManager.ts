@@ -32,6 +32,9 @@ export class BrowserStackDriverManager extends AppiumDriverManager {
     /** Conecta al hub de BrowserStack. No llamar a startAppiumServer() antes. */
     async init(bsConfig: BrowserStackConfig | any): Promise<void> {
         this.bsConfig = bsConfig as BrowserStackConfig;
+        this.sessionState = 'connecting';
+        this.sessionProvider = 'browserstack';
+        this.serverUrl = 'https://hub-cloud.browserstack.com/wd/hub';
         console.log('[BrowserStackDriverManager] Conectando a BS hub:', bsConfig.deviceName);
 
         const isIos = bsConfig.platform === 'ios';
@@ -63,16 +66,22 @@ export class BrowserStackDriverManager extends AppiumDriverManager {
             capabilities['appium:appActivity'] = bsConfig.appActivity;
         }
 
-        this.driver = await remote({
-            protocol:               'https',
-            hostname:               'hub-cloud.browserstack.com',
-            port:                   443,
-            path:                   '/wd/hub',
-            capabilities,
-            logLevel:               'error',
-            connectionRetryCount:   3,
-            connectionRetryTimeout: 90000,
-        });
+        try {
+            this.driver = await remote({
+                protocol:               'https',
+                hostname:               'hub-cloud.browserstack.com',
+                port:                   443,
+                path:                   '/wd/hub',
+                capabilities,
+                logLevel:               'error',
+                connectionRetryCount:   3,
+                connectionRetryTimeout: 90000,
+            });
+            this.sessionState = 'active';
+        } catch (error) {
+            this.sessionState = 'idle';
+            throw error;
+        }
 
         console.log('[BrowserStackDriverManager] Conectado al hub de BrowserStack');
     }
