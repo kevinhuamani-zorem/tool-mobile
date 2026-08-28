@@ -1,4 +1,4 @@
-import http, { IncomingMessage, Server, ServerResponse } from 'http';
+import http, { ClientRequest, IncomingMessage, Server, ServerResponse } from 'http';
 
 const INSPECTOR_ORIGIN = 'appium-recorder://inspector';
 const ALLOWED_METHODS = 'GET, POST, DELETE, OPTIONS';
@@ -22,8 +22,11 @@ function reject(response: ServerResponse, status: number, message: string): void
 
 export class EmbeddedInspectorProxy {
     private server: Server | null = null;
+    private stopInProgress: Promise<void> | null = null;
+    private readonly activeRequests = new Set<ClientRequest>();
 
     async start(upstreamUrl: string, sessionId: string): Promise<string> {
+        if (this.stopInProgress) await this.stopInProgress;
         if (this.server) throw new Error('El proxy del Inspector ya está iniciado');
         const upstream = new URL(upstreamUrl);
         if (upstream.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(upstream.hostname)) {
@@ -46,12 +49,23 @@ export class EmbeddedInspectorProxy {
     }
 
     async stop(): Promise<void> {
+        if (this.stopInProgress) return this.stopInProgress;
         const current = this.server;
         this.server = null;
         if (!current) return;
-        await new Promise<void>((resolve, rejectClose) => {
+        const stopping = new Promise<void>((resolve, rejectClose) => {
             current.close(error => error ? rejectClose(error) : resolve());
         });
+        for (const request of this.activeRequests) {
+            request.destroy(new Error('El proxy del Inspector se está cerrando'));
+        }
+        this.activeRequests.clear();
+        current.closeAllConnections();
+        const tracked = stopping.finally(() => {
+            if (this.stopInProgress === tracked) this.stopInProgress = null;
+        });
+        this.stopInProgress = tracked;
+        return tracked;
     }
 
     private handle(
@@ -100,6 +114,8 @@ export class EmbeddedInspectorProxy {
             });
             proxyResponse.pipe(response);
         });
+        this.activeRequests.add(proxyRequest);
+        proxyRequest.once('close', () => this.activeRequests.delete(proxyRequest));
         proxyRequest.on('error', error => {
             if (!response.headersSent) reject(response, 502, error.message);
             else response.destroy(error);

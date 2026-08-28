@@ -135,6 +135,42 @@ test('the proxy forwards only requests from the trusted origin to the active ses
     assert.equal(rejected.status, 403);
 });
 
+test('proxy shutdown aborts a hung Appium request instead of blocking session cleanup', async t => {
+    let markRequestStarted;
+    const requestStarted = new Promise(resolve => { markRequestStarted = resolve; });
+    const upstream = http.createServer(() => markRequestStarted());
+    await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    t.after(() => {
+        upstream.closeAllConnections();
+        return new Promise(resolve => upstream.close(resolve));
+    });
+    const address = upstream.address();
+    assert.equal(typeof address, 'object');
+
+    const proxy = new EmbeddedInspectorProxy();
+    const proxyUrl = await proxy.start(`http://127.0.0.1:${address.port}`, 'session-123');
+    const pendingRequest = fetch(`${proxyUrl}/session/session-123/source`, {
+        headers: { origin: 'appium-recorder://inspector' },
+    }).catch(error => error);
+    await requestStarted;
+
+    let timeout;
+    try {
+        await Promise.race([
+            proxy.stop(),
+            new Promise((_, reject) => {
+                timeout = setTimeout(
+                    () => reject(new Error('proxy stop timed out')),
+                    1000,
+                );
+            }),
+        ]);
+    } finally {
+        clearTimeout(timeout);
+    }
+    assert.ok(await pendingRequest instanceof Error);
+});
+
 test('rejects altered embedded assets at runtime', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'embedded-inspector-assets-'));
     const assets = path.join(root, 'dist-browser');

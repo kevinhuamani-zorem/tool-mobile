@@ -51,6 +51,7 @@ import {
     resolveInspectorMode,
 } from './embeddedInspectorWindow';
 import { EmbeddedInspectorProxy } from './embeddedInspectorProxy';
+import { RecorderRuntimeLifecycle, RecorderSessionOwnership } from './recorderLifecycle';
 
 registerEmbeddedInspectorScheme();
 
@@ -107,6 +108,40 @@ let automationPreview: {
     plan: GenerationPlan;
     response: AutomationAgentResponse;
 } | null = null;
+const sessionOwnership = new RecorderSessionOwnership();
+
+async function closeEmbeddedInspectorResources(): Promise<void> {
+    const window = embeddedInspectorWindow;
+    embeddedInspectorWindow = null;
+    embeddedInspectorHandshake = null;
+    if (window && !window.isDestroyed()) window.destroy();
+    await embeddedInspectorProxy.stop();
+}
+
+async function closeOwnedSession(): Promise<void> {
+    sessionActive = false;
+    inspector = null;
+    executor = null;
+    activeDm = dm;
+    automationRecordingStore.reset();
+    activeAutomationPackage = '';
+    automationPreview = null;
+    await sessionOwnership.close();
+}
+
+const recorderLifecycle = new RecorderRuntimeLifecycle([
+    closeEmbeddedInspectorResources,
+    closeOwnedSession,
+]);
+
+function quitAfterCleanup(): void {
+    recorderLifecycle.cleanup()
+        .then(() => app.quit())
+        .catch(error => {
+            console.error('[Main] Error cerrando recursos del recorder:', error.message);
+            app.exit(1);
+        });
+}
 
 function syncRecording(): void {
     if (!sessionActive) return;
@@ -150,7 +185,10 @@ function createWindow() {
     // El renderer React es compilado por Vite dentro de dist/renderer.
     mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
 
-    mainWindow.on('closed', () => { mainWindow = null; });
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+        quitAfterCleanup();
+    });
 
     mainWindow.webContents.on('did-finish-load', () => {
         console.log('[Main] Renderer listo');
@@ -172,12 +210,7 @@ app.whenReady().then(async () => {
     console.log('[Main] Ventana lista');
 });
 
-app.on('window-all-closed', async () => {
-    embeddedInspectorWindow?.destroy();
-    await embeddedInspectorProxy.stop();
-    if (sessionActive) await activeDm.quit();
-    app.quit();
-});
+app.on('window-all-closed', quitAfterCleanup);
 
 // ─── IPC HANDLERS — LOCAL ────────────────────────────────────────────────────
 
@@ -470,8 +503,10 @@ ipcMain.handle('start-session', async (_, config: any) => {
         recordingPlatform = config.platform === 'ios' ? 'ios' : 'android';
         activeSquad = config.squad || 'payment';
         activeEnvironment = config.environment || '';
-        await dm.startAppiumServer();
-        await dm.init({ ...config, platform: recordingPlatform });
+        await sessionOwnership.acquire(dm, async () => {
+            await dm.startAppiumServer();
+            await dm.init({ ...config, platform: recordingPlatform });
+        });
         locatorManager = new LocatorManager(projectPaths.locators, 'global', recordingPlatform);
         inspector  = new MobileInspector(activeDm);
         executor   = new MobileStepExecutor(activeDm, locatorManager);
@@ -753,7 +788,7 @@ ipcMain.handle('bs-start-session', async (_, config: BrowserStackConfig) => {
         recordingPlatform = config.platform === 'ios' ? 'ios' : 'android';
         activeSquad = (config as BrowserStackConfig & { squad?: string }).squad || 'payment';
         activeEnvironment = (config as BrowserStackConfig & { environment?: string }).environment || '';
-        await bsDm.init(config);
+        await sessionOwnership.acquire(bsDm, () => bsDm.init(config));
         locatorManager = new LocatorManager(projectPaths.locators, 'global', config.platform === 'ios' ? 'ios' : 'android');
         inspector  = new MobileInspector(activeDm);
         executor   = new MobileStepExecutor(activeDm, locatorManager);
@@ -1505,18 +1540,7 @@ ipcMain.handle('get-automation-memory-stats', async () => ({
 ipcMain.handle('get-steps', async () => ({ steps: recordedSteps }));
 
 ipcMain.handle('close-session', async () => {
-    embeddedInspectorWindow?.close();
-    await embeddedInspectorProxy.stop();
-    if (sessionActive) {
-        await activeDm.quit();
-        sessionActive = false;
-        inspector     = null;
-        executor      = null;
-        activeDm      = dm; // reset al default
-        automationRecordingStore.reset();
-        activeAutomationPackage = '';
-        automationPreview = null;
-    }
+    await recorderLifecycle.cleanup();
     return { success: true };
 });
 
