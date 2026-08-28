@@ -171,7 +171,11 @@ El resolver puede usar cualquier candidato verificado para encontrar una
 coincidencia exacta existente, pero nunca escribe alternativas como fallbacks.
 Ordena por scope y estabilidad; si persisten matches materiales del mismo rango,
 abre un gap bloqueante de decisión QA. La resolución conserva el `candidateId`
-que causó el reuse.
+que causó el reuse. Para `create`, el validator admite únicamente el par primary
+exacto: cruza el `TypeLocator` declarado en el getter del Screen Object con el
+valor del bloque de plataforma en el JSON. Un backup, un tipo distinto o un
+valor intercambiado entre acciones se rechazan aunque cada componente exista
+por separado en la grabación.
 
 ## Acciones soportadas
 

@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import ts from 'typescript';
 import {
     AutomationAgentResponse,
     AutomationScenario,
@@ -16,7 +17,7 @@ import { screenObjectProblems } from './screenObjectContract';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
-import { frameworkContract } from './frameworkContract';
+import { frameworkContract, FrameworkContract } from './frameworkContract';
 import { candidateAllowlist } from './selectorCandidates';
 
 function responseLocatorValues(content: string): Array<{ blockName: string; name: string; selector: string }> {
@@ -46,6 +47,183 @@ function changedLocatorValues(
     return current.filter(entry =>
         inherited.get(`${entry.blockName}\u0000${entry.name}`) !== entry.selector
     );
+}
+
+function propertyChain(expression: ts.Expression): { root: string; properties: string[] } | undefined {
+    if (ts.isIdentifier(expression)) return { root: expression.text, properties: [] };
+    if (ts.isPropertyAccessExpression(expression)) {
+        const parent = propertyChain(expression.expression);
+        return parent
+            ? { root: parent.root, properties: [...parent.properties, expression.name.text] }
+            : undefined;
+    }
+    if (ts.isElementAccessExpression(expression) && expression.argumentExpression) {
+        const parent = propertyChain(expression.expression);
+        const argument = expression.argumentExpression;
+        if (!parent || !ts.isStringLiteralLike(argument)) return undefined;
+        return { root: parent.root, properties: [...parent.properties, argument.text] };
+    }
+    return undefined;
+}
+
+function bindingNames(name: ts.BindingName): string[] {
+    if (ts.isIdentifier(name)) return [name.text];
+    return name.elements.flatMap(element =>
+        ts.isOmittedExpression(element) ? [] : bindingNames(element.name)
+    );
+}
+
+function screenLocatorTypes(
+    content: string,
+    contract: Pick<FrameworkContract,
+        'locatorFactoryImport' | 'locatorFactorySymbol' |
+        'typeLocatorImport' | 'typeLocatorSymbol' | 'locatorSignature'>,
+    locatorPath: string,
+    expectedClassName: string,
+): Map<string, Set<string>> {
+    const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const expectedImport = `@locators/${locatorPath.replace(/^resources\/locators\//, '')}`;
+    const locatorIdentifiers = new Set<string>();
+    const locatorFactoryIdentifiers = new Set<string>();
+    const typeLocatorIdentifiers = new Set<string>();
+    source.statements.forEach(statement => {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return;
+        if (statement.importClause?.isTypeOnly) return;
+        const specifier = statement.moduleSpecifier.text;
+        const defaultIdentifier = statement.importClause?.name?.text;
+        if (specifier === expectedImport && defaultIdentifier) {
+            locatorIdentifiers.add(defaultIdentifier);
+        }
+        if (specifier === contract.locatorFactoryImport && defaultIdentifier) {
+            locatorFactoryIdentifiers.add(defaultIdentifier);
+        }
+        const bindings = statement.importClause?.namedBindings;
+        if (
+            specifier === contract.typeLocatorImport
+            && bindings
+            && ts.isNamedImports(bindings)
+        ) {
+            bindings.elements.forEach(element => {
+                if (
+                    !element.isTypeOnly
+                    && (element.propertyName?.text || element.name.text) === contract.typeLocatorSymbol
+                ) {
+                    typeLocatorIdentifiers.add(element.name.text);
+                }
+            });
+        }
+    });
+    const trustedBindings = new Set([
+        ...locatorIdentifiers,
+        ...locatorFactoryIdentifiers,
+        ...typeLocatorIdentifiers,
+    ]);
+    const types = new Map<string, Set<string>>();
+    const addReturnedCall = (
+        getterName: string,
+        body: ts.Block,
+        expression: ts.Expression,
+    ): void => {
+        let shadowed = false;
+        const findShadowing = (node: ts.Node): void => {
+            if (
+                ts.isVariableDeclaration(node)
+                || ts.isFunctionDeclaration(node)
+                || ts.isClassDeclaration(node)
+            ) {
+                if (node.name && bindingNames(node.name).some(name => trustedBindings.has(name))) {
+                    shadowed = true;
+                    return;
+                }
+            }
+            if (ts.isParameter(node) && bindingNames(node.name).some(name => trustedBindings.has(name))) {
+                shadowed = true;
+                return;
+            }
+            ts.forEachChild(node, findShadowing);
+        };
+        findShadowing(body);
+        if (shadowed) return;
+        while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+        let returnedIdentifier: string | undefined;
+        if (ts.isIdentifier(expression)) {
+            returnedIdentifier = expression.text;
+        } else if (
+            ts.isCallExpression(expression)
+            && ts.isIdentifier(expression.expression)
+            && expression.expression.text === '$'
+            && expression.arguments.length === 1
+            && ts.isIdentifier(expression.arguments[0])
+        ) {
+            returnedIdentifier = expression.arguments[0].text;
+        }
+        if (returnedIdentifier) {
+            const declarations = body.statements.flatMap(statement =>
+                ts.isVariableStatement(statement)
+                && (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+                    ? [...statement.declarationList.declarations]
+                    : []
+            ).filter(declaration =>
+                ts.isIdentifier(declaration.name)
+                && declaration.name.text === returnedIdentifier
+                && Boolean(declaration.initializer)
+            );
+            if (declarations.length !== 1 || !declarations[0].initializer) return;
+            expression = declarations[0].initializer;
+            while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+        }
+        if (
+            !ts.isCallExpression(expression)
+            || !ts.isPropertyAccessExpression(expression.expression)
+            || expression.expression.name.text !== 'getElement'
+        ) return;
+        const receiver = propertyChain(expression.expression.expression);
+        if (
+            !receiver
+            || receiver.properties.length !== 0
+            || !locatorFactoryIdentifiers.has(receiver.root)
+        ) return;
+        contract.locatorSignature.platformOrder.forEach((platform, index) => {
+            const typeChain = expression.arguments[index * 2]
+                ? propertyChain(expression.arguments[index * 2])
+                : undefined;
+            const reference = expression.arguments[index * 2 + 1]
+                ? propertyChain(expression.arguments[index * 2 + 1])
+                : undefined;
+            if (
+                !typeChain
+                || !typeLocatorIdentifiers.has(typeChain.root)
+                || typeChain.properties.length !== 1
+                || !reference
+                || !locatorIdentifiers.has(reference.root)
+                || reference.properties.length < 2
+            ) return;
+            const blockName = reference.properties[reference.properties.length - 2];
+            const name = reference.properties[reference.properties.length - 1];
+            const key = `${getterName}\u0000${platform}\u0000${blockName}\u0000${name}`;
+            const referencedTypes = types.get(key) || new Set<string>();
+            referencedTypes.add(typeChain.properties[0]);
+            types.set(key, referencedTypes);
+        });
+    };
+    const screenClass = source.statements.find(
+        (statement): statement is ts.ClassDeclaration =>
+            ts.isClassDeclaration(statement) && statement.name?.text === expectedClassName
+    );
+    screenClass?.members.forEach(member => {
+        if (!ts.isGetAccessorDeclaration(member) || !member.name || !member.body) return;
+        const getterName = ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name)
+            ? member.name.text
+            : undefined;
+        const returned = member.body.statements.filter(
+            (statement): statement is ts.ReturnStatement =>
+                ts.isReturnStatement(statement) && Boolean(statement.expression)
+        );
+        if (getterName && returned.length === 1 && returned[0].expression) {
+            addReturnedCall(getterName, member.body, returned[0].expression);
+        }
+    });
+    return types;
 }
 
 function unexpectedFields(value: object, allowed: string[]): string[] {
@@ -363,17 +541,22 @@ export class AutomationResponseValidator {
                 if (fs.existsSync(absolute)) baseline = fs.readFileSync(absolute, 'utf-8');
             }
             const actionBySequence = new Map(scenario.actions.map(action => [action.sequence, action]));
-            const allowedByLocator = new Map<string, Set<string>>();
-            const addAllowed = (name: string | undefined, sequence: number): void => {
+            const primaryByLocator = new Map<string, Set<string>>();
+            const addPrimary = (name: string | undefined, sequence: number): void => {
                 if (!name) return;
                 const action = actionBySequence.get(sequence);
                 if (!action) return;
-                const allowed = allowedByLocator.get(name) || new Set<string>();
+                const resolution = plan.resolutions.find(item => item.sequence === sequence);
+                if (resolution?.resolution !== 'create') return;
+                const allowed = primaryByLocator.get(name) || new Set<string>();
                 candidateAllowlist(action, scenario.platform)
-                    .forEach(candidate => allowed.add(candidate.locatorValue));
-                allowedByLocator.set(name, allowed);
+                    .filter(candidate => candidate.primary)
+                    .forEach(candidate =>
+                        allowed.add(`${candidate.locatorType}\u0000${candidate.locatorValue}`)
+                    );
+                primaryByLocator.set(name, allowed);
             };
-            plan.resolutions.forEach(resolution => addAllowed(resolution.locatorName, resolution.sequence));
+            plan.resolutions.forEach(resolution => addPrimary(resolution.locatorName, resolution.sequence));
             response.actionTrace.forEach(trace => {
                 const planned = plan.resolutions.find(resolution => resolution.sequence === trace.sequence);
                 if (planned?.locatorName && trace.locatorName && trace.locatorName !== planned.locatorName) {
@@ -386,22 +569,80 @@ export class AutomationResponseValidator {
                     });
                     return;
                 }
-                addAllowed(trace.locatorName, trace.sequence);
+                addPrimary(trace.locatorName, trace.sequence);
             });
+            const contract = frameworkContract(projectPaths.frameworkRoot);
+            const screenFile = response.files.find(file => file.layer === 'screen');
+            const screenContent = screenFile?.content || '';
+            const referencedTypes = screenLocatorTypes(
+                screenContent,
+                contract,
+                locatorFile.path,
+                screenFile ? screenObjectNames(screenFile.path).className : '',
+            );
+            const currentLocators = responseLocatorValues(locatorFile.content);
+            const createNames = new Set(plan.resolutions
+                .filter(resolution => resolution.resolution === 'create' && resolution.locatorName)
+                .map(resolution => resolution.locatorName!));
+            for (const name of createNames) {
+                const pairs = primaryByLocator.get(name) || new Set<string>();
+                const entries = currentLocators.filter(entry =>
+                    entry.name === name
+                    && entry.blockName.toLowerCase().endsWith(scenario.platform)
+                );
+                const exact = entries.filter(entry => {
+                    const key = `${name}\u0000${scenario.platform}\u0000${entry.blockName}\u0000${name}`;
+                    const types = referencedTypes.get(key) || new Set<string>();
+                    return types.size === 1
+                        && pairs.has(`${[...types][0]}\u0000${entry.selector.trim()}`);
+                });
+                if (exact.length !== 1 || entries.length !== 1) {
+                    errors.push({
+                        code: 'create-locator-contract',
+                        message:
+                            `El create de ${name} debe declarar una sola vez el par primary exacto ` +
+                            '(TypeLocator, valor) en el getter homónimo y bloque de la plataforma grabada.',
+                        file: locatorFile.path,
+                    });
+                }
+            }
             for (const proposed of changedLocatorValues(locatorFile.content, baseline)) {
                 const recordedPlatformBlock = proposed.blockName.toLowerCase().endsWith(scenario.platform);
+                const key =
+                    `${proposed.name}\u0000${scenario.platform}\u0000` +
+                    `${proposed.blockName}\u0000${proposed.name}`;
+                const types = referencedTypes.get(key) || new Set<string>();
+                const pairs = primaryByLocator.get(proposed.name) || new Set<string>();
+                const exactTypes = [...types].filter(type =>
+                    pairs.has(`${type}\u0000${proposed.selector.trim()}`)
+                );
+                if (
+                    createNames.has(proposed.name)
+                    && recordedPlatformBlock
+                    && exactTypes.length === 1
+                    && types.size === 1
+                ) continue;
                 if (
                     recordedPlatformBlock
-                    && allowedByLocator.get(proposed.name)?.has(proposed.selector.trim())
-                ) continue;
-                errors.push({
-                    code: 'invented-selector',
-                    message:
-                        `El locator ${proposed.blockName}.${proposed.name} usa un valor fuera de la allowlist ` +
-                        `verificada de su acción: ` +
-                        `"${proposed.selector}".`,
-                    file: locatorFile.path,
-                });
+                    && [...pairs].some(pair => pair.endsWith(`\u0000${proposed.selector.trim()}`))
+                    && (types.size !== 1 || exactTypes.length !== 1)
+                ) {
+                    errors.push({
+                        code: 'locator-type-mismatch',
+                        message:
+                            `El getter de ${proposed.blockName}.${proposed.name} debe usar el TypeLocator ` +
+                            `del candidato primary para "${proposed.selector}".`,
+                        file: locatorFile.path,
+                    });
+                } else {
+                    errors.push({
+                        code: 'invented-selector',
+                        message:
+                            `El locator ${proposed.blockName}.${proposed.name} no usa el par primary ` +
+                            `(TypeLocator, valor) verificado para create: "${proposed.selector}".`,
+                        file: locatorFile.path,
+                    });
+                }
             }
         }
         const existingAutomationWithoutNewLocators = Boolean(locatorFile) &&

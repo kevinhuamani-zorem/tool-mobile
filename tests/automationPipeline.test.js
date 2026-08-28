@@ -941,6 +941,167 @@ test('validator no permite intercambiar selectores verificados entre acciones', 
     assert.equal(errors.filter(error => error.code === 'invented-selector').length, 2);
 });
 
+test('validator exige el par primary exacto para create y verifica el TypeLocator del getter', () => {
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+        selectorCandidates: [
+            selectorCandidate(
+                'primary-movements',
+                'id=movimientos',
+                'XPATH',
+                '//*[@resource-id="movimientos"]',
+            ),
+            selectorCandidate(
+                'backup-movements',
+                '~Movimientos',
+                'ID',
+                'Movimientos',
+                { primary: false, stability: 'stable', priority: 1 },
+            ),
+        ],
+    }]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+
+    const primary = validResponse(resolved.plan);
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, primary).errors
+            .some(error => ['invented-selector', 'locator-type-mismatch'].includes(error.code)),
+        false,
+    );
+
+    const backupCreate = validResponse(resolved.plan);
+    const backupLocators = JSON.parse(
+        backupCreate.files.find(file => file.layer === 'locators').content
+    );
+    backupLocators.consultaAndroid.movementsList = 'Movimientos';
+    backupCreate.files.find(file => file.layer === 'locators').content =
+        JSON.stringify(backupLocators);
+    backupCreate.files.find(file => file.layer === 'screen').content =
+        backupCreate.files.find(file => file.layer === 'screen').content.replace(
+            `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaAndroid.movementsList`,
+            `${CONTRACT.typeLocatorSymbol}.ID, Locators.consultaAndroid.movementsList`,
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, backupCreate).errors
+            .some(error => error.code === 'invented-selector'),
+        true,
+    );
+
+    const wrongType = validResponse(resolved.plan);
+    wrongType.files.find(file => file.layer === 'screen').content =
+        wrongType.files.find(file => file.layer === 'screen').content.replace(
+            `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaAndroid.movementsList`,
+            `${CONTRACT.typeLocatorSymbol}.ID, Locators.consultaAndroid.movementsList`,
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, wrongType).errors
+            .some(error => error.code === 'locator-type-mismatch'),
+        true,
+    );
+
+    const omitted = validResponse(resolved.plan);
+    const omittedLocators = JSON.parse(
+        omitted.files.find(file => file.layer === 'locators').content
+    );
+    delete omittedLocators.consultaAndroid.movementsList;
+    omitted.files.find(file => file.layer === 'locators').content =
+        JSON.stringify(omittedLocators);
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, omitted).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+
+    const decoyGetter = validResponse(resolved.plan);
+    const decoyScreen = decoyGetter.files.find(file => file.layer === 'screen');
+    decoyScreen.content = decoyScreen.content
+        .replace(
+            `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaAndroid.movementsList`,
+            `${CONTRACT.typeLocatorSymbol}.ID, Locators.consultaAndroid.movementsList`,
+        )
+        .replace(
+            ' public async verifyMovementsList',
+            ` private get unrelatedLocator(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(` +
+            `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaIos.movementsList, ` +
+            `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaAndroid.movementsList); }` +
+            ' public async verifyMovementsList',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, decoyGetter).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+
+    const deadCall = validResponse(resolved.plan);
+    const deadCallScreen = deadCall.files.find(file => file.layer === 'screen');
+    const returnedCall = deadCallScreen.content.match(
+        /private get movementsList\(\): string \{ return ([^;]+); \}/
+    )[1];
+    deadCallScreen.content = deadCallScreen.content.replace(
+        `{ return ${returnedCall}; }`,
+        `{ ${returnedCall}; return ${returnedCall.replace(
+            'Locators.consultaAndroid.movementsList',
+            'Locators.consultaAndroid.unrelatedLocator',
+        )}; }`,
+    );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, deadCall).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+
+    const shadowedImport = validResponse(resolved.plan);
+    const shadowedScreen = shadowedImport.files.find(file => file.layer === 'screen');
+    shadowedScreen.content = shadowedScreen.content.replace(
+        'private get movementsList(): string {',
+        'private get movementsList(): string { const Locators = ' +
+        '{ consultaIos: { movementsList: "" }, consultaAndroid: ' +
+        '{ movementsList: "//*[@resource-id=\\"movimientos\\"]" } };',
+    );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, shadowedImport).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+
+    const typeOnlyImport = validResponse(resolved.plan);
+    typeOnlyImport.files.find(file => file.layer === 'screen').content =
+        typeOnlyImport.files.find(file => file.layer === 'screen').content.replace(
+            'import Locators from',
+            'import type Locators from',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, typeOnlyImport).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+
+    const nestedGetter = validResponse(resolved.plan);
+    const nestedScreen = nestedGetter.files.find(file => file.layer === 'screen');
+    const validReturnedCall = nestedScreen.content.match(
+        /private get movementsList\(\): string \{ return ([^;]+); \}/
+    )[1];
+    nestedScreen.content = nestedScreen.content
+        .replace(
+            'Locators.consultaAndroid.movementsList); } public async',
+            'Locators.consultaAndroid.unrelatedLocator); } public async',
+        )
+        .replace(
+            'public async verifyMovementsList(): Promise<void> {',
+            `public async verifyMovementsList(): Promise<void> { class Decoy { ` +
+            `private get movementsList(): string { return ${validReturnedCall}; } }`,
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, nestedGetter).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+});
+
 test('informa caso existente cuando el agente reutiliza todos los locators', () => {
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
@@ -1124,7 +1285,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         selectorCandidates: [candidate],
     }]), root);
     assert.equal(result.agentRequired, false);
-    assert.equal(result.validation.valid, true);
+    assert.equal(result.validation.valid, true, JSON.stringify(result.validation.errors));
     assert.equal(result.validation.qualityScore, 100);
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'generation-plan.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'reuse-context.json')));
