@@ -1189,6 +1189,50 @@ test('validator exige el par primary exacto para create y verifica el TypeLocato
         true,
     );
 
+    for (const decoyCall of [
+        'console.log(this.movementsList);',
+        'await Promise.resolve(this.movementsList);',
+        'await this.customHelper.process(this.movementsList);',
+        'await this.uiHelper.unknownOperation(this.movementsList);',
+        'await unknownHelper(this.movementsList);',
+    ]) {
+        const decoy = validResponse(resolved.plan);
+        decoy.files.find(file => file.layer === 'screen').content =
+            decoy.files.find(file => file.layer === 'screen').content.replace(
+                'await this.uiHelper.waitForDisplayed(this.movementsList);',
+                decoyCall,
+            );
+        assert.equal(
+            validator.validate(resolved.scenario, resolved.plan, decoy).errors
+                .some(error => error.code === 'trace-screen-method'),
+            true,
+            `${decoyCall} no debe autorizar el getter`,
+        );
+    }
+
+    for (const realSink of [
+        'await this.movementsList.click();',
+        'await this.uiHelper.waitForElementExistByLocator(this.movementsList, true);',
+        'await this.keyboardHelper.submitOtp(this.movementsList, "123456");',
+        'await expect(this.movementsList).toBeDisplayed();',
+        'await expectWebdriverIO(await this.movementsList.getText()).toContain("disponibles");',
+        'const text = await this.uiHelper.getElementText(this.movementsList); ' +
+            'await expect(text).toContain("disponibles");',
+    ]) {
+        const validPattern = validResponse(resolved.plan);
+        validPattern.files.find(file => file.layer === 'screen').content =
+            validPattern.files.find(file => file.layer === 'screen').content.replace(
+                'await this.uiHelper.waitForDisplayed(this.movementsList);',
+                realSink,
+            );
+        assert.equal(
+            validator.validate(resolved.scenario, resolved.plan, validPattern).errors
+                .some(error => error.code === 'trace-screen-method'),
+            false,
+            `${realSink} debe conservar el provenance del getter`,
+        );
+    }
+
     const backupLocalLiteral = validResponse(resolved.plan);
     backupLocalLiteral.files.find(file => file.layer === 'screen').content =
         backupLocalLiteral.files.find(file => file.layer === 'screen').content.replace(

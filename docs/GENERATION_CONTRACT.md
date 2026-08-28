@@ -183,6 +183,12 @@ getter (`const text = await this.title.getText()`) hasta el sink de aserción o
 interacción; una lectura descartada o una variable señuelo no cuentan. Un selector
 inline, otro getter o una ruta alternativa no pueden sustituirlo; varias acciones
 pueden compartir el mismo método cuando este consume todos sus getters.
+Los sinks son una allowlist explícita: operaciones de `uiHelper` y
+`keyboardHelper` cuyos argumentos son elementos, interacciones WebdriverIO sobre
+el receiver del elemento y matchers de `expect`/`expectWebdriverIO`. Las operaciones
+actuales de `gestureHelper` usan texto o coordenadas y no prueban consumo de un
+getter. Logging, `Promise.resolve`, helpers o funciones desconocidos y argumentos
+no relevantes tampoco lo consumen.
 
 ## Acciones soportadas
 
