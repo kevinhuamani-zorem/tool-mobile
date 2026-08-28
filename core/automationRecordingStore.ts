@@ -5,7 +5,8 @@ import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERS
 import { GenerationRequest, MobilePlatform } from './fwkMobileGenerator';
 import { RecordedStep, recordedStepContext } from './models';
 import { projectPaths } from './projectPaths';
-import { roundTrip } from './locatorStrategy';
+import { frameworkLocator, roundTrip } from './locatorStrategy';
+import { compactSelectorCandidates } from './selectorCandidates';
 
 interface RecordingContext {
     squad: string;
@@ -51,6 +52,21 @@ function isSensitiveInput(step: RecordedStep): boolean {
     return /(?:password|contrase(?:n|ñ)a|clave|pin|otp|token|secret|access\s*key|credential)/i.test(context);
 }
 
+function containsSensitiveValue(
+    value: string,
+    candidate: string,
+    platform: MobilePlatform,
+): boolean {
+    const secret = value.trim();
+    if (!secret) return false;
+    if (
+        candidate.trim() === secret
+        || frameworkLocator(candidate, platform).value.trim() === secret
+    ) return true;
+    if (secret.length >= 4) return candidate.includes(secret);
+    return candidate.includes(`"${secret}"`) || candidate.includes(`'${secret}'`);
+}
+
 /**
  * Estrategia y valor con los que el framework reconstruira el selector.
  *
@@ -77,13 +93,47 @@ function locatorFields(step: RecordedStep, platform: MobilePlatform): Partial<Re
 
 function safeStep(step: RecordedStep, sequence: number, platform: MobilePlatform): RecordedStep & { sequence: number } {
     const sensitive = isSensitiveInput(step);
+    const selectorVerified = step.selectorVerified === undefined
+        ? Boolean(step.selector)
+        : step.selectorVerified === true;
+    const candidates = sensitive && step.value
+        ? (step.selectorCandidates || []).filter(candidate =>
+            !containsSensitiveValue(step.value!, candidate.selector, platform)
+            && !containsSensitiveValue(step.value!, candidate.locatorValue, platform)
+        )
+        : step.selectorCandidates || [];
+    if (
+        sensitive
+        && step.value
+        && step.selector
+        && containsSensitiveValue(step.value, step.selector, platform)
+    ) {
+        throw new Error(
+            `La acción ${sequence} usa un selector que contiene el valor sensible capturado; ` +
+            'selecciona un locator que no dependa de la credencial.'
+        );
+    }
+    const selectorCandidates = selectorVerified && step.selector
+        ? compactSelectorCandidates(candidates, step.selector, platform)
+        : [];
     return {
-        ...step,
+        action: step.action,
         sequence,
         platform,
-        ...locatorFields(step, platform),
+        variableName: step.variableName,
+        contextHint: step.contextHint,
+        elementIntent: step.elementIntent,
+        selector: step.selector,
         value: sensitive && step.value ? `<${step.variableName || 'valor'}>` : step.value,
-        selectorVerified: Boolean(step.selectorVerified || step.selector),
+        description: step.description,
+        locatorSource: step.locatorSource ? {
+            file: step.locatorSource.file,
+            module: step.locatorSource.module,
+            scope: step.locatorSource.scope,
+        } : undefined,
+        ...locatorFields(step, platform),
+        selectorVerified,
+        ...(selectorCandidates.length ? { selectorCandidates } : { selectorCandidates: undefined }),
     };
 }
 

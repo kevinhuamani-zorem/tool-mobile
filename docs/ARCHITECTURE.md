@@ -63,7 +63,7 @@ host y el bundle mediante orígenes locales `appium-recorder://host` y
 `appium-recorder://inspector`; no acepta navegación ni ventanas nuevas. El
 renderer principal nunca recibe WebDriver ni datos de sesión: solo el selector
 confirmado explícitamente por el protocolo `appium-inspector:embedded` versión
-2 mediante `appium-inspector:element-used`. El host delega al iframe únicamente
+3 mediante `appium-inspector:element-used`. El host delega al iframe únicamente
 `clipboard-write` para copiar selectores; no concede lectura del portapapeles ni
 otras capacidades y conserva sandbox, CSP y orígenes distintos.
 
@@ -109,6 +109,18 @@ workspace para cambiar el target. Todas las rutas operativas nacen en
    entonces emite el selector confirmado; el recorder oculta la ventana sin
    destruirla y conserva sesión, proxy y selección para la siguiente apertura.
 
+El evento v3 incluye hasta 50 candidatos que el Inspector ya comprobó como
+únicos y pertenecientes al mismo elemento WebDriver. Esa comprobación no cruza
+el límite de confianza: `main` vuelve a ejecutar todos los candidatos
+secuencialmente contra la sesión activa, exige una sola coincidencia con el
+`elementId` seleccionado y comprueba que el par real `(TypeLocator, valor)`
+reconstruya el mismo elemento. El primary inválido rechaza la importación; las
+alternativas inválidas se omiten con diagnóstico. Solo se conservan cuatro
+candidatos compactos y nunca atributos, XML, screenshots, source, capabilities
+o credenciales. Validaciones solapadas llevan una generación monotónica: solo
+la selección más reciente puede publicar candidatos. Ejecutar una acción no
+convierte por sí solo un selector manual en verificado.
+
 ### Caso nuevo con agente de automatización
 
 1. El recorder persiste acciones ordenadas, la intención funcional escrita por
@@ -122,6 +134,11 @@ workspace para cambiar el target. Todas las rutas operativas nacen en
 5. Se escriben `generation-plan.json`, `reuse-context.json`,
    `collision-report.json`, contextos resuelto/no resuelto y contrato
    bajo `runtime/recordings/<id>/generation/automation`.
+   `locator-candidates.json` es la única copia compacta de los backups
+   verificados dentro del paquete; `scenario.json` no los duplica. Al importar,
+   `main` toma el `scenario.json` original del recording como fuente autoritativa
+   y rechaza cambios tanto en el escenario compacto como en la allowlist
+   expuesta al agente.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
    no se invoca al agente. La memoria de calidad 100 también se reutiliza.
 7. La UI abre Terminal en el paquete y muestra el prompt inicial. El usuario

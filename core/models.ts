@@ -1,3 +1,5 @@
+import type { LocatorTypeName } from './locatorStrategy';
+
 export type Action =
     | 'ABRIR_APP'
     | 'CLICK'
@@ -15,6 +17,27 @@ export type Action =
     | 'ESPERAR'
     | 'SCREENSHOT';
 
+export type SelectorCandidateStability = 'stable' | 'contextual' | 'structural' | 'manual';
+
+export interface SelectorCandidate {
+    candidateId: string;
+    /** Selector canónico que entiende el recorder; nunca se escribe como fallback runtime. */
+    selector: string;
+    inspectorStrategy: string;
+    locatorType: LocatorTypeName;
+    locatorValue: string;
+    priority: number;
+    stability: SelectorCandidateStability;
+    sourceReason: string;
+    primary: boolean;
+    verification: {
+        protocolVersion: 3;
+        verifiedAt: string;
+        matchCount: 1;
+        sameElement: true;
+    };
+}
+
 export interface RecordedStep {
     action: Action;
     sequence?: number;
@@ -25,6 +48,8 @@ export interface RecordedStep {
     elementIntent?: string;
     selector?: string;
     selectorVerified?: boolean;
+    /** Allowlist compacta verificada contra la misma identidad WebDriver. */
+    selectorCandidates?: SelectorCandidate[];
     /**
      * Miembro de `TypeLocator` con el que el framework compondra este selector.
      * Se persiste — no se recalcula al generar — para que la grabacion sea

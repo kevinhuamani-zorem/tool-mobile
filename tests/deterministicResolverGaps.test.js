@@ -73,6 +73,28 @@ function scenario(actions) {
 
 const action = (kind, intent, selector, value = '') => ({ action: kind, elementIntent: intent, selector, value });
 
+function verifiedCandidate(candidateId, selector, overrides = {}) {
+    const accessibility = selector.startsWith('~');
+    return {
+        candidateId,
+        selector,
+        inspectorStrategy: accessibility ? 'accessibility id' : 'xpath',
+        locatorType: accessibility ? 'ID' : 'XPATH',
+        locatorValue: accessibility ? selector.slice(1) : selector,
+        priority: 0,
+        stability: 'manual',
+        sourceReason: 'Inspector selection',
+        primary: false,
+        verification: {
+            protocolVersion: 3,
+            verifiedAt: '2026-08-27T00:00:00.000Z',
+            matchCount: 1,
+            sameElement: true,
+        },
+        ...overrides,
+    };
+}
+
 const FLUJO_COMPLETO = [
     action('CLICK', 'yapear', '~Yapear'),
     action('CLICK', 'nuevo numero', 'android=new UiSelector().text("Nuevo número")'),
@@ -126,6 +148,88 @@ test('no marca comodín cuando el texto no lo lleva', () => {
     ]));
 
     assert.equal(result.unresolvedContext.gaps.some(gap => gap.id.startsWith('gap-selector-wildcard')), false);
+});
+
+test('reutiliza un locator existente cuando coincide un backup verificado', () => {
+    const primary = verifiedCandidate('primary', '~Nuevo', { primary: true });
+    const backup = verifiedCandidate('existing-backup', '~Yapear', {
+        stability: 'stable',
+        sourceReason: 'Accessibility identifier',
+    });
+    const result = new DeterministicResolver(catalogWithExistingModule()).resolve(scenario([{
+        ...action('VERIFICAR_EXISTE', 'acceso yapear', '~Nuevo'),
+        selectorVerified: true,
+        selectorCandidates: [primary, backup],
+    }]));
+    const resolution = result.plan.resolutions[0];
+    assert.equal(resolution.resolution, 'reuse');
+    assert.equal(resolution.locatorName, 'yapear');
+    assert.equal(resolution.matchedCandidateId, 'existing-backup');
+    assert.equal(resolution.matchedPrimaryCandidate, false);
+    assert.match(resolution.reason, /backup/);
+});
+
+test('conserva el primary como selector de create cuando ningún candidato existe', () => {
+    const primary = verifiedCandidate('primary', '~Nuevo', { primary: true });
+    const backup = verifiedCandidate('backup', '//android.widget.Button[@text="Nuevo"]', {
+        stability: 'structural',
+    });
+    const result = new DeterministicResolver(emptyCatalog()).resolve(scenario([{
+        ...action('VERIFICAR_EXISTE', 'nuevo acceso', '~Nuevo'),
+        selectorVerified: true,
+        selectorCandidates: [primary, backup],
+    }]));
+    assert.equal(result.plan.resolutions[0].resolution, 'create');
+    assert.equal(result.plan.resolutions[0].selector, '~Nuevo');
+});
+
+test('ranking prefiere estabilidad y deja auditoría del candidato que causó reuse', () => {
+    const provider = {
+        getCatalog: () => ({
+            ...emptyCatalog().getCatalog(),
+            locators: [
+                locator('manualMatch', '~Manual'),
+                locator('stableMatch', '~Stable'),
+            ],
+        }),
+    };
+    const result = new DeterministicResolver(provider).resolve(scenario([{
+        ...action('VERIFICAR_EXISTE', 'resultado', '~Manual'),
+        selectorVerified: true,
+        selectorCandidates: [
+            verifiedCandidate('primary', '~Manual', { primary: true, stability: 'manual' }),
+            verifiedCandidate('stable', '~Stable', { stability: 'stable', priority: 3 }),
+        ],
+    }]));
+    assert.equal(result.plan.resolutions[0].locatorName, 'stableMatch');
+    assert.equal(result.plan.resolutions[0].matchedCandidateId, 'stable');
+});
+
+test('abre un gap QA bloqueante ante matches materialmente ambiguos', () => {
+    const provider = {
+        getCatalog: () => ({
+            ...emptyCatalog().getCatalog(),
+            locators: [
+                locator('firstMatch', '~Stable'),
+                locator('secondMatch', '~Stable'),
+            ],
+        }),
+    };
+    const result = new DeterministicResolver(provider).resolve(scenario([{
+        ...action('VERIFICAR_EXISTE', 'resultado', '~Primary'),
+        selectorVerified: true,
+        selectorCandidates: [
+            verifiedCandidate('primary', '~Primary', { primary: true }),
+            verifiedCandidate('stable', '~Stable', { stability: 'stable' }),
+        ],
+    }]));
+    const gap = result.unresolvedContext.gaps.find(item =>
+        item.id === 'gap-locator-candidate-ambiguity-1'
+    );
+    assert.equal(gap?.type, 'qa-decision');
+    assert.equal(gap?.blocking, true);
+    assert.equal(result.plan.resolutions[0].resolution, 'create');
+    assert.equal(result.plan.resolutions[0].selector, '~Primary');
 });
 
 test('avisa del método equivalente que ya existe en el módulo target', () => {

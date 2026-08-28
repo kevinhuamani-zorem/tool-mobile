@@ -45,27 +45,58 @@ test('keeps the lower inspect button in recorder-local screenshot and XML mode',
     assert.doesNotMatch(localInspector, /api\.openInspector\(\)/);
 });
 
-test('exposes only explicit element-use transfer and keeps verification pending', () => {
+test('exposes only explicit element-use transfer after recorder revalidation', () => {
     assert.match(preload, /onInspectorElementUsed/);
     assert.match(preload, /embedded-inspector-element-used/);
     assert.doesNotMatch(preload, /ElementSelected|element-selected/);
     assert.match(controller, /api\.onInspectorElementUsed/);
-    assert.match(controller, /pendiente de verificación/);
+    assert.match(controller, /Selector y backups revalidados contra la sesión activa/);
+    assert.match(controller, /selectorCandidateToken/);
+    assert.match(controller, /clearInspectorCandidates/);
     assert.doesNotMatch(controller, /onInspectorElementSelected/);
 });
 
-test('forwards explicit use before hiding without invoking centralized cleanup', () => {
+test('revalidates explicit use before forwarding and hiding without centralized cleanup', () => {
     const transfer = between(
         main,
         'elementUsed => {',
         'error => mainWindow?.webContents.send',
     );
-    assert.match(transfer, /webContents\.send\('embedded-inspector-element-used'/);
-    assert.match(transfer, /returnToRecorderAfterElementUse\(embeddedInspectorWindow, mainWindow\)/);
-    assert.ok(
-        transfer.indexOf("webContents.send('embedded-inspector-element-used'") <
-        transfer.indexOf('returnToRecorderAfterElementUse'),
-    );
+    assert.match(transfer, /validateEmbeddedInspectorElementUse\(elementUsed\)/);
     assert.doesNotMatch(transfer, /destroy|proxy\.stop|sessionOwnership\.close|recorderLifecycle\.cleanup/);
+    const validation = between(
+        main,
+        'async function validateEmbeddedInspectorElementUse(',
+        'const recorderLifecycle = new RecorderRuntimeLifecycle',
+    );
+    assert.match(validation, /independentlyVerifySelectorCandidates/);
+    assert.match(validation, /generation !== inspectorValidationGeneration/);
+    assert.match(validation, /webContents\.send\('embedded-inspector-element-used'/);
+    assert.ok(validation.indexOf("webContents.send('embedded-inspector-element-used'") <
+        validation.indexOf('returnToRecorderAfterElementUse'));
     assert.match(main, /const recorderLifecycle = new RecorderRuntimeLifecycle\(\[[\s\S]*closeEmbeddedInspectorResources[\s\S]*closeOwnedSession/);
+});
+
+test('clears stale backups on edits or alternative selection and persists only the trusted token', () => {
+    const inputHandler = between(
+        controller,
+        "txtSelector.addEventListener('input'",
+        "cmbAction.addEventListener('change'",
+    );
+    assert.match(inputHandler, /clearSelectorCandidateBackups\(\)/);
+
+    const chips = between(controller, 'function renderSelectorChips(', 'function buildCandidatesFromEl(');
+    assert.match(chips, /chip\.addEventListener\('click'[\s\S]*clearSelectorCandidateBackups\(\)/);
+
+    const execute = between(
+        controller,
+        "btnExecute.addEventListener('click'",
+        "btnDelete.addEventListener('click'",
+    );
+    assert.match(execute, /selectorVerified:\s*verifiedSelector === selector/);
+    assert.match(execute, /selectorCandidateToken/);
+    assert.match(main, /selectorCandidateToken === pendingInspectorCandidates\.token/);
+    assert.match(main, /selectorCandidates:\s*_untrustedCandidates/);
+    assert.match(main, /executableStep\.selectorVerified === true[\s\S]*Boolean\(trustedCandidates\)/);
+    assert.match(main, /scenario\.json fue modificado o no coincide con la grabación original/);
 });

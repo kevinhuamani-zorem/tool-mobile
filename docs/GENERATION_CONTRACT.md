@@ -146,6 +146,19 @@ interpretar. Si no sale el mismo par, la verificación lo dice en el momento de
 capturar y el resolver abre `gap-locator-roundtrip`, que es bloqueante: un
 locator que no resuelve no es algo que el agente pueda arreglar adivinando.
 
+Una selección explícita del Inspector puede guardar `selectorCandidates`. El
+candidato primary es siempre el selector elegido por el QA y sigue siendo el
+único valor por defecto para `create`. Cada candidato compacto conserva
+`candidateId`, selector canónico, estrategia del Inspector, `locatorType`,
+`locatorValue`, prioridad, estabilidad, motivo y la verificación de captura
+(`protocolVersion=3`, una coincidencia, mismo elemento y fecha). Se deduplica por
+par `(TypeLocator, valor)` y se ordena primary primero; luego
+`stable → contextual → structural → manual`, prioridad y `candidateId`. Se
+persisten como máximo cuatro. Editar el selector o elegir otro borra los backups.
+En una entrada sensible se descarta cualquier backup que contenga el valor
+capturado; si el primary depende de la credencial, la acción se rechaza para no
+persistir el secreto dentro de un selector.
+
 Cuando un recording generado solo carece de iOS (o Android), el QA únicamente
 selecciona y verifica los locators pendientes en una sesión de esa plataforma.
 El recorder actualiza el locator del target y la copia de `agent-response.json`,
@@ -154,6 +167,11 @@ framework contienen ambos bloques completos.
 
 Los locators compartidos se indexan en orden squad → commons → home → global.
 Una coincidencia debe conservar módulo, scope y ruta de origen.
+El resolver puede usar cualquier candidato verificado para encontrar una
+coincidencia exacta existente, pero nunca escribe alternativas como fallbacks.
+Ordena por scope y estabilidad; si persisten matches materiales del mismo rango,
+abre un gap bloqueante de decisión QA. La resolución conserva el `candidateId`
+que causó el reuse.
 
 ## Acciones soportadas
 
@@ -207,11 +225,20 @@ mantenibilidad y consistencia sin alterar el comportamiento grabado.
 
 ## Contrato del pipeline de automatización
 
-El paquete mínimo contiene `scenario.json`, `generation-plan.json`,
+El paquete mínimo contiene `scenario.json`, `locator-candidates.json`,
+`generation-plan.json`,
 `reuse-context.json`, `collision-report.json`, `unresolved-context.json`,
 `instructions.md`, schema y verificador. `reuse-context.json` limita el contexto
 a los cinco casos más cercanos; `collision-report.json` expone coincidencias
 exactas de steps y selectores sin entregar archivos completos del framework.
+`locator-candidates.json` es una allowlist read-only; el agente puede citar un
+`candidateId`, pero no inventar ni modificar selectores. El validator rechaza
+valores nuevos fuera de la allowlist de la acción y plataforma asociadas, el
+intercambio de selectores entre locators y campos de selector introducidos en
+resolutions, completions o metadatos de files. Al importar, el recorder compara
+el archivo con la copia autoritativa del recording antes de hidratar el
+`scenario.json` compacto; `platform` forma parte explícita del package para que
+una verificación Android nunca se pueda reinterpretar como iOS, ni al revés.
 El agente devuelve un solo `agent-response.json` con:
 
 - los mismos `recordingId` y `planId`;

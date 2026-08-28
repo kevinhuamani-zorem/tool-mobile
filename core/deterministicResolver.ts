@@ -25,6 +25,8 @@ import { declareElements } from './elementDeclaration';
 import { CodeGraph } from './codeGraph';
 import { detectRepetition } from './repetitionDetector';
 import { projectPaths } from './projectPaths';
+import { candidateAllowlist } from './selectorCandidates';
+import type { SelectorCandidateStability } from './models';
 
 export interface ResolverResult {
     scenario: AutomationScenario;
@@ -179,26 +181,33 @@ function inputParameterName(intent: string, sequence: number): string {
  * afirmar nada, y no afirmar es no reutilizar. Ese candidato igual llega al QA
  * por el gap de duplicado.
  */
-function exactLocator(
+function exactLocators(
     catalog: SquadReuseCatalog,
     selector: string
-): { locator: LocatorInfo; strategy: string } | undefined {
+): Array<{ locator: LocatorInfo; strategy: string }> {
     const wantedStrategy = strategyOf(selector, catalog.platform);
     const wantedValue = strategyValue(selector);
-    if (!wantedValue) return undefined;
-    for (const locator of catalog.locators) {
-        if (locator.scope !== 'squad' && locator.scope !== 'home') continue;
+    if (!wantedValue) return [];
+    return catalog.locators.flatMap(locator => {
+        if (locator.scope !== 'squad' && locator.scope !== 'home') return [];
         const value = catalog.platform === 'ios' ? locator.iosSelector : locator.androidSelector;
-        if (strategyValue(value) !== wantedValue) continue;
+        if (strategyValue(value) !== wantedValue) return [];
         // La declaracion del getter manda; si no existe, solo vale cuando el
         // valor determina la estrategia por si mismo.
         const declared = (catalog.platform === 'ios' ? locator.iosStrategy : locator.androidStrategy)
             || inferredStrategy(value);
-        if (!declared || declared !== wantedStrategy) continue;
-        return { locator, strategy: declared };
-    }
-    return undefined;
+        if (!declared || declared !== wantedStrategy) return [];
+        return [{ locator, strategy: declared }];
+    });
 }
+
+const REUSE_SCOPE_ORDER: Record<'squad' | 'home', number> = { squad: 0, home: 1 };
+const CANDIDATE_STABILITY_ORDER: Record<SelectorCandidateStability, number> = {
+    stable: 0,
+    contextual: 1,
+    structural: 2,
+    manual: 3,
+};
 
 function normalizeStepText(value: string): string {
     return value.toLowerCase().normalize('NFD')
@@ -482,23 +491,63 @@ export class DeterministicResolver {
                     reason: 'La acción usa un helper del framework y no requiere locator.',
                 };
             }
-            const reused = selector ? exactLocator(catalog, selector) : undefined;
-            if (reused) {
+            const selectorChoices = candidateAllowlist(step, rawScenario.platform);
+            const reuseMatches = selectorChoices.flatMap(candidate =>
+                exactLocators(catalog, candidate.selector).map(match => ({ ...match, candidate }))
+            ).sort((left, right) =>
+                REUSE_SCOPE_ORDER[left.locator.scope as 'squad' | 'home']
+                    - REUSE_SCOPE_ORDER[right.locator.scope as 'squad' | 'home']
+                || CANDIDATE_STABILITY_ORDER[left.candidate.stability]
+                    - CANDIDATE_STABILITY_ORDER[right.candidate.stability]
+                || left.candidate.priority - right.candidate.priority
+                || left.candidate.candidateId.localeCompare(right.candidate.candidateId)
+                || left.locator.module.localeCompare(right.locator.module)
+                || left.locator.name.localeCompare(right.locator.name)
+            );
+            const [reused] = reuseMatches;
+            const materiallyTied = reused
+                ? reuseMatches.filter(match =>
+                    match.locator.scope === reused.locator.scope
+                    && match.candidate.stability === reused.candidate.stability
+                    && match.candidate.priority === reused.candidate.priority
+                    && `${match.locator.module}#${match.locator.name}`
+                        !== `${reused.locator.module}#${reused.locator.name}`
+                )
+                : [];
+            if (reused && materiallyTied.length) {
+                gaps.push({
+                    id: `gap-locator-candidate-ambiguity-${sequence}`,
+                    sequence,
+                    type: 'qa-decision',
+                    blocking: true,
+                    description:
+                        `La acción ${sequence} tiene candidatos verificados que coinciden con varios locators ` +
+                        `del mismo rango: ${[reused, ...materiallyTied].map(match =>
+                            `${match.locator.module}.${match.locator.name} (${match.candidate.candidateId})`
+                        ).join(', ')}.`,
+                    requiredOutput:
+                        'El QA debe elegir explícitamente cuál locator existente representa el elemento; el agente no puede decidirlo.',
+                });
+            } else if (reused) {
                 return {
                     sequence, action: step.action, intent,
                     resolution: 'reuse', locatorName: reused.locator.name,
                     selector: reused.locator.selector, confidence: 1,
+                    matchedCandidateId: reused.candidate.candidateId,
+                    matchedPrimaryCandidate: reused.candidate.primary,
                     source: {
                         file: reused.locator.file,
                         module: reused.locator.module,
                         scope: reused.locator.scope as 'squad' | 'home',
                     },
                     reason: `Mismo identificador y misma estrategia (${reused.strategy}) que ` +
-                        `${reused.locator.module}.${reused.locator.name}.`,
+                        `${reused.locator.module}.${reused.locator.name}; coincidencia causada por ` +
+                        `${reused.candidate.candidateId}${reused.candidate.primary ? ' (primary)' : ' (backup)'}.`,
                 };
             }
-            if (selector && step.selectorVerified !== false) {
-                const pair = roundTrip(selector, rawScenario.platform);
+            const primary = selectorChoices.find(candidate => candidate.primary);
+            if (selector && primary) {
+                const pair = roundTrip(primary.selector, rawScenario.platform);
                 const identity = `${pair.type}\u0000${pair.value}`;
                 const already = createdByLocator.get(identity);
                 if (already) {
@@ -506,8 +555,8 @@ export class DeterministicResolver {
                     // sola vez. El generador colapsa las entradas por nombre.
                     return {
                         sequence, action: step.action, intent,
-                        resolution: 'create', locatorName: already.name, selector,
-                        confidence: step.selectorVerified ? 1 : 0.9,
+                        resolution: 'create', locatorName: already.name, selector: primary.selector,
+                        confidence: 1,
                         reason: `Mismo identificador y misma estrategia (${pair.type}) que la accion ` +
                             `${already.sequence}: es el mismo elemento, no se duplica el locator.`,
                     };
@@ -520,9 +569,9 @@ export class DeterministicResolver {
                 createdByLocator.set(identity, { name: locatorName, sequence });
                 return {
                     sequence, action: step.action, intent,
-                    resolution: 'create', locatorName, selector,
-                    confidence: step.selectorVerified ? 1 : 0.9,
-                    reason: 'Selector ejecutado/verificado por el QA; se crea un locator lógico nuevo.',
+                    resolution: 'create', locatorName, selector: primary.selector,
+                    confidence: 1,
+                    reason: `Selector primary verificado (${primary.candidateId}); se crea un locator lógico nuevo.`,
                 };
             }
             const intentCandidate = catalog.locators

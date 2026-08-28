@@ -31,6 +31,12 @@ La puerta exige:
 - bloqueo de expresiones Gherkin, escenarios y selectores duplicados contra
   squad/Home;
 - equivalencia de selectores con o sin prefijos `id=`, `~` y `android=`.
+- protocolo Inspector v3 estricto, segunda validación contra el mismo
+  `elementId`, roundtrip de TypeLocator y cap compacto de cuatro candidatos;
+- `locator-candidates.json` como única allowlist de backups en el paquete, sin
+  XML, screenshots, source ni atributos;
+- reuse por alternativas verificadas con ranking determinista, gap QA ante
+  ambigüedad y rechazo de selectores inventados por el agente;
 - imports internos por `@screenobjects`, `@utils` y `@locators`, sin rutas
   relativas ni imports de `browser` sin uso.
 - limpieza de placeholders vacíos al arrancar sin eliminar recordings con

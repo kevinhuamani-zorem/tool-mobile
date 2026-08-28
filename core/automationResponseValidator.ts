@@ -17,8 +17,9 @@ import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
 import { frameworkContract } from './frameworkContract';
+import { candidateAllowlist } from './selectorCandidates';
 
-function responseLocatorValues(content: string): Array<{ name: string; selector: string }> {
+function responseLocatorValues(content: string): Array<{ blockName: string; name: string; selector: string }> {
     try {
         const document = JSON.parse(content) as Record<string, unknown>;
         return Object.entries(document).flatMap(([blockName, block]) =>
@@ -26,12 +27,30 @@ function responseLocatorValues(content: string): Array<{ name: string; selector:
             block && typeof block === 'object' && !Array.isArray(block)
                 ? Object.entries(block as Record<string, unknown>)
                     .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1].trim()))
-                    .map(([name, selector]) => ({ name, selector }))
+                    .map(([name, selector]) => ({ blockName, name, selector }))
                 : []
         );
     } catch {
         return [];
     }
+}
+
+function changedLocatorValues(
+    content: string,
+    baseline?: string,
+): Array<{ blockName: string; name: string; selector: string }> {
+    const current = responseLocatorValues(content);
+    if (!baseline) return current;
+    const inherited = new Map(responseLocatorValues(baseline)
+        .map(entry => [`${entry.blockName}\u0000${entry.name}`, entry.selector]));
+    return current.filter(entry =>
+        inherited.get(`${entry.blockName}\u0000${entry.name}`) !== entry.selector
+    );
+}
+
+function unexpectedFields(value: object, allowed: string[]): string[] {
+    const accepted = new Set(allowed);
+    return Object.keys(value).filter(key => !accepted.has(key));
 }
 
 function hasNoLocatorEntries(content: string): boolean {
@@ -213,6 +232,34 @@ export class AutomationResponseValidator {
         if (response.schemaVersion !== 1) errors.push({ code: 'schema', message: 'schemaVersion no soportado' });
         if (response.recordingId !== scenario.recordingId) errors.push({ code: 'recording-id', message: 'recordingId no coincide' });
         if (response.planId !== plan.planId) errors.push({ code: 'plan-id', message: 'planId no coincide' });
+        response.resolutions.forEach((resolution, index) => {
+            const extras = unexpectedFields(resolution, ['gapId', 'decision']);
+            if (extras.length) {
+                errors.push({
+                    code: 'resolution-shape',
+                    message: `resolutions[${index}] contiene campos no permitidos: ${extras.join(', ')}`,
+                });
+            }
+        });
+        response.actionTrace.forEach((trace, index) => {
+            const extras = unexpectedFields(trace, ['sequence', 'gherkinStep', 'screenMethod', 'locatorName']);
+            if (extras.length) {
+                errors.push({
+                    code: 'trace-shape',
+                    message: `actionTrace[${index}] contiene campos no permitidos: ${extras.join(', ')}`,
+                });
+            }
+        });
+        response.files.forEach((file, index) => {
+            const extras = unexpectedFields(file, ['layer', 'path', 'content']);
+            if (extras.length) {
+                errors.push({
+                    code: 'file-shape',
+                    message: `files[${index}] contiene campos no permitidos: ${extras.join(', ')}`,
+                    file: file.path,
+                });
+            }
+        });
 
         // `completions`: adoptar una clave existente y rellenar su hueco.
         //
@@ -221,6 +268,14 @@ export class AutomationResponseValidator {
         // inventado no puede entrar por esta via, que es justo el riesgo de
         // dejarle escribir en un archivo de otra feature.
         for (const completion of response.completions || []) {
+            const extras = unexpectedFields(completion, ['file', 'name', 'platform', 'sequence']);
+            if (extras.length) {
+                errors.push({
+                    code: 'completion-shape',
+                    message: `Completion contiene campos no permitidos: ${extras.join(', ')}`,
+                });
+                continue;
+            }
             const label = `${completion.file}#${completion.name} (${completion.platform})`;
             const action = scenario.actions.find(step => step.sequence === completion.sequence);
             if (!action) {
@@ -300,6 +355,55 @@ export class AutomationResponseValidator {
         }
 
         const locatorFile = response.files.find(file => file.layer === 'locators');
+        if (locatorFile) {
+            const locatorPlan = plan.files.find(file => file.layer === 'locators');
+            let baseline: string | undefined;
+            if (locatorPlan?.operation === 'update') {
+                const absolute = path.join(projectPaths.frameworkRoot, locatorPlan.path);
+                if (fs.existsSync(absolute)) baseline = fs.readFileSync(absolute, 'utf-8');
+            }
+            const actionBySequence = new Map(scenario.actions.map(action => [action.sequence, action]));
+            const allowedByLocator = new Map<string, Set<string>>();
+            const addAllowed = (name: string | undefined, sequence: number): void => {
+                if (!name) return;
+                const action = actionBySequence.get(sequence);
+                if (!action) return;
+                const allowed = allowedByLocator.get(name) || new Set<string>();
+                candidateAllowlist(action, scenario.platform)
+                    .forEach(candidate => allowed.add(candidate.locatorValue));
+                allowedByLocator.set(name, allowed);
+            };
+            plan.resolutions.forEach(resolution => addAllowed(resolution.locatorName, resolution.sequence));
+            response.actionTrace.forEach(trace => {
+                const planned = plan.resolutions.find(resolution => resolution.sequence === trace.sequence);
+                if (planned?.locatorName && trace.locatorName && trace.locatorName !== planned.locatorName) {
+                    errors.push({
+                        code: 'trace-locator',
+                        message:
+                            `La acción ${trace.sequence} traza ${trace.locatorName}, pero el plan exige ` +
+                            `${planned.locatorName}.`,
+                        file: locatorFile.path,
+                    });
+                    return;
+                }
+                addAllowed(trace.locatorName, trace.sequence);
+            });
+            for (const proposed of changedLocatorValues(locatorFile.content, baseline)) {
+                const recordedPlatformBlock = proposed.blockName.toLowerCase().endsWith(scenario.platform);
+                if (
+                    recordedPlatformBlock
+                    && allowedByLocator.get(proposed.name)?.has(proposed.selector.trim())
+                ) continue;
+                errors.push({
+                    code: 'invented-selector',
+                    message:
+                        `El locator ${proposed.blockName}.${proposed.name} usa un valor fuera de la allowlist ` +
+                        `verificada de su acción: ` +
+                        `"${proposed.selector}".`,
+                    file: locatorFile.path,
+                });
+            }
+        }
         const existingAutomationWithoutNewLocators = Boolean(locatorFile) &&
             hasNoLocatorEntries(locatorFile!.content) &&
             (Boolean(plan.existingCase) || reusesEveryRecordedLocator(scenario, plan, response));

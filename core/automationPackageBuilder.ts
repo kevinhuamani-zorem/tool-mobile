@@ -18,6 +18,7 @@ import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
 import { withGeneratedResponseMetadata } from './generatedFileMetadata';
+import { locatorCandidatePackage } from './selectorCandidates';
 
 function writeJson(file: string, value: unknown): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -146,10 +147,11 @@ function instructions(result: ResolverResult): string {
     return `# Contrato del agente de automatización\n\n` +
         `Objetivo: resolver únicamente los gaps de \`unresolved-context.json\` y escribir \`agent-response.json\`.\n\n` +
         `Reglas:\n` +
-        `- Lee solo: generation-plan.json, reuse-context.json, collision-report.json, unresolved-context.json y scenario.json.\n` +
+        `- Lee solo: generation-plan.json, reuse-context.json, collision-report.json, unresolved-context.json, scenario.json y locator-candidates.json.\n` +
         `- No explores el repositorio ni leas XML/capturas salvo que un gap lo pida explícitamente.\n` +
         `- Conserva exactamente recordingId, planId y las cuatro rutas del plan.\n` +
         `- Los selectores verificados y las decisiones reuse/create del plan son definitivos. Los nombres logicos NO: si existe el gap gap-english-naming, renombralos a ingles conservando selector y decision.\n` +
+        `- locator-candidates.json es una allowlist verificada e inmutable. Puedes citar candidateId para justificar reuse, pero no inventar, editar ni escribir un selector fuera de esa lista. El candidato primary sigue siendo el selector por defecto para create; las alternativas solo permiten reutilizar un locator existente.\n` +
         `- contextHint/elementIntent es solo una pista libre escrita por el QA para comprender el elemento. No la copies literalmente ni la conviertas uno-a-uno en un Step; sintetiza comportamientos declarativos usando el objetivo, criterio de aceptación y secuencia completa.\n` +
         `- No dupliques ninguna expresión o selector listado en collision-report.json; reutiliza su ruta y nombre lógico.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
@@ -190,12 +192,13 @@ function regenerationInstructions(
         `Objetivo: mejorar el caso ya generado usando \`baseline-response.json\` y escribir una nueva versión completa en \`agent-response.json\`.\n\n` +
         `Solicitud del QA: ${refinement}\n\n` +
         `Reglas:\n` +
-        `- Lee solo: baseline-response.json, generation-plan.json, scenario.json, reuse-context.json, collision-report.json y unresolved-context.json.\n` +
+        `- Lee solo: baseline-response.json, generation-plan.json, scenario.json, locator-candidates.json, reuse-context.json, collision-report.json y unresolved-context.json.\n` +
         `- Conserva exactamente recordingId=${scenario.recordingId}, planId=${plan.planId} y las cuatro rutas del plan.\n` +
         `- Parte del contenido de baseline-response.json; modifica únicamente lo necesario para el refinamiento.\n` +
         `- Usa un alias de dominio derivado del archivo Screen Object; están prohibidos generatedScreen, screen, page, screenObject y obj.\n` +
         `- Conserva los imports por alias que ya trae el baseline, nunca rutas relativas. browser solo se importa cuando se utiliza.\n` +
         `- No explores el repositorio ni cambies selectores verificados o decisiones deterministas.\n` +
+        `- locator-candidates.json es una allowlist verificada e inmutable: solo puedes citar candidateId, nunca inventar o modificar selectores.\n` +
         `- contextHint/elementIntent es contexto no vinculante del QA: no lo copies literalmente como Step; conserva o mejora la síntesis declarativa del comportamiento completo.\n` +
         `- Redacta Gherkin declarativo y agrupa clicks, scrolls, swipes y esperas dentro de steps funcionales.\n` +
         `- Conserva los tags de plataforma: @android si Android está completo y @ios si iOS está completo.\n` +
@@ -335,12 +338,15 @@ if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('
  */
 function packagedScenario(scenario: AutomationScenario): AutomationScenario {
     const rows = scenario.request.scenarioRows;
-    if (!rows?.length) return scenario;
     return {
         ...scenario,
+        actions: scenario.actions.map(action => {
+            const { selectorCandidates: _selectorCandidates, ...compact } = action;
+            return compact;
+        }),
         request: {
             ...scenario.request,
-            scenarioRows: rows.map(row => ({
+            scenarioRows: rows?.map(row => ({
                 ...row,
                 actions: (row.actions || []).map(action => ({ sequence: action.sequence } as any)),
             })),
@@ -438,6 +444,10 @@ export class AutomationPackageBuilder {
             throw new Error('La grabación no tiene una propuesta validada para regenerar');
         }
         const scenario = read<AutomationScenario>('scenario.json');
+        const locatorCandidatesFile = path.join(packageDirectory, 'locator-candidates.json');
+        if (!fs.existsSync(locatorCandidatesFile)) {
+            writeJson(locatorCandidatesFile, locatorCandidatePackage(scenario));
+        }
         const previousPlan = read<GenerationPlan>('generation-plan.json');
         const baseline = read<AutomationAgentResponse>('agent-response.json');
         const previousValidation = fs.existsSync(path.join(packageDirectory, 'validation.json'))
@@ -483,7 +493,7 @@ export class AutomationPackageBuilder {
                 `${JSON.stringify(value, null, 2)}\n`,
                 'utf-8'
             ), Buffer.byteLength(instructions, 'utf-8'));
-        const retainedContext = ['reuse-context.json', 'collision-report.json']
+        const retainedContext = ['reuse-context.json', 'collision-report.json', 'locator-candidates.json']
             .reduce((total, name) => {
                 const file = path.join(packageDirectory, name);
                 return total + (fs.existsSync(file) ? fs.statSync(file).size : 0);
@@ -506,7 +516,10 @@ export class AutomationPackageBuilder {
             throw new Error(`La iteración de regeneración ${iteration} ya existe`);
         }
         fs.mkdirSync(historyDirectory, { recursive: true });
-        for (const name of ['scenario.json', 'generation-plan.json', 'agent-response.json', 'validation.json', 'status.json']) {
+        for (const name of [
+            'scenario.json', 'locator-candidates.json', 'generation-plan.json',
+            'agent-response.json', 'validation.json', 'status.json',
+        ]) {
             const source = path.join(packageDirectory, name);
             if (fs.existsSync(source)) fs.copyFileSync(source, path.join(historyDirectory, name));
         }
@@ -562,6 +575,7 @@ export class AutomationPackageBuilder {
         const memoryHit = this.memory.find(result.scenario.fingerprint);
         if (memoryHit) result.plan.status = 'memory-hit';
         writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario(result.scenario));
+        writeJson(path.join(packageDirectory, 'locator-candidates.json'), locatorCandidatePackage(result.scenario));
         writeJson(path.join(packageDirectory, 'generation-plan.json'), result.plan);
         writeJson(path.join(packageDirectory, 'resolved-context.json'), result.resolvedContext);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), result.unresolvedContext);
@@ -673,7 +687,8 @@ export class AutomationPackageBuilder {
         });
         const contextBytes = [
             'scenario.json', 'generation-plan.json', 'reuse-context.json',
-            'collision-report.json', 'unresolved-context.json', 'instructions.md'
+            'collision-report.json', 'unresolved-context.json', 'locator-candidates.json',
+            'instructions.md'
         ]
             .reduce((total, file) => total + fs.statSync(path.join(packageDirectory, file)).size, 0);
         // El presupuesto es un objetivo de coste, no una condición de correctitud:

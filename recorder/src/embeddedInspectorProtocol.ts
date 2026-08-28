@@ -1,5 +1,6 @@
 export const EMBEDDED_INSPECTOR_CHANNEL = 'appium-inspector:embedded';
-export const EMBEDDED_INSPECTOR_VERSION = 2;
+export const EMBEDDED_INSPECTOR_VERSION = 3;
+export const MAX_EMBEDDED_INSPECTOR_CANDIDATES = 50;
 
 export const EMBEDDED_INSPECTOR_TYPES = {
     CONNECT: 'appium-inspector:connect',
@@ -24,6 +25,22 @@ export interface EmbeddedInspectorElementUsed {
     attributes: Record<string, string>;
     screenshot?: string;
     source?: string;
+    candidates: EmbeddedInspectorLocatorCandidate[];
+}
+
+export const EMBEDDED_INSPECTOR_CANDIDATE_STABILITIES = [
+    'stable', 'contextual', 'structural', 'manual',
+] as const;
+
+export interface EmbeddedInspectorLocatorCandidate {
+    candidateId: string;
+    strategy: string;
+    selector: string;
+    priority: number;
+    stability: typeof EMBEDDED_INSPECTOR_CANDIDATE_STABILITIES[number];
+    sourceReason: string;
+    matchCount: 1;
+    sameElement: true;
 }
 
 export interface EmbeddedInspectorError {
@@ -65,6 +82,14 @@ function requiredString(value: unknown, field: string): string {
     return value;
 }
 
+function boundedString(value: unknown, field: string, maxLength: number): string {
+    const result = requiredString(value, field);
+    if (result.length > maxLength) {
+        throw new EmbeddedInspectorProtocolError('INVALID_PAYLOAD', `'${field}' excede ${maxLength} caracteres`);
+    }
+    return result;
+}
+
 function optionalString(value: unknown, field: string): string | undefined {
     if (value === undefined) return undefined;
     return requiredString(value, field);
@@ -79,6 +104,51 @@ function stringRecord(value: unknown, field: string): Record<string, string> {
         throw new EmbeddedInspectorProtocolError('INVALID_PAYLOAD', `'${field}' solo admite valores string`);
     }
     return Object.fromEntries(entries) as Record<string, string>;
+}
+
+const CANDIDATE_FIELDS = new Set([
+    'candidateId', 'strategy', 'selector', 'priority', 'stability',
+    'sourceReason', 'matchCount', 'sameElement',
+]);
+
+function locatorCandidate(value: unknown, index: number): EmbeddedInspectorLocatorCandidate {
+    const field = `candidates[${index}]`;
+    if (!isObject(value) || Object.keys(value).some(key => !CANDIDATE_FIELDS.has(key))) {
+        throw new EmbeddedInspectorProtocolError(
+            'INVALID_PAYLOAD',
+            `'${field}' debe usar exclusivamente la forma compacta verificada`,
+        );
+    }
+    if (!Number.isInteger(value.priority) || Number(value.priority) < 0 || Number(value.priority) > 1_000_000) {
+        throw new EmbeddedInspectorProtocolError(
+            'INVALID_PAYLOAD',
+            `'${field}.priority' debe ser un entero no negativo acotado`,
+        );
+    }
+    if (
+        typeof value.stability !== 'string'
+        || !EMBEDDED_INSPECTOR_CANDIDATE_STABILITIES.includes(
+            value.stability as EmbeddedInspectorLocatorCandidate['stability'],
+        )
+    ) {
+        throw new EmbeddedInspectorProtocolError('INVALID_PAYLOAD', `'${field}.stability' no es soportado`);
+    }
+    if (value.matchCount !== 1 || value.sameElement !== true) {
+        throw new EmbeddedInspectorProtocolError(
+            'INVALID_PAYLOAD',
+            `'${field}' debe probar una coincidencia única con el mismo elemento`,
+        );
+    }
+    return {
+        candidateId: boundedString(value.candidateId, `${field}.candidateId`, 128),
+        strategy: boundedString(value.strategy, `${field}.strategy`, 64),
+        selector: boundedString(value.selector, `${field}.selector`, 2_048),
+        priority: Number(value.priority),
+        stability: value.stability as EmbeddedInspectorLocatorCandidate['stability'],
+        sourceReason: boundedString(value.sourceReason, `${field}.sourceReason`, 256),
+        matchCount: 1,
+        sameElement: true,
+    };
 }
 
 function validateEnvelope(data: unknown): Record<string, unknown> {
@@ -168,10 +238,42 @@ export function validateEmbeddedInspectorMessage(data: unknown): EmbeddedInspect
             if (!isObject(message.payload)) {
                 throw new EmbeddedInspectorProtocolError('INVALID_PAYLOAD', "'element-used.payload' debe ser un objeto");
             }
+            if (
+                !Array.isArray(message.payload.candidates)
+                || message.payload.candidates.length === 0
+                || message.payload.candidates.length > MAX_EMBEDDED_INSPECTOR_CANDIDATES
+            ) {
+                throw new EmbeddedInspectorProtocolError(
+                    'INVALID_PAYLOAD',
+                    `'candidates' debe contener entre 1 y ${MAX_EMBEDDED_INSPECTOR_CANDIDATES} elementos`,
+                );
+            }
+            const candidates = message.payload.candidates.map(locatorCandidate);
+            const strategy = boundedString(message.payload.strategy, 'strategy', 64);
+            const selector = boundedString(message.payload.selector, 'selector', 2_048);
+            if (candidates[0].strategy !== strategy || candidates[0].selector !== selector) {
+                throw new EmbeddedInspectorProtocolError(
+                    'INVALID_PAYLOAD',
+                    'El primer candidato debe ser el selector primario visible',
+                );
+            }
+            const identities = candidates.map(candidate =>
+                `${candidate.strategy.trim().toLowerCase()}\u0000${candidate.selector.trim()}`,
+            );
+            if (
+                new Set(identities).size !== identities.length
+                || new Set(candidates.map(candidate => candidate.candidateId)).size !== candidates.length
+            ) {
+                throw new EmbeddedInspectorProtocolError(
+                    'INVALID_PAYLOAD',
+                    "'candidates' no admite selectores ni candidateId duplicados",
+                );
+            }
             const payload: EmbeddedInspectorElementUsed = {
-                strategy: requiredString(message.payload.strategy, 'strategy'),
-                selector: requiredString(message.payload.selector, 'selector'),
+                strategy,
+                selector,
                 attributes: stringRecord(message.payload.attributes, 'attributes'),
+                candidates,
             };
             const elementId = optionalString(message.payload.elementId, 'elementId');
             const tag = optionalString(message.payload.tag, 'tag');
@@ -206,7 +308,9 @@ const STRATEGY_PREFIXES: Record<string, string> = {
     xpath: '',
 };
 
-export function recorderSelectorFromInspector(elementUsed: EmbeddedInspectorElementUsed): string {
+export function recorderSelectorFromInspector(
+    elementUsed: Pick<EmbeddedInspectorElementUsed, 'strategy' | 'selector'>,
+): string {
     const strategy = elementUsed.strategy.trim().toLowerCase();
     const prefix = STRATEGY_PREFIXES[strategy];
     if (prefix === undefined) {

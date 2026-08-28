@@ -263,7 +263,7 @@ test('pins and builds the controlled fork without a committed bundle or plugin',
     const runScript = fs.readFileSync(path.join(toolRoot, 'run.sh'), 'utf8');
 
     assert.match(gitmodules, /kevinhuamani-zorem\/appium-inspector\.git/);
-    assert.match(gitmodules, /kevinhuamani-zorem-embedded-inspector-mode/);
+    assert.match(gitmodules, /kevinhuamani-zorem-verified-locator-backups/);
     assert.match(buildScript, new RegExp(EMBEDDED_INSPECTOR_COMMIT));
     assert.match(buildScript, /npm', \['run', 'build:browser'\]/);
     assert.match(buildScript, /VITE_EMBEDDED_HOST_ORIGIN: hostOrigin/);

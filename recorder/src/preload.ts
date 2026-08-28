@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { SelectorCandidate } from '../../core/models';
 
 contextBridge.exposeInMainWorld('api', {
     // ── Framework ────────────────────────────────────────────────────────────
@@ -50,21 +51,22 @@ contextBridge.exposeInMainWorld('api', {
         selector: string;
         strategy: string;
         tag?: string;
-        attributes: Record<string, string>;
-        screenshot?: string;
-        source?: string;
+        selectorCandidates: SelectorCandidate[];
+        selectorCandidateToken: string;
+        validationWarnings: string[];
     }) => void) => {
         const wrapped = (_event: Electron.IpcRendererEvent, elementUsed: {
             selector: string;
             strategy: string;
             tag?: string;
-            attributes: Record<string, string>;
-            screenshot?: string;
-            source?: string;
+            selectorCandidates: SelectorCandidate[];
+            selectorCandidateToken: string;
+            validationWarnings: string[];
         }) => listener(elementUsed);
         ipcRenderer.on('embedded-inspector-element-used', wrapped);
         return () => ipcRenderer.removeListener('embedded-inspector-element-used', wrapped);
     },
+    clearInspectorCandidates: () => ipcRenderer.invoke('clear-inspector-candidates'),
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),
     deleteStep:          (idx: number)          => ipcRenderer.invoke('delete-step', idx),

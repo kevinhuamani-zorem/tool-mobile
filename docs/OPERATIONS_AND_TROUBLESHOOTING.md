@@ -28,8 +28,11 @@ credenciales; estas nunca se exponen al bundle.
 
 El botón **Inspector** del header abre o focaliza la misma ventana embebida. Una
 selección ordinaria permanece dentro de Appium Inspector; el recorder solo
-importa el selector cuando el QA pulsa **Usar en Recorder**, lo deja pendiente
-de verificación, oculta la ventana y conserva la sesión para reabrirla. El botón
+importa el selector cuando el QA pulsa **Usar en Recorder**, lo somete a una
+segunda validación en el proceso principal, oculta la ventana solo cuando el
+primary vuelve a resolver de forma única al mismo elemento y conserva la sesión
+para reabrirla. Hasta cuatro candidatos verificados acompañan la acción solo para
+análisis de generación/reuse; no son fallbacks de ejecución. El botón
 inferior **Inspeccionar** activa exclusivamente la inspección local sobre la
 captura/XML del recorder.
 
@@ -37,6 +40,11 @@ Al copiar un selector, el Inspector confirma éxito solo cuando
 `navigator.clipboard.writeText` termina correctamente. Si la API no está
 disponible o rechaza la escritura, muestra **Copy failed** y no simula éxito. El
 host concede exclusivamente `clipboard-write` al iframe.
+
+Si el primary falla la segunda validación, el Inspector permanece visible y el
+recorder muestra el error. Alternativas inválidas se omiten y se informa su
+cantidad. Editar manualmente el selector o elegir otro candidato local elimina
+los backups para evitar reutilizar evidencia obsoleta.
 
 ## Diagnóstico por síntomas
 

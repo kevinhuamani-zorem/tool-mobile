@@ -183,41 +183,45 @@ export class AppiumDriverManager {
         throw new Error('getPageSource fallo');
     }
 
-    async findElement(selector: string) {
-        const driver = this.getDriver();
+    private selectorForDriver(selector: string): string {
         const trimmedSelector = selector.trim();
         if (
             trimmedSelector.startsWith('new UiSelector(') ||
             trimmedSelector.startsWith('new UiScrollable(')
         ) {
-            return await driver.$(`android=${trimmedSelector}`);
+            return `android=${trimmedSelector}`;
         }
-        if (selector.startsWith('id=')) {
-            const resourceId = selector.slice(3);
+        if (trimmedSelector.startsWith('id=')) {
+            const resourceId = trimmedSelector.slice(3);
             if (!resourceId.includes('/') && !resourceId.includes(':')) {
-                return await driver.$(`//*[@resource-id="${resourceId}"]`);
+                return `//*[@resource-id="${resourceId}"]`;
             }
-            return await driver.$(selector);
+            return trimmedSelector;
         }
-        if (selector.startsWith('class=')) {
-            return await driver.$(`class name=${selector.slice(6)}`);
+        if (trimmedSelector.startsWith('class=')) {
+            return `class name=${trimmedSelector.slice(6)}`;
         }
-        if (selector.startsWith('android=')) {
-            return await driver.$(selector);
+        if (trimmedSelector.startsWith('android=')) {
+            return trimmedSelector;
         }
-        if (selector.startsWith('iosPredicate=')) {
-            return await driver.$(`-ios predicate string:${selector.slice(13)}`);
+        if (trimmedSelector.startsWith('iosPredicate=')) {
+            return `-ios predicate string:${trimmedSelector.slice(13)}`;
         }
-        if (selector.startsWith('iosClassChain=')) {
-            return await driver.$(`-ios class chain:${selector.slice(14)}`);
+        if (trimmedSelector.startsWith('iosClassChain=')) {
+            return `-ios class chain:${trimmedSelector.slice(14)}`;
         }
-        if (selector.startsWith('//') || selector.startsWith('(')) {
-            return await driver.$(selector);
-        }
-        if (selector.startsWith('~')) {
-            return await driver.$(selector);
-        }
-        return await driver.$(selector);
+        return trimmedSelector;
+    }
+
+    async findElement(selector: string) {
+        return await this.getDriver().$(this.selectorForDriver(selector));
+    }
+
+    /** Devuelve todas las identidades W3C para comprobar unicidad y mismo elemento. */
+    async findElementIds(selector: string): Promise<string[]> {
+        const elements = await this.getDriver().$$(this.selectorForDriver(selector));
+        const ids = await elements.map(element => String(element.elementId || ''));
+        return ids.filter(Boolean);
     }
 
     async executeScript(script: string, ...args: any[]): Promise<any> {

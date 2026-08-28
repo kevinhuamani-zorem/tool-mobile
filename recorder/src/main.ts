@@ -14,6 +14,7 @@ import { MobileStepExecutor } from '../../core/mobileStepExecutor';
 import { LocatorManager } from '../../core/locatorManager';
 import { FeatureGenerator } from './featureGenerator';
 import { RecordedStep } from '../../core/models';
+import { SelectorCandidate } from '../../core/models';
 import { projectPaths } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform, GeneratedPreview } from '../../core/fwkMobileGenerator';
@@ -40,6 +41,7 @@ import {
 } from '../../core/automationPatchWriter';
 import { AutomationAgentResponse, AutomationScenario, GenerationPlan } from '../../core/automationContracts';
 import {
+    EmbeddedInspectorElementUsed,
     EmbeddedInspectorHandshake,
     recorderSelectorFromInspector,
 } from './embeddedInspectorProtocol';
@@ -54,6 +56,12 @@ import {
 } from './embeddedInspectorWindow';
 import { EmbeddedInspectorProxy } from './embeddedInspectorProxy';
 import { RecorderRuntimeLifecycle, RecorderSessionOwnership } from './recorderLifecycle';
+import {
+    attachLocatorCandidatePackage,
+    LocatorCandidatePackage,
+    requireTrustedLocatorCandidatePackage,
+} from '../../core/selectorCandidates';
+import { independentlyVerifySelectorCandidates } from '../../core/verifiedSelectorCandidates';
 
 registerEmbeddedInspectorScheme();
 
@@ -110,6 +118,12 @@ let automationPreview: {
     plan: GenerationPlan;
     response: AutomationAgentResponse;
 } | null = null;
+let pendingInspectorCandidates: {
+    token: string;
+    primarySelector: string;
+    candidates: SelectorCandidate[];
+} | null = null;
+let inspectorValidationGeneration = 0;
 const sessionOwnership = new RecorderSessionOwnership();
 
 async function closeEmbeddedInspectorResources(): Promise<void> {
@@ -128,7 +142,56 @@ async function closeOwnedSession(): Promise<void> {
     automationRecordingStore.reset();
     activeAutomationPackage = '';
     automationPreview = null;
+    pendingInspectorCandidates = null;
+    inspectorValidationGeneration++;
     await sessionOwnership.close();
+}
+
+async function validateEmbeddedInspectorElementUse(
+    elementUsed: EmbeddedInspectorElementUsed,
+): Promise<void> {
+    const generation = ++inspectorValidationGeneration;
+    pendingInspectorCandidates = null;
+    try {
+        if (!sessionActive) throw new Error('La sesión Appium ya no está activa');
+        if (!elementUsed.elementId) {
+            throw new Error('Inspector no entregó la identidad WebDriver del elemento seleccionado');
+        }
+        const metadata = activeDm.getSessionMetadata();
+        const validation = await independentlyVerifySelectorCandidates({
+            candidates: elementUsed.candidates,
+            selectedElementId: elementUsed.elementId,
+            platform: metadata.platform,
+            recorderSelector: recorderSelectorFromInspector,
+            findElementIds: selector => activeDm.findElementIds(selector),
+        });
+        if (generation !== inspectorValidationGeneration) return;
+        if (activeDm.getSessionMetadata().sessionId !== metadata.sessionId) {
+            throw new Error('La sesión Appium cambió durante la validación de candidatos');
+        }
+        const token = crypto.randomUUID();
+        pendingInspectorCandidates = {
+            token,
+            primarySelector: validation.primarySelector,
+            candidates: validation.candidates,
+        };
+        mainWindow?.webContents.send('embedded-inspector-element-used', {
+            selector: validation.primarySelector,
+            strategy: elementUsed.strategy,
+            tag: elementUsed.tag,
+            selectorCandidates: validation.candidates,
+            selectorCandidateToken: token,
+            validationWarnings: validation.warnings,
+        });
+        returnToRecorderAfterElementUse(embeddedInspectorWindow, mainWindow);
+    } catch (error) {
+        if (generation !== inspectorValidationGeneration) return;
+        pendingInspectorCandidates = null;
+        mainWindow?.webContents.send(
+            'embedded-inspector-error',
+            error instanceof Error ? error.message : 'No se pudo validar el selector del Inspector',
+        );
+    }
 }
 
 const recorderLifecycle = new RecorderRuntimeLifecycle([
@@ -889,16 +952,7 @@ ipcMain.handle('open-inspector', async () => {
         ),
         () => mainWindow?.webContents.send('embedded-inspector-connected'),
         elementUsed => {
-            const selector = recorderSelectorFromInspector(elementUsed);
-            mainWindow?.webContents.send('embedded-inspector-element-used', {
-                selector,
-                strategy: elementUsed.strategy,
-                tag: elementUsed.tag,
-                attributes: elementUsed.attributes,
-                screenshot: elementUsed.screenshot,
-                source: elementUsed.source,
-            });
-            returnToRecorderAfterElementUse(embeddedInspectorWindow, mainWindow);
+            void validateEmbeddedInspectorElementUse(elementUsed);
         },
         error => mainWindow?.webContents.send(
             'embedded-inspector-error',
@@ -923,6 +977,12 @@ ipcMain.handle('get-screenshot', async () => {
     } catch (e: any) {
         return { success: false, error: e.message };
     }
+});
+
+ipcMain.handle('clear-inspector-candidates', () => {
+    pendingInspectorCandidates = null;
+    inspectorValidationGeneration++;
+    return { success: true };
 });
 
 ipcMain.handle('tap-at', async (_, x: number, y: number) => {
@@ -1053,19 +1113,40 @@ ipcMain.handle('verify-selector', async (_, selector: string) => {
 
 ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
     if (!executor) return { success: false, message: 'Sin sesion activa' };
-    if (stepData.variableName && stepData.selector) {
-        if (!locatorManager.exists(stepData.variableName)) {
-            locatorManager.add(stepData.variableName, stepData.selector, false);
+    const received = stepData as RecordedStep & {
+        selectorCandidateToken?: string;
+        selectorCandidates?: SelectorCandidate[];
+    };
+    const {
+        selectorCandidateToken,
+        selectorCandidates: _untrustedCandidates,
+        ...baseStep
+    } = received;
+    const trustedCandidates = pendingInspectorCandidates
+        && selectorCandidateToken === pendingInspectorCandidates.token
+        && baseStep.selector === pendingInspectorCandidates.primarySelector
+        ? pendingInspectorCandidates.candidates
+        : undefined;
+    const executableStep: RecordedStep = {
+        ...baseStep,
+        ...(trustedCandidates ? { selectorCandidates: trustedCandidates } : {}),
+    };
+    if (executableStep.variableName && executableStep.selector) {
+        if (!locatorManager.exists(executableStep.variableName)) {
+            locatorManager.add(executableStep.variableName, executableStep.selector, false);
         }
     }
-    const result = await executor.execute(stepData);
+    const result = await executor.execute(executableStep);
     if (result.success) {
         recordedSteps.push({
-            ...stepData,
-            elementIntent: stepData.elementIntent || stepData.description || stepData.variableName,
-            selectorVerified: Boolean(stepData.selector),
+            ...executableStep,
+            elementIntent: executableStep.elementIntent || executableStep.description || executableStep.variableName,
+            selectorVerified:
+                executableStep.selectorVerified === true
+                || Boolean(trustedCandidates),
             platform: recordingPlatform,
         });
+        pendingInspectorCandidates = null;
         syncRecording();
         const screenshot = await inspector?.captureScreenshot().catch(() => undefined);
         return { ...result, totalSteps: recordedSteps.length, screenshot };
@@ -1321,7 +1402,40 @@ ipcMain.handle('import-automation-response', async () => {
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
         const read = <T>(name: string): T => JSON.parse(fs.readFileSync(path.join(activeAutomationPackage, name), 'utf-8')) as T;
-        const scenario = read<AutomationScenario>('scenario.json');
+        const packagedScenario = read<AutomationScenario>('scenario.json');
+        const candidateFile = path.join(activeAutomationPackage, 'locator-candidates.json');
+        const recordingScenarioFile = path.resolve(activeAutomationPackage, '..', '..', 'scenario.json');
+        if (!fs.existsSync(recordingScenarioFile)) {
+            throw new Error('No se encontró la grabación original para validar locator-candidates.json');
+        }
+        const recordingScenario = JSON.parse(
+            fs.readFileSync(recordingScenarioFile, 'utf-8')
+        ) as AutomationScenario;
+        const scenarioIdentity = (value: AutomationScenario, stripCandidates: boolean): unknown => {
+            const { revision: _revision, ...identity } = value;
+            return {
+                ...identity,
+                actions: identity.actions.map(action => {
+                    if (!stripCandidates) return action;
+                    const { selectorCandidates: _candidates, ...compact } = action;
+                    return compact;
+                }),
+            };
+        };
+        if (
+            JSON.stringify(scenarioIdentity(packagedScenario, false))
+            !== JSON.stringify(scenarioIdentity(recordingScenario, true))
+        ) {
+            throw new Error('scenario.json fue modificado o no coincide con la grabación original');
+        }
+        const packagedCandidates = fs.existsSync(candidateFile)
+            ? read<LocatorCandidatePackage>('locator-candidates.json')
+            : undefined;
+        const trustedCandidates = requireTrustedLocatorCandidatePackage(
+            recordingScenario,
+            packagedCandidates,
+        );
+        const scenario = attachLocatorCandidatePackage(recordingScenario, trustedCandidates);
         const plan = read<GenerationPlan>('generation-plan.json');
         const response = withGeneratedResponseMetadata(
             read<AutomationAgentResponse>('agent-response.json'),

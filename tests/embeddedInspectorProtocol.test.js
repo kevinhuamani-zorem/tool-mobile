@@ -7,6 +7,7 @@ const {
     EMBEDDED_INSPECTOR_VERSION,
     EmbeddedInspectorHandshake,
     EmbeddedInspectorProtocolError,
+    MAX_EMBEDDED_INSPECTOR_CANDIDATES,
     recorderSelectorFromInspector,
     validateEmbeddedInspectorMessage,
 } = require('../dist/recorder/src/embeddedInspectorProtocol');
@@ -17,6 +18,20 @@ function message(type, payload) {
         version: EMBEDDED_INSPECTOR_VERSION,
         type,
         ...(payload === undefined ? {} : { payload }),
+    };
+}
+
+function candidate(overrides = {}) {
+    return {
+        candidateId: 'primary-1',
+        strategy: 'xpath',
+        selector: '//button',
+        priority: 0,
+        stability: 'manual',
+        sourceReason: 'Manual Inspector selection',
+        matchCount: 1,
+        sameElement: true,
+        ...overrides,
     };
 }
 
@@ -32,6 +47,10 @@ test('validates every embedded event payload', () => {
             elementId: 'element-1',
             tag: 'android.widget.Button',
             attributes: { text: 'Pagar', enabled: 'true' },
+            candidates: [candidate({
+                strategy: '-android uiautomator',
+                selector: 'new UiSelector().text("Pagar")',
+            })],
             screenshot: 'abc',
             source: '<hierarchy />',
         })).payload.attributes,
@@ -43,6 +62,7 @@ test('validates every embedded event payload', () => {
             strategy: 'xpath',
             selector: '//button',
             attributes: { enabled: true },
+            candidates: [candidate()],
         })),
         error => error instanceof EmbeddedInspectorProtocolError && error.code === 'INVALID_PAYLOAD',
     );
@@ -57,7 +77,7 @@ test('validates every embedded event payload', () => {
 });
 
 test('maps successful Inspector strategies into existing recorder selector syntax', () => {
-    const base = { attributes: {} };
+    const base = { attributes: {}, candidates: [candidate()] };
     assert.equal(
         recorderSelectorFromInspector({ ...base, strategy: 'accessibility id', selector: 'Pagar' }),
         '~Pagar',
@@ -114,12 +134,16 @@ test('performs the handshake and transfers the explicitly used strategy and sele
         strategy: 'xpath',
         selector: '//android.widget.Button',
         attributes: {},
+        elementId: 'element-1',
+        candidates: [candidate({ selector: '//android.widget.Button' })],
     }));
     assert.equal(uses.length, 1);
     assert.deepEqual(uses[0], {
         strategy: 'xpath',
         selector: '//android.widget.Button',
         attributes: {},
+        elementId: 'element-1',
+        candidates: [candidate({ selector: '//android.widget.Button' })],
     });
     assert.deepEqual(errors, []);
 
@@ -147,6 +171,7 @@ test('rejects explicit element use before the connected acknowledgement', () => 
             strategy: 'xpath',
             selector: '//button',
             attributes: {},
+            candidates: [candidate()],
         })),
         error => error.code === 'INVALID_MESSAGE_ORDER',
     );
@@ -174,8 +199,38 @@ test('rejects ordinary Inspector selection without mutating recorder state', () 
             strategy: 'xpath',
             selector: '//button',
             attributes: {},
+            candidates: [candidate()],
         })),
         error => error.code === 'INVALID_MESSAGE_TYPE',
     );
     assert.equal(uses, 0);
+});
+
+test('rejects missing, malformed, duplicated, oversized, evidence-bearing and inconsistent candidates', () => {
+    const payload = {
+        strategy: 'xpath',
+        selector: '//button',
+        elementId: 'element-1',
+        attributes: {},
+        candidates: [candidate()],
+    };
+    const rejects = [
+        { ...payload, candidates: undefined },
+        { ...payload, candidates: [{ ...candidate(), matchCount: 2 }] },
+        { ...payload, candidates: [{ ...candidate(), screenshot: 'abc' }] },
+        { ...payload, candidates: [candidate(), candidate()] },
+        {
+            ...payload,
+            candidates: Array.from({ length: MAX_EMBEDDED_INSPECTOR_CANDIDATES + 1 }, (_, index) =>
+                candidate({ candidateId: `candidate-${index}`, selector: `//button[${index + 1}]` })
+            ),
+        },
+        { ...payload, candidates: [candidate({ selector: '//different' })] },
+    ];
+    for (const invalid of rejects) {
+        assert.throws(
+            () => validateEmbeddedInspectorMessage(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED, invalid)),
+            error => error instanceof EmbeddedInspectorProtocolError && error.code === 'INVALID_PAYLOAD',
+        );
+    }
 });

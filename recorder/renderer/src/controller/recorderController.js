@@ -198,6 +198,8 @@ export async function initializeRecorder() {
     let activeScenarioCoverage = null;
     let currentAssignment = null;
     let verifiedSelector = '';
+    let selectorCandidates = [];
+    let selectorCandidateToken = '';
     let advanceAssignmentAfterSave = false;
     let workflowMode = 'new';
     let recordingScenarioCatalog = [];
@@ -1474,6 +1476,12 @@ export async function initializeRecorder() {
         lblInspect.className = 'inspect-status' + (type ? ' ' + type : '');
     }
 
+    function clearSelectorCandidateBackups() {
+        selectorCandidates = [];
+        selectorCandidateToken = '';
+        void api.clearInspectorCandidates();
+    }
+
     api.onInspectorConnected(() => {
         setInspect('✓ Inspector embebido conectado a la sesión', 'ok');
         setStatus('✓ Inspector listo', '#00CC00');
@@ -1491,18 +1499,18 @@ export async function initializeRecorder() {
         renderSelectedLocatorCoverage();
         txtSelector.value = elementUsed.selector;
         txtVarName.value = currentAssignment?.name || txtVarName.value;
-        verifiedSelector = '';
-        if (elementUsed.screenshot) {
-            updateDeviceScreen(
-                elementUsed.screenshot.startsWith('data:')
-                    ? elementUsed.screenshot
-                    : 'data:image/png;base64,' + elementUsed.screenshot
-            );
-        }
+        verifiedSelector = elementUsed.selector;
+        selectorCandidates = elementUsed.selectorCandidates;
+        selectorCandidateToken = elementUsed.selectorCandidateToken;
         renderAssignmentTarget();
         updateAssignmentButton();
-        setVerify('— Selector importado explícitamente; pendiente de verificación');
-        setInspect('✓ Selector usado explícitamente desde Appium Inspector', 'ok');
+        setVerify('✓ Selector y backups revalidados contra la sesión activa', 'ok');
+        setInspect(
+            elementUsed.validationWarnings.length
+                ? `✓ Selector importado; ${elementUsed.validationWarnings.length} alternativa(s) omitida(s)`
+                : '✓ Selector usado explícitamente desde Appium Inspector',
+            'ok'
+        );
         setStatus('✓ Selector importado desde Appium Inspector', '#00CC00');
     });
 
@@ -1792,6 +1800,7 @@ export async function initializeRecorder() {
 
     function clearStepFields() {
         clearSelectorChips();
+        clearSelectorCandidateBackups();
         if (txtSelector) txtSelector.value = '';
         if (txtVarName)  txtVarName.value  = '';
         if (txtElementContext) txtElementContext.value = '';
@@ -2397,6 +2406,7 @@ export async function initializeRecorder() {
 
             chip.addEventListener('click', () => {
                 // Actualizar selector y variable name
+                clearSelectorCandidateBackups();
                 txtSelector.value = c.selector;
                 verifiedSelector = '';
                 const patterns = [
@@ -2693,6 +2703,7 @@ export async function initializeRecorder() {
         // Activar modo inspección
         if (interactionActive) exitInteractionMode();
         clearSelectorChips();
+        clearSelectorCandidateBackups();
         selectedCatalogLocator = null;
         renderSelectedLocatorCoverage();
         txtSelector.value = '';
@@ -2777,6 +2788,7 @@ export async function initializeRecorder() {
             }
 
             txtSelector.value = candidates[0].selector;
+            clearSelectorCandidateBackups();
             txtVarName.value  = currentAssignment?.name || '';
             verifiedSelector = '';
             if (candidates.length > 1) renderSelectorChips(candidates, txtVarName.value);
@@ -2816,6 +2828,7 @@ export async function initializeRecorder() {
 
     txtSelector.addEventListener('input', () => {
         verifiedSelector = '';
+        clearSelectorCandidateBackups();
         updateAssignmentButton();
     });
 
@@ -2856,6 +2869,11 @@ export async function initializeRecorder() {
             variableName: varName,
             contextHint,
             selector,
+            selectorVerified: verifiedSelector === selector,
+            ...(selectorCandidateToken && selectorCandidates.length ? {
+                selectorCandidates,
+                selectorCandidateToken,
+            } : {}),
             value,
             description: desc,
             ...(selectedCatalogLocator ? {
@@ -3713,6 +3731,7 @@ export async function initializeRecorder() {
         if (inspectorActive) exitInspectorMode();
         if (interactionActive) exitInteractionMode();
         clearSelectorChips();
+        clearSelectorCandidateBackups();
         selectedCatalogLocator = null;
         renderSelectedLocatorCoverage();
         xmlModal.style.display = 'flex';

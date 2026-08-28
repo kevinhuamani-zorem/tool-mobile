@@ -110,6 +110,27 @@ function scenario(actions) {
     };
 }
 
+function selectorCandidate(candidateId, selector, locatorType, locatorValue, overrides = {}) {
+    return {
+        candidateId,
+        selector,
+        inspectorStrategy: selector.startsWith('~') ? 'accessibility id' : 'id',
+        locatorType,
+        locatorValue,
+        priority: 0,
+        stability: 'manual',
+        sourceReason: 'Manual Inspector selection',
+        primary: true,
+        verification: {
+            protocolVersion: 3,
+            verifiedAt: '2026-08-27T00:00:00.000Z',
+            matchCount: 1,
+            sameElement: true,
+        },
+        ...overrides,
+    };
+}
+
 const emptyCatalog = {
     getCatalog: (squad, platform) => ({ squad, platform, stepDefinitions: [], screenMethods: [], locators: [], features: [] })
 };
@@ -119,7 +140,19 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     const store = new AutomationRecordingStore(root);
     store.start({ squad: 'payment', platform: 'android', environment: 'qa' });
     store.replaceActions([
-        { action: 'ESCRIBIR', selector: 'id=phone', variableName: 'phone', contextHint: 'numero a yapear', value: '999111222' },
+        {
+            action: 'ESCRIBIR', selector: 'id=phone', selectorVerified: true,
+            variableName: 'phone', contextHint: 'numero a yapear', value: '999111222',
+            selectorCandidates: [selectorCandidate(
+                'primary-phone',
+                'id=phone',
+                'XPATH',
+                '//*[@resource-id="phone"]',
+                { screenshot: 'forbidden', source: '<hierarchy />', attributes: { text: 'phone' } },
+            )],
+            screenshot: 'forbidden-top-level',
+            source: '<hierarchy />',
+        },
         { action: 'ESCRIBIR', selector: 'id=password', variableName: 'password', contextHint: 'contraseña', value: 'secreto' }
     ], {
         squad: 'payment', platform: 'android', environment: 'qa'
@@ -130,6 +163,53 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     assert.equal(actions[1].value, '<password>');
     assert.equal(actions[0].selectorVerified, true);
     assert.equal(actions[0].contextHint, 'numero a yapear');
+    assert.equal(actions[0].selectorCandidates[0].candidateId, 'primary-phone');
+    assert.equal(JSON.stringify(actions).includes('forbidden'), false);
+    assert.equal(JSON.stringify(actions).includes('hierarchy'), false);
+});
+
+test('recording descarta backups derivados de secretos y rechaza un primary sensible', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-secret-locator-'));
+    const store = new AutomationRecordingStore(root);
+    const context = { squad: 'payment', platform: 'android', environment: 'qa' };
+    store.start(context);
+    store.replaceActions([{
+        action: 'ESCRIBIR',
+        selector: 'id=password',
+        selectorVerified: true,
+        variableName: 'password',
+        contextHint: 'contraseña',
+        value: 'secreto',
+        selectorCandidates: [
+            selectorCandidate(
+                'primary-password',
+                'id=password',
+                'XPATH',
+                '//*[@resource-id="password"]',
+            ),
+            selectorCandidate(
+                'backup-password-value',
+                'android=new UiSelector().text("secreto")',
+                'ANDROID',
+                'new UiSelector().text("secreto")',
+                { primary: false },
+            ),
+        ],
+    }], context);
+    const actions = JSON.parse(fs.readFileSync(path.join(store.getActiveDirectory(), 'actions.json')));
+    assert.deepEqual(actions[0].selectorCandidates.map(candidate => candidate.candidateId), [
+        'primary-password',
+    ]);
+    assert.equal(JSON.stringify(actions).includes('secreto'), false);
+
+    assert.throws(() => store.replaceActions([{
+        action: 'ESCRIBIR',
+        selector: '~123',
+        selectorVerified: true,
+        variableName: 'pin',
+        contextHint: 'PIN',
+        value: '123',
+    }], context), /selector que contiene el valor sensible/);
 });
 
 test('al iniciar elimina únicamente placeholders sin scenario ni acciones', () => {
@@ -680,8 +760,8 @@ function validResponse(plan, recordingId = 'rec-test') {
         steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.verifyMovementsList(); });\n`,
         // El fixture se arma desde el contrato real del framework: si el
         // framework renombra o mueve un anclaje, el test lo sigue.
-        screen: `import ${CONTRACT.baseScreenClass} from '${CONTRACT.baseScreenImport}';\nimport ${CONTRACT.locatorFactorySymbol} from '${CONTRACT.locatorFactoryImport}';\nimport { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends ${CONTRACT.baseScreenClass} { private get movementsList(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaIos.movementsList, ${CONTRACT.typeLocatorSymbol}.ID, Locators.consultaAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForDisplayed(this.movementsList); } }\nexport default new ${screenClass}();\n`,
-        locators: JSON.stringify({ consultaAndroid: { movementsList: 'id=movimientos' }, consultaIos: { movementsList: '' } }, null, 2)
+        screen: `import ${CONTRACT.baseScreenClass} from '${CONTRACT.baseScreenImport}';\nimport ${CONTRACT.locatorFactorySymbol} from '${CONTRACT.locatorFactoryImport}';\nimport { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends ${CONTRACT.baseScreenClass} { private get movementsList(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaIos.movementsList, ${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForDisplayed(this.movementsList); } }\nexport default new ${screenClass}();\n`,
+        locators: JSON.stringify({ consultaAndroid: { movementsList: '//*[@resource-id="movimientos"]' }, consultaIos: { movementsList: '' } }, null, 2)
     };
     return {
         schemaVersion: 1, recordingId, planId: plan.planId, resolutions: [],
@@ -699,6 +779,29 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     const validation = validator.validate(resolved.scenario, resolved.plan, validResponse(resolved.plan));
     assert.equal(validation.valid, true);
     assert.equal(validation.qualityScore, 100);
+
+    const invented = validResponse(resolved.plan);
+    const inventedLocators = JSON.parse(invented.files.find(file => file.layer === 'locators').content);
+    inventedLocators.consultaAndroid.movementsList = '//*[@text="Inventado"]';
+    invented.files.find(file => file.layer === 'locators').content = JSON.stringify(inventedLocators);
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, invented)
+            .errors.some(error => error.code === 'invented-selector'),
+        true,
+    );
+
+    const smuggled = validResponse(resolved.plan);
+    smuggled.resolutions = [{ gapId: 'x', decision: 'reuse', selector: '//*[@text="Inventado"]' }];
+    smuggled.completions = [{
+        file: 'resources/locators/payment/existing.locator.json',
+        name: 'existing',
+        platform: 'android',
+        sequence: 1,
+        selector: '//*[@text="Inventado"]',
+    }];
+    const smuggledErrors = validator.validate(resolved.scenario, resolved.plan, smuggled).errors;
+    assert.equal(smuggledErrors.some(error => error.code === 'resolution-shape'), true);
+    assert.equal(smuggledErrors.some(error => error.code === 'completion-shape'), true);
 
     const androidOnly = validResponse(resolved.plan);
     const androidOnlyLocators = JSON.parse(
@@ -738,7 +841,11 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     );
     completedIos.files.find(file => file.layer === 'feature').content =
         completedIos.files.find(file => file.layer === 'feature').content.replace('@android', '@android @ios');
-    assert.equal(validator.validate(resolved.scenario, resolved.plan, completedIos).valid, true);
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, completedIos)
+            .errors.some(error => error.code === 'invented-selector'),
+        true,
+    );
 
     const genericAlias = validResponse(resolved.plan);
     const genericSteps = genericAlias.files.find(file => file.layer === 'steps');
@@ -771,6 +878,67 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     assert.equal(browserValidation.errors.some(error =>
         error.code === 'output' && error.message.includes('no lo utiliza')
     ), true);
+});
+
+test('validator no permite intercambiar selectores verificados entre acciones', () => {
+    const recorded = scenario([
+        {
+            action: 'CLICK',
+            selector: 'id=movimientos',
+            selectorVerified: true,
+            elementIntent: 'abrir movimientos',
+            selectorCandidates: [
+                selectorCandidate(
+                    'primary-movements',
+                    'id=movimientos',
+                    'XPATH',
+                    '//*[@resource-id="movimientos"]',
+                ),
+            ],
+        },
+        {
+            action: 'VERIFICAR_EXISTE',
+            selector: 'id=saldo',
+            selectorVerified: true,
+            elementIntent: 'saldo disponible',
+            selectorCandidates: [
+                selectorCandidate(
+                    'primary-balance',
+                    'id=saldo',
+                    'XPATH',
+                    '//*[@resource-id="saldo"]',
+                ),
+            ],
+        },
+    ]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    const [first, second] = resolved.plan.resolutions.filter(item => item.locatorName);
+    const response = validResponse(resolved.plan);
+    response.actionTrace = [
+        {
+            sequence: first.sequence,
+            gherkinStep: 'When el usuario consulta sus movimientos',
+            locatorName: first.locatorName,
+        },
+        {
+            sequence: second.sequence,
+            gherkinStep: 'Then se muestra el saldo disponible',
+            locatorName: second.locatorName,
+        },
+    ];
+    response.files.find(file => file.layer === 'locators').content = JSON.stringify({
+        consultaAndroid: {
+            [first.locatorName]: '//*[@resource-id="saldo"]',
+            [second.locatorName]: '//*[@resource-id="movimientos"]',
+        },
+        consultaIos: {
+            [first.locatorName]: '',
+            [second.locatorName]: '',
+        },
+    });
+    const errors = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response).errors;
+    assert.equal(errors.filter(error => error.code === 'invented-selector').length, 2);
 });
 
 test('informa caso existente cuando el agente reutiliza todos los locators', () => {
@@ -890,8 +1058,8 @@ test('validator bloquea steps y locators que duplican artefactos del framework',
                 squad: 'payment', scope: 'squad'
             }],
             locators: [{
-                name: 'movimientosExistentes', selector: 'movimientos',
-                androidSelector: 'movimientos', iosSelector: '',
+                name: 'movimientosExistentes', selector: '//*[@resource-id="movimientos"]',
+                androidSelector: '//*[@resource-id="movimientos"]', iosSelector: '',
                 file: 'resources/locators/payment/existing.locator.json',
                 module: 'payment/existing', squad: 'payment', scope: 'squad', platform: 'android'
             }]
@@ -944,9 +1112,16 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-package-'));
     const resolved = new DeterministicResolver(emptyCatalog);
     const builder = new AutomationPackageBuilder(resolved, new AutomationMemory(path.join(root, 'memory')));
+    const candidate = selectorCandidate(
+        'primary-movements',
+        'id=movimientos',
+        'XPATH',
+        '//*[@resource-id="movimientos"]',
+    );
     const result = builder.prepare(scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
-        elementIntent: 'lista de movimientos'
+        elementIntent: 'lista de movimientos',
+        selectorCandidates: [candidate],
     }]), root);
     assert.equal(result.agentRequired, false);
     assert.equal(result.validation.valid, true);
@@ -954,6 +1129,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'generation-plan.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'reuse-context.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'collision-report.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'locator-candidates.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'verify-package.js')));
     // El verificador del sandbox carga las reglas del modulo compartido; sin la
     // copia se quedaria sin comprobar el contrato del Screen Object.
@@ -997,6 +1173,8 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /with \{ type: 'json' \}/);
     assert.match(instructions, /Copialos literalmente en vez de componerlos/);
     assert.match(instructions, /Nada de `_metadata`/);
+    assert.match(instructions, /allowlist verificada e inmutable/);
+    assert.match(instructions, /candidateId/);
     assert.match(instructions, /tier de ejecucion \(`@smoke_mobile`\)/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);
@@ -1007,6 +1185,23 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         cwd: result.packageDirectory,
         stdio: 'pipe'
     }));
+    const packagedScenario = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'scenario.json'), 'utf8'
+    ));
+    const packagedCandidates = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'locator-candidates.json'), 'utf8'
+    ));
+    assert.equal(packagedScenario.actions[0].selectorCandidates, undefined);
+    assert.equal(packagedCandidates.actions[0].primaryCandidateId, 'primary-movements');
+    assert.deepEqual(packagedCandidates.actions[0].candidates, [candidate]);
+    assert.equal(JSON.stringify(packagedCandidates).includes('screenshot'), false);
+    const accounted = [
+        'scenario.json', 'generation-plan.json', 'reuse-context.json',
+        'collision-report.json', 'unresolved-context.json', 'locator-candidates.json',
+        'instructions.md',
+    ].reduce((total, name) =>
+        total + fs.statSync(path.join(result.packageDirectory, name)).size, 0);
+    assert.equal(result.contextBytes, accounted);
 
     const responseFile = path.join(result.packageDirectory, 'agent-response.json');
     const response = JSON.parse(fs.readFileSync(responseFile, 'utf8'));

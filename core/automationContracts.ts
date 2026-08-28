@@ -29,6 +29,9 @@ export interface ActionResolution {
     resolution: ResolutionKind;
     locatorName?: string;
     selector?: string;
+    /** Candidato verificado que justificó reuse; audita alternativas sin escribirlas. */
+    matchedCandidateId?: string;
+    matchedPrimaryCandidate?: boolean;
     source?: {
         file: string;
         module: string;
@@ -174,7 +177,7 @@ export interface ResolvedContext {
 export interface UnresolvedGap {
     id: string;
     sequence?: number;
-    type: 'missing-assertion' | 'missing-selector' | 'missing-intent' | 'test-data' | 'test-input' | 'semantic-naming' | 'verification-semantics' | 'repetition' | 'refinement';
+    type: 'missing-assertion' | 'missing-selector' | 'missing-intent' | 'test-data' | 'test-input' | 'semantic-naming' | 'verification-semantics' | 'repetition' | 'refinement' | 'qa-decision';
     description: string;
     requiredOutput: string;
     /**
