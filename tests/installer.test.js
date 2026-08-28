@@ -92,3 +92,22 @@ test('rechaza una carpeta que no es fwk-mobile-test', () => {
         stdio: 'pipe',
     }));
 });
+
+// El Inspector embebido no existe en todas las ramas del recorder. El
+// instalador decide por lo que trae el checkout: una rama sin submódulo se
+// instala igual, en vez de abortar con "pathspec did not match".
+test('instala una rama sin Appium Inspector sin abortar', () => {
+    const fixture = createFixture();
+    const output = execFileSync('bash', [installer], {
+        cwd: fixture.framework,
+        env: {
+            ...process.env,
+            VISUAL_RECORDER_REPOSITORY: fixture.source,
+            VISUAL_RECORDER_BRANCH: 'visual-recorder',
+            VISUAL_RECORDER_SKIP_NPM_CI: '1',
+        },
+        encoding: 'utf8',
+    });
+    assert.match(output, /esta rama del recorder no lo incluye/);
+    assert.match(output, /inspector XML local/);
+});

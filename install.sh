@@ -24,6 +24,10 @@ Variables opcionales:
   VISUAL_RECORDER_BRANCH       Rama del recorder (visual-recorder por defecto).
   VISUAL_RECORDER_TARGET       Directorio de instalación.
   VISUAL_RECORDER_SKIP_NPM_CI  Usa 1 únicamente en pruebas controladas.
+  VISUAL_RECORDER_SKIP_INSPECTOR
+                               Usa 1 para instalar sin el Appium Inspector
+                               embebido. El recorder funciona, pero cae al
+                               inspector XML local.
 EOF
 }
 
@@ -88,9 +92,74 @@ else
         "${REPOSITORY}" "${INSTALL_DIR}"
 fi
 
+INSPECTOR_PATH="vendor/appium-inspector"
+INSPECTOR_CACHE="${INSTALL_DIR}/node_modules/.cache/appium-inspector"
+
+# El Inspector embebido no existe en todas las ramas del recorder. Se decide por
+# lo que trae el checkout, no por lo que esta version del instalador espera: así
+# una rama sin Inspector se instala igual en vez de fallar.
+INSPECTOR_AVAILABLE="false"
+if [[ "${VISUAL_RECORDER_SKIP_INSPECTOR:-0}" != "1" ]] &&
+   git -C "${INSTALL_DIR}" config --file .gitmodules \
+       --get "submodule.${INSPECTOR_PATH}.url" >/dev/null 2>&1 &&
+   node -e 'process.exit(require(process.argv[1]).scripts?.["inspector:build"] ? 0 : 1)' \
+       "${INSTALL_DIR}/package.json" >/dev/null 2>&1; then
+    INSPECTOR_AVAILABLE="true"
+fi
+
+if [[ "${INSPECTOR_AVAILABLE}" == "true" ]]; then
+    echo "Obteniendo el Appium Inspector fijado..."
+    git -C "${INSTALL_DIR}" submodule sync --recursive -- "${INSPECTOR_PATH}" >/dev/null
+    # Superficial primero porque el pin suele ser la punta de la rama. Si no lo
+    # es, el fetch superficial no alcanza ese commit y hace falta el completo.
+    if ! git -C "${INSTALL_DIR}" submodule update --init --recursive --depth 1 \
+            -- "${INSPECTOR_PATH}" 2>/dev/null; then
+        git -C "${INSTALL_DIR}" submodule update --init --recursive -- "${INSPECTOR_PATH}"
+    fi
+fi
+
 if [[ "${VISUAL_RECORDER_SKIP_NPM_CI:-0}" != "1" ]]; then
+    # `npm ci` borra node_modules entero, y ahí es donde vive el build del
+    # Inspector. Sin apartarlo, cada actualización del recorder obliga a
+    # recompilarlo desde cero: casi 1 GB de dependencias del submódulo para
+    # volver a producir los mismos 5,9 MB.
+    INSPECTOR_CACHE_BACKUP=""
+    if [[ -d "${INSPECTOR_CACHE}" ]]; then
+        INSPECTOR_CACHE_BACKUP="$(mktemp -d "${TMPDIR:-/tmp}/visual-recorder-inspector.XXXXXX")/appium-inspector"
+        mv -- "${INSPECTOR_CACHE}" "${INSPECTOR_CACHE_BACKUP}"
+    fi
+
     echo "Instalando dependencias reproducibles..."
     npm --prefix "${INSTALL_DIR}" ci
+
+    if [[ -n "${INSPECTOR_CACHE_BACKUP}" ]] && [[ -d "${INSPECTOR_CACHE_BACKUP}" ]]; then
+        mkdir -p -- "$(dirname -- "${INSPECTOR_CACHE}")"
+        rm -rf -- "${INSPECTOR_CACHE}"
+        mv -- "${INSPECTOR_CACHE_BACKUP}" "${INSPECTOR_CACHE}"
+        rmdir -- "$(dirname -- "${INSPECTOR_CACHE_BACKUP}")" 2>/dev/null || true
+    fi
+fi
+
+if [[ "${INSPECTOR_AVAILABLE}" == "true" ]]; then
+    # El verificador compara los hashes del build contra su manifiesto: si ya
+    # está compilado y coincide, no se vuelve a compilar.
+    if npm --prefix "${INSTALL_DIR}" run --silent inspector:check >/dev/null 2>&1; then
+        echo "Appium Inspector embebido: ya compilado y verificado."
+    else
+        echo "Compilando el Appium Inspector embebido..."
+        echo "Solo ocurre la primera vez o cuando cambia su versión; tarda varios minutos."
+        if ! npm --prefix "${INSTALL_DIR}" run inspector:build; then
+            echo >&2
+            echo "No se pudo compilar el Appium Inspector embebido." >&2
+            echo "El recorder no puede usarlo y caería al inspector XML local sin avisar," >&2
+            echo "así que la instalación se detiene aquí." >&2
+            echo >&2
+            echo "Reintenta con: npm --prefix \"${INSTALL_DIR}\" run inspector:build" >&2
+            echo "O instala sin él: VISUAL_RECORDER_SKIP_INSPECTOR=1 ./install.sh" >&2
+            exit 1
+        fi
+        npm --prefix "${INSTALL_DIR}" run --silent inspector:check
+    fi
 fi
 
 # Mantiene limpio `git status` sin editar el .gitignore versionado del target.
@@ -105,6 +174,15 @@ fi
 
 echo
 echo "Appium Visual Recorder está listo en: ${INSTALL_DIR}"
+if [[ "${INSPECTOR_AVAILABLE}" == "true" ]]; then
+    echo "Appium Inspector: incluido y verificado; se abre dentro del recorder."
+elif [[ "${VISUAL_RECORDER_SKIP_INSPECTOR:-0}" == "1" ]]; then
+    echo "Appium Inspector: omitido (VISUAL_RECORDER_SKIP_INSPECTOR=1)."
+    echo "El recorder usará su inspector XML local."
+else
+    echo "Appium Inspector: esta rama del recorder no lo incluye."
+    echo "El recorder usará su inspector XML local."
+fi
 echo "El framework no fue modificado. Para iniciarlo desde su raíz:"
 echo "npm --prefix tools/visual-recorder run recorder"
 
