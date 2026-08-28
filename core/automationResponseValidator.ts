@@ -13,7 +13,7 @@ import { projectPaths } from './projectPaths';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
 import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
-import { screenObjectProblems } from './screenObjectContract';
+import { screenObjectProblems, typeLocatorImportProblem } from './screenObjectContract';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
@@ -700,7 +700,9 @@ export class AutomationResponseValidator {
         if (response.recordingId !== scenario.recordingId) errors.push({ code: 'recording-id', message: 'recordingId no coincide' });
         if (response.planId !== plan.planId) errors.push({ code: 'plan-id', message: 'planId no coincide' });
         response.resolutions.forEach((resolution, index) => {
-            const extras = unexpectedFields(resolution, ['gapId', 'decision']);
+            // `reason` es la traza que lee el QA: se acepta y se publica en el
+            // esquema. Lo que no se acepta es inventar campos.
+            const extras = unexpectedFields(resolution, ['gapId', 'decision', 'reason']);
             if (extras.length) {
                 errors.push({
                     code: 'resolution-shape',
@@ -832,8 +834,20 @@ export class AutomationResponseValidator {
             if (!traced.has(action.sequence)) errors.push({ code: 'trace', message: `Acción ${action.sequence} sin trazabilidad` });
         }
 
+        // Con el enum mal importado, `TypeLocator.X` deja de reconocerse y todas
+        // las comprobaciones de tipos disparan a la vez sin nombrar la causa. El
+        // agente tiene un solo intento de reparacion: se le da el error real y
+        // no cuatro consecuencias.
+        const enumImportBroken = Boolean(typeLocatorImportProblem(
+            response.files.find(file => file.layer === 'screen')?.content || '',
+            {
+                typeLocatorSymbol: frameworkContract(projectPaths.frameworkRoot).typeLocatorSymbol,
+                typeLocatorImport: frameworkContract(projectPaths.frameworkRoot).typeLocatorImport,
+            }
+        ));
+
         const locatorFile = response.files.find(file => file.layer === 'locators');
-        if (locatorFile) {
+        if (locatorFile && !enumImportBroken) {
             const locatorPlan = plan.files.find(file => file.layer === 'locators');
             let baseline: string | undefined;
             if (locatorPlan?.operation === 'update') {
@@ -853,12 +867,30 @@ export class AutomationResponseValidator {
                 }
                 completionBySequence.set(completion.sequence, completion);
             }
+            // El gap de duplicado invita a reutilizar un locator existente en vez
+            // de crear el del plan. Adoptar uno de los que el gap OFRECIO esta
+            // autorizado —cualquier otro nombre, no—; sin esto el validador
+            // rechazaba al agente por obedecer al gap.
+            const adoptedBySequence = new Map<number, string>();
+            response.actionTrace.forEach(trace => {
+                if (!trace.locatorName) return;
+                const planned = plan.resolutions.find(item => item.sequence === trace.sequence);
+                if (!planned || planned.locatorName === trace.locatorName) return;
+                const offered = (planned.reuseCandidates || [])
+                    .find(candidate => candidate.name === trace.locatorName);
+                if (offered) adoptedBySequence.set(trace.sequence, offered.name);
+            });
+
             const primaryByLocator = new Map<string, Set<string>>();
             const addPrimary = (name: string | undefined, sequence: number): void => {
                 if (!name) return;
                 const action = actionBySequence.get(sequence);
                 if (!action) return;
                 const resolution = plan.resolutions.find(item => item.sequence === sequence);
+                // Adoptar un candidato existente deja de ser un `create`: el par
+                // (TypeLocator, valor) es el del locator que ya vive en el
+                // framework, no el que la grabacion habria escrito.
+                if (adoptedBySequence.has(sequence)) return;
                 if (resolution?.resolution !== 'create' || completionBySequence.has(sequence)) return;
                 const allowed = primaryByLocator.get(name) || new Set<string>();
                 candidateAllowlist(action, scenario.platform)
@@ -871,13 +903,19 @@ export class AutomationResponseValidator {
             plan.resolutions.forEach(resolution => addPrimary(resolution.locatorName, resolution.sequence));
             response.actionTrace.forEach(trace => {
                 const planned = plan.resolutions.find(resolution => resolution.sequence === trace.sequence);
-                const expectedName = completionBySequence.get(trace.sequence)?.name || planned?.locatorName;
+                const expectedName = adoptedBySequence.get(trace.sequence)
+                    || completionBySequence.get(trace.sequence)?.name
+                    || planned?.locatorName;
                 if (expectedName && trace.locatorName !== expectedName) {
                     errors.push({
                         code: 'trace-locator',
                         message:
                             `La acción ${trace.sequence} traza ${trace.locatorName}, pero el plan exige ` +
-                            `${expectedName}.`,
+                            `${expectedName}` +
+                            ((planned?.reuseCandidates || []).length
+                                ? `. Solo puedes adoptar uno de los locators que ofrece su gap: ` +
+                                  `${planned!.reuseCandidates!.map(candidate => candidate.name).join(', ')}.`
+                                : '.'),
                         file: locatorFile.path,
                     });
                     return;
@@ -900,18 +938,25 @@ export class AutomationResponseValidator {
             response.actionTrace.forEach(trace => {
                 if (!trace.screenMethod) return;
                 const resolution = plan.resolutions.find(item => item.sequence === trace.sequence);
-                const expectedName = completionBySequence.get(trace.sequence)?.name || resolution?.locatorName;
+                const expectedName = adoptedBySequence.get(trace.sequence)
+                    || completionBySequence.get(trace.sequence)?.name
+                    || resolution?.locatorName;
                 if (!expectedName || trace.locatorName !== expectedName) return;
                 const getters = tracedGettersByMethod.get(trace.screenMethod) || new Set<string>();
                 getters.add(expectedName);
                 tracedGettersByMethod.set(trace.screenMethod, getters);
             });
             const currentLocators = responseLocatorValues(locatorFile.content);
+            // Una accion que adopto un candidato del gap ya no crea nada: su par
+            // (TypeLocator, valor) es el del locator que ya vive en el
+            // framework. Exigirle el par de la grabacion era pedirle que
+            // deshiciera la reutilizacion que el propio gap le pidio.
             const createNames = new Set(plan.resolutions
                 .filter(resolution =>
                     resolution.resolution === 'create'
                     && resolution.locatorName
                     && !completionBySequence.has(resolution.sequence)
+                    && !adoptedBySequence.has(resolution.sequence)
                 )
                 .map(resolution => resolution.locatorName!));
             for (const name of createNames) {
@@ -944,7 +989,8 @@ export class AutomationResponseValidator {
                 const traces = response.actionTrace.filter(trace => trace.sequence === resolution.sequence);
                 const trace = traces.length === 1 ? traces[0] : undefined;
                 const completion = completionBySequence.get(resolution.sequence);
-                const expectedGetter = completion?.name || resolution.locatorName!;
+                const adopted = adoptedBySequence.get(resolution.sequence);
+                const expectedGetter = adopted || completion?.name || resolution.locatorName!;
                 const usage = trace?.screenMethod
                     ? methodUsage.get(trace.screenMethod)
                     : undefined;
@@ -956,6 +1002,9 @@ export class AutomationResponseValidator {
                 const candidateLiterals = candidates
                     .flatMap(candidate => [candidate.selector, candidate.locatorValue]);
                 const primary = candidates.find(candidate => candidate.primary);
+                // El locator adoptado trae su propio valor del framework: los
+                // literales de la grabacion no aplican.
+                const literals = adopted ? [] : candidateLiterals;
                 const completionMappingValid = !completion || Boolean(
                     primary
                     && (() => {
@@ -972,7 +1021,7 @@ export class AutomationResponseValidator {
                     !trace?.screenMethod
                     || !usage
                     || usage.hardcodedSelector
-                    || candidateLiterals.some(value => usage.literals.has(value))
+                    || literals.some(value => usage.literals.has(value))
                     || !completionMappingValid
                     || !usage.getters.has(expectedGetter)
                     || [...usage.getters].some(getter => !tracedGetters?.has(getter))
@@ -1311,6 +1360,7 @@ export class AutomationResponseValidator {
                     }
                     for (const problem of screenObjectProblems(screenContent, {
                         typeLocatorSymbol: contract.typeLocatorSymbol,
+                        typeLocatorImport: contract.typeLocatorImport,
                         platformOrder: contract.locatorSignature.platformOrder,
                         parameterCount: contract.locatorSignature.parameterCount,
                         expectedImports,

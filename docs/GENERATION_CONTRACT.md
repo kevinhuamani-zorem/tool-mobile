@@ -399,3 +399,26 @@ validador lee los archivos reales y evalúa cómo quedarán **después** del pat
 Descartada la prueba de tokens de identidad como requisito para completar: medida
 sobre 455 pares que ya funcionan en ambas plataformas, los tokens coinciden solo
 en el 75%. Exigirla habría bloqueado uno de cada cuatro casos válidos.
+
+### De dónde sale el texto de cada step
+
+El texto se elige por orden de calidad, y cada fila declara su origen en
+`wording`:
+
+1. **`domain`** — frase redactada a mano para ese dominio (`movimientos`,
+   `saldo`). Es el mejor Gherkin disponible y gana siempre.
+2. **`qa`** — el `objective` y el `acceptanceCriteria` que escribió el QA. Ya son
+   español redactado por una persona y describen exactamente el comportamiento y
+   el resultado esperado. Se usan solo cuando hay **un** bloque de comportamiento
+   y **una** aserción; con varios no se pueden repartir.
+3. **`template`** — último recurso: la frase se arma con el slug técnico. Es la
+   única que sale de máquina, y de ahí salía `el usuario completa saldo
+   disponible consultar etiqueta`.
+
+Una frase del QA se descarta si narra la interfaz (`hace clic`, `presiona el
+botón`, `scroll`), si nombra controles (`botón`, `campo`, `icono`, `menú`), si
+empieza por un keyword de Gherkin, si trae un `<parámetro>` sin columna en
+Examples, o si es demasiado corta para ser una frase.
+
+Las filas `domain` y `qa` están redactadas y no se tocan. Una fila `template` es
+la única que conviene reescribir, y las instrucciones del agente se lo dicen.

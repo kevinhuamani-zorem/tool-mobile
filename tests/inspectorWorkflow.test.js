@@ -115,7 +115,7 @@ test('clears stale backups on edits or alternative selection and persists only t
     assert.match(main, /requireTrustedScenarioPackage/);
     assert.match(
         scenarioPackage,
-        /scenario\.json fue modificado o no coincide con la grabación original/
+        /ya no corresponde a la grabación/
     );
 });
 

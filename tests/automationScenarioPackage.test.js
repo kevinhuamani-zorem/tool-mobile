@@ -165,7 +165,10 @@ test('rechaza cambios reales del escenario empaquetado', async t => {
             mutate(tampered);
             assert.throws(
                 () => builderFor(resolved).requireTrustedScenarioPackage(original, tampered),
-                /scenario\.json fue modificado/
+                // El mensaje nombra el campo que divergio: el fallo mas comun no
+                // es una manipulacion sino un paquete viejo, y sin el detalle el
+                // QA no sabia que habia cambiado ni que hacer.
+                /ya no corresponde a la grabación: difiere en /
             );
         });
     }
@@ -189,7 +192,7 @@ test('preserva revisiones de refinement sin aceptar retrocesos', () => {
     stale.revision = original.revision - 1;
     assert.throws(
         () => builderFor(resolved).requireTrustedScenarioPackage(original, stale),
-        /scenario\.json fue modificado/
+        /ya no corresponde a la grabación: su revisión es/
     );
 });
 

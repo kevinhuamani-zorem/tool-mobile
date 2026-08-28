@@ -136,9 +136,53 @@ function responseSchema(): object {
             schemaVersion: { const: 1 },
             recordingId: { type: 'string' },
             planId: { type: 'string' },
-            resolutions: { type: 'array', items: { type: 'object', required: ['gapId', 'decision'] } },
-            actionTrace: { type: 'array', items: { type: 'object', required: ['sequence', 'gherkinStep'] } },
-            files: { type: 'array', minItems: 4, maxItems: 4 },
+            // Las formas van cerradas EN EL ESQUEMA, no solo en el validador.
+            // El agente añadía campos propios (`reusedElement`, `candidateId`) y
+            // se los rechazaba una regla que nunca se le publicó: gastaba su
+            // unico intento de reparacion en algo que podia haber sabido antes.
+            resolutions: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    required: ['gapId', 'decision'],
+                    properties: {
+                        gapId: { type: 'string' },
+                        decision: { type: 'string' },
+                        /** Por qué se decidió así; es la traza que lee el QA. */
+                        reason: { type: 'string' },
+                    },
+                    additionalProperties: false,
+                },
+            },
+            actionTrace: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    required: ['sequence', 'gherkinStep'],
+                    properties: {
+                        sequence: { type: 'integer' },
+                        gherkinStep: { type: 'string' },
+                        screenMethod: { type: 'string' },
+                        locatorName: { type: 'string' },
+                    },
+                    additionalProperties: false,
+                },
+            },
+            files: {
+                type: 'array',
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                    type: 'object',
+                    required: ['layer', 'path', 'content'],
+                    properties: {
+                        layer: { enum: ['feature', 'steps', 'screen', 'locators'] },
+                        path: { type: 'string' },
+                        content: { type: 'string' },
+                    },
+                    additionalProperties: false,
+                },
+            },
             completions: {
                 type: 'array',
                 items: {
@@ -178,7 +222,7 @@ function instructions(result: ResolverResult): string {
         `- Si reuse-context.json contiene updateBaselines, abre únicamente su archivo reference dentro de baselines/, parte de ese contenido y añade solo lo faltante; no reemplaces ni borres APIs existentes.\n` +
         `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
-        `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion: ${contract.baseScreenClass} desde ${contract.baseScreenImport}, ${contract.locatorFactorySymbol} desde ${contract.locatorFactoryImport} y ${contract.typeLocatorSymbol} desde ${contract.typeLocatorImport}. Copialos tal cual, con esa extension: no uses rutas relativas ni el nombre que recuerdes de otro repo (la clase se llama ${contract.locatorFactorySymbol}, no LocatorFactory).\n` +
+        `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion. Copia estas lineas LITERALES, con sus llaves y su extension — ${contract.locatorFactorySymbol} es export por defecto y ${contract.typeLocatorSymbol} es export NOMBRADO, invertirlo no compila: \`import ${contract.baseScreenClass} from '${contract.baseScreenImport}';\` , \`import ${contract.locatorFactorySymbol} from '${contract.locatorFactoryImport}';\` , \`import { ${contract.typeLocatorSymbol} } from '${contract.typeLocatorImport}';\`. No uses rutas relativas ni el nombre que recuerdes de otro repo (la clase se llama ${contract.locatorFactorySymbol}, no LocatorFactory).\n` +
         `- \`getElement\` tiene UNA firma y no admite variantes: \`${signatureHint({ typeLocatorSymbol: contract.typeLocatorSymbol, platformOrder: contract.locatorSignature.platformOrder })}\`. Son ${contract.locatorSignature.parameterCount} argumentos SIEMPRE, tambien cuando una plataforma todavia no tiene locator: en ese caso su valor queda vacio, pero el argumento se escribe. El ${contract.locatorSignature.platformOrder[0]} va primero, y el tipo va antes que el valor — nunca al reves.\n` +
         `- Todo import de un .locator.json se escribe con alias y con atributo de tipo: \`import <Identificador> from '@locators/<squad>/<modulo>.locator.json' with { type: 'json' };\`. Sin el atributo Node lanza al cargar el JSON y el caso no corre. Aplica igual a los modulos reutilizados: nunca rutas relativas.\n` +
         `- \`reuse-context.json\` trae, por cada modulo, \`importLine\` y, por cada elemento, \`getter\`: son el import y el getter COMPLETOS, ya escritos con la firma y el atributo correctos. Copialos literalmente en vez de componerlos.\n` +
@@ -195,6 +239,7 @@ function instructions(result: ResolverResult): string {
         `- Las filas de scenarioRows con status "reused" se copian LITERALES, caracter por caracter (tildes incluidas). Ya existen como step definition en el framework: si las reescribes o reemplazas su parametro por un literal, Cucumber las reporta como undefined al ejecutar. Ejemplo: \`Given el usuario <username> inicia sesión en Yape\` se copia tal cual, nunca con el nombre del usuario dentro.\n` +
         `- Todo <parametro> que dejes en un step obliga a \`Scenario Outline:\` y a una tabla \`Examples:\` con esa columna. Toma los valores de request.examples de scenario.json; si falta la columna, el parametro llega literal al step y no enlaza.\n` +
         `- Todo el codigo va en INGLES: metodos y getters del Screen Object, claves de locator, variables y parametros. El espanol se reserva para la prosa que lee el QA: la linea Feature, el nombre del Scenario y el texto de los steps. Ejemplo: el step "el usuario consulta todos sus movimientos" se resuelve con \`movementsScreen.openAllMovements()\`, nunca con \`elUsuarioConsultaTodosSusMovimientos()\`.\n` +
+        `- Una fila de scenarioRows con \`wording: "template"\` es la unica cuyo texto salio de una plantilla con el slug tecnico, no de una frase redactada: reescribela en espanol declarativo usando el objetivo y el criterio de aceptacion. Las filas \`domain\` y \`qa\` ya estan redactadas, no las toques.\n` +
         `- Redacta Gherkin declarativo: describe intención, capacidad y resultado de negocio; no narres clicks, botones, campos, scrolls, swipes ni esperas.\n` +
         `- Agrupa acciones técnicas consecutivas dentro de un único step funcional. Varias secuencias pueden apuntar al mismo gherkinStep en actionTrace.\n` +
         `- Para cada acción create, actionTrace debe declarar locatorName y screenMethod. Ese método debe consumir el getter del locator (directamente o mediante una variable local); no uses selectores literales ni otro getter.\n` +
@@ -226,6 +271,8 @@ function regenerationInstructions(
         `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
         `- Cada create conserva locatorName y screenMethod en actionTrace; el método trazado consume el getter correspondiente, sin selectores inline ni rutas alternativas.\n` +
         `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
+        `- \`agent-response.json\` tiene forma CERRADA: la define agent-response.schema.json y no admite campos extra. En cada resolucion van \`gapId\`, \`decision\` y opcionalmente \`reason\`; en cada archivo solo \`layer\`, \`path\` y \`content\` — la operacion la fija el plan, no la repitas. Explica lo que quieras en \`reason\` o en \`assumptions\`, nunca en campos inventados.\n` +
+        `- Si un gap de duplicado te ofrece locators existentes, adoptar uno de ESOS nombres esta permitido y el plan lo acepta: trazalo en actionTrace.locatorName. Adoptar cualquier otro nombre, o renombrar por tu cuenta un locator del plan, no.\n` +
         `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
 }
 
@@ -250,6 +297,7 @@ function verifierSource(contract: FrameworkContract): string {
         baseScreenClass: contract.baseScreenClass,
         locatorFactorySymbol: contract.locatorFactorySymbol,
         typeLocatorSymbol: contract.typeLocatorSymbol,
+        typeLocatorImport: contract.typeLocatorImport,
         locatorSignature: contract.locatorSignature,
         requiredScreenImports: [
             contract.baseScreenImport,
@@ -336,7 +384,7 @@ if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bl
 const recordedPlatform=scenario.platform;const completionTarget=c=>{const targets=((plan.resolutions||[]).find(r=>r.sequence===c.sequence)?.completionTargets||[]).filter(t=>t.file===c.file&&t.name===c.name&&t.platform===c.platform&&String(t.block).toLowerCase().endsWith(c.platform));return targets.length===1?targets[0]:undefined};const authorizedCompletions=(response.completions||[]).map(c=>({completion:c,target:completionTarget(c)}));const declaredCompletions=new Set(authorizedCompletions.filter(x=>x.target&&x.target.platform===recordedPlatform).map(x=>x.target.file+'#'+x.target.platform+'#'+x.target.block+'#'+x.target.name));
 for(const mod of (reuse.elements||[])){const block=(mod.groups||{})[recordedPlatform];const file=String(mod.import||'').replace(/^@locators\//,'resources/locators/');if(!block)continue;for(const el of (mod.elements||[])){const slot=(el.locators||{})[recordedPlatform];if(!slot||slot.status!=='missing')continue;const referenced=new RegExp('\\b'+mod.identifier+'\\s*\\.\\s*'+block+'\\s*\\.\\s*'+el.name+'\\b').test(screen);const identity=file+'#'+recordedPlatform+'#'+block+'#'+el.name;if(referenced&&!declaredCompletions.has(identity))errors.push('Cobertura de plataforma: '+mod.identifier+'.'+block+'.'+el.name+' no tiene valor en '+recordedPlatform+'. Rellenalo declarandolo en completions con la accion que lo capturo, o usa un locator del modulo de este caso.')}}
 for(const x of authorizedCompletions){const c=x.completion;if(!x.target)errors.push('Completion no autorizado: '+c.file+'#'+c.name+' ('+c.platform+') accion '+c.sequence);if(!(scenario.actions||[]).some(a=>a.sequence===c.sequence&&a.selector))errors.push('completions apunta a la accion '+c.sequence+', que no capturo ningun elemento')}
-try{const {screenObjectProblems}=require('./screen-object-contract.js');const expectedImports={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');expectedImports[spec.split('/').pop()]=spec}for(const mod of (reuse.elements||[])){if(mod&&mod.import)expectedImports[String(mod.import).split('/').pop()]=mod.import}for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
+try{const {screenObjectProblems}=require('./screen-object-contract.js');const expectedImports={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');expectedImports[spec.split('/').pop()]=spec}for(const mod of (reuse.elements||[])){if(mod&&mod.import)expectedImports[String(mod.import).split('/').pop()]=mod.import}for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,typeLocatorImport:FRAMEWORK_CONTRACT.typeLocatorImport,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
 const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
 for(const [label,content] of [['Steps',steps],['ScreenObject',screen]]){const relative=importSources(content).filter(source=>source.startsWith('.'));if(relative.length)errors.push(label+' usa imports relativos: '+relative.join(', '))}
 const importsBrowser=/import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(screen);

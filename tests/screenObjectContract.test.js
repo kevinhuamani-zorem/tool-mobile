@@ -8,9 +8,13 @@ const { projectPaths } = require('../dist/core/projectPaths');
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const RULES = {
     typeLocatorSymbol: CONTRACT.typeLocatorSymbol,
+    typeLocatorImport: CONTRACT.typeLocatorImport,
     platformOrder: CONTRACT.locatorSignature.platformOrder,
     parameterCount: CONTRACT.locatorSignature.parameterCount,
 };
+// Un Screen Object siempre trae el import del enum; los fragmentos de estos
+// tests tambien, o dispararian la regla de import en cada caso.
+const ENUM_IMPORT = `import { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\n`;
 const codes = content => screenObjectProblems(content, RULES).map(problem => problem.code);
 
 // La firma sale del framework, no de la memoria del agente.
@@ -51,7 +55,7 @@ test('el atributo vale con comillas simples o dobles', () => {
 
 // 860 de 860 llamadas del framework tienen exactamente 4 argumentos.
 test('getElement con solo la plataforma activa es un error', () => {
-    const dos = `
+    const dos = ENUM_IMPORT + `
         const locator = LocatorProvider.getElement(
             TypeLocator.ANDROID, LocatorContac.yapearAndroid.titleYapear
         );`;
@@ -62,7 +66,7 @@ test('getElement con solo la plataforma activa es un error', () => {
 });
 
 test('el valor antes del TypeLocator es un error', () => {
-    const invertido = `
+    const invertido = ENUM_IMPORT + `
         const locator = LocatorProvider.getElement(
             LocatorContac.yapearIos.titleYapear, TypeLocator.ID,
             LocatorContac.yapearAndroid.titleYapear, TypeLocator.ANDROID
@@ -75,7 +79,7 @@ test('el valor antes del TypeLocator es un error', () => {
 // Este no lo habia reportado nadie y es peor: mantiene 4 argumentos, compila,
 // pasa el review y ejecuta el locator de la plataforma contraria.
 test('intercambiar los valores de iOS y Android es un error', () => {
-    const cruzado = `
+    const cruzado = ENUM_IMPORT + `
         const locator = LocatorProvider.getElement(
             TypeLocator.ID, LocatorContac.yapearAndroid.titleYapear,
             TypeLocator.ANDROID, LocatorContac.yapearIos.titleYapear
@@ -86,7 +90,7 @@ test('intercambiar los valores de iOS y Android es un error', () => {
 });
 
 test('la llamada correcta no produce ningun problema', () => {
-    assert.deepEqual(codes(`
+    assert.deepEqual(codes(ENUM_IMPORT + `
         const locator = LocatorProvider.getElement(
             TypeLocator.ID, LocatorContac.yapearIos.titleYapear,
             TypeLocator.ANDROID, LocatorContac.yapearAndroid.titleYapear
@@ -119,4 +123,33 @@ test('el generador determinista cumple el contrato que exige al agente', () => {
     }, actions);
 
     assert.deepEqual(screenObjectProblems(preview.screenContent, RULES), []);
+});
+
+// El enum es un export nombrado. Importarlo por defecto no compila, y ademas
+// hacia que el analisis dejara de reconocer TypeLocator.X: el validador
+// disparaba cuatro errores sobre "el par primary" y ninguno nombraba la linea
+// del import, que era el unico problema real.
+test('el enum importado por defecto se nombra como lo que es', () => {
+    const roto = `import ${CONTRACT.typeLocatorSymbol} from '${CONTRACT.typeLocatorImport}';
+        const locator = LocatorProvider.getElement(
+            TypeLocator.ID, L.xIos.a,
+            TypeLocator.ANDROID, L.xAndroid.a
+        );`;
+    const problems = screenObjectProblems(roto, RULES);
+    assert.deepEqual(problems.map(p => p.code), ['type-locator-import']);
+    assert.match(problems[0].message, /export nombrado, no un default/);
+    assert.match(problems[0].message, /import \{ TypeLocator \} from/);
+});
+
+test('usar el enum sin importarlo tambien se marca', () => {
+    const problems = screenObjectProblems('TypeLocator.ID', RULES);
+    assert.deepEqual(problems.map(p => p.code), ['type-locator-import']);
+    assert.match(problems[0].message, /pero no lo importa/);
+});
+
+test('el import nombrado correcto no produce nada', () => {
+    assert.deepEqual(
+        screenObjectProblems(ENUM_IMPORT + 'const x = TypeLocator.ID;', RULES).map(p => p.code),
+        []
+    );
 });

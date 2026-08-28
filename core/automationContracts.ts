@@ -32,6 +32,19 @@ export interface ActionResolution {
     /** Candidato verificado que justificó reuse; audita alternativas sin escribirlas. */
     matchedCandidateId?: string;
     matchedPrimaryCandidate?: boolean;
+    /**
+     * Locators existentes que el gap de duplicado ofrecio para esta accion.
+     *
+     * El gap invita a reutilizar uno en vez de crear; sin esta lista el
+     * validador seguia exigiendo el `locatorName` del plan y rechazaba al
+     * agente por hacer justo lo que el gap le pedia. Adoptar uno de estos
+     * nombres esta autorizado; cualquier otro, no.
+     */
+    reuseCandidates?: Array<{
+        file: string;
+        module: string;
+        name: string;
+    }>;
     /** Huecos existentes que esta accion puede completar sin elegir otra key. */
     completionTargets?: Array<{
         file: string;

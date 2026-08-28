@@ -17,13 +17,16 @@
  */
 
 export interface ScreenObjectProblem {
-    code: 'json-import-attribute' | 'locator-import-alias' | 'getElement-arity' | 'getElement-order';
+    code: 'json-import-attribute' | 'locator-import-alias' | 'getElement-arity'
+        | 'getElement-order' | 'type-locator-import';
     message: string;
 }
 
 export interface ScreenObjectRules {
     /** Nombre del enum de estrategias en ESTE framework (`TypeLocator`). */
     typeLocatorSymbol: string;
+    /** Modulo del que se importa ese enum; opcional solo para tests. */
+    typeLocatorImport?: string;
     /** Orden de plataformas que declara la firma de `getElement`. */
     platformOrder: ('android' | 'ios')[];
     parameterCount: number;
@@ -108,6 +111,35 @@ function expectedSpecifier(
 }
 
 /**
+ * El enum de estrategias es un export NOMBRADO.
+ *
+ * Importarlo por defecto no compila —el modulo no tiene default— y ademas
+ * invalida cualquier analisis del getter: el validador deja de reconocer
+ * `TypeLocator.X` y dispara errores sobre "el par primary" que no nombran el
+ * problema real, que esta en la linea del import. Por eso se expone aparte:
+ * cuando esta rota, las comprobaciones que dependen de los tipos no se corren.
+ */
+export function typeLocatorImportProblem(
+    content: string,
+    rules: Pick<ScreenObjectRules, 'typeLocatorSymbol' | 'typeLocatorImport'>
+): ScreenObjectProblem | undefined {
+    const source = String(content || '');
+    const symbol = rules.typeLocatorSymbol;
+    if (!new RegExp(`\\b${symbol}\\s*\\.`).test(source)) return undefined;
+    if (new RegExp(`import\\s*\\{[^}]*\\b${symbol}\\b[^}]*\\}\\s*from`).test(source)) return undefined;
+    const byDefault = new RegExp(`import\\s+${symbol}\\s*(?:,|from)`).test(source);
+    const from = rules.typeLocatorImport ? ` from '${rules.typeLocatorImport}'` : '';
+    return {
+        code: 'type-locator-import',
+        message: byDefault
+            ? `${symbol} es un export nombrado, no un default: \`import ${symbol}${from}\` no compila. `
+                + `Escribe exactamente: import { ${symbol} }${from};`
+            : `El Screen Object usa ${symbol} pero no lo importa. `
+                + `Escribe exactamente: import { ${symbol} }${from};`,
+    };
+}
+
+/**
  * Comprueba las reglas y devuelve los problemas con la linea ya corregida.
  *
  * El mensaje trae el arreglo porque el agente tiene un solo intento de
@@ -139,6 +171,9 @@ export function screenObjectProblems(
             });
         }
     }
+
+    const enumImport = typeLocatorImportProblem(source, rules);
+    if (enumImport) problems.push(enumImport);
 
     const order = rules.platformOrder;
     for (const call of getElementCalls(source)) {
@@ -193,6 +228,7 @@ export function signatureHint(rules: Pick<ScreenObjectRules, 'typeLocatorSymbol'
 
 export const screenObjectContract = {
     screenObjectProblems,
+    typeLocatorImportProblem,
     signatureHint,
     getElementCalls,
     callArguments,

@@ -136,7 +136,45 @@ function titleFromSlug(value: string): string {
     return text ? text[0].toUpperCase() + text.slice(1) : 'Automatización móvil';
 }
 
-function behaviorText(actions: RecordedStep[], intents: string[], technicalName: string): string {
+/**
+ * Texto procedimental que no puede ser un step: narra la interfaz en vez del
+ * comportamiento. Es el mismo criterio que aplica el validador al Feature.
+ */
+const PROCEDURAL_TEXT =
+    /\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b|\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:bot[oó]n|elemento|campo)\b|\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b|\b(?:espera|esperar)\s+\d+\s*segundos?\b|\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b/i;
+
+/**
+ * Frase del QA lista para usarse como texto de step, o `undefined`.
+ *
+ * El objetivo y el criterio de aceptacion ya son espanol redactado por una
+ * persona y describen exactamente el comportamiento y el resultado esperado.
+ * Usarlos evita la plantilla, que armaba la frase con el slug tecnico y salia
+ * como "el usuario completa saldo disponible consultar etiqueta": palabras
+ * sueltas en orden de maquina.
+ */
+function qaSentence(value: string | undefined): string | undefined {
+    const text = String(value || '').trim().replace(/\s+/g, ' ').replace(/[.;]+$/, '');
+    if (text.length < 12 || text.split(' ').length < 4) return undefined;
+    // Un keyword dentro del texto rompe el parseo del Feature.
+    if (/^(?:Given|When|Then|And|But|Dado|Cuando|Entonces)\b/i.test(text)) return undefined;
+    if (PROCEDURAL_TEXT.test(text)) return undefined;
+    // Un step no nombra controles: eso es narrar la interfaz, no el negocio.
+    if (/\b(?:bot[oó]n|campo|icono|checkbox|men[uú]|input|label|etiqueta)\b/i.test(text)) return undefined;
+    // `<param>` sin columna en Examples deja el step sin enlazar.
+    if (/<[^>]+>/.test(text)) return undefined;
+    return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+/**
+ * Frase de dominio redactada a mano, o `undefined` si ninguna aplica.
+ *
+ * Se separa de la plantilla para poder intercalar el objetivo del QA entre
+ * ambas: la frase curada es mejor Gherkin que cualquier texto generico, pero la
+ * plantilla es peor que las palabras de una persona.
+ */
+function domainBehaviorText(
+    actions: RecordedStep[], intents: string[], technicalName: string
+): string | undefined {
     const relevantIndex = actions.map(action => !['SCROLL_DOWN', 'SCROLL_UP', 'SWIPE'].includes(action.action))
         .lastIndexOf(true);
     const intent = intents[relevantIndex >= 0 ? relevantIndex : intents.length - 1] || titleFromSlug(technicalName).toLowerCase();
@@ -148,13 +186,22 @@ function behaviorText(actions: RecordedStep[], intents: string[], technicalName:
     }
     if (/^mostrar\s+/i.test(intent)) return `el usuario consulta ${intent.replace(/^mostrar\s+/i, '')}`;
     if (/^ver\s+/i.test(intent)) return `el usuario consulta ${intent.replace(/^ver\s+/i, '')}`;
+    return undefined;
+}
+
+/** Ultimo recurso: arma la frase con el slug tecnico. Sale de maquina. */
+function behaviorTemplate(technicalName: string): string {
     return `el usuario completa ${titleFromSlug(technicalName).toLowerCase()}`;
 }
 
-function assertionText(intents: string[], technicalName: string): string {
+function domainAssertionText(intents: string[]): string | undefined {
     const context = intents.filter(Boolean).join(' ');
     if (/movimiento/i.test(context)) return 'se muestran los movimientos esperados';
     if (/saldo/i.test(context)) return 'se muestra la información de saldo esperada';
+    return undefined;
+}
+
+function assertionTemplate(technicalName: string): string {
     return `se obtiene el resultado esperado de ${titleFromSlug(technicalName).toLowerCase()}`;
 }
 
@@ -758,6 +805,14 @@ export class DeterministicResolver {
                 .sort((a, b) => Number(Boolean(platformValue(b))) - Number(Boolean(platformValue(a))));
             if (!matches.length) continue;
             const candidates = matches.slice(0, 4);
+            // Lo que el gap ofrece queda tambien como dato, no solo como prosa:
+            // el validador tiene que poder autorizar la reutilizacion que el
+            // propio gap pide.
+            resolution.reuseCandidates = candidates.map(candidate => ({
+                file: candidate.file,
+                module: candidate.module,
+                name: candidate.name,
+            }));
             resolution.completionTargets = candidates
                 .filter(candidate => !platformValue(candidate))
                 .flatMap(candidate => {
@@ -856,6 +911,8 @@ export class DeterministicResolver {
             if (!current || current.assertion !== assertion) chunks.push({ assertion, entries: [] });
             chunks[chunks.length - 1].entries.push({ step, resolution: resolutions[index] });
         });
+        const behaviorChunks = chunks.filter(chunk => !chunk.assertion).length;
+        const assertionChunks = chunks.filter(chunk => chunk.assertion).length;
         let behaviorSeen = false;
         let assertionSeen = false;
         chunks.forEach(chunk => {
@@ -883,15 +940,30 @@ export class DeterministicResolver {
                 ?.value || '').match(/^<([A-Za-z_][A-Za-z0-9_]*)>$/)?.[1];
             const behavior = inputParameter && intents.some(intent => /yapear/i.test(intent))
                 ? `el usuario busca el número <${inputParameter}> para yapear`
-                : behaviorText(chunk.entries.map(entry => entry.step), intents, technicalName);
+                // Con un solo bloque de comportamiento, el objetivo del QA ES
+                // ese comportamiento; con varios no se puede repartir y se
+                // vuelve a la plantilla.
+                // Orden deliberado: la frase de dominio esta redactada a mano y
+                // gana; si no aplica, las palabras del QA; la plantilla solo
+                // cuando no hay ninguna de las dos.
+                : domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName)
+                    || (behaviorChunks === 1 ? qaSentence(rawScenario.objective) : undefined)
+                    || behaviorTemplate(technicalName);
+            const assertionRow = domainAssertionText(intents)
+                || (assertionChunks === 1 ? qaSentence(rawScenario.acceptanceCriteria) : undefined)
+                || assertionTemplate(technicalName);
+            const wording: 'domain' | 'qa' | 'template' = chunk.assertion
+                ? (domainAssertionText(intents) ? 'domain'
+                    : assertionRow === assertionTemplate(technicalName) ? 'template' : 'qa')
+                : (domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName) ? 'domain'
+                    : behavior === behaviorTemplate(technicalName) ? 'template' : 'qa');
             scenarioRows.push({
                 keyword: chunk.assertion
                     ? (assertionSeen ? 'And' : 'Then')
                     : (behaviorSeen ? 'And' : 'When'),
-                text: chunk.assertion
-                    ? assertionText(intents, technicalName)
-                    : behavior,
+                text: chunk.assertion ? assertionRow : behavior,
                 status: 'missing',
+                wording,
                 actions: parameterizedActions,
             });
             if (chunk.assertion) assertionSeen = true;

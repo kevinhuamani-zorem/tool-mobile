@@ -60,6 +60,44 @@ const TRANSLATIONS: Record<string, string> = {
     comprobante: 'receipt', constancia: 'receipt', contacto: 'contact', contactos: 'contacts',
     comentario: 'comment', imagen: 'image', icono: 'icon', enlace: 'link',
     ventas: 'sales', venta: 'sale', dia: 'day', dias: 'days', mes: 'month', ano: 'year',
+    // Ausencia y negacion. Faltaban enteras, y como tampoco se detectaban como
+    // espanol, `mensaje de no hay ventas` salia `noHaySalesMessage`: un nombre
+    // a medias que el recorder daba por limpio. La mitad del trabajo de QA son
+    // casos negativos, asi que el hueco no era anecdotico.
+    sin: 'without', vacio: 'empty', vacia: 'empty', vacios: 'empty', vacias: 'empty',
+    ninguno: 'no', ninguna: 'no', ningun: 'no',
+    resultado: 'result', resultados: 'results',
+    // Vocabulario corriente de QA que faltaba entero. Medido sobre 113 palabras
+    // habituales, el diccionario cubria 42: las 71 restantes salian tal cual en
+    // los identificadores —`etiquetaBalanceDisponible`— y ademas 70 de ellas no
+    // se detectaban como espanol, asi que `gap-english-naming` nunca saltaba y
+    // el recorder daba el nombre por limpio.
+    etiqueta: 'label', etiquetas: 'labels', disponible: 'available',
+    informacion: 'information', completa: 'complete', completar: 'complete',
+    columna: 'column', columnas: 'columns', importe: 'amount', importes: 'amounts',
+    codigo: 'code', codigos: 'codes', hora: 'time', horas: 'times',
+    estado: 'status', estados: 'statuses', historial: 'history',
+    comercio: 'merchant', comercios: 'merchants', producto: 'product', productos: 'products',
+    recibo: 'receipt', recibos: 'receipts', operacion: 'operation', operaciones: 'operations',
+    transferencia: 'transfer', transferencias: 'transfers',
+    deposito: 'deposit', depositos: 'deposits', retiro: 'withdrawal', retiros: 'withdrawals',
+    abono: 'credit', abonos: 'credits', cargo: 'charge', cargos: 'charges',
+    banco: 'bank', bancos: 'banks', tipo: 'type', tipos: 'types',
+    cambio: 'exchange', moneda: 'currency', monedas: 'currencies', dolares: 'dollars',
+    atras: 'back', ordenar: 'sort', elegir: 'choose', recibir: 'receive',
+    compartir: 'share', descargar: 'download', copiar: 'copy', pegar: 'paste',
+    editar: 'edit', eliminar: 'delete', borrar: 'clear',
+    agregar: 'add', anadir: 'add', quitar: 'remove',
+    activar: 'enable', habilitar: 'enable', desactivar: 'disable',
+    alerta: 'alert', alertas: 'alerts', aviso: 'notice', avisos: 'notices',
+    correcto: 'correct', incorrecto: 'incorrect', valido: 'valid', invalido: 'invalid',
+    lleno: 'full', pendiente: 'pending', pendientes: 'pending',
+    aprobado: 'approved', aprobada: 'approved', rechazado: 'rejected', rechazada: 'rejected',
+    superior: 'top', inferior: 'bottom', izquierda: 'left', derecha: 'right',
+    arriba: 'up', abajo: 'down', primero: 'first',
+    cantidad: 'quantity', descuento: 'discount', descuentos: 'discounts',
+    comision: 'fee', comisiones: 'fees', deuda: 'debt', deudas: 'debts',
+    cobro: 'collection', cobros: 'collections',
 };
 
 /**
@@ -96,6 +134,8 @@ const DROPPED = new Set([
     'del', 'al', 'de', 'por', 'para', 'con', 'se', 'su', 'sus',
     'lo', 'que', 'cual', 'cuando', 'donde', 'como',
     'este', 'esta', 'estos', 'estas', 'ese', 'esa', 'esos', 'esas',
+    // `no hay X` es `no X`: el verbo no aporta nada al identificador.
+    'hay', 'existe', 'existen', 'tiene', 'tienen',
 ]);
 
 /**
@@ -105,10 +145,36 @@ const DROPPED = new Set([
  * bajo ninguna lectura). Las funcionales necesitan compania: `elSeeMore` es
  * "element See More" y tiene que pasar limpio.
  */
+/**
+ * Terminaciones que no aparecen en ingles y marcan una palabra como espanola sin
+ * necesidad de tenerla en el diccionario.
+ *
+ * Es la red de seguridad: el diccionario siempre va a ir por detras del
+ * vocabulario real de los QA, y una palabra desconocida pasando en silencio es
+ * como se colaron `noHaySalesMessage` y `etiquetaBalanceDisponible`. Con esto,
+ * lo que el diccionario no sepa traducir al menos abre `gap-english-naming` en
+ * vez de darse por bueno.
+ */
+const SPANISH_ENDINGS = [
+    'cion', 'ciones', 'dad', 'dades', 'miento', 'mientos',
+    'encia', 'encias', 'ancia', 'ancias', 'mente', 'aje', 'ajes',
+];
+
+/** `informacion`, `cantidad`, `transferencia`... sin estar en el diccionario. */
+function looksSpanish(word: string): boolean {
+    if (word.length < 5) return false;
+    return SPANISH_ENDINGS.some(ending => word.endsWith(ending));
+}
+
 export function spanishTokens(identifier: string): string[] {
     const tokens = [...new Set(words(String(identifier || '')))];
     const domain = tokens.filter(word => DOMAIN_WORDS.has(word));
     const functional = tokens.filter(word => FUNCTION_WORDS.has(word));
+    // Una terminacion espanola marca sola: no necesita compania como las
+    // palabras ambiguas, porque el ingles no las produce.
+    const morphological = tokens.filter(word =>
+        !DOMAIN_WORDS.has(word) && !TRANSLATIONS[word] && looksSpanish(word));
+    if (morphological.length) return [...new Set([...domain, ...morphological, ...functional])];
     if (!domain.length && functional.length < 2) return [];
     return [...domain, ...functional];
 }
@@ -217,7 +283,10 @@ function identifierTokens(value: string): string[] {
 
 export function translateToEnglish(value: string): Translation {
     const tokens = identifierTokens(value).filter(word => !DROPPED.has(word));
-    const translated = tokens.map(word => TRANSLATIONS[word] || word);
+    // `no tiene ninguna venta` traduce `no` y `ninguna` a lo mismo; repetirlo
+    // daria `noNoSale`.
+    const translated = tokens.map(word => TRANSLATIONS[word] || word)
+        .filter((word, index, all) => word !== all[index - 1]);
     const untranslated = tokens.filter(word => !TRANSLATIONS[word] && spanishTokens(word).length);
     const leading = translated.filter(word => !TRAILING_NOUNS.has(word));
     const trailing = translated.filter(word => TRAILING_NOUNS.has(word));

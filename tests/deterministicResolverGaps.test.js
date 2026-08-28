@@ -563,3 +563,68 @@ test('el resolver no reutiliza un locator vacio en la plataforma grabada', () =>
     ]));
     assert.equal(result.plan.resolutions[0].resolution, 'create');
 });
+
+// El gap de duplicado invita a reutilizar un locator existente. Para que el
+// validador pueda autorizar esa reutilizacion, lo que el gap ofrece tiene que
+// viajar como dato, no solo como prosa dentro de la descripcion.
+test('el gap de duplicado publica los candidatos que ofrece', () => {
+    const result = new DeterministicResolver(catalogoConPlataformaAMedias()).resolve(scenario([
+        action('CLICK', 'ver todas las cuentas de tapp', '~Ver todas'),
+        action('VERIFICAR_EXISTE', 'titulo del subhome de tapp', '~TAPP'),
+    ]));
+    const resolution = result.plan.resolutions.find(item => item.sequence === 1);
+    assert.ok(resolution.reuseCandidates?.length, 'sin esto el validador no puede autorizar la reutilizacion');
+    assert.equal(resolution.reuseCandidates[0].name, 'btnViewAllAccounts');
+    assert.equal(resolution.reuseCandidates[0].file, 'resources/locators/payment/tapp-subhome.locator.json');
+});
+
+// El texto del step salia de una plantilla armada con el slug tecnico —"el
+// usuario completa saldo disponible consultar etiqueta"— ignorando que el QA ya
+// habia escrito el comportamiento y el resultado esperado en espanol.
+test('el objetivo y el criterio del QA se usan como texto de los steps', () => {
+    const recorded = scenario([
+        action('CLICK', 'opcion de recarga', '~btnRecarga'),
+        action('VERIFICAR_EXISTE', 'confirmacion de recarga', '~lblRecarga'),
+    ]);
+    recorded.objective = 'el usuario recarga su celular con un monto';
+    recorded.acceptanceCriteria = 'se muestra la constancia de la recarga realizada';
+    const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows;
+
+    const when = rows.find(row => row.keyword === 'When');
+    const then = rows.find(row => row.keyword === 'Then');
+    assert.equal(when.text, 'el usuario recarga su celular con un monto');
+    assert.equal(when.wording, 'qa');
+    assert.equal(then.text, 'se muestra la constancia de la recarga realizada');
+    assert.equal(then.wording, 'qa');
+    assert.doesNotMatch(rows.map(row => row.text).join(' '), /el usuario completa|resultado esperado de/);
+});
+
+// Las frases de dominio estan redactadas a mano y son mejor Gherkin que
+// cualquier objetivo: ganan.
+test('una frase de dominio gana al objetivo del QA', () => {
+    const recorded = scenario([
+        action('CLICK', 'mostrar movimientos', 'android=new UiSelector().text("Mostrar")'),
+        action('VERIFICAR_EXISTE', 'contenedor de movimientos', '~lblMovimientos'),
+    ]);
+    recorded.objective = 'el usuario debe poder ver todos sus movimientos';
+    const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows;
+    const when = rows.find(row => row.keyword === 'When');
+    assert.equal(when.text, 'el usuario consulta sus movimientos');
+    assert.equal(when.wording, 'domain');
+});
+
+// Un objetivo que narra la interfaz no es un step. Se descarta, y la fila queda
+// marcada `template` — la unica senal de que ese texto salio de maquina y hay
+// que reescribirlo.
+test('un objetivo procedimental no se usa y la fila queda marcada template', () => {
+    const recorded = scenario([
+        action('CLICK', 'opcion de recarga', '~btnRecarga'),
+        action('VERIFICAR_EXISTE', 'confirmacion de recarga', '~lblRecarga'),
+    ]);
+    recorded.objective = 'el usuario hace clic en el boton de recarga';
+    recorded.acceptanceCriteria = 'ok';
+    const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows;
+    assert.equal(rows.find(row => row.keyword === 'When').wording, 'template');
+    // Un criterio demasiado corto tampoco sirve como resultado esperado.
+    assert.equal(rows.find(row => row.keyword === 'Then').wording, 'template');
+});

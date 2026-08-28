@@ -38,6 +38,13 @@ export interface GenerationRequest {
         text: string;
         actions?: RecordedStep[];
         status?: 'reused' | 'missing';
+        /**
+         * De donde salio el texto del step: `domain` de una frase redactada a
+         * mano, `qa` de las palabras del propio QA, `template` de la plantilla
+         * con el slug tecnico. Una fila `template` es la unica que sale de
+         * maquina y la unica que conviene reescribir.
+         */
+        wording?: 'domain' | 'qa' | 'template';
         methodName?: string;
     }[];
 }

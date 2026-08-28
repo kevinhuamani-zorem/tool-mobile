@@ -2,8 +2,36 @@ import type { AutomationScenario } from './automationContracts';
 import type { GenerationRequest } from './fwkMobileGenerator';
 import type { RecordedStep } from './models';
 
-const SCENARIO_MISMATCH_ERROR =
-    'scenario.json fue modificado o no coincide con la grabación original';
+/**
+ * Primer campo en el que divergen dos objetos, en notacion de ruta.
+ *
+ * Sin esto el fallo era opaco: el mensaje insinuaba manipulacion y el QA no
+ * tenia forma de saber que habia cambiado ni que hacer al respecto.
+ */
+function firstDivergence(expected: unknown, actual: unknown, at = ''): string | undefined {
+    if (JSON.stringify(expected) === JSON.stringify(actual)) return undefined;
+    const bothObjects = expected && actual
+        && typeof expected === 'object' && typeof actual === 'object'
+        && Array.isArray(expected) === Array.isArray(actual);
+    if (!bothObjects) return at || '(raiz)';
+    const left = expected as Record<string, unknown>;
+    const right = actual as Record<string, unknown>;
+    for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
+        const found = firstDivergence(left[key], right[key], at ? `${at}.${key}` : key);
+        if (found) return found;
+    }
+    return at || '(raiz)';
+}
+
+function mismatchError(detail: string): Error {
+    return new Error(
+        `El scenario.json del paquete ya no corresponde a la grabación: ${detail}. ` +
+        'Normalmente no es una manipulación del archivo, sino que el paquete quedó viejo: ' +
+        'la grabación continuó, o el framework cambió (un locator nuevo, una actualización ' +
+        'del recorder) y el plan se resuelve distinto. Vuelve a preparar el paquete y a ' +
+        'lanzar el agente. Si nadie tocó nada de eso, entonces sí revisa el archivo.'
+    );
+}
 
 type ScenarioRow = NonNullable<GenerationRequest['scenarioRows']>[number];
 
@@ -59,12 +87,15 @@ export function requireTrustedAutomationScenarioPackage(
     const expected = packageAutomationScenario(resolvedRecordingScenario);
     const revisionIsValid = Number.isInteger(packagedScenario.revision)
         && packagedScenario.revision >= expected.revision;
-    if (
-        !revisionIsValid
-        || JSON.stringify(scenarioIdentity(packagedScenario))
-            !== JSON.stringify(scenarioIdentity(expected))
-    ) {
-        throw new Error(SCENARIO_MISMATCH_ERROR);
+    if (!revisionIsValid) {
+        throw mismatchError(
+            `su revisión es ${JSON.stringify(packagedScenario.revision)} y la grabación va por ` +
+            `${expected.revision}`
+        );
+    }
+    const divergence = firstDivergence(scenarioIdentity(expected), scenarioIdentity(packagedScenario));
+    if (divergence) {
+        throw mismatchError(`difiere en ${divergence}`);
     }
     return {
         ...resolvedRecordingScenario,
