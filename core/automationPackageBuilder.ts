@@ -26,6 +26,11 @@ import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
 import { withGeneratedResponseMetadata } from './generatedFileMetadata';
 import { locatorCandidatePackage } from './selectorCandidates';
+import {
+    packageAutomationScenario,
+    requireTrustedAutomationScenarioPackage,
+} from './automationScenarioPackage';
+import type { PackagedAutomationScenario } from './automationScenarioPackage';
 
 function writeJson(file: string, value: unknown): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -343,33 +348,6 @@ if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('
 }
 
 /**
- * Copia del escenario para el paquete, sin la triplicación de acciones.
- *
- * `scenario.actions` ya describe cada acción completa; `request.scenarioRows`
- * las repetía enteras y `plan.resolutions` otra vez. En una grabación de 14
- * acciones eso eran ~3,8 KB de puro duplicado. Las filas solo necesitan
- * referenciar la secuencia. La copia del recording conserva todo: esta poda
- * aplica únicamente al paquete que lee el agente.
- */
-function packagedScenario(scenario: AutomationScenario): AutomationScenario {
-    const rows = scenario.request.scenarioRows;
-    return {
-        ...scenario,
-        actions: scenario.actions.map(action => {
-            const { selectorCandidates: _selectorCandidates, ...compact } = action;
-            return compact;
-        }),
-        request: {
-            ...scenario.request,
-            scenarioRows: rows?.map(row => ({
-                ...row,
-                actions: (row.actions || []).map(action => ({ sequence: action.sequence } as any)),
-            })),
-        },
-    };
-}
-
-/**
  * [visual-recorder] Se lanza cuando el resolver marca un gap `blocking`.
  * A diferencia del resto de gaps, este no viaja al agente: el paquete no llega
  * a escribirse y el QA tiene que corregir la grabacion primero.
@@ -427,6 +405,14 @@ export class AutomationPackageBuilder {
         private readonly validator = new AutomationResponseValidator(),
         private readonly frameworkRoot = projectPaths.frameworkRoot,
     ) {}
+
+    requireTrustedScenarioPackage(
+        recordingScenario: AutomationScenario,
+        packagedScenario: PackagedAutomationScenario
+    ): AutomationScenario {
+        const resolvedScenario = this.resolver.resolve(recordingScenario).scenario;
+        return requireTrustedAutomationScenarioPackage(resolvedScenario, packagedScenario);
+    }
 
     prepareRecordedScenario(
         recordingDirectory: string,
@@ -539,7 +525,10 @@ export class AutomationPackageBuilder {
             if (fs.existsSync(source)) fs.copyFileSync(source, path.join(historyDirectory, name));
         }
 
-        writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario(revisedScenario));
+        writeJson(
+            path.join(packageDirectory, 'scenario.json'),
+            packageAutomationScenario(revisedScenario)
+        );
         writeJson(path.join(packageDirectory, 'generation-plan.json'), plan);
         writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
@@ -589,7 +578,10 @@ export class AutomationPackageBuilder {
         fs.mkdirSync(packageDirectory, { recursive: true });
         const memoryHit = this.memory.find(result.scenario.fingerprint);
         if (memoryHit) result.plan.status = 'memory-hit';
-        writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario(result.scenario));
+        writeJson(
+            path.join(packageDirectory, 'scenario.json'),
+            packageAutomationScenario(result.scenario)
+        );
         writeJson(path.join(packageDirectory, 'locator-candidates.json'), locatorCandidatePackage(result.scenario));
         writeJson(path.join(packageDirectory, 'generation-plan.json'), result.plan);
         writeJson(path.join(packageDirectory, 'resolved-context.json'), result.resolvedContext);

@@ -138,8 +138,9 @@ convierte por sí solo un selector manual en verificado.
    bajo `runtime/recordings/<id>/generation/automation`.
    `locator-candidates.json` es la única copia compacta de los backups
    verificados dentro del paquete; `scenario.json` no los duplica. Al importar,
-   `main` toma el `scenario.json` original del recording como fuente autoritativa
-   y rechaza cambios tanto en el escenario compacto como en la allowlist
+   `main` toma el `scenario.json` original del recording como fuente autoritativa,
+   reconstruye con el mismo resolver su normalización y representación compacta,
+   y rechaza cambios tanto en ese escenario esperado como en la allowlist
    expuesta al agente.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
    no se invoca al agente. La memoria de calidad 100 también se reutiliza.

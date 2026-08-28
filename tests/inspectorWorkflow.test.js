@@ -10,6 +10,10 @@ const controller = fs.readFileSync(
 );
 const preload = fs.readFileSync(path.join(root, 'recorder/src/preload.ts'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
+const scenarioPackage = fs.readFileSync(
+    path.join(root, 'core/automationScenarioPackage.ts'),
+    'utf8',
+);
 
 function between(source, start, end) {
     const startIndex = source.indexOf(start);
@@ -108,7 +112,11 @@ test('clears stale backups on edits or alternative selection and persists only t
     assert.ok(executeHandler.indexOf('prepareRecordedStep(') < executeHandler.indexOf('executor.execute('));
     assert.ok(executeHandler.indexOf('executor.execute(') < executeHandler.indexOf('recordedSteps.push('));
     assert.match(executeHandler, /catch \(error\) \{[\s\S]*recordedSteps\.pop\(\)/);
-    assert.match(main, /scenario\.json fue modificado o no coincide con la grabación original/);
+    assert.match(main, /requireTrustedScenarioPackage/);
+    assert.match(
+        scenarioPackage,
+        /scenario\.json fue modificado o no coincide con la grabación original/
+    );
 });
 
 test('aplica completions externos aunque el plan no tenga capas update', () => {

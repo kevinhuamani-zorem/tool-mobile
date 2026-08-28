@@ -29,6 +29,7 @@ import {
     prepareRecordedStep,
 } from '../../core/automationRecordingStore';
 import { AutomationPackageBuilder } from '../../core/automationPackageBuilder';
+import type { PackagedAutomationScenario } from '../../core/automationScenarioPackage';
 import { AutomationAgentLauncher } from '../../core/automationAgentLauncher';
 import { RecordingCoverageAnalyzer } from '../../core/recordingCoverageAnalyzer';
 import { RecordingPlatformUpdater } from '../../core/recordingPlatformUpdater';
@@ -1438,7 +1439,7 @@ ipcMain.handle('import-automation-response', async () => {
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
         const read = <T>(name: string): T => JSON.parse(fs.readFileSync(path.join(activeAutomationPackage, name), 'utf-8')) as T;
-        const packagedScenario = read<AutomationScenario>('scenario.json');
+        const packagedScenario = read<PackagedAutomationScenario>('scenario.json');
         const candidateFile = path.join(activeAutomationPackage, 'locator-candidates.json');
         const recordingScenarioFile = path.resolve(activeAutomationPackage, '..', '..', 'scenario.json');
         if (!fs.existsSync(recordingScenarioFile)) {
@@ -1447,23 +1448,10 @@ ipcMain.handle('import-automation-response', async () => {
         const recordingScenario = JSON.parse(
             fs.readFileSync(recordingScenarioFile, 'utf-8')
         ) as AutomationScenario;
-        const scenarioIdentity = (value: AutomationScenario, stripCandidates: boolean): unknown => {
-            const { revision: _revision, ...identity } = value;
-            return {
-                ...identity,
-                actions: identity.actions.map(action => {
-                    if (!stripCandidates) return action;
-                    const { selectorCandidates: _candidates, ...compact } = action;
-                    return compact;
-                }),
-            };
-        };
-        if (
-            JSON.stringify(scenarioIdentity(packagedScenario, false))
-            !== JSON.stringify(scenarioIdentity(recordingScenario, true))
-        ) {
-            throw new Error('scenario.json fue modificado o no coincide con la grabación original');
-        }
+        const trustedPackagedScenario = automationPackageBuilder.requireTrustedScenarioPackage(
+            recordingScenario,
+            packagedScenario
+        );
         const packagedCandidates = fs.existsSync(candidateFile)
             ? read<LocatorCandidatePackage>('locator-candidates.json')
             : undefined;
@@ -1471,7 +1459,10 @@ ipcMain.handle('import-automation-response', async () => {
             recordingScenario,
             packagedCandidates,
         );
-        const scenario = attachLocatorCandidatePackage(recordingScenario, trustedCandidates);
+        const scenario = attachLocatorCandidatePackage(
+            trustedPackagedScenario,
+            trustedCandidates
+        );
         const plan = read<GenerationPlan>('generation-plan.json');
         const response = withGeneratedResponseMetadata(
             read<AutomationAgentResponse>('agent-response.json'),

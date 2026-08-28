@@ -255,10 +255,11 @@ exactas de steps y selectores sin entregar archivos completos del framework.
 `candidateId`, pero no inventar ni modificar selectores. El validator rechaza
 valores nuevos fuera de la allowlist de la acción y plataforma asociadas, el
 intercambio de selectores entre locators y campos de selector introducidos en
-resolutions, completions o metadatos de files. Al importar, el recorder compara
-el archivo con la copia autoritativa del recording antes de hidratar el
-`scenario.json` compacto; `platform` forma parte explícita del package para que
-una verificación Android nunca se pueda reinterpretar como iOS, ni al revés.
+resolutions, completions o metadatos de files. Al importar, el recorder vuelve
+a resolver la copia autoritativa del recording y reconstruye con el mismo helper
+el `scenario.json` compacto esperado antes de hidratarlo; `platform` forma parte
+explícita del package para que una verificación Android nunca se pueda
+reinterpretar como iOS, ni al revés.
 El agente devuelve un solo `agent-response.json` con:
 
 - los mismos `recordingId` y `planId`;
