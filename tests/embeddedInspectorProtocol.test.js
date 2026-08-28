@@ -84,7 +84,7 @@ test('maps successful Inspector strategies into existing recorder selector synta
     );
 });
 
-test('performs ready, connect, connected and explicit use handshake once', () => {
+test('performs the handshake and transfers the explicitly used strategy and selector unchanged', () => {
     const sent = [];
     const uses = [];
     const errors = [];
@@ -116,6 +116,11 @@ test('performs ready, connect, connected and explicit use handshake once', () =>
         attributes: {},
     }));
     assert.equal(uses.length, 1);
+    assert.deepEqual(uses[0], {
+        strategy: 'xpath',
+        selector: '//android.widget.Button',
+        attributes: {},
+    });
     assert.deepEqual(errors, []);
 
     assert.throws(

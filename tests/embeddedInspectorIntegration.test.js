@@ -12,6 +12,7 @@ const {
     EMBEDDED_INSPECTOR_HOST_ORIGIN,
     EMBEDDED_INSPECTOR_ORIGIN,
     EMBEDDED_INSPECTOR_URL,
+    embeddedInspectorAssetsPath,
     embeddedInspectorWindowOptions,
     embeddedInspectorAssetsAvailable,
     focusEmbeddedInspectorWindow,
@@ -220,6 +221,20 @@ test('rejects altered embedded assets at runtime', () => {
     assert.equal(embeddedInspectorAssetsAvailable(assets), false);
 });
 
+test('resolves embedded assets from the cache pinned to the controlled fork commit', () => {
+    assert.equal(
+        embeddedInspectorAssetsPath(),
+        path.join(
+            toolRoot,
+            'node_modules',
+            '.cache',
+            'appium-inspector',
+            EMBEDDED_INSPECTOR_COMMIT,
+            'dist-browser',
+        ),
+    );
+});
+
 test('pins and builds the controlled fork without a committed bundle or plugin', () => {
     const gitmodules = fs.readFileSync(path.join(toolRoot, '.gitmodules'), 'utf8');
     const buildScript = fs.readFileSync(
@@ -229,7 +244,7 @@ test('pins and builds the controlled fork without a committed bundle or plugin',
     const runScript = fs.readFileSync(path.join(toolRoot, 'run.sh'), 'utf8');
 
     assert.match(gitmodules, /kevinhuamani-zorem\/appium-inspector\.git/);
-    assert.match(gitmodules, /kevinhuamani-zorem-explicit-inspector-selection/);
+    assert.match(gitmodules, /kevinhuamani-zorem-expanded-locator-candidates/);
     assert.match(buildScript, new RegExp(EMBEDDED_INSPECTOR_COMMIT));
     assert.match(buildScript, /npm', \['run', 'build:browser'\]/);
     assert.match(buildScript, /VITE_EMBEDDED_HOST_ORIGIN: hostOrigin/);
