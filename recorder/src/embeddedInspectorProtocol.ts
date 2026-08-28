@@ -1,12 +1,12 @@
 export const EMBEDDED_INSPECTOR_CHANNEL = 'appium-inspector:embedded';
-export const EMBEDDED_INSPECTOR_VERSION = 1;
+export const EMBEDDED_INSPECTOR_VERSION = 2;
 
 export const EMBEDDED_INSPECTOR_TYPES = {
     CONNECT: 'appium-inspector:connect',
     READY: 'appium-inspector:ready',
     CONNECTED: 'appium-inspector:connected',
     ERROR: 'appium-inspector:error',
-    ELEMENT_SELECTED: 'appium-inspector:element-selected',
+    ELEMENT_USED: 'appium-inspector:element-used',
 } as const;
 
 export interface EmbeddedInspectorConnection {
@@ -16,7 +16,7 @@ export interface EmbeddedInspectorConnection {
     platform: string;
 }
 
-export interface EmbeddedInspectorSelection {
+export interface EmbeddedInspectorElementUsed {
     strategy: string;
     selector: string;
     elementId?: string;
@@ -35,7 +35,7 @@ export type EmbeddedInspectorIncomingMessage =
     | { channel: typeof EMBEDDED_INSPECTOR_CHANNEL; version: typeof EMBEDDED_INSPECTOR_VERSION; type: typeof EMBEDDED_INSPECTOR_TYPES.READY }
     | { channel: typeof EMBEDDED_INSPECTOR_CHANNEL; version: typeof EMBEDDED_INSPECTOR_VERSION; type: typeof EMBEDDED_INSPECTOR_TYPES.CONNECTED; payload: { sessionId: string } }
     | { channel: typeof EMBEDDED_INSPECTOR_CHANNEL; version: typeof EMBEDDED_INSPECTOR_VERSION; type: typeof EMBEDDED_INSPECTOR_TYPES.ERROR; payload: EmbeddedInspectorError }
-    | { channel: typeof EMBEDDED_INSPECTOR_CHANNEL; version: typeof EMBEDDED_INSPECTOR_VERSION; type: typeof EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED; payload: EmbeddedInspectorSelection };
+    | { channel: typeof EMBEDDED_INSPECTOR_CHANNEL; version: typeof EMBEDDED_INSPECTOR_VERSION; type: typeof EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED; payload: EmbeddedInspectorElementUsed };
 
 export type EmbeddedInspectorConnectMessage = {
     channel: typeof EMBEDDED_INSPECTOR_CHANNEL;
@@ -164,11 +164,11 @@ export function validateEmbeddedInspectorMessage(data: unknown): EmbeddedInspect
                 },
             };
         }
-        case EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED: {
+        case EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED: {
             if (!isObject(message.payload)) {
-                throw new EmbeddedInspectorProtocolError('INVALID_PAYLOAD', "'element-selected.payload' debe ser un objeto");
+                throw new EmbeddedInspectorProtocolError('INVALID_PAYLOAD', "'element-used.payload' debe ser un objeto");
             }
-            const payload: EmbeddedInspectorSelection = {
+            const payload: EmbeddedInspectorElementUsed = {
                 strategy: requiredString(message.payload.strategy, 'strategy'),
                 selector: requiredString(message.payload.selector, 'selector'),
                 attributes: stringRecord(message.payload.attributes, 'attributes'),
@@ -184,7 +184,7 @@ export function validateEmbeddedInspectorMessage(data: unknown): EmbeddedInspect
             return {
                 channel: EMBEDDED_INSPECTOR_CHANNEL,
                 version: EMBEDDED_INSPECTOR_VERSION,
-                type: EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED,
+                type: EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED,
                 payload,
             };
         }
@@ -206,16 +206,16 @@ const STRATEGY_PREFIXES: Record<string, string> = {
     xpath: '',
 };
 
-export function recorderSelectorFromInspector(selection: EmbeddedInspectorSelection): string {
-    const strategy = selection.strategy.trim().toLowerCase();
+export function recorderSelectorFromInspector(elementUsed: EmbeddedInspectorElementUsed): string {
+    const strategy = elementUsed.strategy.trim().toLowerCase();
     const prefix = STRATEGY_PREFIXES[strategy];
     if (prefix === undefined) {
         throw new EmbeddedInspectorProtocolError(
             'UNSUPPORTED_SELECTOR_STRATEGY',
-            `Estrategia de selector no soportada: ${selection.strategy}`,
+            `Estrategia de selector no soportada: ${elementUsed.strategy}`,
         );
     }
-    return `${prefix}${selection.selector}`;
+    return `${prefix}${elementUsed.selector}`;
 }
 
 export class EmbeddedInspectorHandshake {
@@ -225,7 +225,7 @@ export class EmbeddedInspectorHandshake {
         private readonly connection: EmbeddedInspectorConnection,
         private readonly sendConnect: (message: EmbeddedInspectorConnectMessage) => void,
         private readonly onConnected: () => void,
-        private readonly onSelection: (selection: EmbeddedInspectorSelection) => void,
+        private readonly onElementUsed: (elementUsed: EmbeddedInspectorElementUsed) => void,
         private readonly onError: (error: EmbeddedInspectorError) => void,
     ) {}
 
@@ -254,9 +254,9 @@ export class EmbeddedInspectorHandshake {
         if (this.state !== 'connected') {
             throw new EmbeddedInspectorProtocolError(
                 'INVALID_MESSAGE_ORDER',
-                'Inspector seleccionó un elemento antes de confirmar la conexión',
+                'Inspector intentó usar un elemento antes de confirmar la conexión',
             );
         }
-        this.onSelection(message.payload);
+        this.onElementUsed(message.payload);
     }
 }

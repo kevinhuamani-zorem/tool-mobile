@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('embedded-inspector-error', wrapped);
         return () => ipcRenderer.removeListener('embedded-inspector-error', wrapped);
     },
-    onInspectorElementSelected: (listener: (selection: {
+    onInspectorElementUsed: (listener: (elementUsed: {
         selector: string;
         strategy: string;
         tag?: string;
@@ -54,16 +54,16 @@ contextBridge.exposeInMainWorld('api', {
         screenshot?: string;
         source?: string;
     }) => void) => {
-        const wrapped = (_event: Electron.IpcRendererEvent, selection: {
+        const wrapped = (_event: Electron.IpcRendererEvent, elementUsed: {
             selector: string;
             strategy: string;
             tag?: string;
             attributes: Record<string, string>;
             screenshot?: string;
             source?: string;
-        }) => listener(selection);
-        ipcRenderer.on('embedded-inspector-element-selected', wrapped);
-        return () => ipcRenderer.removeListener('embedded-inspector-element-selected', wrapped);
+        }) => listener(elementUsed);
+        ipcRenderer.on('embedded-inspector-element-used', wrapped);
+        return () => ipcRenderer.removeListener('embedded-inspector-element-used', wrapped);
     },
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),

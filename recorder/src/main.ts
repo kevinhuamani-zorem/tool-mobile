@@ -46,9 +46,11 @@ import {
 import {
     createEmbeddedInspectorWindow,
     embeddedInspectorAssetsAvailable,
+    focusEmbeddedInspectorWindow,
     registerEmbeddedInspectorProtocol,
     registerEmbeddedInspectorScheme,
     resolveInspectorMode,
+    returnToRecorderAfterElementUse,
 } from './embeddedInspectorWindow';
 import { EmbeddedInspectorProxy } from './embeddedInspectorProxy';
 import { RecorderRuntimeLifecycle, RecorderSessionOwnership } from './recorderLifecycle';
@@ -864,10 +866,7 @@ ipcMain.handle('open-inspector', async () => {
         };
     }
 
-    if (embeddedInspectorWindow && !embeddedInspectorWindow.isDestroyed()) {
-        if (embeddedInspectorWindow.isMinimized()) embeddedInspectorWindow.restore();
-        embeddedInspectorWindow.show();
-        embeddedInspectorWindow.focus();
+    if (focusEmbeddedInspectorWindow(embeddedInspectorWindow)) {
         return { success: true, mode: 'embedded', focused: true };
     }
 
@@ -889,18 +888,17 @@ ipcMain.handle('open-inspector', async () => {
             message,
         ),
         () => mainWindow?.webContents.send('embedded-inspector-connected'),
-        selection => {
-            const selector = recorderSelectorFromInspector(selection);
-            mainWindow?.webContents.send('embedded-inspector-element-selected', {
+        elementUsed => {
+            const selector = recorderSelectorFromInspector(elementUsed);
+            mainWindow?.webContents.send('embedded-inspector-element-used', {
                 selector,
-                strategy: selection.strategy,
-                tag: selection.tag,
-                attributes: selection.attributes,
-                screenshot: selection.screenshot,
-                source: selection.source,
+                strategy: elementUsed.strategy,
+                tag: elementUsed.tag,
+                attributes: elementUsed.attributes,
+                screenshot: elementUsed.screenshot,
+                source: elementUsed.source,
             });
-            mainWindow?.show();
-            mainWindow?.focus();
+            returnToRecorderAfterElementUse(embeddedInspectorWindow, mainWindow);
         },
         error => mainWindow?.webContents.send(
             'embedded-inspector-error',

@@ -5,7 +5,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { projectPaths } from '../../core/projectPaths';
 
-export const EMBEDDED_INSPECTOR_COMMIT = 'c98bb47be2f52aa1a765b03b6ea31761c6e7d190';
+export const EMBEDDED_INSPECTOR_COMMIT = 'b5dbc3d86de67365833949e6f7b147533003e2ac';
 export const EMBEDDED_INSPECTOR_SCHEME = 'appium-recorder';
 export const EMBEDDED_INSPECTOR_HOST_ORIGIN = `${EMBEDDED_INSPECTOR_SCHEME}://host`;
 export const EMBEDDED_INSPECTOR_ORIGIN = `${EMBEDDED_INSPECTOR_SCHEME}://inspector`;
@@ -183,4 +183,30 @@ export function createEmbeddedInspectorWindow(): BrowserWindow {
     });
     window.loadURL(EMBEDDED_INSPECTOR_URL);
     return window;
+}
+
+type FocusableInspectorWindow = Pick<
+    BrowserWindow,
+    'focus' | 'isDestroyed' | 'isMinimized' | 'restore' | 'show'
+>;
+
+type RecorderWindow = Pick<BrowserWindow, 'focus' | 'show'>;
+
+export function focusEmbeddedInspectorWindow(
+    window: FocusableInspectorWindow | null,
+): boolean {
+    if (!window || window.isDestroyed()) return false;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+    return true;
+}
+
+export function returnToRecorderAfterElementUse(
+    inspectorWindow: Pick<BrowserWindow, 'hide' | 'isDestroyed'> | null,
+    recorderWindow: RecorderWindow | null,
+): void {
+    if (inspectorWindow && !inspectorWindow.isDestroyed()) inspectorWindow.hide();
+    recorderWindow?.show();
+    recorderWindow?.focus();
 }

@@ -26,6 +26,13 @@ explícitamente sin assets, la apertura falla indicando el comando de build.
 BrowserStack conserva legacy porque el protocolo fijado no transporta
 credenciales; estas nunca se exponen al bundle.
 
+El botón **Inspector** del header abre o focaliza la misma ventana embebida. Una
+selección ordinaria permanece dentro de Appium Inspector; el recorder solo
+importa el selector cuando el QA pulsa **Usar en Recorder**, lo deja pendiente
+de verificación, oculta la ventana y conserva la sesión para reabrirla. El botón
+inferior **Inspeccionar** activa exclusivamente la inspección local sobre la
+captura/XML del recorder.
+
 ## Diagnóstico por síntomas
 
 ### Electron failed to install correctly

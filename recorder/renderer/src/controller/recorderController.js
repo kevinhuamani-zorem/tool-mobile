@@ -874,7 +874,7 @@ export async function initializeRecorder() {
     }
 
     btnAnalyzeScenario.addEventListener('click', analyzeSelectedScenario);
-    btnOpenAssignmentInspector.addEventListener('click', () => btnInspect.click());
+    btnOpenAssignmentInspector.addEventListener('click', openAppiumInspector);
     btnCancelAssignment.addEventListener('click', () => {
         currentAssignment = null;
         verifiedSelector = '';
@@ -1484,26 +1484,26 @@ export async function initializeRecorder() {
         setStatus('✗ Error del Inspector', '#CC0000');
     });
 
-    api.onInspectorElementSelected(selection => {
+    api.onInspectorElementUsed(elementUsed => {
         if (inspectorActive) exitInspectorMode();
         clearSelectorChips();
         selectedCatalogLocator = null;
         renderSelectedLocatorCoverage();
-        txtSelector.value = selection.selector;
+        txtSelector.value = elementUsed.selector;
         txtVarName.value = currentAssignment?.name || txtVarName.value;
         verifiedSelector = '';
-        if (selection.screenshot) {
+        if (elementUsed.screenshot) {
             updateDeviceScreen(
-                selection.screenshot.startsWith('data:')
-                    ? selection.screenshot
-                    : 'data:image/png;base64,' + selection.screenshot
+                elementUsed.screenshot.startsWith('data:')
+                    ? elementUsed.screenshot
+                    : 'data:image/png;base64,' + elementUsed.screenshot
             );
         }
         renderAssignmentTarget();
         updateAssignmentButton();
-        setVerify('— Selector capturado; verifícalo antes de usarlo');
-        setInspect('✓ Elemento seleccionado en Appium Inspector', 'ok');
-        setStatus('✓ Selector cargado desde Appium Inspector', '#00CC00');
+        setVerify('— Selector importado explícitamente; pendiente de verificación');
+        setInspect('✓ Selector usado explícitamente desde Appium Inspector', 'ok');
+        setStatus('✓ Selector importado desde Appium Inspector', '#00CC00');
     });
 
     function setGenerate(msg, type) {
@@ -2690,22 +2690,6 @@ export async function initializeRecorder() {
             return;
         }
 
-        const inspectorLaunch = await api.openInspector();
-        if (!inspectorLaunch.success) {
-            setInspect('✗ ' + (inspectorLaunch.error || 'No se pudo abrir el Inspector'), 'err');
-            setStatus('✗ Error del Inspector', '#CC0000');
-            return;
-        }
-        if (inspectorLaunch.mode === 'embedded') {
-            if (interactionActive) exitInteractionMode();
-            setInspect('⏳ Esperando selección en Appium Inspector...', 'active');
-            setStatus('🔍 Appium Inspector abierto', '#2E75B6');
-            return;
-        }
-        if (inspectorLaunch.warning) {
-            setInspect('⚠ ' + inspectorLaunch.warning, 'err');
-        }
-
         // Activar modo inspección
         if (interactionActive) exitInteractionMode();
         clearSelectorChips();
@@ -3725,8 +3709,7 @@ export async function initializeRecorder() {
         }
     });
 
-    // Abrir inspector
-    btnXmlInspector.addEventListener('click', async () => {
+    async function openLegacyHierarchyInspector(warning) {
         if (inspectorActive) exitInspectorMode();
         if (interactionActive) exitInteractionMode();
         clearSelectorChips();
@@ -3734,7 +3717,32 @@ export async function initializeRecorder() {
         renderSelectedLocatorCoverage();
         xmlModal.style.display = 'flex';
         await refreshHierarchy();
-    });
+        if (warning) {
+            setInspect('⚠ ' + warning + ' Se abrió el inspector XML local.', 'err');
+            setStatus('⚠ Appium Inspector no disponible; usando inspector XML local', '#CC7A00');
+        }
+    }
+
+    async function openAppiumInspector() {
+        const inspectorLaunch = await api.openInspector();
+        if (!inspectorLaunch.success) {
+            setInspect('✗ ' + (inspectorLaunch.error || 'No se pudo abrir Appium Inspector'), 'err');
+            setStatus('✗ Error de Appium Inspector', '#CC0000');
+            return;
+        }
+        if (inspectorLaunch.mode === 'legacy') {
+            await openLegacyHierarchyInspector(
+                inspectorLaunch.warning || 'Appium Inspector resolvió al modo legacy.'
+            );
+            return;
+        }
+        if (inspectorActive) exitInspectorMode();
+        if (interactionActive) exitInteractionMode();
+        setInspect('⏳ Usa “Usar en Recorder” para importar el selector confirmado', 'active');
+        setStatus('🔍 Appium Inspector abierto', '#2E75B6');
+    }
+
+    btnXmlInspector.addEventListener('click', openAppiumInspector);
 
     async function refreshHierarchy() {
         hierTree.innerHTML    = '<span class="hier-hint">Cargando...</span>';

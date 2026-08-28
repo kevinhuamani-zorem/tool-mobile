@@ -26,7 +26,7 @@ test('validates every embedded event payload', () => {
         message(EMBEDDED_INSPECTOR_TYPES.READY),
     );
     assert.deepEqual(
-        validateEmbeddedInspectorMessage(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED, {
+        validateEmbeddedInspectorMessage(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED, {
             strategy: '-android uiautomator',
             selector: 'new UiSelector().text("Pagar")',
             elementId: 'element-1',
@@ -39,7 +39,7 @@ test('validates every embedded event payload', () => {
     );
 
     assert.throws(
-        () => validateEmbeddedInspectorMessage(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED, {
+        () => validateEmbeddedInspectorMessage(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED, {
             strategy: 'xpath',
             selector: '//button',
             attributes: { enabled: true },
@@ -49,7 +49,7 @@ test('validates every embedded event payload', () => {
     assert.throws(
         () => validateEmbeddedInspectorMessage({
             channel: EMBEDDED_INSPECTOR_CHANNEL,
-            version: 2,
+            version: 1,
             type: EMBEDDED_INSPECTOR_TYPES.READY,
         }),
         error => error instanceof EmbeddedInspectorProtocolError && error.code === 'UNSUPPORTED_PROTOCOL',
@@ -84,9 +84,9 @@ test('maps successful Inspector strategies into existing recorder selector synta
     );
 });
 
-test('performs ready, connect, connected and selection handshake once', () => {
+test('performs ready, connect, connected and explicit use handshake once', () => {
     const sent = [];
-    const selections = [];
+    const uses = [];
     const errors = [];
     let connected = 0;
     const connection = {
@@ -99,7 +99,7 @@ test('performs ready, connect, connected and selection handshake once', () => {
         connection,
         value => sent.push(value),
         () => { connected += 1; },
-        value => selections.push(value),
+        value => uses.push(value),
         value => errors.push(value),
     );
 
@@ -110,12 +110,12 @@ test('performs ready, connect, connected and selection handshake once', () => {
 
     handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.CONNECTED, { sessionId: 'session-1' }));
     assert.equal(connected, 1);
-    handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED, {
+    handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED, {
         strategy: 'xpath',
         selector: '//android.widget.Button',
         attributes: {},
     }));
-    assert.equal(selections.length, 1);
+    assert.equal(uses.length, 1);
     assert.deepEqual(errors, []);
 
     assert.throws(
@@ -124,7 +124,7 @@ test('performs ready, connect, connected and selection handshake once', () => {
     );
 });
 
-test('rejects element selection before the connected acknowledgement', () => {
+test('rejects explicit element use before the connected acknowledgement', () => {
     const handshake = new EmbeddedInspectorHandshake(
         {
             serverUrl: 'http://127.0.0.1:4723',
@@ -138,11 +138,39 @@ test('rejects element selection before the connected acknowledgement', () => {
         () => undefined,
     );
     assert.throws(
-        () => handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_SELECTED, {
+        () => handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.ELEMENT_USED, {
             strategy: 'xpath',
             selector: '//button',
             attributes: {},
         })),
         error => error.code === 'INVALID_MESSAGE_ORDER',
     );
+});
+
+test('rejects ordinary Inspector selection without mutating recorder state', () => {
+    let uses = 0;
+    const handshake = new EmbeddedInspectorHandshake(
+        {
+            serverUrl: 'http://127.0.0.1:4723',
+            sessionId: 'session-1',
+            capabilities: {},
+            platform: 'android',
+        },
+        () => undefined,
+        () => undefined,
+        () => { uses += 1; },
+        () => undefined,
+    );
+    handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.READY));
+    handshake.handle(message(EMBEDDED_INSPECTOR_TYPES.CONNECTED, { sessionId: 'session-1' }));
+
+    assert.throws(
+        () => handshake.handle(message('appium-inspector:element-selected', {
+            strategy: 'xpath',
+            selector: '//button',
+            attributes: {},
+        })),
+        error => error.code === 'INVALID_MESSAGE_TYPE',
+    );
+    assert.equal(uses, 0);
 });

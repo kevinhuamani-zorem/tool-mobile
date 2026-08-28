@@ -62,7 +62,8 @@ caché local con `npm run inspector:build`. Una `BrowserWindow` aislada sirve un
 host y el bundle mediante orígenes locales `appium-recorder://host` y
 `appium-recorder://inspector`; no acepta navegación ni ventanas nuevas. El
 renderer principal nunca recibe WebDriver ni datos de sesión: solo el selector
-ya validado por el protocolo `appium-inspector:embedded` versión 1.
+confirmado explícitamente por el protocolo `appium-inspector:embedded` versión
+2 mediante `appium-inspector:element-used`.
 
 ### Dominio (`core/`)
 
@@ -102,7 +103,9 @@ workspace para cambiar el target. Todas las rutas operativas nacen en
    recorder conserva propiedad exclusiva y cierra la sesión; el Inspector solo
    se adjunta mediante un proxy loopback efímero que acepta exclusivamente el
    origen local del Inspector y las rutas de la sesión activa. El Inspector
-   emite luego la selección comprobada.
+   mantiene la selección local hasta que el QA pulsa **Usar en Recorder**. Solo
+   entonces emite el selector confirmado; el recorder oculta la ventana sin
+   destruirla y conserva sesión, proxy y selección para la siguiente apertura.
 
 ### Caso nuevo con agente de automatización
 
@@ -171,7 +174,7 @@ Las familias públicas son:
 - sesión local y BrowserStack: devices, apps, credenciales y start/close;
 - interacción: screenshot, page source, element-at, tap, swipe, verify y execute;
 - Inspector embebido: abrir/focalizar y eventos acotados de conexión, error y
-  selección;
+  uso explícito del selector;
 - automatización: preparar paquete, lanzar agente, importar respuesta, generar
   con token, preparar regeneración y consultar memoria;
 - generación heredada: preview Gherkin, preview de archivos y generación.

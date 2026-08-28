@@ -29,7 +29,7 @@ descargar el binario nativo de macOS. Si una instalación anterior lo omitió,
 puede repararse con `npm --prefix tools/visual-recorder rebuild electron`.
 
 El fork controlado está fijado en
-`c98bb47be2f52aa1a765b03b6ea31761c6e7d190`. No se usa
+`b5dbc3d86de67365833949e6f7b147533003e2ac`. No se usa
 `appium-inspector-plugin`, una instalación global ni un bundle opaco
 versionado. `inspector:build` ejecuta `npm ci` y `npm run build:browser` dentro
 del submódulo, compila `VITE_EMBEDDED_HOST_ORIGIN=appium-recorder://host` y

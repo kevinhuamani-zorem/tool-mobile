@@ -14,8 +14,10 @@ const {
     EMBEDDED_INSPECTOR_URL,
     embeddedInspectorWindowOptions,
     embeddedInspectorAssetsAvailable,
+    focusEmbeddedInspectorWindow,
     isAllowedInspectorNavigation,
     resolveInspectorMode,
+    returnToRecorderAfterElementUse,
 } = require('../dist/recorder/src/embeddedInspectorWindow');
 const {
     EmbeddedInspectorProxy,
@@ -80,6 +82,36 @@ test('defaults to embedded only with assets and preserves actionable legacy fall
         /npm run inspector:build/,
     );
     assert.throws(() => resolveInspectorMode('unknown', true), /legacy.*embedded/);
+});
+
+test('explicit use hides Inspector, focuses recorder, and preserves the same window', () => {
+    const calls = [];
+    const inspectorWindow = {
+        isDestroyed: () => false,
+        isMinimized: () => true,
+        restore: () => calls.push('restore'),
+        show: () => calls.push('inspector-show'),
+        focus: () => calls.push('inspector-focus'),
+        hide: () => calls.push('inspector-hide'),
+        destroy: () => calls.push('inspector-destroy'),
+    };
+    const recorderWindow = {
+        show: () => calls.push('recorder-show'),
+        focus: () => calls.push('recorder-focus'),
+    };
+
+    returnToRecorderAfterElementUse(inspectorWindow, recorderWindow);
+    assert.deepEqual(calls, ['inspector-hide', 'recorder-show', 'recorder-focus']);
+    assert.equal(focusEmbeddedInspectorWindow(inspectorWindow), true);
+    assert.deepEqual(calls, [
+        'inspector-hide',
+        'recorder-show',
+        'recorder-focus',
+        'restore',
+        'inspector-show',
+        'inspector-focus',
+    ]);
+    assert.doesNotMatch(calls.join(','), /destroy/);
 });
 
 test('accepts only the embedded origin and active session through the Appium proxy', () => {
@@ -197,7 +229,7 @@ test('pins and builds the controlled fork without a committed bundle or plugin',
     const runScript = fs.readFileSync(path.join(toolRoot, 'run.sh'), 'utf8');
 
     assert.match(gitmodules, /kevinhuamani-zorem\/appium-inspector\.git/);
-    assert.match(gitmodules, /kevinhuamani-zorem-embedded-inspector-mode/);
+    assert.match(gitmodules, /kevinhuamani-zorem-explicit-inspector-selection/);
     assert.match(buildScript, new RegExp(EMBEDDED_INSPECTOR_COMMIT));
     assert.match(buildScript, /npm', \['run', 'build:browser'\]/);
     assert.match(buildScript, /VITE_EMBEDDED_HOST_ORIGIN: hostOrigin/);

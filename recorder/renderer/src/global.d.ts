@@ -1,6 +1,6 @@
 export {};
 
-interface EmbeddedInspectorSelection {
+interface EmbeddedInspectorElementUsed {
     selector: string;
     strategy: string;
     tag?: string;
@@ -20,8 +20,8 @@ declare global {
             }>;
             onInspectorConnected(listener: () => void): () => void;
             onInspectorError(listener: (message: string) => void): () => void;
-            onInspectorElementSelected(
-                listener: (selection: EmbeddedInspectorSelection) => void,
+            onInspectorElementUsed(
+                listener: (elementUsed: EmbeddedInspectorElementUsed) => void,
             ): () => void;
         };
     }
