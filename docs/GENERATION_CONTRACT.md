@@ -175,7 +175,12 @@ que causó el reuse. Para `create`, el validator admite únicamente el par prima
 exacto: cruza el `TypeLocator` declarado en el getter del Screen Object con el
 valor del bloque de plataforma en el JSON. Un backup, un tipo distinto o un
 valor intercambiado entre acciones se rechazan aunque cada componente exista
-por separado en la grabación.
+por separado en la grabación. Además, cada acción `create` declara
+`actionTrace.screenMethod`: el validator analiza el método real de la clase
+esperada y exige que consuma el getter de `locatorName`, directamente o mediante
+una variable local. Un selector inline, otro getter o una ruta alternativa no
+pueden sustituirlo; varias acciones pueden compartir el mismo método cuando este
+consume todos sus getters.
 
 ## Acciones soportadas
 

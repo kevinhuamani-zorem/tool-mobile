@@ -12,7 +12,14 @@ import {
 import { AutomationMemory } from './automationMemory';
 import { AutomationResponseValidator } from './automationResponseValidator';
 import { DeterministicResolver, ResolverResult } from './deterministicResolver';
-import { domainTag, executionTag, FwkMobileGenerator, GeneratedPreview, ReusedLocator } from './fwkMobileGenerator';
+import {
+    domainTag,
+    executionTag,
+    FwkMobileGenerator,
+    GeneratedPreview,
+    ReusedLocator,
+    scenarioRowMethodName,
+} from './fwkMobileGenerator';
 import { signatureHint } from './screenObjectContract';
 import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
@@ -69,10 +76,12 @@ function responseFromPreview(
         recordingId: scenario.recordingId,
         planId: plan.planId,
         resolutions: [],
-        actionTrace: scenario.request.scenarioRows?.slice(1).flatMap(row =>
+        actionTrace: scenario.request.scenarioRows?.filter(row => row.status === 'missing')
+            .flatMap((row, index) =>
             (row.actions || []).map(action => ({
                 sequence: action.sequence!,
                 gherkinStep: `${row.keyword} ${row.text}`,
+                screenMethod: scenarioRowMethodName(row, index),
                 locatorName: plan.resolutions.find(item => item.sequence === action.sequence)?.locatorName,
             }))
         ) || [],
@@ -95,10 +104,13 @@ function responseFromExistingFiles(
         recordingId: scenario.recordingId,
         planId: plan.planId,
         resolutions: [],
-        actionTrace: scenario.request.scenarioRows?.flatMap(row =>
+        actionTrace: scenario.request.scenarioRows?.flatMap((row, index) =>
             (row.actions || []).map(action => ({
                 sequence: action.sequence!,
                 gherkinStep: `${row.keyword} ${row.text}`,
+                screenMethod: row.status === 'missing'
+                    ? scenarioRowMethodName(row, index)
+                    : row.methodName,
                 locatorName: plan.resolutions.find(item => item.sequence === action.sequence)?.locatorName,
             }))
         ) || [],
@@ -179,6 +191,7 @@ function instructions(result: ResolverResult): string {
         `- Todo el codigo va en INGLES: metodos y getters del Screen Object, claves de locator, variables y parametros. El espanol se reserva para la prosa que lee el QA: la linea Feature, el nombre del Scenario y el texto de los steps. Ejemplo: el step "el usuario consulta todos sus movimientos" se resuelve con \`movementsScreen.openAllMovements()\`, nunca con \`elUsuarioConsultaTodosSusMovimientos()\`.\n` +
         `- Redacta Gherkin declarativo: describe intención, capacidad y resultado de negocio; no narres clicks, botones, campos, scrolls, swipes ni esperas.\n` +
         `- Agrupa acciones técnicas consecutivas dentro de un único step funcional. Varias secuencias pueden apuntar al mismo gherkinStep en actionTrace.\n` +
+        `- Para cada acción create, actionTrace debe declarar locatorName y screenMethod. Ese método debe consumir el getter del locator (directamente o mediante una variable local); no uses selectores literales ni otro getter.\n` +
         `- Finaliza en menos de 5 minutos. No escribas fuera de esta carpeta.\n` +
         `- Ejecuta \`node verify-package.js\`. Si falla, realiza una sola reparación dirigida.\n`;
 }
@@ -205,6 +218,7 @@ function regenerationInstructions(
         `- Conserva literales las filas reused (login incluido) y su tabla Examples: son steps que ya existen en el framework.\n` +
         `- Los identificadores nuevos van en ingles (metodos, getters, locators, variables); no renombres los que ya existen en el baseline.\n` +
         `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
+        `- Cada create conserva locatorName y screenMethod en actionTrace; el método trazado consume el getter correspondiente, sin selectores inline ni rutas alternativas.\n` +
         `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
         `- No escribas fuera de esta carpeta. Ejecuta \`node verify-package.js\` y realiza como máximo una reparación dirigida.\n`;
 }

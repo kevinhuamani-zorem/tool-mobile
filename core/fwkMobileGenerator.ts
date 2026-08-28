@@ -42,6 +42,25 @@ export interface GenerationRequest {
     }[];
 }
 
+export function scenarioRowMethodName(
+    row: NonNullable<GenerationRequest['scenarioRows']>[number],
+    index: number,
+): string {
+    if (row.methodName && /^[a-z][A-Za-z0-9]*$/.test(row.methodName)) {
+        return row.methodName;
+    }
+    const source = row.text.replace(/<[^>]+>/g, '');
+    const translated = translateToEnglish(source).name;
+    if (translated) return translated;
+    const words = source
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9]+/g, ' ')
+        .trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return `executeStep${index + 1}`;
+    return words[0].toLowerCase() +
+        words.slice(1).map(word => word[0].toUpperCase() + word.slice(1).toLowerCase()).join('');
+}
+
 /**
  * Locator que ya existe en otro modulo y NO debe copiarse.
  *
@@ -474,7 +493,7 @@ export class FwkMobileGenerator {
             const expression = this.stepExpression(row.text);
             const args = parameters.map(name => `${name}: string`).join(', ');
             const callArgs = parameters.join(', ');
-            const methodName = this.rowMethodName(row, index);
+            const methodName = scenarioRowMethodName(row, index);
             return {
                 key: `${keyword}:${expression}`,
                 content: [
@@ -594,7 +613,7 @@ export class FwkMobileGenerator {
                     hasTimeout, next: rowActions[actionIndex + 1],
                 })
             );
-            const methodName = this.rowMethodName(row, index);
+            const methodName = scenarioRowMethodName(row, index);
             return {
                 name: methodName,
                 content: [
@@ -646,27 +665,6 @@ export class FwkMobileGenerator {
             `export default new ${className}();`,
             ''
         ].join('\n');
-    }
-
-    private rowMethodName(
-        row: NonNullable<GenerationRequest['scenarioRows']>[number],
-        index: number
-    ): string {
-        if (row.methodName && /^[a-z][A-Za-z0-9]*$/.test(row.methodName)) {
-            return row.methodName;
-        }
-        // El texto del step es espanol a proposito (lo lee el QA); el nombre del
-        // metodo no: el codigo del framework se nombra en ingles.
-        const source = row.text.replace(/<[^>]+>/g, '');
-        const translated = translateToEnglish(source).name;
-        if (translated) return translated;
-        const words = source
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^A-Za-z0-9]+/g, ' ')
-            .trim().split(/\s+/).filter(Boolean);
-        if (words.length === 0) return `executeStep${index + 1}`;
-        return words[0].toLowerCase() +
-            words.slice(1).map(word => word[0].toUpperCase() + word.slice(1).toLowerCase()).join('');
     }
 
     /**

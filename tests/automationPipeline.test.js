@@ -16,6 +16,7 @@ const { RecordingCoverageAnalyzer } = require('../dist/core/recordingCoverageAna
 const { frameworkContract } = require('../dist/core/frameworkContract');
 const { inferredStrategy } = require('../dist/core/locatorStrategy');
 const { projectPaths } = require('../dist/core/projectPaths');
+const { screenObjectNames } = require('../dist/core/semanticNaming');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
@@ -765,7 +766,12 @@ function validResponse(plan, recordingId = 'rec-test') {
     };
     return {
         schemaVersion: 1, recordingId, planId: plan.planId, resolutions: [],
-        actionTrace: [{ sequence: 1, gherkinStep: 'Then se muestra la lista de movimientos', locatorName: 'movementsList' }],
+        actionTrace: [{
+            sequence: 1,
+            gherkinStep: 'Then se muestra la lista de movimientos',
+            screenMethod: 'verifyMovementsList',
+            locatorName: 'movementsList',
+        }],
         files: plan.files.map(file => ({ layer: file.layer, path: file.path, content: content[file.layer] }))
     };
 }
@@ -1100,6 +1106,172 @@ test('validator exige el par primary exacto para create y verifica el TypeLocato
             .some(error => error.code === 'create-locator-contract'),
         true,
     );
+
+    const hardcodedMethod = validResponse(resolved.plan);
+    hardcodedMethod.files.find(file => file.layer === 'screen').content =
+        hardcodedMethod.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'await this.uiHelper.waitForDisplayed("~Movimientos");',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, hardcodedMethod).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
+    const backupLiteralWithDecoyUsage = validResponse(resolved.plan);
+    backupLiteralWithDecoyUsage.files.find(file => file.layer === 'screen').content =
+        backupLiteralWithDecoyUsage.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'await this.uiHelper.waitForDisplayed(this.movementsList); ' +
+            'await this.uiHelper.waitForDisplayed("Movimientos");',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, backupLiteralWithDecoyUsage).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
+    const otherGetterMethod = validResponse(resolved.plan);
+    const otherGetterScreen = otherGetterMethod.files.find(file => file.layer === 'screen');
+    otherGetterScreen.content = otherGetterScreen.content
+        .replace(
+            ' public async verifyMovementsList',
+            ' private get alternativeElement(): string { return "//android.widget.TextView"; }' +
+            ' public async verifyMovementsList',
+        )
+        .replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'await this.uiHelper.waitForDisplayed(this.movementsList); ' +
+            'await this.uiHelper.waitForDisplayed(this.alternativeElement);',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, otherGetterMethod).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
+    const localVariableMethod = validResponse(resolved.plan);
+    localVariableMethod.files.find(file => file.layer === 'screen').content =
+        localVariableMethod.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'const target = this.movementsList; await this.uiHelper.waitForDisplayed(target);',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, localVariableMethod).errors
+            .some(error => error.code === 'trace-screen-method'),
+        false,
+    );
+
+    const backupLocalLiteral = validResponse(resolved.plan);
+    backupLocalLiteral.files.find(file => file.layer === 'screen').content =
+        backupLocalLiteral.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'const backup = "Movimientos"; ' +
+            'await this.uiHelper.waitForDisplayed(this.movementsList); ' +
+            'await this.uiHelper.waitForDisplayed(backup);',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, backupLocalLiteral).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
+    const nestedFunctionDecoy = validResponse(resolved.plan);
+    nestedFunctionDecoy.files.find(file => file.layer === 'screen').content =
+        nestedFunctionDecoy.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'const unused = async () => { ' +
+            'await this.uiHelper.waitForDisplayed(this.movementsList); }; ' +
+            'await this.gestureHelper.verticalScrollingToEnd();',
+        );
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, nestedFunctionDecoy).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
+    const missingScreenMethod = validResponse(resolved.plan);
+    delete missingScreenMethod.actionTrace[0].screenMethod;
+    assert.equal(
+        validator.validate(resolved.scenario, resolved.plan, missingScreenMethod).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+});
+
+test('validator permite un screenMethod agrupado que consume varios getters create', () => {
+    const recorded = scenario([
+        {
+            action: 'CLICK',
+            selector: 'id=movimientos',
+            selectorVerified: true,
+            elementIntent: 'abrir movimientos',
+            selectorCandidates: [selectorCandidate(
+                'primary-movements',
+                'id=movimientos',
+                'XPATH',
+                '//*[@resource-id="movimientos"]',
+            )],
+        },
+        {
+            action: 'VERIFICAR_EXISTE',
+            selector: 'id=saldo',
+            selectorVerified: true,
+            elementIntent: 'saldo disponible',
+            selectorCandidates: [selectorCandidate(
+                'primary-balance',
+                'id=saldo',
+                'XPATH',
+                '//*[@resource-id="saldo"]',
+            )],
+        },
+    ]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    const creates = resolved.plan.resolutions.filter(item =>
+        item.resolution === 'create' && item.locatorName
+    );
+    const response = validResponse(resolved.plan);
+    const screenFile = response.files.find(file => file.layer === 'screen');
+    const locatorFile = response.files.find(file => file.layer === 'locators');
+    const names = screenObjectNames(screenFile.path);
+    const locatorImport = '@locators/' + locatorFile.path.replace(/^resources\/locators\//, '');
+    const values = new Map(creates.map(item => [
+        item.locatorName,
+        recorded.actions[item.sequence - 1].selectorCandidates[0].locatorValue,
+    ]));
+    locatorFile.content = JSON.stringify({
+        groupedAndroid: Object.fromEntries(creates.map(item => [
+            item.locatorName,
+            values.get(item.locatorName),
+        ])),
+        groupedIos: Object.fromEntries(creates.map(item => [item.locatorName, ''])),
+    });
+    const getters = creates.map(item =>
+        `private get ${item.locatorName}(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(` +
+        `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.groupedIos.${item.locatorName}, ` +
+        `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.groupedAndroid.${item.locatorName}); }`
+    ).join(' ');
+    screenFile.content =
+        `import ${CONTRACT.baseScreenClass} from '${CONTRACT.baseScreenImport}';\n` +
+        `import ${CONTRACT.locatorFactorySymbol} from '${CONTRACT.locatorFactoryImport}';\n` +
+        `import { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\n` +
+        `import Locators from '${locatorImport}' with { type: 'json' };\n` +
+        `class ${names.className} extends ${CONTRACT.baseScreenClass} { ${getters} ` +
+        `public async executeGroupedFlow(): Promise<void> { ` +
+        `await this.uiHelper.waitForDisplayed(this.${creates[0].locatorName}); ` +
+        `const target = this.${creates[1].locatorName}; ` +
+        `await this.uiHelper.waitForDisplayed(target); } }\n` +
+        `export default new ${names.className}();\n`;
+    response.actionTrace = creates.map(item => ({
+        sequence: item.sequence,
+        gherkinStep: 'When el usuario completa el flujo agrupado',
+        screenMethod: 'executeGroupedFlow',
+        locatorName: item.locatorName,
+    }));
+    const errors = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response).errors;
+    assert.equal(errors.some(error => error.code === 'trace-screen-method'), false);
 });
 
 test('informa caso existente cuando el agente reutiliza todos los locators', () => {

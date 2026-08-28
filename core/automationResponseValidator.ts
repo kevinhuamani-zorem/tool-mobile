@@ -226,6 +226,142 @@ function screenLocatorTypes(
     return types;
 }
 
+function screenMethodGetterUsage(
+    content: string,
+    expectedClassName: string,
+): Map<string, { getters: Set<string>; literals: Set<string>; hardcodedSelector: boolean }> {
+    const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const screenClass = source.statements.find(
+        (statement): statement is ts.ClassDeclaration =>
+            ts.isClassDeclaration(statement) && statement.name?.text === expectedClassName
+    );
+    if (!screenClass) return new Map();
+    const knownGetters = new Set(screenClass.members.flatMap(member =>
+        ts.isGetAccessorDeclaration(member)
+        && (ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name))
+            ? [member.name.text]
+            : []
+    ));
+    const result = new Map<string, {
+        getters: Set<string>;
+        literals: Set<string>;
+        hardcodedSelector: boolean;
+    }>();
+    const directGetter = (expression: ts.Expression): string | undefined => {
+        while (ts.isParenthesizedExpression(expression) || ts.isAwaitExpression(expression)) {
+            expression = expression.expression;
+        }
+        if (
+            ts.isPropertyAccessExpression(expression)
+            && expression.expression.kind === ts.SyntaxKind.ThisKeyword
+            && knownGetters.has(expression.name.text)
+        ) return expression.name.text;
+        if (
+            ts.isElementAccessExpression(expression)
+            && expression.expression.kind === ts.SyntaxKind.ThisKeyword
+            && expression.argumentExpression
+            && ts.isStringLiteralLike(expression.argumentExpression)
+            && knownGetters.has(expression.argumentExpression.text)
+        ) return expression.argumentExpression.text;
+        return undefined;
+    };
+    const selectorLiteral = /^(?:~|id=|android=|iosPredicate=|iosClassChain=|class=|\/|new\s+UiSelector\b|-ios\s)/;
+    screenClass.members.forEach(member => {
+        if (
+            !ts.isMethodDeclaration(member)
+            || !member.body
+            || !(ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name))
+        ) return;
+        const aliases = new Map<string, string>();
+        member.body.statements.forEach(statement => {
+            if (
+                !ts.isVariableStatement(statement)
+                || (statement.declarationList.flags & ts.NodeFlags.Const) === 0
+            ) return;
+            statement.declarationList.declarations.forEach(declaration => {
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return;
+                const getter = directGetter(declaration.initializer)
+                    || (ts.isIdentifier(declaration.initializer)
+                        ? aliases.get(declaration.initializer.text)
+                        : undefined);
+                if (getter) aliases.set(declaration.name.text, getter);
+            });
+        });
+        const usage = {
+            getters: new Set<string>(),
+            literals: new Set<string>(),
+            hardcodedSelector: false,
+        };
+        const inspectLiteral = (candidate: ts.Node): void => {
+            if (ts.isStringLiteralLike(candidate)) {
+                const literal = candidate.text.trim();
+                usage.literals.add(literal);
+                if (selectorLiteral.test(literal)) usage.hardcodedSelector = true;
+            }
+            ts.forEachChild(candidate, inspectLiteral);
+        };
+        inspectLiteral(member.body);
+        const getterReferences = (node: ts.Node, root = true): Set<string> => {
+            const found = new Set<string>();
+            if (
+                !root
+                && (
+                    ts.isFunctionDeclaration(node)
+                    || ts.isFunctionExpression(node)
+                    || ts.isArrowFunction(node)
+                    || ts.isMethodDeclaration(node)
+                    || ts.isGetAccessorDeclaration(node)
+                    || ts.isSetAccessorDeclaration(node)
+                    || ts.isClassDeclaration(node)
+                    || ts.isClassExpression(node)
+                )
+            ) return found;
+            if (ts.isExpression(node)) {
+                const getter = directGetter(node);
+                if (getter) found.add(getter);
+                if (ts.isIdentifier(node) && aliases.has(node.text)) found.add(aliases.get(node.text)!);
+            }
+            ts.forEachChild(node, child => {
+                getterReferences(child, false).forEach(getter => found.add(getter));
+            });
+            return found;
+        };
+        const isEffectful = (call: ts.CallExpression): boolean => {
+            let current: ts.Node = call;
+            while (current.parent && !ts.isStatement(current.parent)) {
+                if (ts.isVariableDeclaration(current.parent)) return false;
+                current = current.parent;
+            }
+            return Boolean(
+                current.parent
+                && (ts.isExpressionStatement(current.parent) || ts.isReturnStatement(current.parent))
+            );
+        };
+        const visit = (node: ts.Node): void => {
+            if (
+                node !== member.body
+                && (
+                    ts.isFunctionDeclaration(node)
+                    || ts.isFunctionExpression(node)
+                    || ts.isArrowFunction(node)
+                    || ts.isMethodDeclaration(node)
+                    || ts.isGetAccessorDeclaration(node)
+                    || ts.isSetAccessorDeclaration(node)
+                    || ts.isClassDeclaration(node)
+                    || ts.isClassExpression(node)
+                )
+            ) return;
+            if (ts.isCallExpression(node) && isEffectful(node)) {
+                getterReferences(node).forEach(getter => usage.getters.add(getter));
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(member.body);
+        result.set(member.name.text, usage);
+    });
+    return result;
+}
+
 function unexpectedFields(value: object, allowed: string[]): string[] {
     const accepted = new Set(allowed);
     return Object.keys(value).filter(key => !accepted.has(key));
@@ -580,6 +716,19 @@ export class AutomationResponseValidator {
                 locatorFile.path,
                 screenFile ? screenObjectNames(screenFile.path).className : '',
             );
+            const methodUsage = screenMethodGetterUsage(
+                screenContent,
+                screenFile ? screenObjectNames(screenFile.path).className : '',
+            );
+            const tracedGettersByMethod = new Map<string, Set<string>>();
+            response.actionTrace.forEach(trace => {
+                if (!trace.screenMethod) return;
+                const resolution = plan.resolutions.find(item => item.sequence === trace.sequence);
+                if (!resolution?.locatorName || trace.locatorName !== resolution.locatorName) return;
+                const getters = tracedGettersByMethod.get(trace.screenMethod) || new Set<string>();
+                getters.add(resolution.locatorName);
+                tracedGettersByMethod.set(trace.screenMethod, getters);
+            });
             const currentLocators = responseLocatorValues(locatorFile.content);
             const createNames = new Set(plan.resolutions
                 .filter(resolution => resolution.resolution === 'create' && resolution.locatorName)
@@ -603,6 +752,39 @@ export class AutomationResponseValidator {
                             `El create de ${name} debe declarar una sola vez el par primary exacto ` +
                             '(TypeLocator, valor) en el getter homónimo y bloque de la plataforma grabada.',
                         file: locatorFile.path,
+                    });
+                }
+            }
+            for (const resolution of plan.resolutions.filter(item =>
+                item.resolution === 'create' && item.locatorName
+            )) {
+                const traces = response.actionTrace.filter(trace => trace.sequence === resolution.sequence);
+                const trace = traces.length === 1 ? traces[0] : undefined;
+                const usage = trace?.screenMethod
+                    ? methodUsage.get(trace.screenMethod)
+                    : undefined;
+                const tracedGetters = trace?.screenMethod
+                    ? tracedGettersByMethod.get(trace.screenMethod)
+                    : undefined;
+                const action = actionBySequence.get(resolution.sequence);
+                const candidateLiterals = action
+                    ? candidateAllowlist(action, scenario.platform)
+                        .flatMap(candidate => [candidate.selector, candidate.locatorValue])
+                    : [];
+                if (
+                    !trace?.screenMethod
+                    || !usage
+                    || usage.hardcodedSelector
+                    || candidateLiterals.some(value => usage.literals.has(value))
+                    || !usage.getters.has(resolution.locatorName!)
+                    || [...usage.getters].some(getter => !tracedGetters?.has(getter))
+                ) {
+                    errors.push({
+                        code: 'trace-screen-method',
+                        message:
+                            `La acción ${resolution.sequence} debe trazar un único screenMethod que consuma ` +
+                            `el getter ${resolution.locatorName} sin selectores literales ni rutas alternativas.`,
+                        file: screenFile?.path,
                     });
                 }
             }
