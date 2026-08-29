@@ -197,3 +197,41 @@ test('avisa en vez de mentir cuando el framework no declara la composicion', () 
     // Cae a la convencion, nunca a una tabla vacia que dejaria pasar cualquier tipo.
     assert.deepEqual(contract.locatorComposition.android.ID, { prefix: '~', suffix: '' });
 });
+
+// Misma trampa que en el mapa de helpers: el contrato se leía una vez y el
+// mtime del directorio no cambia al editar un archivo dentro, así que agregar
+// una estrategia al switch dejaba la tabla de composición congelada.
+test('una estrategia nueva en el switch entra sin reiniciar', () => {
+    clearFrameworkContractCache();
+    const root = buildFramework(CANONICAL);
+    assert.equal(frameworkContract(root).locatorComposition.android.CLASSNAME, undefined);
+
+    const withClassName = provider('LocatorFactory').replace(
+        '    case TypeLocator.ANDROID: return Constants.ANDROID_LOCATOR + value;',
+        '    case TypeLocator.ANDROID: return Constants.ANDROID_LOCATOR + value;\n'
+        + '    case TypeLocator.CLASSNAME: return Constants.ANDROID_LOCATOR + value;'
+    );
+    assert.notEqual(withClassName, provider('LocatorFactory'), 'el fixture tiene que cambiar de verdad');
+    fs.writeFileSync(path.join(root, 'support/utils/LocatorFactory.ts'), withClassName);
+
+    assert.deepEqual(
+        frameworkContract(root).locatorComposition.android.CLASSNAME,
+        { prefix: 'droid=', suffix: '' }
+    );
+});
+
+test('un prefijo cambiado en las constantes entra sin reiniciar', () => {
+    clearFrameworkContractCache();
+    const root = buildFramework(CANONICAL);
+    assert.deepEqual(frameworkContract(root).locatorComposition.android.ID, { prefix: '@@', suffix: '' });
+
+    const constants = path.join(root, 'support/utils/constants.ts');
+    fs.writeFileSync(constants, CONSTANTS.replace("static ID: string = '@@';", "static ID: string = '##';"));
+    // El fixture reescribe el archivo en el mismo milisegundo y con el mismo
+    // tamaño, algo que un guardado real nunca hace. Se adelanta el mtime para
+    // representar la edición real en vez de un caso que no ocurre.
+    const later = new Date(Date.now() + 1000);
+    fs.utimesSync(constants, later, later);
+
+    assert.deepEqual(frameworkContract(root).locatorComposition.android.ID, { prefix: '##', suffix: '' });
+});

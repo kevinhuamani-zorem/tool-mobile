@@ -422,3 +422,28 @@ Examples, o si es demasiado corta para ser una frase.
 
 Las filas `domain` y `qa` están redactadas y no se tocan. Una fila `template` es
 la única que conviene reescribir, y las instrucciones del agente se lo dicen.
+
+### API de los helpers
+
+`BaseScreen` expone sus helpers por composición, y el agente escribía llamadas a
+métodos que no existen —`this.uiHelper.scrollDown()`, cuando `scrollDown` vive en
+`gestureHelper`—. Eso no compila, y el fallo aparecía al construir el framework,
+fuera del pipeline: el paquete nunca le decía qué métodos hay y ninguna capa
+comprobaba que existieran.
+
+`framework-api.json` viaja ahora en el paquete con los helpers y **todos** sus
+métodos públicos con su firma, leídos del disco por AST. Los helpers se
+descubren por la declaración de `BaseScreen`, no por una lista de nombres: si el
+framework agrega un cuarto helper, entra solo.
+
+La regla mecánica vive en `screenObjectContract` y corre en los dos sitios de
+siempre. Cuando el método existe pero en otro helper, el mensaje lo dice:
+
+```
+this.uiHelper.scrollDown() no existe: scrollDown vive en gestureHelper.
+Escribe this.gestureHelper.scrollDown(...).
+```
+
+Y cuando no existe en ninguno, enumera los que sí hay y da la salida correcta:
+escribirlo como un método del propio Screen Object, para que quede reutilizable
+— nunca inventar una llamada al helper.

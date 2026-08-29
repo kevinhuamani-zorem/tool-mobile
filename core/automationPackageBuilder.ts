@@ -21,6 +21,7 @@ import {
     scenarioRowMethodName,
 } from './fwkMobileGenerator';
 import { signatureHint } from './screenObjectContract';
+import { frameworkHelpersOf } from './frameworkHelpers';
 import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
 import { projectPaths } from './projectPaths';
@@ -226,6 +227,7 @@ function instructions(result: ResolverResult): string {
         `- \`getElement\` tiene UNA firma y no admite variantes: \`${signatureHint({ typeLocatorSymbol: contract.typeLocatorSymbol, platformOrder: contract.locatorSignature.platformOrder })}\`. Son ${contract.locatorSignature.parameterCount} argumentos SIEMPRE, tambien cuando una plataforma todavia no tiene locator: en ese caso su valor queda vacio, pero el argumento se escribe. El ${contract.locatorSignature.platformOrder[0]} va primero, y el tipo va antes que el valor — nunca al reves.\n` +
         `- Todo import de un .locator.json se escribe con alias y con atributo de tipo: \`import <Identificador> from '@locators/<squad>/<modulo>.locator.json' with { type: 'json' };\`. Sin el atributo Node lanza al cargar el JSON y el caso no corre. Aplica igual a los modulos reutilizados: nunca rutas relativas.\n` +
         `- \`reuse-context.json\` trae, por cada modulo, \`importLine\` y, por cada elemento, \`getter\`: son el import y el getter COMPLETOS, ya escritos con la firma y el atributo correctos. Copialos literalmente en vez de componerlos.\n` +
+        `- \`framework-api.json\` lista los helpers que BaseScreen expone y TODOS sus metodos con su firma. Usa unicamente esos: \`this.<helper>.<metodo>(...)\` con un metodo que no este ahi no compila. Ojo con el helper correcto — por ejemplo \`scrollDown\` esta en \`gestureHelper\`, no en \`uiHelper\`. Si el caso necesita algo que ningun helper cubre, escribelo como un metodo del propio Screen Object para que quede reutilizable; nunca inventes una llamada al helper.\n` +
         `- Cada getter del Screen Object resuelve el locator y devuelve \`$(locator)\`: \`public get x() { const locator = ${contract.locatorFactorySymbol}.getElement(...); return $(locator); }\`. Es el patron del framework y lo que revisa el PR. Importa de @wdio/globals solo lo que uses: \`$\` siempre que haya getters, \`expect\` si hay aserciones, \`browser\` solo si hay una llamada browser.; no dejes imports sin uso.\n` +
         `- Ninguna espera por tiempo: nada de browser.pause ni driver.pause, en ningun getter, metodo ni step. Toda espera va anclada a un elemento con this.uiHelper.waitForElementExistByLocator(elemento, true) antes de interactuar${
             contract.timeoutHelperSymbol
@@ -299,6 +301,10 @@ function verifierSource(contract: FrameworkContract): string {
         typeLocatorSymbol: contract.typeLocatorSymbol,
         typeLocatorImport: contract.typeLocatorImport,
         locatorSignature: contract.locatorSignature,
+        helpers: frameworkHelpersOf(projectPaths.frameworkRoot).map(helper => ({
+            property: helper.property,
+            methods: helper.methods.map(method => method.name),
+        })),
         requiredScreenImports: [
             contract.baseScreenImport,
             contract.locatorFactoryImport,
@@ -384,7 +390,7 @@ if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bl
 const recordedPlatform=scenario.platform;const completionTarget=c=>{const targets=((plan.resolutions||[]).find(r=>r.sequence===c.sequence)?.completionTargets||[]).filter(t=>t.file===c.file&&t.name===c.name&&t.platform===c.platform&&String(t.block).toLowerCase().endsWith(c.platform));return targets.length===1?targets[0]:undefined};const authorizedCompletions=(response.completions||[]).map(c=>({completion:c,target:completionTarget(c)}));const declaredCompletions=new Set(authorizedCompletions.filter(x=>x.target&&x.target.platform===recordedPlatform).map(x=>x.target.file+'#'+x.target.platform+'#'+x.target.block+'#'+x.target.name));
 for(const mod of (reuse.elements||[])){const block=(mod.groups||{})[recordedPlatform];const file=String(mod.import||'').replace(/^@locators\//,'resources/locators/');if(!block)continue;for(const el of (mod.elements||[])){const slot=(el.locators||{})[recordedPlatform];if(!slot||slot.status!=='missing')continue;const referenced=new RegExp('\\b'+mod.identifier+'\\s*\\.\\s*'+block+'\\s*\\.\\s*'+el.name+'\\b').test(screen);const identity=file+'#'+recordedPlatform+'#'+block+'#'+el.name;if(referenced&&!declaredCompletions.has(identity))errors.push('Cobertura de plataforma: '+mod.identifier+'.'+block+'.'+el.name+' no tiene valor en '+recordedPlatform+'. Rellenalo declarandolo en completions con la accion que lo capturo, o usa un locator del modulo de este caso.')}}
 for(const x of authorizedCompletions){const c=x.completion;if(!x.target)errors.push('Completion no autorizado: '+c.file+'#'+c.name+' ('+c.platform+') accion '+c.sequence);if(!(scenario.actions||[]).some(a=>a.sequence===c.sequence&&a.selector))errors.push('completions apunta a la accion '+c.sequence+', que no capturo ningun elemento')}
-try{const {screenObjectProblems}=require('./screen-object-contract.js');const expectedImports={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');expectedImports[spec.split('/').pop()]=spec}for(const mod of (reuse.elements||[])){if(mod&&mod.import)expectedImports[String(mod.import).split('/').pop()]=mod.import}for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,typeLocatorImport:FRAMEWORK_CONTRACT.typeLocatorImport,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
+try{const {screenObjectProblems}=require('./screen-object-contract.js');const expectedImports={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');expectedImports[spec.split('/').pop()]=spec}for(const mod of (reuse.elements||[])){if(mod&&mod.import)expectedImports[String(mod.import).split('/').pop()]=mod.import}for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,typeLocatorImport:FRAMEWORK_CONTRACT.typeLocatorImport,helpers:FRAMEWORK_CONTRACT.helpers,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
 const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
 for(const [label,content] of [['Steps',steps],['ScreenObject',screen]]){const relative=importSources(content).filter(source=>source.startsWith('.'));if(relative.length)errors.push(label+' usa imports relativos: '+relative.join(', '))}
 const importsBrowser=/import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(screen);
@@ -581,6 +587,9 @@ export class AutomationPackageBuilder {
         writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
+        writeJson(path.join(packageDirectory, 'framework-api.json'), {
+            helpers: frameworkHelpersOf(projectPaths.frameworkRoot),
+        });
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions);
         writeVerifier(packageDirectory);
         for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {
@@ -694,6 +703,9 @@ export class AutomationPackageBuilder {
             ),
         });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
+        writeJson(path.join(packageDirectory, 'framework-api.json'), {
+            helpers: frameworkHelpersOf(projectPaths.frameworkRoot),
+        });
         fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions(result));
         writeVerifier(packageDirectory);
         for (const stale of ['agent-response.json', 'validation.json', 'repair-context.json']) {

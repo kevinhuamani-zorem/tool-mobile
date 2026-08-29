@@ -432,8 +432,12 @@ export class FwkMobileGenerator {
     private validateGenerationActions(
         rows: NonNullable<GenerationRequest['scenarioRows']>
     ): void {
+        // SCROLL_HASTA se resuelve con el texto, no con un locator:
+        // `verticalScrollTextIntoView(<texto>)`. Exigirle nombre y selector
+        // impedia generar cualquier grabacion que lo usara.
         const withoutLocator = new Set<RecordedStep['action']>([
-            'ABRIR_APP', 'SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'VOLVER', 'ESPERAR', 'SCREENSHOT'
+            'ABRIR_APP', 'SCROLL_DOWN', 'SCROLL_UP', 'SCROLL_HASTA',
+            'SWIPE', 'VOLVER', 'ESPERAR', 'SCREENSHOT'
         ]);
         for (const row of rows) {
             if (!row.actions || row.actions.length === 0) {

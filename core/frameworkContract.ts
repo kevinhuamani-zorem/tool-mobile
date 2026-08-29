@@ -250,7 +250,8 @@ function bodyFrom(content: string, open: number): string {
 function visibleStringConstants(
     frameworkRoot: string,
     file: string,
-    aliases: Record<string, string>
+    aliases: Record<string, string>,
+    readFiles?: Set<string>
 ): Map<string, string> {
     const found = new Map<string, string>();
     const collect = (content: string, qualifier: string): void => {
@@ -298,6 +299,7 @@ function visibleStringConstants(
     for (const [name, specifier] of imports) {
         const target = resolveSpecifier(specifier);
         if (!target) continue;
+        readFiles?.add(target);
         try {
             collect(fs.readFileSync(target, 'utf-8'), name);
         } catch {
@@ -347,7 +349,7 @@ function readComposition(
     frameworkRoot: string,
     locatorFactoryFile: string | undefined,
     typeLocatorSymbol: string
-, aliases: Record<string, string>): { composition: LocatorComposition; found: boolean } {
+, aliases: Record<string, string>, readFiles?: Set<string>): { composition: LocatorComposition; found: boolean } {
     const empty = { android: {}, ios: {} } as LocatorComposition;
     if (!locatorFactoryFile) return { composition: DEFAULTS.locatorComposition, found: false };
     const absolute = path.join(frameworkRoot, locatorFactoryFile);
@@ -357,7 +359,8 @@ function readComposition(
     } catch {
         return { composition: DEFAULTS.locatorComposition, found: false };
     }
-    const constants = visibleStringConstants(frameworkRoot, absolute, aliases);
+    readFiles?.add(absolute);
+    const constants = visibleStringConstants(frameworkRoot, absolute, aliases, readFiles);
 
     // Cada metodo cuyo nombre o firma nombra la plataforma aporta su switch.
     const methods = /(?:private\s+)?static\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{/g;
@@ -421,7 +424,11 @@ export function composeLocator(
     return `${rule.prefix}${value}${rule.suffix}`;
 }
 
-function resolve(frameworkRoot: string): FrameworkContract {
+function resolve(frameworkRoot: string): { contract: FrameworkContract; files: string[] } {
+    // Archivos cuyo CONTENIDO determina el contrato. Se sellan uno a uno porque
+    // el mtime del directorio no cambia al editarlos: agregar un caso al switch
+    // de estrategias dejaba la tabla de composicion congelada.
+    const readFiles = new Set<string>([path.join(frameworkRoot, 'tsconfig.json')]);
     const { aliases, found } = readAliases(frameworkRoot);
     const warnings: string[] = [];
     if (!found) {
@@ -481,8 +488,11 @@ function resolve(frameworkRoot: string): FrameworkContract {
     };
 
     const typeLocatorSymbol = anchors.typeLocator.capture || DEFAULTS.typeLocatorSymbol;
+    for (const anchor of Object.values(anchors)) {
+        if (anchor.file) readFiles.add(path.join(frameworkRoot, anchor.file));
+    }
     const { composition, found: compositionFound } =
-        readComposition(frameworkRoot, anchors.locatorFactory.file, typeLocatorSymbol, aliases);
+        readComposition(frameworkRoot, anchors.locatorFactory.file, typeLocatorSymbol, aliases, readFiles);
     if (!compositionFound) {
         warnings.push(
             'No se pudo leer la tabla de composicion de locators del framework: ' +
@@ -490,7 +500,7 @@ function resolve(frameworkRoot: string): FrameworkContract {
         );
     }
 
-    return {
+    return { files: [...readFiles], contract: {
         aliases,
         baseScreenImport: importFor('baseScreen', DEFAULTS.baseScreenImport),
         baseScreenClass: anchors.baseScreen.capture || DEFAULTS.baseScreenClass,
@@ -511,7 +521,7 @@ function resolve(frameworkRoot: string): FrameworkContract {
         timeoutHelperSymbol: anchors.timeoutHelper.capture,
         locatorComposition: composition,
         warnings,
-    };
+    } };
 }
 
 /**
@@ -519,20 +529,30 @@ function resolve(frameworkRoot: string): FrameworkContract {
  * cambia cuando se agrega, borra o mueve un archivo dentro, que es justo el
  * caso que hay que detectar; el tsconfig se vigila por contenido.
  */
-function signature(frameworkRoot: string): string {
-    const stamps = [path.join(frameworkRoot, 'tsconfig.json'), ...SCAN_ROOTS.map(root =>
-        path.join(frameworkRoot, root))]
-        .map(target => {
-            try {
-                return String(fs.statSync(target).mtimeMs);
-            } catch {
-                return '0';
-            }
-        });
-    return stamps.join('|');
+/**
+ * Sello de los archivos cuyo contenido determina el resultado.
+ *
+ * Se sella cada ARCHIVO por `mtime` y tamano, no el directorio que lo contiene:
+ * el mtime de un directorio solo cambia al agregar o quitar entradas, nunca al
+ * editar un archivo dentro. Sellando el directorio, agregar un metodo a un
+ * ancla existente —el caso normal cuando el framework se actualiza— dejaba
+ * esto congelado hasta reiniciar el recorder.
+ */
+function signature(frameworkRoot: string, files: string[] = []): string {
+    // Los directorios siguen sellandose porque detectan lo otro: archivos
+    // agregados, movidos o borrados, que es lo que cambia DONDE esta un ancla.
+    const targets = [...SCAN_ROOTS.map(root => path.join(frameworkRoot, root)), ...files];
+    return targets.map(target => {
+        try {
+            const stats = fs.statSync(target);
+            return `${target}:${stats.mtimeMs}:${stats.isFile() ? stats.size : 'dir'}`;
+        } catch {
+            return `${target}:0`;
+        }
+    }).join('|');
 }
 
-const cache = new Map<string, { signature: string; contract: FrameworkContract }>();
+const cache = new Map<string, { signature: string; contract: FrameworkContract; files: string[] }>();
 
 /**
  * Resuelve el contrato del framework, recalculandolo cuando el arbol cambia.
@@ -540,11 +560,10 @@ const cache = new Map<string, { signature: string; contract: FrameworkContract }
  * anclaje se refleje sin reiniciar el recorder.
  */
 export function frameworkContract(frameworkRoot: string): FrameworkContract {
-    const current = signature(frameworkRoot);
     const cached = cache.get(frameworkRoot);
-    if (cached && cached.signature === current) return cached.contract;
-    const contract = resolve(frameworkRoot);
-    cache.set(frameworkRoot, { signature: current, contract });
+    if (cached && cached.signature === signature(frameworkRoot, cached.files)) return cached.contract;
+    const { contract, files } = resolve(frameworkRoot);
+    cache.set(frameworkRoot, { signature: signature(frameworkRoot, files), contract, files });
     return contract;
 }
 

@@ -18,7 +18,7 @@
 
 export interface ScreenObjectProblem {
     code: 'json-import-attribute' | 'locator-import-alias' | 'getElement-arity'
-        | 'getElement-order' | 'type-locator-import';
+        | 'getElement-order' | 'type-locator-import' | 'helper-method';
     message: string;
 }
 
@@ -27,6 +27,11 @@ export interface ScreenObjectRules {
     typeLocatorSymbol: string;
     /** Modulo del que se importa ese enum; opcional solo para tests. */
     typeLocatorImport?: string;
+    /**
+     * API real de los helpers que BaseScreen expone, leida del framework.
+     * Sin esto no se puede afirmar que `this.uiHelper.scrollDown()` no existe.
+     */
+    helpers?: Array<{ property: string; methods: string[] }>;
     /** Orden de plataformas que declara la firma de `getElement`. */
     platformOrder: ('android' | 'ios')[];
     parameterCount: number;
@@ -140,6 +145,46 @@ export function typeLocatorImportProblem(
 }
 
 /**
+ * Llamadas a metodos de helper que no existen.
+ *
+ * El caso real: `this.uiHelper.scrollDown()`. El metodo existe, pero en
+ * `gestureHelper`. Compila mal y el fallo aparecia recien al construir el
+ * framework, fuera del pipeline. Cuando el metodo vive en otro helper el
+ * mensaje lo dice, que es el arreglo entero.
+ */
+export function helperMethodProblems(
+    content: string,
+    helpers: Array<{ property: string; methods: string[] }> = []
+): ScreenObjectProblem[] {
+    if (!helpers.length) return [];
+    const byProperty = new Map(helpers.map(helper => [helper.property, new Set(helper.methods)]));
+    const problems: ScreenObjectProblem[] = [];
+    const seen = new Set<string>();
+    for (const [, property, method] of String(content || '').matchAll(
+        /\bthis\s*\.\s*([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g
+    )) {
+        const known = byProperty.get(property);
+        if (!known || known.has(method)) continue;
+        const unique = `${property}.${method}`;
+        if (seen.has(unique)) continue;
+        seen.add(unique);
+        const owner = helpers.find(helper => helper.property !== property
+            && helper.methods.includes(method));
+        problems.push({
+            code: 'helper-method',
+            message: owner
+                ? `this.${property}.${method}() no existe: ${method} vive en ${owner.property}. `
+                    + `Escribe this.${owner.property}.${method}(...).`
+                : `this.${property}.${method}() no existe y ningun helper del framework lo tiene. `
+                    + `Los metodos de ${property} son: ${[...known].sort().join(', ')}. `
+                    + 'Si necesitas algo que no esta, escribelo como un metodo del propio Screen '
+                    + 'Object para que quede reutilizable; no inventes una llamada al helper.',
+        });
+    }
+    return problems;
+}
+
+/**
  * Comprueba las reglas y devuelve los problemas con la linea ya corregida.
  *
  * El mensaje trae el arreglo porque el agente tiene un solo intento de
@@ -174,6 +219,8 @@ export function screenObjectProblems(
 
     const enumImport = typeLocatorImportProblem(source, rules);
     if (enumImport) problems.push(enumImport);
+
+    for (const problem of helperMethodProblems(source, rules.helpers)) problems.push(problem);
 
     const order = rules.platformOrder;
     for (const call of getElementCalls(source)) {
@@ -228,6 +275,7 @@ export function signatureHint(rules: Pick<ScreenObjectRules, 'typeLocatorSymbol'
 
 export const screenObjectContract = {
     screenObjectProblems,
+    helperMethodProblems,
     typeLocatorImportProblem,
     signatureHint,
     getElementCalls,

@@ -1691,6 +1691,17 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     // El verificador del sandbox carga las reglas del modulo compartido; sin la
     // copia se quedaria sin comprobar el contrato del Screen Object.
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'screen-object-contract.js')));
+    // El agente no puede acertar el helper si nadie le dice cuales hay.
+    const frameworkApi = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'framework-api.json'), 'utf8'
+    ));
+    assert.deepEqual(
+        frameworkApi.helpers.map(helper => helper.property),
+        ['gestureHelper', 'keyboardHelper', 'uiHelper']
+    );
+    assert.ok(frameworkApi.helpers
+        .find(helper => helper.property === 'gestureHelper').methods
+        .some(method => method.name === 'scrollDown'));
     // El verificador se genera como texto: tsc no lo revisa, asi que un error de
     // sintaxis solo aparecia cuando el agente lo ejecutaba.
     assert.doesNotThrow(
@@ -1729,6 +1740,8 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /getElement\(TypeLocator\.<IOS>, <valor ios>, TypeLocator\.<ANDROID>, <valor android>\)/);
     assert.match(instructions, /with \{ type: 'json' \}/);
     assert.match(instructions, /Copialos literalmente en vez de componerlos/);
+    assert.match(instructions, /`scrollDown` esta en `gestureHelper`, no en `uiHelper`/);
+    assert.match(instructions, /metodo del propio Screen Object para que quede reutilizable/);
     assert.match(instructions, /Nada de `_metadata`/);
     assert.match(instructions, /allowlist verificada e inmutable/);
     assert.match(instructions, /candidateId/);

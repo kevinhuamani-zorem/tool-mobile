@@ -14,6 +14,7 @@ import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
 import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
 import { screenObjectProblems, typeLocatorImportProblem } from './screenObjectContract';
+import { frameworkHelpersOf } from './frameworkHelpers';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
@@ -1361,6 +1362,10 @@ export class AutomationResponseValidator {
                     for (const problem of screenObjectProblems(screenContent, {
                         typeLocatorSymbol: contract.typeLocatorSymbol,
                         typeLocatorImport: contract.typeLocatorImport,
+                        helpers: frameworkHelpersOf(projectPaths.frameworkRoot).map(helper => ({
+                            property: helper.property,
+                            methods: helper.methods.map(method => method.name),
+                        })),
                         platformOrder: contract.locatorSignature.platformOrder,
                         parameterCount: contract.locatorSignature.parameterCount,
                         expectedImports,
