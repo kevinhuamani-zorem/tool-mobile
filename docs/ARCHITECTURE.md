@@ -74,7 +74,7 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 | Sesión | `appiumDriverManager`, `browserStackDriverManager`, `mobileStepExecutor` | Conectar, capturar, tocar, gestos y ejecutar acciones |
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver la raíz padre y el catálogo del framework |
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationContextProjections`, `automationPackageBuilder` | Recording, plan, hints/gaps derivados y contexto mínimo |
-| IA acotada | `automationAgentLauncher`, `automationContracts` | Abrir Terminal en el paquete y entregar un prompt acotado; el usuario inicia el agente |
+| IA acotada | `agentOrchestrator`, `copilotCliAdapter`, `automationAgentLauncher`, `automationContracts` | Modo `manual` (handoff en Terminal) o `automatic` (dos pasadas controladas por contratos y budgets) |
 | Validación/memoria | `automationResponseValidator`, `automationMemory` | Validar, reparar una vez y versionar score 100 |
 | Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
@@ -146,9 +146,10 @@ convierte por sí solo un selector manual en verificado.
    expuesta al agente.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
    no se invoca al agente. La memoria de calidad 100 también se reutiliza.
-7. La UI abre Terminal en el paquete y muestra el prompt inicial. El usuario
-   inicia Copilot manualmente; el agente recibe solo gaps y un contexto
-   máximo de 20 KB, con objetivo operativo de 5 min.
+7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
+   o ejecuta el orquestador automático. En modo automático el agente opera en
+   dos pasadas (`query-requests/query-results` y luego `agent-response`) bajo
+   `GapQueryPolicy` y budgets del plan.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
    Los rellenos de plataforma solo aceptan la identidad determinista completa

@@ -1697,6 +1697,8 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'collision-report.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'hints.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'gaps.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'query-requests.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'query-results.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'locator-candidates.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'verify-package.js')));
     // El verificador del sandbox carga las reglas del modulo compartido; sin la
@@ -1732,6 +1734,8 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(agentRun.responseBytes > 0);
     assert.equal(agentRun.tokensInput, null);
     assert.equal(agentRun.tokensOutput, null);
+    assert.equal(agentRun.agentExecutionMode, 'manual');
+    assert.equal(agentRun.agentInvocationCount, 0);
     assert.ok(agentRun.hintsGenerated > 0);
     assert.equal(agentRun.initialGapCount, 0);
     assert.equal(agentRun.finalGapCount, 0);

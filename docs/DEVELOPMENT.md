@@ -53,6 +53,12 @@ copia el resultado a `node_modules/.cache`.
 | `npm run codegraph:recorder -- --search X` | Consulta dependencias internas |
 | `npm run codegraph:export -- --squad X` | Exporta subgrafo del target |
 
+Flags útiles del pipeline agentic:
+
+- `RECORDER_AGENT_EXECUTION_MODE=manual|automatic` (default `manual`).
+- `RECORDER_COPILOT_CLI_COMMAND` y `RECORDER_COPILOT_CLI_ARGS` para adaptar
+  el comando del provider sin tocar código.
+
 Los grafos y métricas se guardan en `runtime/` y no se versionan.
 
 ## Workspace y agente

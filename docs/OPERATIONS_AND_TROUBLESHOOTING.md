@@ -26,6 +26,13 @@ explícitamente sin assets, la apertura falla indicando el comando de build.
 BrowserStack conserva legacy porque el protocolo fijado no transporta
 credenciales; estas nunca se exponen al bundle.
 
+Ejecución del agente de automatización:
+
+- `RECORDER_AGENT_EXECUTION_MODE=manual` (default): abre Terminal para handoff.
+- `RECORDER_AGENT_EXECUTION_MODE=automatic`: ejecuta dos pasadas controladas
+  (query-requests/query-results y luego agent-response) con budgets y policy de
+  fallback.
+
 El botón **Inspector** del header abre o focaliza la misma ventana embebida. Una
 selección ordinaria permanece dentro de Appium Inspector; el recorder solo
 importa el selector cuando el QA pulsa **Usar en Recorder**, lo somete a una
@@ -180,6 +187,13 @@ convertir información repetible en decisiones del plan.
 Importar crea `repair-context.json` con errores concretos. Usa “Abrir Terminal
 del agente” y pega el prompt actualizado; solo puede corregir archivos afectados y dispone de un intento.
 Después debe volver a ejecutarse la importación. Un fallo no entra a memoria.
+
+### Falló la ejecución automática del agente
+
+Si el modo es `automatic`, revisa `agent-run.json` y `status.json` del package.
+Solo errores del provider `AGENT_NOT_INSTALLED` y `AGENT_UNAVAILABLE` habilitan
+fallback automático a handoff manual; errores de contrato/presupuesto se
+detienen sin fallback.
 
 ## Logs y secretos
 

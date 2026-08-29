@@ -4341,10 +4341,23 @@ export async function initializeRecorder() {
         disableBtn(btnLaunchAutomation, '⏳ Abriendo...');
         const result = await api.launchAutomationAgent();
         enableBtn(btnLaunchAutomation);
-        if (result.success) showAutomationHandoff(result.launch);
-        automationPackageStatus.textContent = result.success
-            ? `✓ Terminal abierta en el paquete. Inicia ${result.launch.provider} y pega el prompt mostrado.`
-            : `✗ ${result.error}`;
+        if (!result.success) {
+            automationPackageStatus.textContent = `✗ ${result.error}`;
+            automationPackageStatus.className = 'generate-result err';
+            return;
+        }
+        if (result.automatic && result.imported?.success) {
+            automationWorkflow = true;
+            showAutomationPreview(result.imported, true);
+            automationPackageStatus.textContent =
+                `✓ Ejecución automática completada (${result.run?.invocations || 0} pasada(s)). Propuesta válida lista para revisión.`;
+            automationPackageStatus.className = 'generate-result ok';
+            return;
+        }
+        if (result.launch) showAutomationHandoff(result.launch);
+        automationPackageStatus.textContent = result.fallback
+            ? `✓ Fallback manual activado (${result.fallbackReason}). Inicia ${result.launch.provider} y pega el prompt mostrado.`
+            : `✓ Terminal abierta en el paquete. Inicia ${result.launch.provider} y pega el prompt mostrado.`;
         automationPackageStatus.className = `generate-result ${result.success ? 'ok' : 'err'}`;
     });
 
