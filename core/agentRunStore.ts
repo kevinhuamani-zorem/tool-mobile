@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import type { CodeGraphBuildMetrics } from './codeGraph';
 import type { FrameworkQueryMetrics } from './frameworkQueryService';
 import type { ProjectionMetrics } from './automationContextProjections';
+import { AgentExecutionMode } from './automationContracts';
 
 export interface AgentRunArtifact {
     schemaVersion: 1;
@@ -39,6 +40,15 @@ export interface AgentRunArtifact {
     queriesRejected: number;
     duplicateQueriesAvoided: number;
     queriesAvoidedNoGap: number;
+    agentProvider: string | null;
+    agentVersion: string | null;
+    agentExecutionMode: AgentExecutionMode;
+    agentInvocationCount: number;
+    agentExitCode: number | null;
+    agentTimedOut: boolean;
+    agentCancelled: boolean;
+    fallbackUsed: boolean;
+    fallbackReason: string | null;
     /** Marcas internas numéricas; nunca contienen prompts, selectores ni evidencia. */
     timers?: { agentStartedAtMs?: number; repairStartedAtMs?: number };
 }
@@ -91,6 +101,15 @@ export class AgentRunStore {
             queriesRejected: 0,
             duplicateQueriesAvoided: 0,
             queriesAvoidedNoGap: 0,
+            agentProvider: null,
+            agentVersion: null,
+            agentExecutionMode: 'manual',
+            agentInvocationCount: 0,
+            agentExitCode: null,
+            agentTimedOut: false,
+            agentCancelled: false,
+            fallbackUsed: false,
+            fallbackReason: null,
         };
         this.write(run);
         return run;
@@ -112,6 +131,15 @@ export class AgentRunStore {
                 queriesRejected: parsed.queriesRejected || 0,
                 duplicateQueriesAvoided: parsed.duplicateQueriesAvoided || 0,
                 queriesAvoidedNoGap: parsed.queriesAvoidedNoGap || 0,
+                agentProvider: parsed.agentProvider || null,
+                agentVersion: parsed.agentVersion || null,
+                agentExecutionMode: parsed.agentExecutionMode === 'automatic' ? 'automatic' : 'manual',
+                agentInvocationCount: parsed.agentInvocationCount || 0,
+                agentExitCode: Number.isInteger(parsed.agentExitCode) ? parsed.agentExitCode : null,
+                agentTimedOut: Boolean(parsed.agentTimedOut),
+                agentCancelled: Boolean(parsed.agentCancelled),
+                fallbackUsed: Boolean(parsed.fallbackUsed),
+                fallbackReason: parsed.fallbackReason || null,
             };
         } catch {
             return undefined;
@@ -141,6 +169,44 @@ export class AgentRunStore {
     }
     setRepairAttempts(repairAttempts: number): void {
         this.update(run => ({ ...run, repairAttempts: Math.max(0, repairAttempts) }));
+    }
+    setAgentMetadata(provider: string, version?: string): void {
+        this.update(run => ({
+            ...run,
+            agentProvider: provider || null,
+            agentVersion: version || null,
+        }));
+    }
+    setExecutionMode(mode: AgentExecutionMode): void {
+        this.update(run => ({
+            ...run,
+            agentExecutionMode: mode === 'automatic' ? 'automatic' : 'manual',
+        }));
+    }
+    incrementAgentInvocation(): void {
+        this.update(run => ({
+            ...run,
+            agentInvocationCount: run.agentInvocationCount + 1,
+        }));
+    }
+    setAgentExitCode(exitCode: number | null): void {
+        this.update(run => ({
+            ...run,
+            agentExitCode: Number.isInteger(exitCode) ? exitCode : null,
+        }));
+    }
+    markAgentTimedOut(): void {
+        this.update(run => ({ ...run, agentTimedOut: true }));
+    }
+    markAgentCancelled(): void {
+        this.update(run => ({ ...run, agentCancelled: true }));
+    }
+    setFallback(used: boolean, reason?: string): void {
+        this.update(run => ({
+            ...run,
+            fallbackUsed: Boolean(used),
+            fallbackReason: used ? (reason || 'unspecified') : null,
+        }));
     }
     recordProjectionMetrics(metrics: ProjectionMetrics): void {
         this.update(run => ({

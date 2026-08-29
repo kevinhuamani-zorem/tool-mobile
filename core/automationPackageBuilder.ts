@@ -4,9 +4,13 @@ import crypto from 'crypto';
 import {
     AgentGeneratedFile,
     AutomationAgentResponse,
+    AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION,
     AutomationPackageResult,
     AutomationScenario,
+    DEFAULT_AGENT_EXECUTION_MODE,
+    DEFAULT_AGENT_OPERATIONAL_BUDGETS,
     GenerationPlan,
+    normalizeAgentOperationalBudgets,
     ResolvedContext,
     UnresolvedContext,
     UnresolvedGap,
@@ -36,10 +40,16 @@ import {
 import type { PackagedAutomationScenario } from './automationScenarioPackage';
 import { AgentRunStore } from './agentRunStore';
 import { deriveAutomationContextProjections, ProjectionInput } from './automationContextProjections';
+import { emptyQueryRequests, emptyQueryResults } from './agentQueryContracts';
+import { resolveAgentExecutionMode, resolvePackageArtifactPath } from './agentRuntimeGuards';
 
 function writeJson(file: string, value: unknown): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+}
+
+function writePackageArtifactJson(packageDirectory: string, fileName: string, value: unknown): void {
+    writeJson(resolvePackageArtifactPath(packageDirectory, fileName), value);
 }
 
 function writeContextProjections(
@@ -93,7 +103,7 @@ function responseFromPreview(
     if (preview.screenPath && preview.screenContent) files.push({ layer: 'screen', path: relative(preview.screenPath), content: preview.screenContent });
     if (preview.locatorPath && preview.locatorContent) files.push({ layer: 'locators', path: relative(preview.locatorPath), content: preview.locatorContent });
     return {
-        schemaVersion: 1,
+        schemaVersion: AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION,
         recordingId: scenario.recordingId,
         planId: plan.planId,
         resolutions: [],
@@ -121,7 +131,7 @@ function responseFromExistingFiles(
         content: fs.readFileSync(path.join(projectPaths.frameworkRoot, file.path), 'utf-8'),
     }));
     return {
-        schemaVersion: 1,
+        schemaVersion: AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION,
         recordingId: scenario.recordingId,
         planId: plan.planId,
         resolutions: [],
@@ -149,7 +159,7 @@ function responseSchema(): object {
         type: 'object',
         required: ['schemaVersion', 'recordingId', 'planId', 'resolutions', 'actionTrace', 'files'],
         properties: {
-            schemaVersion: { const: 1 },
+            schemaVersion: { const: AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION },
             recordingId: { type: 'string' },
             planId: { type: 'string' },
             // Las formas van cerradas EN EL ESQUEMA, no solo en el validador.
@@ -560,6 +570,7 @@ export class AutomationPackageBuilder {
             status: 'regeneration',
             files: previousPlan.files.map(file => ({ ...file, operation: 'update' })),
             unresolvedGapIds: ['gap-regeneration-refinement'],
+            budgets: normalizeAgentOperationalBudgets(previousPlan.budgets || DEFAULT_AGENT_OPERATIONAL_BUDGETS),
         };
         const revisedScenario: AutomationScenario = {
             ...scenario,
@@ -609,6 +620,7 @@ export class AutomationPackageBuilder {
             'scenario.json', 'locator-candidates.json', 'generation-plan.json',
             'agent-response.json', 'validation.json', 'status.json', 'agent-run.json',
             'hints.json', 'gaps.json',
+            'query-requests.json', 'query-results.json',
         ]) {
             const source = path.join(packageDirectory, name);
             if (fs.existsSync(source)) fs.copyFileSync(source, path.join(historyDirectory, name));
@@ -622,6 +634,8 @@ export class AutomationPackageBuilder {
         writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
+        writePackageArtifactJson(packageDirectory, 'query-requests.json', emptyQueryRequests());
+        writePackageArtifactJson(packageDirectory, 'query-results.json', emptyQueryResults());
         writeJson(path.join(packageDirectory, 'framework-api.json'), {
             helpers: frameworkHelpersOf(projectPaths.frameworkRoot),
         });
@@ -637,12 +651,14 @@ export class AutomationPackageBuilder {
             planId: plan.planId,
             state: 'ready-for-agent',
             mode: 'regeneration',
+            agentExecutionMode: resolveAgentExecutionMode(process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE),
             regenerationIteration: iteration,
             refinement: normalizedRefinement,
             preparedAt: new Date().toISOString(),
             budgets: plan.budgets,
         });
         runStore.start(revisedScenario.recordingId, plan.planId);
+        runStore.setExecutionMode(resolveAgentExecutionMode(process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE));
         const resolvedContextFile = path.join(packageDirectory, 'resolved-context.json');
         writeContextProjections(packageDirectory, {
             scenario: revisedScenario,
@@ -679,6 +695,7 @@ export class AutomationPackageBuilder {
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
         const runStore = new AgentRunStore(packageDirectory);
         runStore.start(scenario.recordingId);
+        runStore.setExecutionMode(resolveAgentExecutionMode(process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE));
         const resolverStarted = process.hrtime.bigint();
         let result: ResolverResult;
         try {
@@ -772,6 +789,8 @@ export class AutomationPackageBuilder {
             ),
         });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
+        writePackageArtifactJson(packageDirectory, 'query-requests.json', emptyQueryRequests());
+        writePackageArtifactJson(packageDirectory, 'query-results.json', emptyQueryResults());
         writeJson(path.join(packageDirectory, 'framework-api.json'), {
             helpers: frameworkHelpersOf(projectPaths.frameworkRoot),
         });
@@ -810,7 +829,7 @@ export class AutomationPackageBuilder {
             if (!result.plan.existingCase) {
                 response = withGeneratedResponseMetadata(response, result.scenario.createdAt);
             }
-            writeJson(path.join(packageDirectory, 'agent-response.json'), response);
+            writePackageArtifactJson(packageDirectory, 'agent-response.json', response);
             const validationStarted = process.hrtime.bigint();
             validation = this.validator.validate(result.scenario, result.plan, response);
             runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validationStarted) / 1_000_000);
@@ -821,6 +840,7 @@ export class AutomationPackageBuilder {
             recordingId: result.scenario.recordingId,
             planId: result.plan.planId,
             state: response ? (validation?.valid ? 'ready-for-review' : 'needs-repair') : 'ready-for-agent',
+            agentExecutionMode: resolveAgentExecutionMode(process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE),
             preparedAt: new Date().toISOString(),
             budgets: result.plan.budgets,
         });

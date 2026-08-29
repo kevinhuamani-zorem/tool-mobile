@@ -3,6 +3,163 @@ import { RecordedStep } from './models';
 
 export const AUTOMATION_SCHEMA_VERSION = 1;
 export const AUTOMATION_PIPELINE_VERSION = '1.0.0';
+export const AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION = 1;
+export const AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION = '1.0';
+export const AUTOMATION_QUERY_RESULTS_SCHEMA_VERSION = '1.0';
+
+export type AgentExecutionMode = 'manual' | 'automatic';
+export const DEFAULT_AGENT_EXECUTION_MODE: AgentExecutionMode = 'manual';
+
+export type AgentExecutionState =
+    | 'prepared'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'timed-out'
+    | 'cancelled';
+
+export type AgentDomainErrorCode =
+    | 'QUERY_NOT_ALLOWED'
+    | 'NO_OPEN_GAP'
+    | 'GAP_BLOCKED'
+    | 'MAX_QUERIES_EXCEEDED'
+    | 'DUPLICATE_QUERY'
+    | 'QUERY_POLICY_VIOLATION'
+    | 'SCHEMA_INVALID'
+    | 'DURATION_BUDGET_EXCEEDED'
+    | 'CONTEXT_BUDGET_EXCEEDED'
+    | 'RESPONSE_BUDGET_EXCEEDED'
+    | 'AGENT_INVOCATION_BUDGET_EXCEEDED'
+    | 'TOTAL_QUERY_BUDGET_EXCEEDED';
+
+export type AgentProviderErrorCode =
+    | 'AGENT_NOT_INSTALLED'
+    | 'AGENT_UNAVAILABLE'
+    | 'AGENT_TIMEOUT'
+    | 'AGENT_CANCELLED'
+    | 'AGENT_NON_ZERO_EXIT'
+    | 'AGENT_OUTPUT_MISSING';
+
+export type AgentErrorCode = AgentDomainErrorCode | AgentProviderErrorCode;
+
+export type AgentFallbackPolicy = Record<AgentErrorCode, boolean>;
+
+export const DEFAULT_AGENT_FALLBACK_POLICY: AgentFallbackPolicy = {
+    QUERY_NOT_ALLOWED: false,
+    NO_OPEN_GAP: false,
+    GAP_BLOCKED: false,
+    MAX_QUERIES_EXCEEDED: false,
+    DUPLICATE_QUERY: false,
+    QUERY_POLICY_VIOLATION: false,
+    SCHEMA_INVALID: false,
+    DURATION_BUDGET_EXCEEDED: false,
+    CONTEXT_BUDGET_EXCEEDED: false,
+    RESPONSE_BUDGET_EXCEEDED: false,
+    AGENT_INVOCATION_BUDGET_EXCEEDED: false,
+    TOTAL_QUERY_BUDGET_EXCEEDED: false,
+    AGENT_NOT_INSTALLED: true,
+    AGENT_UNAVAILABLE: true,
+    AGENT_TIMEOUT: false,
+    AGENT_CANCELLED: false,
+    AGENT_NON_ZERO_EXIT: false,
+    AGENT_OUTPUT_MISSING: false,
+};
+
+export function isAgentFallbackAllowed(
+    code: AgentErrorCode,
+    policy: AgentFallbackPolicy = DEFAULT_AGENT_FALLBACK_POLICY,
+): boolean {
+    return Boolean(policy[code]);
+}
+
+export interface AgentOperationalBudgets {
+    maxDurationMs: number;
+    maxContextBytes: number;
+    maxResponseBytes: number;
+    maxAgentInvocations: number;
+    maxTotalQueries: number;
+    maxQueriesPerGap: number;
+    maxRepairAttempts: number;
+}
+
+export const DEFAULT_AGENT_OPERATIONAL_BUDGETS: AgentOperationalBudgets = {
+    maxDurationMs: 300_000,
+    maxContextBytes: 20_000,
+    maxResponseBytes: 400_000,
+    maxAgentInvocations: 2,
+    maxTotalQueries: 8,
+    maxQueriesPerGap: 2,
+    maxRepairAttempts: 1,
+};
+
+function clampBudget(value: unknown, fallback: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+    return Math.max(0, Math.floor(value));
+}
+
+export function normalizeAgentOperationalBudgets(
+    budgets?: Partial<AgentOperationalBudgets> | null,
+): AgentOperationalBudgets {
+    return {
+        maxDurationMs: clampBudget(
+            budgets?.maxDurationMs,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxDurationMs
+        ),
+        maxContextBytes: clampBudget(
+            budgets?.maxContextBytes,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxContextBytes
+        ),
+        maxResponseBytes: clampBudget(
+            budgets?.maxResponseBytes,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxResponseBytes
+        ),
+        maxAgentInvocations: clampBudget(
+            budgets?.maxAgentInvocations,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxAgentInvocations
+        ),
+        maxTotalQueries: clampBudget(
+            budgets?.maxTotalQueries,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxTotalQueries
+        ),
+        maxQueriesPerGap: clampBudget(
+            budgets?.maxQueriesPerGap,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxQueriesPerGap
+        ),
+        maxRepairAttempts: clampBudget(
+            budgets?.maxRepairAttempts,
+            DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxRepairAttempts
+        ),
+    };
+}
+
+export interface AgentBudgetUsage {
+    totalDurationMs?: number;
+    contextBytes?: number;
+    responseBytes?: number;
+    agentInvocations?: number;
+    totalQueries?: number;
+    queriesPerGap?: Record<string, number>;
+}
+
+export function agentBudgetViolations(
+    budgets: AgentOperationalBudgets,
+    usage: AgentBudgetUsage,
+): AgentDomainErrorCode[] {
+    const violations: AgentDomainErrorCode[] = [];
+    if ((usage.totalDurationMs || 0) > budgets.maxDurationMs) violations.push('DURATION_BUDGET_EXCEEDED');
+    if ((usage.contextBytes || 0) > budgets.maxContextBytes) violations.push('CONTEXT_BUDGET_EXCEEDED');
+    if ((usage.responseBytes || 0) > budgets.maxResponseBytes) violations.push('RESPONSE_BUDGET_EXCEEDED');
+    if ((usage.agentInvocations || 0) > budgets.maxAgentInvocations) {
+        violations.push('AGENT_INVOCATION_BUDGET_EXCEEDED');
+    }
+    if ((usage.totalQueries || 0) > budgets.maxTotalQueries) violations.push('TOTAL_QUERY_BUDGET_EXCEEDED');
+    if (usage.queriesPerGap) {
+        const exceeded = Object.values(usage.queriesPerGap)
+            .some(value => value > budgets.maxQueriesPerGap);
+        if (exceeded) violations.push('MAX_QUERIES_EXCEEDED');
+    }
+    return [...new Set(violations)];
+}
 
 export interface AutomationScenario {
     schemaVersion: number;
@@ -110,11 +267,7 @@ export interface GenerationPlan {
         screen?: string;
         locators?: string;
     };
-    budgets: {
-        maxDurationMs: number;
-        maxContextBytes: number;
-        maxRepairAttempts: number;
-    };
+    budgets: AgentOperationalBudgets;
 }
 
 export interface ExistingAutomationCandidate {
@@ -278,6 +431,42 @@ export interface AutomationGapsProjection {
     gaps: AutomationGap[];
 }
 
+export interface AgentContextQueryRequest {
+    id: string;
+    gapId: string;
+    query: FrameworkContextQuery;
+    args: Record<string, unknown>;
+}
+
+export interface AgentContextQueryRequests {
+    schemaVersion: typeof AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION;
+    requests: AgentContextQueryRequest[];
+}
+
+export type AgentContextQueryResultStatus = 'resolved' | 'rejected' | 'not-found' | 'error';
+
+export type AgentContextQueryRejectionCode =
+    | 'query-not-allowed'
+    | 'no-open-gap'
+    | 'max-queries-exceeded'
+    | 'duplicate-query'
+    | 'blocked-qa'
+    | 'context-budget-exceeded';
+
+export interface AgentContextQueryResult {
+    requestId: string;
+    gapId: string;
+    status: AgentContextQueryResultStatus;
+    code?: AgentContextQueryRejectionCode;
+    data?: Record<string, unknown>;
+    evidence?: string[];
+}
+
+export interface AgentContextQueryResults {
+    schemaVersion: typeof AUTOMATION_QUERY_RESULTS_SCHEMA_VERSION;
+    results: AgentContextQueryResult[];
+}
+
 export interface UnresolvedContext {
     schemaVersion: number;
     recordingId: string;
@@ -292,7 +481,8 @@ export interface AgentGeneratedFile {
 }
 
 export interface AutomationAgentResponse {
-    schemaVersion: number;
+    /** Backward compatible: respuestas viejas podían omitirlo; se asume v1. */
+    schemaVersion?: number;
     recordingId: string;
     planId: string;
     resolutions: Array<{ gapId: string; decision: string }>;

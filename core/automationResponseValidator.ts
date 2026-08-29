@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import ts from 'typescript';
 import {
+    AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION,
     AutomationAgentResponse,
     AutomationScenario,
     AutomationValidation,
@@ -697,7 +698,9 @@ export class AutomationResponseValidator {
     ): AutomationValidation {
         const errors: AutomationValidation['errors'] = [];
         const warnings: string[] = [];
-        if (response.schemaVersion !== 1) errors.push({ code: 'schema', message: 'schemaVersion no soportado' });
+        if ((response.schemaVersion ?? AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION) !== AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION) {
+            errors.push({ code: 'schema', message: 'schemaVersion no soportado' });
+        }
         if (response.recordingId !== scenario.recordingId) errors.push({ code: 'recording-id', message: 'recordingId no coincide' });
         if (response.planId !== plan.planId) errors.push({ code: 'plan-id', message: 'planId no coincide' });
         response.resolutions.forEach((resolution, index) => {

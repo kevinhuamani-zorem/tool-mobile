@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {
     ActionResolution,
+    DEFAULT_AGENT_OPERATIONAL_BUDGETS,
     AutomationScenario,
     FrameworkReuseCandidate,
     GenerationPlan,
@@ -11,6 +12,7 @@ import {
     UnresolvedGap,
     AUTOMATION_PIPELINE_VERSION,
     AUTOMATION_SCHEMA_VERSION,
+    normalizeAgentOperationalBudgets,
 } from './automationContracts';
 import { GenerationRequest } from './fwkMobileGenerator';
 import { ArtifactBundle, FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
@@ -1146,7 +1148,7 @@ export class DeterministicResolver {
             reuseTarget,
             ...(repetition ? { repetition } : {}),
             unresolvedGapIds: gaps.map(gap => gap.id),
-            budgets: { maxDurationMs: 300_000, maxContextBytes: 20_000, maxRepairAttempts: 1 },
+            budgets: normalizeAgentOperationalBudgets(DEFAULT_AGENT_OPERATIONAL_BUDGETS),
         };
         return {
             scenario,

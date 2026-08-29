@@ -21,6 +21,8 @@ Cada preparación escribe también:
 ```text
 generation/automation/hints.json
 generation/automation/gaps.json
+generation/automation/query-requests.json
+generation/automation/query-results.json
 ```
 
 `hints.json` contiene IDs estables, tipo, fuente, confidence y evidencia
@@ -33,6 +35,12 @@ La regla operativa es **NO SEARCH WITHOUT GAP**. Una consulta debe nombrar un
 gap `open`, pertenecer a `allowedQueries` y no exceder `maxQueries`. Consultas
 idénticas no se repiten. Un gap resuelto, bloqueante o destinado al QA no
 autoriza búsquedas.
+
+`query-requests.json` y `query-results.json` tienen contrato versionado (`schemaVersion: "1.0"`):
+
+- requests: `id`, `gapId`, `query` y `args` (sin queries arbitrarias).
+- results: `requestId`, `gapId`, `status` (`resolved|rejected|not-found|error`)
+  y `code` estructurado cuando hay rechazo.
 
 ## Salida fwk-mobile
 
@@ -59,6 +67,10 @@ Cada archivo planificado declara `create` o `update`. Un `update` incluye el
 hash del baseline y debe ser aditivo: conserva definitions, methods y locators
 existentes. Si el archivo cambia después de preparar el plan, se bloquea la
 escritura y se debe preparar un paquete nuevo.
+
+El presupuesto operativo del plan vive en una sola fuente (`GenerationPlan.budgets`):
+`maxDurationMs`, `maxContextBytes`, `maxResponseBytes`, `maxAgentInvocations`,
+`maxTotalQueries`, `maxQueriesPerGap` y `maxRepairAttempts`.
 
 Las cuatro capas llevan metadata de procedencia agregada por el recorder:
 `Generado por Appium Visual Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
