@@ -1,5 +1,39 @@
 # Contrato de generación
 
+## Telemetría local
+
+Cada intento mantiene `agent-run.json` junto al paquete de automatización. El
+archivo contiene únicamente contadores, tamaños, duraciones, timestamps,
+identificadores técnicos y estado final. No forma parte del contexto entregado
+al agente y no puede contener prompts, XML, screenshots, secretos ni datos del
+caso. Los tokens son anulables porque el agente se inicia manualmente y el CLI
+actual no garantiza métricas de consumo.
+
+Además registra el número inicial/final de gaps, hints generados/usados, gaps
+resueltos determinísticamente y consultas solicitadas, aceptadas, rechazadas,
+duplicadas o evitadas por ausencia de gap. Una consulta rechazada no incrementa
+`queryCount`, porque CodeGraph no fue consultado.
+
+## Proyecciones de contexto
+
+Cada preparación escribe también:
+
+```text
+generation/automation/hints.json
+generation/automation/gaps.json
+```
+
+`hints.json` contiene IDs estables, tipo, fuente, confidence y evidencia
+compacta como ruta, símbolo o relación. `gaps.json` extiende los gaps existentes
+con intención, razón, estado, responsable de resolución, evidencia requerida,
+esquema de respuesta y presupuesto de consultas. Ambos son derivados;
+`GenerationPlan`, los contextos existentes y el recording siguen autoritativos.
+
+La regla operativa es **NO SEARCH WITHOUT GAP**. Una consulta debe nombrar un
+gap `open`, pertenecer a `allowedQueries` y no exceder `maxQueries`. Consultas
+idénticas no se repiten. Un gap resuelto, bloqueante o destinado al QA no
+autoriza búsquedas.
+
 ## Salida fwk-mobile
 
 Un caso completo puede producir:

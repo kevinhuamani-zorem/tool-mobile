@@ -1649,7 +1649,8 @@ test('memoria solo promociona calidad 100 y recupera la versión más reciente',
 });
 
 // Regla ISTQB: sin resultado esperado no hay caso de prueba. El corte tiene que
-// ser antes de escribir el paquete, o el agente arranca y gasta tokens igual.
+// ser antes de escribir el paquete funcional. Solo queda la telemetría segura
+// del intento fallido; no hay plan ni contexto que permita arrancar al agente.
 test('una grabación sin verificación no llega a armar el paquete', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-sin-then-'));
     const builder = new AutomationPackageBuilder(
@@ -1662,7 +1663,15 @@ test('una grabación sin verificación no llega a armar el paquete', () => {
         ]), root),
         error => error instanceof BlockingGapError && /VERIFICAR_TEXTO/.test(error.message)
     );
-    assert.equal(fs.existsSync(path.join(root, 'generation', 'automation')), false);
+    const failedPackage = path.join(root, 'generation', 'automation');
+    assert.equal(fs.existsSync(path.join(failedPackage, 'generation-plan.json')), false);
+    assert.ok(fs.existsSync(path.join(failedPackage, 'hints.json')));
+    const blockedGaps = JSON.parse(fs.readFileSync(path.join(failedPackage, 'gaps.json'), 'utf-8'));
+    assert.equal(blockedGaps.gaps[0].status, 'blocked-qa');
+    assert.deepEqual(blockedGaps.gaps[0].allowedQueries, []);
+    const run = JSON.parse(fs.readFileSync(path.join(failedPackage, 'agent-run.json'), 'utf-8'));
+    assert.equal(run.result, 'blocked');
+    assert.ok(run.resolverDurationMs >= 0);
 });
 
 test('package builder limita el contexto y deja verificador autocontenido', () => {
@@ -1686,6 +1695,8 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'generation-plan.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'reuse-context.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'collision-report.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'hints.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'gaps.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'locator-candidates.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'verify-package.js')));
     // El verificador del sandbox carga las reglas del modulo compartido; sin la
@@ -1709,6 +1720,22 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         'verify-package.js tiene que ser JavaScript valido'
     );
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'agent-response.json')));
+    const agentRun = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'agent-run.json'), 'utf8'
+    ));
+    assert.equal(agentRun.recordingId, result.recordingId);
+    assert.equal(agentRun.planId, result.planId);
+    assert.equal(agentRun.result, 'ready-for-review');
+    assert.ok(agentRun.resolverDurationMs >= 0);
+    assert.ok(agentRun.validatorDurationMs >= 0);
+    assert.ok(agentRun.contextBytes > 0);
+    assert.ok(agentRun.responseBytes > 0);
+    assert.equal(agentRun.tokensInput, null);
+    assert.equal(agentRun.tokensOutput, null);
+    assert.ok(agentRun.hintsGenerated > 0);
+    assert.equal(agentRun.initialGapCount, 0);
+    assert.equal(agentRun.finalGapCount, 0);
+    assert.equal(agentRun.queriesAccepted, 0);
     const generatedResponse = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'agent-response.json'),
         'utf8'
@@ -1770,8 +1797,8 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.deepEqual(packagedCandidates.actions[0].candidates, [candidate]);
     assert.equal(JSON.stringify(packagedCandidates).includes('screenshot'), false);
     const accounted = [
-        'scenario.json', 'generation-plan.json', 'reuse-context.json',
-        'collision-report.json', 'unresolved-context.json', 'locator-candidates.json',
+        'scenario.json', 'generation-plan.json', 'hints.json', 'gaps.json',
+        'reuse-context.json', 'collision-report.json', 'locator-candidates.json',
         'instructions.md',
     ].reduce((total, name) =>
         total + fs.statSync(path.join(result.packageDirectory, name)).size, 0);

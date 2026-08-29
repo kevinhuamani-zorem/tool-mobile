@@ -33,6 +33,7 @@ export interface ResolverResult {
     plan: GenerationPlan;
     resolvedContext: ResolvedContext;
     unresolvedContext: UnresolvedContext;
+    frameworkMetrics?: SquadReuseCatalog['frameworkMetrics'];
 }
 
 interface CatalogProvider {
@@ -1150,6 +1151,7 @@ export class DeterministicResolver {
         return {
             scenario,
             plan,
+            frameworkMetrics: catalog.frameworkMetrics,
             resolvedContext: {
                 schemaVersion: AUTOMATION_SCHEMA_VERSION,
                 recordingId: scenario.recordingId,

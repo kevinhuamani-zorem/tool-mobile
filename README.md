@@ -42,6 +42,10 @@ Home. El agente no recibe todo `fwk-mobile-test`: recibe selectores ya
 verificados, decisiones de reutilización, APIs relevantes y únicamente el
 contexto necesario para completar los gaps.
 
+El paquete incluye `hints.json` y `gaps.json` como vistas compactas derivadas.
+Las consultas siguen **NO SEARCH WITHOUT GAP**: solo un gap abierto puede
+autorizar búsquedas acotadas al índice incremental del framework.
+
 ## Requisitos
 
 Requisitos generales:
@@ -339,10 +343,18 @@ El paquete contiene como máximo el contexto mínimo necesario:
 - contexto resuelto y gaps pendientes;
 - firmas y fragmentos reutilizables del squad/Home;
 - reglas compactas y verificador autocontenido.
+- `agent-run.json` con métricas locales de duración, cache, lecturas y tamaños;
+  nunca contiene prompts, XML, capturas ni secretos.
 
 El agente escribe `agent-response.json`. El recorder lo importa y aplica un
 validador determinista. Solo una respuesta con score 100 puede llegar al
 preview y promocionarse a memoria reutilizable.
+
+El acceso al framework usa un único CodeGraph incremental. La capa
+`FrameworkQueryService` permite consultar escenarios, Screen Objects, Steps,
+Examples, locators, contrato, helpers e imports con respuestas JSON limitadas
+por cantidad y bytes; una consulta caliente no vuelve a leer archivos que no
+cambiaron.
 
 ## Preview, validación y escritura
 

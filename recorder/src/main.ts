@@ -66,6 +66,7 @@ import {
     requireTrustedLocatorCandidatePackage,
 } from '../../core/selectorCandidates';
 import { independentlyVerifySelectorCandidates } from '../../core/verifiedSelectorCandidates';
+import { AgentRunStore } from '../../core/agentRunStore';
 
 registerEmbeddedInspectorScheme();
 
@@ -1423,6 +1424,7 @@ ipcMain.handle('prepare-automation-regeneration', async (_, input: {
 ipcMain.handle('launch-automation-agent', async () => {
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        new AgentRunStore(activeAutomationPackage).markAgentStarted();
         return {
             success: true,
             launch: automationAgentLauncher.openTerminal(
@@ -1431,13 +1433,22 @@ ipcMain.handle('launch-automation-agent', async () => {
             ),
         };
     } catch (e: any) {
+        if (activeAutomationPackage) {
+            const run = new AgentRunStore(activeAutomationPackage);
+            run.markAgentFinished();
+            run.mark('agent-launch-failed');
+        }
         return { success: false, error: e.message };
     }
 });
 
 ipcMain.handle('import-automation-response', async () => {
+    let runStore: AgentRunStore | undefined;
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        runStore = new AgentRunStore(activeAutomationPackage);
+        runStore.markAgentFinished();
+        runStore.markRepairFinished();
         const read = <T>(name: string): T => JSON.parse(fs.readFileSync(path.join(activeAutomationPackage, name), 'utf-8')) as T;
         const packagedScenario = read<PackagedAutomationScenario>('scenario.json');
         const candidateFile = path.join(activeAutomationPackage, 'locator-candidates.json');
@@ -1450,7 +1461,8 @@ ipcMain.handle('import-automation-response', async () => {
         ) as AutomationScenario;
         const trustedPackagedScenario = automationPackageBuilder.requireTrustedScenarioPackage(
             recordingScenario,
-            packagedScenario
+            packagedScenario,
+            activeAutomationPackage,
         );
         const packagedCandidates = fs.existsSync(candidateFile)
             ? read<LocatorCandidatePackage>('locator-candidates.json')
@@ -1468,6 +1480,7 @@ ipcMain.handle('import-automation-response', async () => {
             read<AutomationAgentResponse>('agent-response.json'),
             scenario.createdAt
         );
+        runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
         fs.writeFileSync(
             path.join(activeAutomationPackage, 'agent-response.json'),
             JSON.stringify(response, null, 2) + '\n'
@@ -1475,7 +1488,9 @@ ipcMain.handle('import-automation-response', async () => {
         const statusFile = path.join(activeAutomationPackage, 'status.json');
         const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
         const repairAttempts = Number(status.repairAttempts || 0);
+        const validatorStarted = process.hrtime.bigint();
         const validation = automationResponseValidator.validate(scenario, plan, response, repairAttempts);
+        runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
         fs.writeFileSync(
             path.join(activeAutomationPackage, 'validation.json'),
             JSON.stringify(validation, null, 2) + '\n'
@@ -1488,6 +1503,7 @@ ipcMain.handle('import-automation-response', async () => {
                     state: 'existing-automation',
                     updatedAt: new Date().toISOString(),
                 }, null, 2) + '\n');
+                runStore.mark('existing-automation', true);
                 return {
                     success: false,
                     validation,
@@ -1496,6 +1512,8 @@ ipcMain.handle('import-automation-response', async () => {
                 };
             }
             if (repairAttempts >= plan.budgets.maxRepairAttempts) {
+                runStore.setRepairAttempts(repairAttempts);
+                runStore.mark('repair-exhausted', true);
                 return { success: false, validation, error: 'Se agotó la única reparación permitida: ' + validation.errors.map(item => item.message).join(' | ') };
             }
             fs.writeFileSync(
@@ -1508,6 +1526,8 @@ ipcMain.handle('import-automation-response', async () => {
                 repairAttempts: repairAttempts + 1,
                 updatedAt: new Date().toISOString(),
             }, null, 2) + '\n');
+            runStore.setRepairAttempts(repairAttempts + 1);
+            runStore.markRepairStarted();
             return {
                 success: false,
                 validation,
@@ -1519,8 +1539,10 @@ ipcMain.handle('import-automation-response', async () => {
         const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
         const token = crypto.randomUUID();
         automationPreview = { token, scenario, plan, response };
+        runStore.mark('ready-for-review');
         return { success: true, preview, validation, previewToken: token, conflicts: managed.conflicts };
     } catch (e: any) {
+        runStore?.mark('import-failed', true);
         return { success: false, error: e.message };
     }
 });
@@ -1633,11 +1655,13 @@ ipcMain.handle('generate-automation-response', async (
     previewToken: string,
     reviewedContents?: Record<string, string>
 ) => {
+    let runStore: AgentRunStore | undefined;
     try {
         if (!automationPreview || automationPreview.token !== previewToken) {
             throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
         }
         const { scenario, plan } = automationPreview;
+        runStore = new AgentRunStore(activeAutomationPackage);
         const response: AutomationAgentResponse = {
             ...automationPreview.response,
             files: automationPreview.response.files.map(file => ({
@@ -1645,7 +1669,10 @@ ipcMain.handle('generate-automation-response', async (
                 content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content,
             })),
         };
+        const validatorStarted = process.hrtime.bigint();
         const validation = automationResponseValidator.validate(scenario, plan, response);
+        runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
+        runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
         if (!validation.valid) throw new Error(validation.errors.map(item => item.message).join(' | '));
         const preview = automationResponseValidator.toPreview(response);
         const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
@@ -1691,8 +1718,10 @@ ipcMain.handle('generate-automation-response', async (
             memoryVersion: memoryEntry.version,
         }, null, 2) + '\n');
         automationPreview = null;
+        runStore.mark('generated', true);
         return { success: true, generated, validation, memoryVersion: memoryEntry.version, patched: patched.outcomes };
     } catch (e: any) {
+        runStore?.mark('generation-failed', true);
         return { success: false, error: e.message };
     }
 });

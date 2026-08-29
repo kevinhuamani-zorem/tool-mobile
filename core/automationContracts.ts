@@ -207,6 +207,75 @@ export interface UnresolvedGap {
      * corregir. El paquete no se arma y el agente nunca arranca.
      */
     blocking?: boolean;
+    /** Campos opcionales de Fase 3; recordings anteriores siguen siendo válidos. */
+    intent?: string;
+    reason?: string;
+    allowedQueries?: FrameworkContextQuery[];
+    maxQueries?: number;
+    expectedAnswerSchema?: Record<string, unknown>;
+    evidenceRequired?: string[];
+    resolvedBy?: GapResolver;
+    status?: GapStatus;
+}
+
+export type FrameworkContextQuery =
+    | 'inspectScenario'
+    | 'findExistingScreen'
+    | 'findExistingStep'
+    | 'findExample'
+    | 'findLocator'
+    | 'getContract'
+    | 'getHelperApi'
+    | 'validateImports';
+
+export type GapResolver = 'qa' | 'deterministic' | 'agent';
+export type GapStatus = 'open' | 'resolved' | 'blocked-qa';
+
+export type AutomationHintType =
+    | 'verified_selector'
+    | 'existing_locator'
+    | 'builtin_action'
+    | 'existing_scenario'
+    | 'existing_step'
+    | 'existing_screen'
+    | 'framework_contract';
+
+export interface AutomationHint {
+    id: string;
+    type: AutomationHintType;
+    confidence: number;
+    source: 'qa-recording' | 'deterministic-resolver' | 'framework-index' | 'framework-contract';
+    symbol?: string;
+    path?: string;
+    intent?: string;
+    relation?: string;
+    evidence?: Record<string, unknown>;
+}
+
+export interface AutomationHintsProjection {
+    schemaVersion: 1;
+    recordingId: string;
+    planId: string;
+    hints: AutomationHint[];
+}
+
+export interface AutomationGap extends Omit<UnresolvedGap, 'resolvedBy'> {
+    intent: string;
+    reason: string;
+    blocking: boolean;
+    allowedQueries: FrameworkContextQuery[];
+    maxQueries: number;
+    expectedAnswerSchema: Record<string, unknown>;
+    evidenceRequired: string[];
+    resolvedBy: GapResolver | null;
+    status: GapStatus;
+}
+
+export interface AutomationGapsProjection {
+    schemaVersion: 1;
+    recordingId: string;
+    planId: string;
+    gaps: AutomationGap[];
 }
 
 export interface UnresolvedContext {

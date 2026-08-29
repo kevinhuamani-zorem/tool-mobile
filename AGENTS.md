@@ -73,6 +73,9 @@ generadores, validadores o plantillas.
 9. **El preprocesador decide antes que el agente.** Selectores verificados,
    rutas, orden de acciones y reutilización exacta en squad/Home son decisiones
    deterministas. El agente solo resuelve los gaps declarados en el plan.
+   Las consultas obedecen **NO SEARCH WITHOUT GAP**: pasan por
+   `GapQueryPolicy`, deben estar autorizadas por el gap abierto y respetar su
+   presupuesto; un gap bloqueante del QA nunca habilita búsquedas del agente.
 10. **IA opt-in y contexto mínimo.** Copilot solo se ejecuta por una
     decisión explícita del usuario. Reciben el paquete confinado bajo
     `runtime/recordings`, sin secretos, y no deben explorar el target ni leer

@@ -41,6 +41,10 @@ La puerta exige:
   relativas ni imports de `browser` sin uso.
 - limpieza de placeholders vacíos al arrancar sin eliminar recordings con
   scenario, acciones o evidencia adicional.
+- proyección determinística de hints/gaps sin sustituir plan ni contextos;
+- política `NO SEARCH WITHOUT GAP`, allowlist por gap, límite de consultas,
+  deduplicación y rechazo de gaps resueltos o bloqueantes;
+- cero consultas al framework cuando el scenario queda completamente resuelto.
 
 ## Control manual
 
@@ -50,6 +54,8 @@ La puerta exige:
    antes de abrir el agente.
 4. Revisar `reuse-context.json` y `collision-report.json`; ningún candidato debe
    obligar al agente a explorar el framework.
+   Revisar primero `hints.json` y `gaps.json`: si `gaps` está vacío no debe
+   existir ninguna consulta permitida y `blocked-qa` debe tener presupuesto cero.
 5. Confirmar que “Abrir Terminal del agente” esté habilitado, abra la carpeta
    mostrada y no ejecute ningún CLI automáticamente.
 6. Copiar el prompt inicial mostrado y comprobar que limita al agente al paquete.

@@ -4,6 +4,7 @@ const colors: Record<CodeGraphNode['type'], string> = {
     feature: '#7E57C2',
     scenario: '#9575CD',
     gherkinStep: '#42A5F5',
+    exampleTable: '#29B6F6',
     stepDefinition: '#26A69A',
     screenObject: '#FFA726',
     method: '#FFCA28',

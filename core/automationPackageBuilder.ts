@@ -7,6 +7,8 @@ import {
     AutomationPackageResult,
     AutomationScenario,
     GenerationPlan,
+    ResolvedContext,
+    UnresolvedContext,
     UnresolvedGap,
 } from './automationContracts';
 import { AutomationMemory } from './automationMemory';
@@ -32,10 +34,23 @@ import {
     requireTrustedAutomationScenarioPackage,
 } from './automationScenarioPackage';
 import type { PackagedAutomationScenario } from './automationScenarioPackage';
+import { AgentRunStore } from './agentRunStore';
+import { deriveAutomationContextProjections, ProjectionInput } from './automationContextProjections';
 
 function writeJson(file: string, value: unknown): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+}
+
+function writeContextProjections(
+    packageDirectory: string,
+    input: ProjectionInput,
+    runStore: AgentRunStore,
+): void {
+    const projections = deriveAutomationContextProjections(input);
+    writeJson(path.join(packageDirectory, 'hints.json'), projections.hints);
+    writeJson(path.join(packageDirectory, 'gaps.json'), projections.gaps);
+    runStore.recordProjectionMetrics(projections.metrics);
 }
 
 function relative(file: string): string {
@@ -207,9 +222,11 @@ function responseSchema(): object {
 function instructions(result: ResolverResult): string {
     const contract = frameworkContract(projectPaths.frameworkRoot);
     return `# Contrato del agente de automatización\n\n` +
-        `Objetivo: resolver únicamente los gaps de \`unresolved-context.json\` y escribir \`agent-response.json\`.\n\n` +
+        `Objetivo: resolver únicamente los gaps abiertos de \`gaps.json\` y escribir \`agent-response.json\`.\n\n` +
         `Reglas:\n` +
-        `- Lee solo: generation-plan.json, reuse-context.json, collision-report.json, unresolved-context.json, scenario.json y locator-candidates.json.\n` +
+        `- Empieza por hints.json, gaps.json, generation-plan.json, scenario.json y locator-candidates.json. resolved-context.json y unresolved-context.json se conservan solo por compatibilidad.\n` +
+        `- NO SEARCH WITHOUT GAP: no solicites contexto si no hay un gap abierto; usa únicamente sus allowedQueries y respeta maxQueries. Un gap blocked-qa no se entrega al agente.\n` +
+        `- Consulta reuse-context.json o collision-report.json solo cuando la evidencia de un hint/gap apunte a ellos.\n` +
         `- No explores el repositorio ni leas XML/capturas salvo que un gap lo pida explícitamente.\n` +
         `- Conserva exactamente recordingId, planId y las cuatro rutas del plan.\n` +
         `- Los selectores verificados y las decisiones reuse/create del plan son definitivos. Los nombres logicos NO: si existe el gap gap-english-naming, renombralos a ingles conservando selector y decision.\n` +
@@ -256,6 +273,7 @@ function regenerationInstructions(
 ): string {
     return `# Refinamiento de una automatización existente\n\n` +
         `Objetivo: mejorar el caso ya generado usando \`baseline-response.json\` y escribir una nueva versión completa en \`agent-response.json\`.\n\n` +
+        `Empieza por hints.json y gaps.json. NO SEARCH WITHOUT GAP: no busques contexto sin un gap abierto y respeta allowedQueries/maxQueries.\n` +
         `Solicitud del QA: ${refinement}\n\n` +
         `Reglas:\n` +
         `- Lee solo: baseline-response.json, generation-plan.json, scenario.json, locator-candidates.json, reuse-context.json, collision-report.json y unresolved-context.json.\n` +
@@ -462,10 +480,25 @@ export class AutomationPackageBuilder {
 
     requireTrustedScenarioPackage(
         recordingScenario: AutomationScenario,
-        packagedScenario: PackagedAutomationScenario
+        packagedScenario: PackagedAutomationScenario,
+        packageDirectory?: string,
     ): AutomationScenario {
-        const resolvedScenario = this.resolver.resolve(recordingScenario).scenario;
-        return requireTrustedAutomationScenarioPackage(resolvedScenario, packagedScenario);
+        const started = process.hrtime.bigint();
+        try {
+            const resolved = this.resolver.resolve(recordingScenario);
+            if (packageDirectory) {
+                const run = new AgentRunStore(packageDirectory);
+                run.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - started) / 1_000_000);
+                run.recordFrameworkAccess(resolved.frameworkMetrics);
+            }
+            return requireTrustedAutomationScenarioPackage(resolved.scenario, packagedScenario);
+        } catch (error) {
+            if (packageDirectory) {
+                const run = new AgentRunStore(packageDirectory);
+                run.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - started) / 1_000_000);
+            }
+            throw error;
+        }
     }
 
     prepareRecordedScenario(
@@ -504,6 +537,7 @@ export class AutomationPackageBuilder {
             writeJson(locatorCandidatesFile, locatorCandidatePackage(scenario));
         }
         const previousPlan = read<GenerationPlan>('generation-plan.json');
+        const runStore = new AgentRunStore(packageDirectory);
         const baseline = read<AutomationAgentResponse>('agent-response.json');
         const previousValidation = fs.existsSync(path.join(packageDirectory, 'validation.json'))
             ? read<any>('validation.json')
@@ -553,11 +587,11 @@ export class AutomationPackageBuilder {
                 const file = path.join(packageDirectory, name);
                 return total + (fs.existsSync(file) ? fs.statSync(file).size : 0);
             }, 0);
-        const contextBytes = serializedContext + retainedContext;
+        let contextBytes = serializedContext + retainedContext;
         // El límite es un objetivo de coste, no una regla: el alcance del caso lo
         // decide el QA y una grabación larga necesita más contexto. Se informa el
         // sobrecosto y se continúa.
-        const contextWarning = contextBytes > plan.budgets.maxContextBytes
+        let contextWarning = contextBytes > plan.budgets.maxContextBytes
             ? `El contexto del refinamiento es de ${contextBytes} bytes y supera el objetivo de ` +
               `${plan.budgets.maxContextBytes}. El agente costará más tokens.`
             : undefined;
@@ -573,7 +607,8 @@ export class AutomationPackageBuilder {
         fs.mkdirSync(historyDirectory, { recursive: true });
         for (const name of [
             'scenario.json', 'locator-candidates.json', 'generation-plan.json',
-            'agent-response.json', 'validation.json', 'status.json',
+            'agent-response.json', 'validation.json', 'status.json', 'agent-run.json',
+            'hints.json', 'gaps.json',
         ]) {
             const source = path.join(packageDirectory, name);
             if (fs.existsSync(source)) fs.copyFileSync(source, path.join(historyDirectory, name));
@@ -607,6 +642,22 @@ export class AutomationPackageBuilder {
             preparedAt: new Date().toISOString(),
             budgets: plan.budgets,
         });
+        runStore.start(revisedScenario.recordingId, plan.planId);
+        const resolvedContextFile = path.join(packageDirectory, 'resolved-context.json');
+        writeContextProjections(packageDirectory, {
+            scenario: revisedScenario,
+            plan,
+            resolvedContext: fs.existsSync(resolvedContextFile) ? read<ResolvedContext>('resolved-context.json') : undefined,
+            unresolvedContext: unresolvedContext as UnresolvedContext,
+        }, runStore);
+        contextBytes += ['hints.json', 'gaps.json'].reduce((total, name) =>
+            total + fs.statSync(path.join(packageDirectory, name)).size, 0);
+        contextWarning = contextBytes > plan.budgets.maxContextBytes
+            ? `El contexto del refinamiento es de ${contextBytes} bytes y supera el objetivo de ` +
+              `${plan.budgets.maxContextBytes}. El agente costará más tokens.`
+            : undefined;
+        runStore.setContextBytes(contextBytes);
+        runStore.mark('ready-for-agent');
         return {
             packageDirectory,
             recordingId: revisedScenario.recordingId,
@@ -625,13 +676,31 @@ export class AutomationPackageBuilder {
     }
 
     prepare(scenario: AutomationScenario, recordingDirectory: string): AutomationPackageResult {
-        const result = this.resolver.resolve(scenario);
+        const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
+        const runStore = new AgentRunStore(packageDirectory);
+        runStore.start(scenario.recordingId);
+        const resolverStarted = process.hrtime.bigint();
+        let result: ResolverResult;
+        try {
+            result = this.resolver.resolve(scenario);
+            runStore.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - resolverStarted) / 1_000_000);
+            runStore.recordFrameworkAccess(result.frameworkMetrics);
+            runStore.setPlan(result.plan.planId);
+        } catch (error) {
+            runStore.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - resolverStarted) / 1_000_000);
+            runStore.mark('resolver-failed', true);
+            throw error;
+        }
         // [visual-recorder] Un gap bloqueante corta antes de crear el paquete:
         // si se escribiera, el agente arrancaria igual y gastaria tokens en un
         // caso que el verificador va a rechazar mas adelante de todos modos.
         const blocking = result.unresolvedContext.gaps.filter(gap => gap.blocking);
-        if (blocking.length) throw new BlockingGapError(blocking);
-        const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
+        writeContextProjections(packageDirectory, result, runStore);
+        if (blocking.length) {
+            runStore.mark('blocked', true);
+            throw new BlockingGapError(blocking);
+        }
+        try {
         fs.mkdirSync(packageDirectory, { recursive: true });
         const memoryHit = this.memory.find(result.scenario.fingerprint);
         if (memoryHit) result.plan.status = 'memory-hit';
@@ -742,8 +811,11 @@ export class AutomationPackageBuilder {
                 response = withGeneratedResponseMetadata(response, result.scenario.createdAt);
             }
             writeJson(path.join(packageDirectory, 'agent-response.json'), response);
+            const validationStarted = process.hrtime.bigint();
             validation = this.validator.validate(result.scenario, result.plan, response);
+            runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validationStarted) / 1_000_000);
             writeJson(path.join(packageDirectory, 'validation.json'), validation);
+            runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
         }
         writeJson(path.join(packageDirectory, 'status.json'), {
             recordingId: result.scenario.recordingId,
@@ -753,8 +825,8 @@ export class AutomationPackageBuilder {
             budgets: result.plan.budgets,
         });
         const contextBytes = [
-            'scenario.json', 'generation-plan.json', 'reuse-context.json',
-            'collision-report.json', 'unresolved-context.json', 'locator-candidates.json',
+            'scenario.json', 'generation-plan.json', 'hints.json', 'gaps.json',
+            'reuse-context.json', 'collision-report.json', 'locator-candidates.json',
             'instructions.md'
         ]
             .reduce((total, file) => total + fs.statSync(path.join(packageDirectory, file)).size, 0);
@@ -766,6 +838,8 @@ export class AutomationPackageBuilder {
               `${result.plan.budgets.maxContextBytes}. El agente costará más tokens; ` +
               `considera dividir la grabación en casos más cortos.`
             : undefined;
+        runStore.setContextBytes(contextBytes);
+        runStore.mark(response ? (validation?.valid ? 'ready-for-review' : 'needs-repair') : 'ready-for-agent');
         return {
             packageDirectory,
             recordingId: result.scenario.recordingId,
@@ -783,5 +857,9 @@ export class AutomationPackageBuilder {
                 ? { frameworkWarnings: frameworkContract(projectPaths.frameworkRoot).warnings }
                 : {}),
         };
+        } catch (error) {
+            runStore.mark('prepare-failed', true);
+            throw error;
+        }
     }
 }

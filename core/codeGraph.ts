@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, recordedStepContext } from './models';
-import { locatorKeysIn } from './reuseAnalyzer';
+import { locatorKeysIn } from './locatorReferences';
 import { importsOf } from './locatorStrategy';
 
 export type CodeNodeType =
-    | 'feature' | 'scenario' | 'gherkinStep'
+    | 'feature' | 'scenario' | 'gherkinStep' | 'exampleTable'
     | 'stepDefinition' | 'screenObject' | 'method' | 'locator'
     | 'module' | 'component' | 'service' | 'ipcChannel'
     | 'domElement' | 'script' | 'test';
@@ -21,7 +21,7 @@ export interface CodeGraphNode {
     file: string;
     squad: string;
     text?: string;
-    metadata?: Record<string, string | boolean>;
+    metadata?: Record<string, string | boolean | number | string[]>;
 }
 
 export interface CodeGraphEdge {
@@ -38,7 +38,7 @@ interface CachedFile {
 }
 
 interface CodeGraphCache {
-    version: 1;
+    version: 2;
     builtAt: string;
     files: Record<string, CachedFile>;
 }
@@ -54,7 +54,39 @@ export interface CodeSubgraph {
         contextReduction: number;
         indexedFiles: number;
         reindexedFiles: number;
+        cacheHit?: boolean;
+        filesExamined?: number;
+        filesRead?: number;
+        bytesRead?: number;
+        indexDurationMs?: number;
     };
+}
+
+export interface CodeGraphBuildMetrics {
+    cacheHit: boolean;
+    filesExamined: number;
+    filesRead: number;
+    bytesRead: number;
+    indexedFiles: number;
+    reindexedFiles: number;
+    indexDurationMs: number;
+}
+
+export interface CodeGraphSnapshot {
+    revision: string;
+    files: string[];
+    nodes: CodeGraphNode[];
+    edges: CodeGraphEdge[];
+    metrics: CodeGraphBuildMetrics;
+}
+
+export interface CodeGraphOptions {
+    frameworkRoot?: string;
+    featureRoot?: string;
+    stepDefinitionsRoot?: string;
+    screenobjectsRoot?: string;
+    locatorsRoot?: string;
+    cacheFile?: string;
 }
 
 const supportedExtensions = new Set(['.feature', '.ts', '.json']);
@@ -154,28 +186,63 @@ function words(value: string): Set<string> {
 }
 
 export class CodeGraph {
-    private cache: CodeGraphCache = { version: 1, builtAt: '', files: {} };
+    private cache: CodeGraphCache = { version: 2, builtAt: '', files: {} };
     private reindexedFiles = 0;
+    private buildMetrics: CodeGraphBuildMetrics = {
+        cacheHit: false,
+        filesExamined: 0,
+        filesRead: 0,
+        bytesRead: 0,
+        indexedFiles: 0,
+        reindexedFiles: 0,
+        indexDurationMs: 0,
+    };
+    private readonly frameworkRoot: string;
+    private readonly roots: string[];
+    private readonly cacheFile: string;
+    private readFiles = new Set<string>();
     private dependentsIndex?: {
         allNodes: CodeGraphNode[];
         allEdges: CodeGraphEdge[];
         byId: Map<string, CodeGraphNode>;
     };
 
-    build(): void {
-        const previous = this.readCache();
-        const roots = [
-            projectPaths.features,
-            projectPaths.stepDefinitions,
-            projectPaths.screenobjects,
-            projectPaths.locators
+    constructor(options: CodeGraphOptions = {}) {
+        this.frameworkRoot = options.frameworkRoot || projectPaths.frameworkRoot;
+        this.roots = [
+            options.featureRoot || (options.frameworkRoot
+                ? path.join(options.frameworkRoot, 'features/yape-features') : projectPaths.features),
+            options.stepDefinitionsRoot || (options.frameworkRoot
+                ? path.join(options.frameworkRoot, 'features/yape-steps-definitions') : projectPaths.stepDefinitions),
+            options.screenobjectsRoot || (options.frameworkRoot
+                ? path.join(options.frameworkRoot, 'screenobjects') : projectPaths.screenobjects),
+            options.locatorsRoot || (options.frameworkRoot
+                ? path.join(options.frameworkRoot, 'resources/locators') : projectPaths.locators),
         ];
-        const files = roots.flatMap(walk);
+        this.cacheFile = options.cacheFile || (options.frameworkRoot
+            ? path.join(options.frameworkRoot, '.visual-recorder-codegraph.json')
+            : projectPaths.codeGraphCache);
+    }
+
+    build(): void {
+        const started = process.hrtime.bigint();
+        const previous = this.readCache();
+        const files = this.roots.flatMap(walk);
         const nextFiles: Record<string, CachedFile> = {};
         this.reindexedFiles = 0;
+        this.readFiles = new Set();
+        this.buildMetrics = {
+            cacheHit: false,
+            filesExamined: files.length,
+            filesRead: 0,
+            bytesRead: 0,
+            indexedFiles: files.length,
+            reindexedFiles: 0,
+            indexDurationMs: 0,
+        };
 
         for (const absolute of files) {
-            const relative = path.relative(projectPaths.frameworkRoot, absolute).replace(/\\/g, '/');
+            const relative = path.relative(this.frameworkRoot, absolute).replace(/\\/g, '/');
             const stat = fs.statSync(absolute);
             const cached = previous.files[relative];
             if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
@@ -192,7 +259,7 @@ export class CodeGraph {
         }
 
         this.cache = {
-            version: 1,
+            version: 2,
             builtAt: new Date().toISOString(),
             files: nextFiles
         };
@@ -201,7 +268,24 @@ export class CodeGraph {
         } else {
             this.addDerivedEdges();
         }
+        this.dependentsIndex = undefined;
         this.writeCache();
+        this.buildMetrics.cacheHit = this.reindexedFiles === 0 && Object.keys(previous.files).length > 0;
+        this.buildMetrics.reindexedFiles = this.reindexedFiles;
+        this.buildMetrics.indexDurationMs = Number(process.hrtime.bigint() - started) / 1_000_000;
+    }
+
+    snapshot(): CodeGraphSnapshot {
+        this.build();
+        const entries = Object.entries(this.cache.files).filter(([file]) => file !== '__derived__');
+        const files = entries.map(([file]) => file).sort();
+        const nodes = Object.values(this.cache.files).flatMap(file => file.nodes);
+        const edges = Object.values(this.cache.files).flatMap(file => file.edges);
+        const revision = files.map(file => {
+            const cached = this.cache.files[file];
+            return `${file}:${cached.mtimeMs}:${cached.size}`;
+        }).join('|');
+        return { revision, files, nodes, edges, metrics: { ...this.buildMetrics } };
     }
 
     /**
@@ -257,6 +341,11 @@ export class CodeGraph {
                 contextReduction: allNodes.length === 0 ? 0 : Math.max(0, 1 - nodes.length / allNodes.length),
                 indexedFiles: Object.keys(this.cache.files).filter(file => file !== '__derived__').length,
                 reindexedFiles: this.reindexedFiles,
+                cacheHit: this.buildMetrics.cacheHit,
+                filesExamined: this.buildMetrics.filesExamined,
+                filesRead: this.buildMetrics.filesRead,
+                bytesRead: this.buildMetrics.bytesRead,
+                indexDurationMs: this.buildMetrics.indexDurationMs,
             },
         };
     }
@@ -362,13 +451,18 @@ export class CodeGraph {
                     : Math.max(0, 1 - selected.length / allNodes.length),
                 indexedFiles: Object.keys(this.cache.files)
                     .filter(file => file !== '__derived__').length,
-                reindexedFiles: this.reindexedFiles
+                reindexedFiles: this.reindexedFiles,
+                cacheHit: this.buildMetrics.cacheHit,
+                filesExamined: this.buildMetrics.filesExamined,
+                filesRead: this.buildMetrics.filesRead,
+                bytesRead: this.buildMetrics.bytesRead,
+                indexDurationMs: this.buildMetrics.indexDurationMs,
             }
         };
     }
 
     private parseFile(absolute: string, relative: string): Pick<CachedFile, 'nodes' | 'edges'> {
-        const content = fs.readFileSync(absolute, 'utf-8');
+        const content = this.read(absolute);
         const squad = squadFrom(relative);
         if (relative.endsWith('.feature')) return this.parseFeature(content, relative, squad);
         if (relative.includes('features/yape-steps-definitions/')) {
@@ -389,7 +483,9 @@ export class CodeGraph {
         let scenarioId = featureId;
         let scenarioIndex = 0;
         let stepIndex = 0;
-        for (const line of content.split(/\r?\n/)) {
+        const lines = content.split(/\r?\n/);
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+            const line = lines[lineIndex];
             const scenario = line.match(/^\s*Scenario(?: Outline)?:\s*(.+)$/i);
             if (scenario) {
                 scenarioIndex += 1;
@@ -406,6 +502,26 @@ export class CodeGraph {
                 const id = nodeId('gherkinStep', file, step[2].trim(), stepIndex);
                 nodes.push({
                     id, type: 'gherkinStep', name: step[1], text: step[2].trim(), file, squad
+                });
+                edges.push({ from: scenarioId, to: id, type: 'contains' });
+                continue;
+            }
+            if (/^\s*Examples:\s*$/i.test(line)) {
+                const table: string[] = [];
+                let cursor = lineIndex + 1;
+                while (cursor < lines.length && /^\s*\|.*\|\s*$/.test(lines[cursor])) {
+                    table.push(lines[cursor]);
+                    cursor += 1;
+                }
+                const headers = table[0]?.split('|').map(value => value.trim()).filter(Boolean) || [];
+                const id = nodeId('exampleTable', file, `Examples ${scenarioIndex}`, scenarioIndex);
+                nodes.push({
+                    id,
+                    type: 'exampleTable',
+                    name: 'Examples',
+                    file,
+                    squad,
+                    metadata: { headers, rowCount: Math.max(0, table.length - 1) },
                 });
                 edges.push({ from: scenarioId, to: id, type: 'contains' });
             }
@@ -427,7 +543,8 @@ export class CodeGraph {
                 name: match[1],
                 text: expression,
                 file,
-                squad
+                squad,
+                metadata: { signature: `${match[1]}(/^${expression}$/)` },
             });
         }
         return { nodes, edges: [] };
@@ -449,7 +566,8 @@ export class CodeGraph {
             if (match[1] === 'constructor' || CONTROL_KEYWORDS.has(match[1])) continue;
             index += 1;
             const id = nodeId('method', file, match[1], index);
-            nodes.push({ id, type: 'method', name: match[1], file, squad });
+            const signature = match[0].slice(0, match[0].lastIndexOf('{')).trim();
+            nodes.push({ id, type: 'method', name: match[1], file, squad, metadata: { signature } });
             edges.push({ from: screenId, to: id, type: 'contains' });
         }
         return { nodes, edges };
@@ -459,7 +577,11 @@ export class CodeGraph {
         const nodes: CodeGraphNode[] = [];
         try {
             const document = JSON.parse(content) as Record<string, Record<string, unknown>>;
-            const names = new Map<string, { android: boolean; ios: boolean }>();
+            const names = new Map<string, {
+                android: boolean; ios: boolean;
+                androidSelector?: string; iosSelector?: string;
+                androidBlock?: string; iosBlock?: string;
+            }>();
             for (const [block, values] of Object.entries(document)) {
                 if (!values || typeof values !== 'object' || Array.isArray(values)) continue;
                 const platform = /ios$/i.test(block) ? 'ios' : /android$/i.test(block) ? 'android' : '';
@@ -467,6 +589,10 @@ export class CodeGraph {
                 for (const [name, value] of Object.entries(values)) {
                     const coverage = names.get(name) || { android: false, ios: false };
                     coverage[platform] = typeof value === 'string' && Boolean(value.trim());
+                    if (typeof value === 'string') {
+                        coverage[`${platform}Selector`] = value.trim();
+                        coverage[`${platform}Block`] = block;
+                    }
                     names.set(name, coverage);
                 }
             }
@@ -530,7 +656,7 @@ export class CodeGraph {
 
         const read = (relative: string): string => {
             try {
-                return fs.readFileSync(path.join(projectPaths.frameworkRoot, relative), 'utf-8');
+                return this.read(path.join(this.frameworkRoot, relative));
             } catch {
                 return '';
             }
@@ -577,7 +703,7 @@ export class CodeGraph {
         for (const [screenFile, fileMethods] of methodsByFile) {
             const content = read(screenFile);
             if (!content) continue;
-            const modules = [...importsOf(path.join(projectPaths.frameworkRoot, screenFile)).keys()];
+            const modules = [...importsOf(path.join(this.frameworkRoot, screenFile)).keys()];
             const available = modules
                 .map(module => `resources/locators/${module}.locator.json`)
                 .filter(file => locatorsByFile.has(file));
@@ -634,16 +760,26 @@ export class CodeGraph {
 
     private readCache(): CodeGraphCache {
         try {
-            const parsed = JSON.parse(fs.readFileSync(projectPaths.codeGraphCache, 'utf-8'));
-            if (parsed?.version === 1 && parsed.files) return parsed;
+            const parsed = JSON.parse(fs.readFileSync(this.cacheFile, 'utf-8'));
+            if (parsed?.version === 2 && parsed.files) return parsed;
         } catch { /* cache inexistente o corrupto */ }
-        return { version: 1, builtAt: '', files: {} };
+        return { version: 2, builtAt: '', files: {} };
     }
 
     private writeCache(): void {
-        fs.mkdirSync(path.dirname(projectPaths.codeGraphCache), { recursive: true });
-        const temporary = `${projectPaths.codeGraphCache}.${process.pid}.tmp`;
+        fs.mkdirSync(path.dirname(this.cacheFile), { recursive: true });
+        const temporary = `${this.cacheFile}.${process.pid}.tmp`;
         fs.writeFileSync(temporary, JSON.stringify(this.cache));
-        fs.renameSync(temporary, projectPaths.codeGraphCache);
+        fs.renameSync(temporary, this.cacheFile);
+    }
+
+    private read(file: string): string {
+        const content = fs.readFileSync(file, 'utf-8');
+        if (!this.readFiles.has(file)) {
+            this.readFiles.add(file);
+            this.buildMetrics.filesRead += 1;
+            this.buildMetrics.bytesRead += Buffer.byteLength(content, 'utf-8');
+        }
+        return content;
     }
 }

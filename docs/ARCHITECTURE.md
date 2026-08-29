@@ -73,13 +73,15 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 |---|---|---|
 | Sesión | `appiumDriverManager`, `browserStackDriverManager`, `mobileStepExecutor` | Conectar, capturar, tocar, gestos y ejecutar acciones |
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver la raíz padre y el catálogo del framework |
-| Automatización | `automationRecordingStore`, `deterministicResolver`, `automationPackageBuilder` | Recording, plan y contexto mínimo |
+| Automatización | `automationRecordingStore`, `deterministicResolver`, `automationContextProjections`, `automationPackageBuilder` | Recording, plan, hints/gaps derivados y contexto mínimo |
 | IA acotada | `automationAgentLauncher`, `automationContracts` | Abrir Terminal en el paquete y entregar un prompt acotado; el usuario inicia el agente |
 | Validación/memoria | `automationResponseValidator`, `automationMemory` | Validar, reparar una vez y versionar score 100 |
 | Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
 | Análisis | `reuseAnalyzer`, `scenarioCoverageAnalyzer` | Impacto de steps y cobertura Android/iOS |
-| Indexación | `codeGraph`, `recorderCodeGraph`, exporters | Relaciones del framework y del propio recorder |
+| Indexación | `codeGraph`, `frameworkQueryService`, `recorderCodeGraph`, exporters | Inventario incremental único y consultas acotadas del framework; grafo separado del propio recorder |
+| Política contextual | `gapQueryPolicy` | Autorizar consultas solo para gaps abiertos, con allowlist, deduplicación y presupuesto |
+| Observabilidad | `agentRunStore` | Métricas seguras por ejecución en `agent-run.json` |
 | Modelo | `models` | Acciones, steps y tipos compartidos |
 
 ## Workspace
@@ -156,6 +158,55 @@ convierte por sí solo un selector manual en verificado.
    son `create`; no dependen de que exista un `update` en el plan.
 9. Puede emitirse una sola reparación dirigida a archivos afectados.
 10. El usuario revisa el preview, genera y recién entonces se promociona memoria.
+
+### Observabilidad por ejecución
+
+Cada preparación real inicia
+`runtime/recordings/<id>/generation/automation/agent-run.json`. El mismo
+artefacto se actualiza durante resolución, apertura manual del agente,
+validación, reparación y generación, incluso si el flujo termina con error.
+Registra duraciones, lecturas del índice, bytes de contexto/respuesta, intentos
+de reparación y resultado. `tokensInput` y `tokensOutput` permanecen en `null`
+mientras el CLI no exponga esos datos. No almacena prompts, XML, capturas,
+selectores, secretos ni mensajes de error.
+
+### Índice y consultas del framework
+
+`CodeGraph` es la fuente autoritativa del inventario de Features, Steps, Screen
+Objects y locators. Su cache compara `mtime` y tamaño por archivo: una consulta
+en frío indexa el framework, una consulta caliente reutiliza todos los nodos y
+una modificación reindexa únicamente los archivos cambiados antes de reconstruir
+relaciones derivadas.
+
+`FrameworkQueryService` expone respuestas JSON pequeñas para
+`inspectScenario`, `findExistingScreen`, `findExistingStep`, `findExample`,
+`findLocator`, `getContract`, `getHelperApi` y `validateImports`. Todas aplican
+límites de resultados/bytes, devuelven rutas, símbolos, firmas y relaciones,
+y reportan `cacheHit`, archivos examinados/leídos y bytes leídos. Nunca incluyen
+el contenido completo de un archivo por defecto.
+
+`ReuseAnalyzer` conserva su contrato para no romper el resolver ni el scanner,
+pero obtiene del CodeGraph el inventario y la revisión del framework y cachea
+el catálogo por revisión, squad, plataforma y feature scope. Ya no descubre
+Steps ni Screen Objects con un segundo recorrido independiente. La migración
+de sus analizadores de contenido restantes será gradual.
+
+### Hints, gaps y política de consultas
+
+Después del resolver, `automationContextProjections` deriva dos vistas compactas:
+`hints.json` describe decisiones que ya tienen evidencia y `gaps.json` normaliza
+únicamente lo que continúa faltando. Son proyecciones de `GenerationPlan`,
+`resolved-context.json` y `unresolved-context.json`; no reemplazan esas fuentes.
+
+La confianza no se estima libremente: coincidencias exactas, selectores
+verificados y contratos resueltos valen `1`; las relaciones usan el score ya
+calculado por el índice/resolver. Una relación sin score no genera hint.
+
+`GapQueryPolicy` es la entrada para consultas contextuales. Sin gap abierto
+rechaza antes de tocar CodeGraph. Con gap abierto solo acepta `allowedQueries`
+hasta `maxQueries`, evita solicitudes idénticas y deja de consultar al resolver
+el gap. Los gaps `blocked-qa` tienen presupuesto cero. En esta fase la política
+se valida determinísticamente; todavía no existe orquestador ni integración CLI.
 
 ### Completar plataforma de un caso existente
 

@@ -4,6 +4,10 @@ import ts from 'typescript';
 import path from 'path';
 import { projectPaths } from './projectPaths';
 import { featureScopeDirectory, normalizeFeatureScope } from './featureScope';
+import { CodeGraph, CodeGraphBuildMetrics } from './codeGraph';
+import { locatorKeysIn } from './locatorReferences';
+
+export { locatorKeysIn } from './locatorReferences';
 
 export interface StepDefinitionInfo {
     keyword: 'Given' | 'When' | 'Then';
@@ -85,6 +89,8 @@ export interface SquadReuseCatalog {
     features: FeatureStepGroup[];
     scenarios: FeatureScenarioInfo[];
     artifactBundles: ArtifactBundle[];
+    /** Telemetría del acceso que produjo este catálogo; no forma parte del contexto del agente. */
+    frameworkMetrics?: CodeGraphBuildMetrics & { queryCount: number };
 }
 
 export interface FeatureScenarioInfo {
@@ -112,21 +118,6 @@ export interface FeatureStepGroup {
     stepDefinitions: StepDefinitionInfo[];
 }
 
-function walkTypeScript(root: string): string[] {
-    if (!fs.existsSync(root)) return [];
-    const output: string[] = [];
-    const pending = [root];
-    while (pending.length > 0) {
-        const current = pending.pop()!;
-        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-            const fullPath = path.join(current, entry.name);
-            if (entry.isDirectory()) pending.push(fullPath);
-            else if (entry.isFile() && entry.name.endsWith('.ts')) output.push(fullPath);
-        }
-    }
-    return output.sort();
-}
-
 function safeRegex(expression: string): RegExp | undefined {
     try {
         return new RegExp(expression);
@@ -138,8 +129,20 @@ function safeRegex(expression: string): RegExp | undefined {
 export class ReuseAnalyzer {
     private stepDefinitions: StepDefinitionInfo[] = [];
     private screenMethods: ScreenMethodInfo[] = [];
+    private graphRevision = '';
+    private frameworkFiles: string[] = [];
+    private lastMetrics?: CodeGraphBuildMetrics & { queryCount: number };
+    private catalogCache = new Map<string, SquadReuseCatalog>();
+
+    constructor(private readonly graph = new CodeGraph()) {}
 
     refresh(): void {
+        const snapshot = this.graph.snapshot();
+        this.lastMetrics = { ...snapshot.metrics, queryCount: 1 };
+        if (snapshot.revision === this.graphRevision && this.stepDefinitions.length) return;
+        this.graphRevision = snapshot.revision;
+        this.frameworkFiles = snapshot.files;
+        this.catalogCache.clear();
         this.stepDefinitions = this.indexStepDefinitions();
         this.screenMethods = this.indexScreenMethods();
     }
@@ -209,33 +212,20 @@ export class ReuseAnalyzer {
         text: string;
     }[] {
         const usages: { feature: string; scenario: string; file: string; text: string }[] = [];
-        if (!fs.existsSync(projectPaths.features)) return usages;
-        const pending = [projectPaths.features];
-        while (pending.length) {
-            const current = pending.pop()!;
-            for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-                const fullPath = path.join(current, entry.name);
-                if (entry.isDirectory()) {
-                    pending.push(fullPath);
-                    continue;
-                }
-                if (!entry.isFile() || !entry.name.endsWith('.feature')) continue;
-                let feature = entry.name.replace(/\.feature$/, '');
-                let scenario = 'Sin escenario';
-                for (const line of fs.readFileSync(fullPath, 'utf-8').split(/\r?\n/)) {
-                    const featureMatch = line.match(/^\s*Feature:\s*(.+)$/i);
-                    if (featureMatch) feature = featureMatch[1].trim();
-                    const scenarioMatch = line.match(/^\s*Scenario(?: Outline)?:\s*(.+)$/i);
-                    if (scenarioMatch) scenario = scenarioMatch[1].trim();
-                    const stepMatch = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
-                    if (stepMatch) {
-                        usages.push({
-                            feature,
-                            scenario,
-                            file: path.relative(projectPaths.frameworkRoot, fullPath),
-                            text: stepMatch[1].trim()
-                        });
-                    }
+        for (const relativeFile of this.frameworkFiles.filter(file =>
+            file.startsWith('features/yape-features/') && file.endsWith('.feature')
+        )) {
+            const fullPath = path.join(projectPaths.frameworkRoot, relativeFile);
+            let feature = path.basename(relativeFile).replace(/\.feature$/, '');
+            let scenario = 'Sin escenario';
+            for (const line of this.readFrameworkFile(fullPath).split(/\r?\n/)) {
+                const featureMatch = line.match(/^\s*Feature:\s*(.+)$/i);
+                if (featureMatch) feature = featureMatch[1].trim();
+                const scenarioMatch = line.match(/^\s*Scenario(?: Outline)?:\s*(.+)$/i);
+                if (scenarioMatch) scenario = scenarioMatch[1].trim();
+                const stepMatch = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+                if (stepMatch) {
+                    usages.push({ feature, scenario, file: relativeFile, text: stepMatch[1].trim() });
                 }
             }
         }
@@ -251,10 +241,14 @@ export class ReuseAnalyzer {
     }
 
     getCatalog(squad: string, platform: 'android' | 'ios', featureScope = ''): SquadReuseCatalog {
+        const started = process.hrtime.bigint();
         this.refresh();
         const normalizedScope = normalizeFeatureScope(featureScope);
+        const cacheKey = `${this.graphRevision}|${squad}|${platform}|${normalizedScope}`;
+        const cached = this.catalogCache.get(cacheKey);
+        if (cached) return { ...cached, frameworkMetrics: this.lastMetrics };
         const stepDefinitions = this.getStepDefinitions(squad);
-        return {
+        const catalog: SquadReuseCatalog = {
             squad,
             featureScope: normalizedScope,
             platform,
@@ -264,7 +258,13 @@ export class ReuseAnalyzer {
             features: this.indexFeatureSteps(squad, stepDefinitions, normalizedScope),
             scenarios: this.indexFeatureScenarios(squad, normalizedScope, stepDefinitions),
             artifactBundles: this.indexArtifactBundles(squad, stepDefinitions),
+            frameworkMetrics: this.lastMetrics,
         };
+        if (this.lastMetrics) {
+            this.lastMetrics.indexDurationMs = Number(process.hrtime.bigint() - started) / 1_000_000;
+        }
+        this.catalogCache.set(cacheKey, catalog);
+        return catalog;
     }
 
     private indexFeatureScenarios(
@@ -274,12 +274,12 @@ export class ReuseAnalyzer {
     ): FeatureScenarioInfo[] {
         const root = featureScopeDirectory(projectPaths.features, squad, featureScope);
         if (!fs.existsSync(root)) return [];
-        const files = this.walkFiles(root, '.feature');
+        const files = this.filesUnder(root, '.feature');
         const scenarios: FeatureScenarioInfo[] = [];
         for (const file of files) {
             const relativeFeature = path.relative(projectPaths.frameworkRoot, file).replace(/\\/g, '/');
             const basename = path.basename(file, '.feature');
-            const content = fs.readFileSync(file, 'utf-8');
+            const content = this.readFrameworkFile(file);
             const feature = content.match(/^\s*Feature:\s*(.+)$/mi)?.[1]?.trim() || basename;
             const lines = content.split(/\r?\n/);
             let current: FeatureScenarioInfo | undefined;
@@ -374,7 +374,7 @@ export class ReuseAnalyzer {
     ): string[] {
         const absoluteFile = path.join(projectPaths.frameworkRoot, relativeFile);
         if (!fs.existsSync(absoluteFile)) return [];
-        const content = fs.readFileSync(absoluteFile, 'utf-8');
+        const content = this.readFrameworkFile(absoluteFile);
         const imports = [...content.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)]
             .map(match => match[1]);
         const alias = target === 'screenobjects' ? '@screenobjects/' : '@locators/';
@@ -411,11 +411,14 @@ export class ReuseAnalyzer {
         const definitions: StepDefinitionInfo[] = [];
         const pattern = /\b(Given|When|Then)\s*\(\s*\/((?:\\\/|[^/])+)\/[dgimsuvy]*\s*,/g;
 
-        for (const file of walkTypeScript(projectPaths.stepDefinitions)) {
+        for (const relativeFile of this.frameworkFiles.filter(file =>
+            file.startsWith('features/yape-steps-definitions/') && file.endsWith('.ts')
+        )) {
+            const file = path.join(projectPaths.frameworkRoot, relativeFile);
             const relativeToSteps = path.relative(projectPaths.stepDefinitions, file);
             const squad = relativeToSteps.split(path.sep)[0];
             if (!squad || squad === '..') continue;
-            const content = fs.readFileSync(file, 'utf-8');
+            const content = this.readFrameworkFile(file);
             let match: RegExpExecArray | null;
             while ((match = pattern.exec(content)) !== null) {
                 definitions.push({
@@ -434,25 +437,21 @@ export class ReuseAnalyzer {
         const indexed: LocatorInfo[] = [];
         const strategies = indexDeclaredStrategies();
         const sources: { directory: string; squad: string; scope: LocatorInfo['scope'] }[] = [
-            { directory: projectPaths.locators, squad: 'global', scope: 'global' },
-            { directory: path.join(projectPaths.locators, 'home'), squad: 'home', scope: 'home' },
+            { directory: path.join(projectPaths.locators, squad), squad, scope: 'squad' },
             { directory: path.join(projectPaths.locators, 'commons'), squad: 'commons', scope: 'commons' },
-            { directory: path.join(projectPaths.locators, squad), squad, scope: 'squad' }
+            { directory: path.join(projectPaths.locators, 'home'), squad: 'home', scope: 'home' },
+            { directory: projectPaths.locators, squad: 'global', scope: 'global' },
         ];
 
         for (const source of sources) {
             const files = source.scope === 'global'
-                ? (fs.existsSync(source.directory)
-                    ? fs.readdirSync(source.directory, { withFileTypes: true })
-                        .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
-                        .map(entry => path.join(source.directory, entry.name))
-                    : [])
-                : this.walkJson(source.directory);
+                ? this.filesUnder(source.directory, '.json').filter(file => path.dirname(file) === source.directory)
+                : this.filesUnder(source.directory, '.json');
 
             for (const file of files) {
                 let document: Record<string, unknown>;
                 try {
-                    document = JSON.parse(fs.readFileSync(file, 'utf-8'));
+                    document = JSON.parse(this.readFrameworkFile(file));
                 } catch {
                     continue;
                 }
@@ -524,23 +523,13 @@ export class ReuseAnalyzer {
         );
     }
 
-    private walkJson(root: string): string[] {
-        return this.walkFiles(root, '.json');
-    }
-
-    private walkFiles(root: string, extension: string): string[] {
-        if (!fs.existsSync(root)) return [];
-        const output: string[] = [];
-        const pending = [root];
-        while (pending.length > 0) {
-            const current = pending.pop()!;
-            for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-                const fullPath = path.join(current, entry.name);
-                if (entry.isDirectory()) pending.push(fullPath);
-                else if (entry.isFile() && entry.name.endsWith(extension)) output.push(fullPath);
-            }
-        }
-        return output.sort();
+    /** Inventario único: CodeGraph descubre archivos; ReuseAnalyzer solo filtra. */
+    private filesUnder(root: string, extension: string): string[] {
+        const prefix = path.relative(projectPaths.frameworkRoot, root)
+            .replace(/\\/g, '/').replace(/\/$/, '');
+        return this.frameworkFiles.filter(file =>
+            file.endsWith(extension) && (file === prefix || file.startsWith(`${prefix}/`))
+        ).map(file => path.join(projectPaths.frameworkRoot, file));
     }
 
     private indexFeatureSteps(
@@ -550,19 +539,10 @@ export class ReuseAnalyzer {
     ): FeatureStepGroup[] {
         const root = featureScopeDirectory(projectPaths.features, squad, featureScope);
         if (!fs.existsSync(root)) return [];
-        const files: string[] = [];
-        const pending = [root];
-        while (pending.length > 0) {
-            const current = pending.pop()!;
-            for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-                const fullPath = path.join(current, entry.name);
-                if (entry.isDirectory()) pending.push(fullPath);
-                else if (entry.isFile() && entry.name.endsWith('.feature')) files.push(fullPath);
-            }
-        }
+        const files = this.filesUnder(root, '.feature');
 
         return files.sort().map(file => {
-            const content = fs.readFileSync(file, 'utf-8');
+            const content = this.readFrameworkFile(file);
             const featureName = content.match(/^\s*Feature:\s*(.+)$/mi)?.[1]?.trim()
                 || path.basename(file, '.feature');
             const texts = [...content.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gmi)]
@@ -584,11 +564,14 @@ export class ReuseAnalyzer {
 
     private indexScreenMethods(): ScreenMethodInfo[] {
         const methods: ScreenMethodInfo[] = [];
-        for (const file of walkTypeScript(projectPaths.screenobjects)) {
+        for (const relativeFile of this.frameworkFiles.filter(file =>
+            file.startsWith('screenobjects/') && file.endsWith('.ts')
+        )) {
+            const file = path.join(projectPaths.frameworkRoot, relativeFile);
             const relative = path.relative(projectPaths.screenobjects, file);
             const squad = relative.split(path.sep)[0];
             const frameworkRelative = path.relative(projectPaths.frameworkRoot, file);
-            const content = fs.readFileSync(file, 'utf-8');
+            const content = this.readFrameworkFile(file);
             const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
             const locatorFiles = this.importedFrameworkFiles(frameworkRelative, 'locators');
             for (const declaration of source.statements) {
@@ -623,18 +606,15 @@ export class ReuseAnalyzer {
         }
         return methods;
     }
-}
 
-/** Claves alcanzadas como `Locators["bloqueAndroid"].clave` o `Locators.bloqueIos.clave`. */
-export function locatorKeysIn(text: string): string[] {
-    const keys = new Set<string>();
-    for (const match of text.matchAll(/[A-Za-z_$][\w$]*\s*\[\s*["'][^"']+["']\s*\]\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
-        keys.add(match[1]);
+    private readFrameworkFile(file: string): string {
+        const content = fs.readFileSync(file, 'utf-8');
+        if (this.lastMetrics) {
+            this.lastMetrics.filesRead += 1;
+            this.lastMetrics.bytesRead += Buffer.byteLength(content, 'utf-8');
+        }
+        return content;
     }
-    for (const match of text.matchAll(/[A-Za-z_$][\w$]*\s*\.\s*[A-Za-z_$][\w$]*(?:Android|Ios)\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
-        keys.add(match[1]);
-    }
-    return [...keys];
 }
 
 function methodSignature(member: ts.MethodDeclaration, source: ts.SourceFile): string {
