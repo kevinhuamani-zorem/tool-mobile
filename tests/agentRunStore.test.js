@@ -32,6 +32,8 @@ test('agent-run registra éxito, cache y tiempos sin contenido sensible', () => 
     assert.equal(artifact.bytesRead, 500);
     assert.equal(artifact.queryCount, 1);
     assert.equal(artifact.cacheHits, 1);
+    assert.equal(artifact.totalContextBytes, 0);
+    assert.equal(artifact.aggregatedContextBytes, 0);
     assert.equal(artifact.tokensInput, null);
     assert.equal(artifact.tokensOutput, null);
     assert.equal(artifact.result, 'generated');
@@ -54,4 +56,69 @@ test('agent-run conserva métricas y resultado en una ejecución fallida', () =>
     assert.equal(artifact.repairDurationMs, 30);
     assert.equal(artifact.repairAttempts, 1);
     assert.ok(artifact.finishedAt);
+});
+
+test('agent-run guarda contexto por pasada y breakdown', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-run-context-'));
+    const store = new AgentRunStore(root);
+    store.start('recording-pass');
+    store.setPassContext('pass1', 900, {
+        promptBaseBytes: 10,
+        instructionsBytes: 10,
+        scenarioBytes: 200,
+        generationPlanBytes: 120,
+        hintsBytes: 100,
+        gapsBytes: 80,
+        frameworkApiBytes: 0,
+        reuseContextBytes: 0,
+        resolvedContextBytes: 0,
+        unresolvedContextBytes: 0,
+        locatorCandidatesBytes: 0,
+        collisionReportBytes: 0,
+        queryRequestsBytes: 0,
+        queryResultsBytes: 0,
+        queryContractBytes: 40,
+        wrapperBytes: 340,
+        totalBytes: 900,
+    });
+
+    test('setContextBytes no altera totalContextBytes sin pasadas de agente', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-run-context-total-'));
+        const store = new AgentRunStore(root);
+        store.start('recording-pass');
+        store.setContextBytes(15560);
+        const artifact = store.read();
+        assert.equal(artifact.contextBytes, 15560);
+        assert.equal(artifact.pass1ContextBytes, 0);
+        assert.equal(artifact.pass2ContextBytes, 0);
+        assert.equal(artifact.totalContextBytes, 0);
+        assert.equal(artifact.aggregatedContextBytes, 0);
+    });
+    store.setPassContext('pass2', 1200, {
+        promptBaseBytes: 12,
+        instructionsBytes: 18,
+        scenarioBytes: 300,
+        generationPlanBytes: 150,
+        hintsBytes: 100,
+        gapsBytes: 80,
+        frameworkApiBytes: 180,
+        reuseContextBytes: 120,
+        resolvedContextBytes: 0,
+        unresolvedContextBytes: 0,
+        locatorCandidatesBytes: 90,
+        collisionReportBytes: 60,
+        queryRequestsBytes: 0,
+        queryResultsBytes: 40,
+        queryContractBytes: 40,
+        wrapperBytes: 10,
+        totalBytes: 1200,
+    });
+    const artifact = store.read();
+    assert.equal(artifact.pass1ContextBytes, 900);
+    assert.equal(artifact.pass2ContextBytes, 1200);
+    assert.equal(artifact.contextBytes, 1200);
+    assert.equal(artifact.totalContextBytes, 2100);
+    assert.equal(artifact.aggregatedContextBytes, 2100);
+    assert.equal(artifact.pass1ContextBreakdown.totalBytes, 900);
+    assert.equal(artifact.pass2ContextBreakdown.totalBytes, 1200);
 });

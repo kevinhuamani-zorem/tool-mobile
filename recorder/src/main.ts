@@ -13,8 +13,7 @@ import { MobileInspector } from './mobileInspector';
 import { MobileStepExecutor } from '../../core/mobileStepExecutor';
 import { LocatorManager } from '../../core/locatorManager';
 import { FeatureGenerator } from './featureGenerator';
-import { RecordedStep } from '../../core/models';
-import { SelectorCandidate } from '../../core/models';
+import { RecordedStep, SelectorCandidate } from '../../core/models';
 import { projectPaths } from '../../core/projectPaths';
 import { FrameworkScanner } from '../../core/frameworkScanner';
 import { FwkMobileGenerator, GenerationRequest, MobilePlatform, GeneratedPreview } from '../../core/fwkMobileGenerator';
@@ -49,6 +48,8 @@ import {
     DEFAULT_AGENT_EXECUTION_MODE,
     GenerationPlan,
     AgentExecutionMode,
+    AUTOMATION_GAP_RESOLUTIONS_SCHEMA_VERSION,
+    GapResolution,
 } from '../../core/automationContracts';
 import {
     EmbeddedInspectorElementUsed,
@@ -66,17 +67,20 @@ import {
 } from './embeddedInspectorWindow';
 import { EmbeddedInspectorProxy } from './embeddedInspectorProxy';
 import { RecorderRuntimeLifecycle, RecorderSessionOwnership } from './recorderLifecycle';
-import {
-    attachLocatorCandidatePackage,
-    LocatorCandidatePackage,
-    requireTrustedLocatorCandidatePackage,
-} from '../../core/selectorCandidates';
 import { independentlyVerifySelectorCandidates } from '../../core/verifiedSelectorCandidates';
 import { AgentRunStore } from '../../core/agentRunStore';
 import { FrameworkQueryService } from '../../core/frameworkQueryService';
 import { CopilotCliAdapter } from '../../core/copilotCliAdapter';
+import { VisibleCopilotProvider } from '../../core/visibleCopilotProvider';
 import { AgentOrchestrator } from '../../core/agentOrchestrator';
 import { resolveAgentExecutionMode } from '../../core/agentRuntimeGuards';
+import { DeterministicGenerator } from '../../core/deterministicGenerator';
+import {
+    normalizeAgentResponseEnglishIdentifiers,
+} from '../../core/agentResponseEnglishNormalizer';
+import {
+    enforceAgentResponsePlatformTags,
+} from '../../core/agentResponsePlatformTagEnforcer';
 
 registerEmbeddedInspectorScheme();
 
@@ -110,7 +114,9 @@ const recordingCoverageAnalyzer = new RecordingCoverageAnalyzer();
 const recordingPlatformUpdater = new RecordingPlatformUpdater();
 const frameworkQueryService = new FrameworkQueryService();
 const copilotCliAdapter = new CopilotCliAdapter();
-const agentOrchestrator = new AgentOrchestrator(frameworkQueryService, copilotCliAdapter);
+const visibleCopilotProvider = new VisibleCopilotProvider(copilotCliAdapter, automationAgentLauncher);
+const agentOrchestrator = new AgentOrchestrator(frameworkQueryService, visibleCopilotProvider);
+const deterministicGenerator = new DeterministicGenerator();
 const approvedPreviews = new Map<string, string>();
 let locatorManager   = new LocatorManager(projectPaths.locators, 'global', 'android');
 // Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
@@ -138,11 +144,129 @@ let automationPreview: {
 } | null = null;
 let pendingInspectorCandidates: {
     token: string;
-    primarySelector: string;
+    selector: string;
     candidates: SelectorCandidate[];
 } | null = null;
 let inspectorValidationGeneration = 0;
 const sessionOwnership = new RecorderSessionOwnership();
+
+interface QaDecisionOption {
+    optionId: string;
+    title: string;
+    reason: string;
+    decision: 'reuse' | 'create';
+    symbol?: string;
+    candidate?: { file: string; module: string; name: string };
+}
+
+interface QaDecisionPrompt {
+    gapId: string;
+    title: string;
+    description: string;
+    requiredOutput: string;
+    options: QaDecisionOption[];
+}
+
+type ProductStage =
+    | 'ANALYZING'
+    | 'RESOLVING_CONTEXT'
+    | 'RESOLVING_DECISIONS'
+    | 'WAITING_FOR_QA'
+    | 'GENERATING'
+    | 'VALIDATING'
+    | 'READY_FOR_REVIEW'
+    | 'APPLYING'
+    | 'COMPLETED'
+    | 'FAILED';
+
+function emitAutomationProgress(
+    stage: ProductStage,
+    message: string,
+    completed: number,
+    total: number,
+    meta?: Record<string, unknown>,
+): void {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('automation-progress', {
+        stage,
+        message,
+        completed,
+        total,
+        ...(meta || {}),
+    });
+}
+
+function qaDecisionPromptsFromPlan(plan: GenerationPlan, packageDirectory: string): QaDecisionPrompt[] {
+    const unresolvedFile = path.join(packageDirectory, 'unresolved-context.json');
+    const unresolved = fs.existsSync(unresolvedFile)
+        ? JSON.parse(fs.readFileSync(unresolvedFile, 'utf-8')) as { gaps?: Array<any> }
+        : { gaps: [] };
+    const gaps = (unresolved.gaps || []).filter(gap =>
+        gap && typeof gap.id === 'string' && (gap.blocking || gap.status === 'blocked-qa' || gap.type === 'qa-decision')
+    );
+    return gaps.map(gap => {
+        const resolution = plan.resolutions.find(entry => entry.gapId === gap.id);
+        const candidates = (resolution?.reuseCandidates || []).map((candidate: any) => ({
+            optionId: `reuse:${candidate.module}.${candidate.name}`,
+            title: `Reutilizar ${candidate.module}.${candidate.name}`,
+            reason: `Componente existente en ${candidate.file}`,
+            decision: 'reuse' as const,
+            symbol: `${candidate.module}.${candidate.name}`,
+            candidate: {
+                file: candidate.file,
+                module: candidate.module,
+                name: candidate.name,
+            },
+        }));
+        return {
+            gapId: gap.id,
+            title: gap.intent || gap.description || 'Decisión pendiente',
+            description: gap.description || 'Se requiere confirmación para continuar.',
+            requiredOutput: gap.requiredOutput || '',
+            options: [
+                ...candidates,
+                {
+                    optionId: 'create:new',
+                    title: 'Crear componente nuevo',
+                    reason: 'No reutilizar un candidato existente para este caso.',
+                    decision: 'create',
+                },
+            ],
+        } satisfies QaDecisionPrompt;
+    });
+}
+
+function mergedResolutionsWithQa(
+    plan: GenerationPlan,
+    qaResolutions: GapResolution[],
+    packageDirectory: string,
+): GapResolution[] {
+    const unresolvedFile = path.join(packageDirectory, 'unresolved-context.json');
+    const unresolved = fs.existsSync(unresolvedFile)
+        ? JSON.parse(fs.readFileSync(unresolvedFile, 'utf-8')) as { gaps?: Array<any> }
+        : { gaps: [] };
+    const byGap = new Map<string, GapResolution>(qaResolutions.map(item => [item.gapId, item]));
+    const fromDeterministic = plan.resolutions
+        .filter(item => item.gapId && item.resolution !== 'unresolved')
+        .map(item => ({
+            gapId: item.gapId!,
+            decision: item.resolution === 'builtin' ? 'resolved' : item.resolution,
+            reason: item.reason,
+        } as GapResolution));
+    for (const item of fromDeterministic) {
+        if (!byGap.has(item.gapId)) byGap.set(item.gapId, item);
+    }
+    for (const gapId of plan.unresolvedGapIds || []) {
+        if (byGap.has(gapId)) continue;
+        const gap = (unresolved.gaps || []).find((entry: any) => entry?.id === gapId);
+        byGap.set(gapId, {
+            gapId,
+            decision: 'unresolved',
+            reason: gap?.requiredOutput || 'Gap abierto sin resolución explícita.',
+        });
+    }
+    return [...byGap.values()];
+}
 
 async function closeEmbeddedInspectorResources(): Promise<void> {
     const window = embeddedInspectorWindow;
@@ -187,19 +311,18 @@ async function validateEmbeddedInspectorElementUse(
         if (activeDm.getSessionMetadata().sessionId !== metadata.sessionId) {
             throw new Error('La sesión Appium cambió durante la validación de candidatos');
         }
-        const token = crypto.randomUUID();
+        const selectorCandidateToken = crypto.randomUUID();
         pendingInspectorCandidates = {
-            token,
-            primarySelector: validation.primarySelector,
+            token: selectorCandidateToken,
+            selector: validation.primarySelector,
             candidates: validation.candidates,
         };
         mainWindow?.webContents.send('embedded-inspector-element-used', {
             selector: validation.primarySelector,
             strategy: elementUsed.strategy,
             tag: elementUsed.tag,
-            selectorCandidates: validation.candidates,
-            selectorCandidateToken: token,
             validationWarnings: validation.warnings,
+            selectorCandidateToken,
         });
         returnToRecorderAfterElementUse(embeddedInspectorWindow, mainWindow);
     } catch (error) {
@@ -997,12 +1120,6 @@ ipcMain.handle('get-screenshot', async () => {
     }
 });
 
-ipcMain.handle('clear-inspector-candidates', () => {
-    pendingInspectorCandidates = null;
-    inspectorValidationGeneration++;
-    return { success: true };
-});
-
 ipcMain.handle('tap-at', async (_, x: number, y: number) => {
     if (!sessionActive || !inspector) {
         return { success: false, error: 'Sin sesion activa' };
@@ -1129,26 +1246,9 @@ ipcMain.handle('verify-selector', async (_, selector: string) => {
     }
 });
 
-ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
+ipcMain.handle('execute-step', async (_, stepData: RecordedStep & { selectorCandidateToken?: string }) => {
     if (!executor) return { success: false, message: 'Sin sesion activa' };
-    const received = stepData as RecordedStep & {
-        selectorCandidateToken?: string;
-        selectorCandidates?: SelectorCandidate[];
-    };
-    const {
-        selectorCandidateToken,
-        selectorCandidates: _untrustedCandidates,
-        ...baseStep
-    } = received;
-    const trustedCandidates = pendingInspectorCandidates
-        && selectorCandidateToken === pendingInspectorCandidates.token
-        && baseStep.selector === pendingInspectorCandidates.primarySelector
-        ? pendingInspectorCandidates.candidates
-        : undefined;
-    const executableStep: RecordedStep = {
-        ...baseStep,
-        ...(trustedCandidates ? { selectorCandidates: trustedCandidates } : {}),
-    };
+    const executableStep = stepData as RecordedStep;
     let preparedStep: RecordedStep;
     let persistedStep: RecordedStep;
     try {
@@ -1158,19 +1258,32 @@ ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
             recordingPlatform,
             false,
         );
+        const selectorCandidateToken = typeof stepData.selectorCandidateToken === 'string'
+            ? stepData.selectorCandidateToken
+            : '';
+        const trustedCandidates =
+            preparedStep.selectorVerified === true
+            && pendingInspectorCandidates
+            && selectorCandidateToken === pendingInspectorCandidates.token
+            && preparedStep.selector === pendingInspectorCandidates.selector
+                ? pendingInspectorCandidates.candidates
+                : undefined;
+        const _untrustedCandidates = preparedStep.selectorVerified === true && Boolean(trustedCandidates)
+            ? trustedCandidates
+            : undefined;
         persistedStep = prepareRecordedStep(
             {
                 ...preparedStep,
                 elementIntent: preparedStep.elementIntent
                     || preparedStep.description
                     || preparedStep.variableName,
-                selectorVerified:
-                    preparedStep.selectorVerified === true
-                    || Boolean(trustedCandidates),
+                selectorVerified: preparedStep.selectorVerified === true,
+                selectorCandidates: _untrustedCandidates,
             },
             recordedSteps.length + 1,
             recordingPlatform,
         );
+        pendingInspectorCandidates = null;
     } catch (error) {
         return {
             success: false,
@@ -1198,7 +1311,6 @@ ipcMain.handle('execute-step', async (_, stepData: RecordedStep) => {
                 locatorManager.add(preparedStep.variableName, preparedStep.selector, false);
             }
         }
-        pendingInspectorCandidates = null;
         const screenshot = await inspector?.captureScreenshot().catch(() => undefined);
         return { ...result, totalSteps: recordedSteps.length, screenshot };
     }
@@ -1374,6 +1486,7 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
     acceptanceCriteria: string;
 }) => {
     try {
+        emitAutomationProgress('ANALYZING', 'Analizando grabación', 1, 6);
         if (!recordedSteps.length) throw new Error('No hay acciones grabadas');
         if (!input.objective?.trim()) throw new Error('Describe el objetivo funcional del caso');
         if (!input.acceptanceCriteria?.trim()) throw new Error('Define el resultado esperado');
@@ -1386,14 +1499,22 @@ ipcMain.handle('prepare-automation-package', async (_, input: {
             environment: activeEnvironment,
         });
         const result = automationPackageBuilder.prepare(scenario, directory);
+        emitAutomationProgress('RESOLVING_CONTEXT', 'Preparando estructura de automatización', 2, 6);
         activeAutomationPackage = result.packageDirectory;
         automationPreview = null;
         const handoff = automationAgentLauncher.describe(
             projectPaths.automationAgent,
             result.packageDirectory
         );
+        emitAutomationProgress(
+            result.agentRequired ? 'RESOLVING_DECISIONS' : 'GENERATING',
+            result.agentRequired ? 'Resolviendo decisiones pendientes' : 'Generando automatización',
+            result.agentRequired ? 3 : 4,
+            6,
+        );
         return { success: true, result, handoff };
     } catch (e: any) {
+        emitAutomationProgress('FAILED', 'No pudimos analizar la grabación', 0, 6, { error: e.message });
         return { success: false, error: e.message };
     }
 });
@@ -1434,26 +1555,41 @@ ipcMain.handle('prepare-automation-regeneration', async (_, input: {
     }
 });
 
-ipcMain.handle('launch-automation-agent', async () => {
+ipcMain.handle('launch-automation-agent', async (_, input?: {
+    mode?: string;
+    autorun?: boolean;
+}) => {
     try {
         if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        emitAutomationProgress('RESOLVING_DECISIONS', 'Resolviendo decisiones pendientes', 3, 6);
         const mode: AgentExecutionMode = resolveAgentExecutionMode(
-            process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE
+            input?.mode || process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE
         );
         if (mode === 'manual') {
             new AgentRunStore(activeAutomationPackage).markAgentStarted();
+            const launch = input?.autorun
+                ? automationAgentLauncher.openTerminalWithPrompt(
+                    projectPaths.automationAgent,
+                    activeAutomationPackage
+                )
+                : automationAgentLauncher.openTerminal(
+                    projectPaths.automationAgent,
+                    activeAutomationPackage
+                );
             return {
                 success: true,
                 mode,
-                launch: automationAgentLauncher.openTerminal(
-                    projectPaths.automationAgent,
-                    activeAutomationPackage
-                ),
+                automatic: false,
+                launch,
             };
         }
         const run = await agentOrchestrator.run(activeAutomationPackage, mode);
         if (run.success) {
+            emitAutomationProgress('GENERATING', 'Generando automatización', 4, 6);
             const imported = await importAutomationResponseFromPackage(activeAutomationPackage);
+            if (imported.success) {
+                emitAutomationProgress('READY_FOR_REVIEW', 'Listo para revisión', 6, 6);
+            }
             return {
                 success: imported.success,
                 mode,
@@ -1465,18 +1601,25 @@ ipcMain.handle('launch-automation-agent', async () => {
             };
         }
         if (run.fallback) {
-            new AgentRunStore(activeAutomationPackage).markAgentStarted();
-            const launch = automationAgentLauncher.openTerminal(
+            const handoff = automationAgentLauncher.describe(
                 projectPaths.automationAgent,
                 activeAutomationPackage
             );
+            emitAutomationProgress(
+                'FAILED',
+                'No pudimos completar la resolución automática',
+                0,
+                6,
+                { error: run.error || run.errorCode || 'Proveedor no disponible' }
+            );
             return {
-                success: true,
-                mode: 'manual',
-                automatic: false,
-                fallback: true,
+                success: false,
+                mode,
+                automatic: true,
+                fallbackSuggested: true,
                 fallbackReason: run.errorCode,
-                launch,
+                handoff,
+                error: run.error || 'La ejecución automática no está disponible en este momento.',
             };
         }
         return {
@@ -1487,6 +1630,9 @@ ipcMain.handle('launch-automation-agent', async () => {
             run,
         };
     } catch (e: any) {
+        emitAutomationProgress('FAILED', 'No pudimos resolver decisiones automáticamente', 0, 6, {
+            error: e.message,
+        });
         if (activeAutomationPackage) {
             const run = new AgentRunStore(activeAutomationPackage);
             run.markAgentFinished();
@@ -1506,10 +1652,9 @@ async function importAutomationResponseFromPackage(
         fs.readFileSync(path.join(packageDirectory, name), 'utf-8')
     ) as T;
     const packagedScenario = read<PackagedAutomationScenario>('scenario.json');
-    const candidateFile = path.join(packageDirectory, 'locator-candidates.json');
     const recordingScenarioFile = path.resolve(packageDirectory, '..', '..', 'scenario.json');
     if (!fs.existsSync(recordingScenarioFile)) {
-        throw new Error('No se encontró la grabación original para validar locator-candidates.json');
+        throw new Error('No se encontró la grabación original para validar scenario.json');
     }
     const recordingScenario = JSON.parse(
         fs.readFileSync(recordingScenarioFile, 'utf-8')
@@ -1519,22 +1664,26 @@ async function importAutomationResponseFromPackage(
         packagedScenario,
         packageDirectory,
     );
-    const packagedCandidates = fs.existsSync(candidateFile)
-        ? read<LocatorCandidatePackage>('locator-candidates.json')
-        : undefined;
-    const trustedCandidates = requireTrustedLocatorCandidatePackage(
-        recordingScenario,
-        packagedCandidates,
-    );
-    const scenario = attachLocatorCandidatePackage(
-        trustedPackagedScenario,
-        trustedCandidates
-    );
-    const plan = read<GenerationPlan>('generation-plan.json');
-    const response = withGeneratedResponseMetadata(
-        read<AutomationAgentResponse>('agent-response.json'),
+    const scenario = trustedPackagedScenario;
+    const effectivePlanFile = path.join(packageDirectory, 'effective-generation-plan.json');
+    const plan = fs.existsSync(effectivePlanFile)
+        ? JSON.parse(fs.readFileSync(effectivePlanFile, 'utf-8')) as GenerationPlan
+        : read<GenerationPlan>('generation-plan.json');
+    const responsePath = path.join(packageDirectory, 'agent-response.json');
+    if (!fs.existsSync(responsePath)) {
+        throw new Error(
+            'Aún no existe agent-response.json en el paquete. ' +
+            'Si abriste ejecución manual, completa el proveedor y luego usa "Importar resultado manual".'
+        );
+    }
+    let response = withGeneratedResponseMetadata(
+        JSON.parse(fs.readFileSync(responsePath, 'utf-8')) as AutomationAgentResponse,
         scenario.createdAt
     );
+    const normalized = normalizeAgentResponseEnglishIdentifiers(response);
+    response = withGeneratedResponseMetadata(normalized.response, scenario.createdAt);
+    const tagged = enforceAgentResponsePlatformTags(response, scenario.platform);
+    response = withGeneratedResponseMetadata(tagged.response, scenario.createdAt);
     runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
     fs.writeFileSync(
         path.join(packageDirectory, 'agent-response.json'),
@@ -1543,8 +1692,26 @@ async function importAutomationResponseFromPackage(
     const statusFile = path.join(packageDirectory, 'status.json');
     const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
     const repairAttempts = Number(status.repairAttempts || 0);
+    const responseHash = crypto.createHash('sha256')
+        .update(JSON.stringify(response))
+        .digest('hex');
+    const previousInvalidHash = typeof status.lastInvalidResponseHash === 'string'
+        ? status.lastInvalidResponseHash
+        : '';
     const validatorStarted = process.hrtime.bigint();
+    emitAutomationProgress('VALIDATING', 'Validando resultado', 5, 6);
     const validation = automationResponseValidator.validate(scenario, plan, response, repairAttempts);
+    if (Object.keys(normalized.renamed).length > 0 || normalized.skipped.length > 0) {
+        validation.warnings.push(
+            `Normalización de identificadores ES→EN aplicada: ${Object.keys(normalized.renamed).length}; ` +
+            `omitida: ${normalized.skipped.length}.`
+        );
+    }
+    if (tagged.added.length > 0) {
+        validation.warnings.push(
+            `Tags de plataforma autoagregados en Feature: ${tagged.added.map(platform => `@${platform}`).join(', ')}.`
+        );
+    }
     runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
     fs.writeFileSync(
         path.join(packageDirectory, 'validation.json'),
@@ -1566,8 +1733,35 @@ async function importAutomationResponseFromPackage(
                 error: existingAutomation.message,
             };
         }
-        if (repairAttempts >= plan.budgets.maxRepairAttempts) {
+        const isRepairSubmission = Boolean(previousInvalidHash);
+        const changedByRepair = isRepairSubmission && previousInvalidHash !== responseHash;
+        if (isRepairSubmission && !changedByRepair) {
+            fs.writeFileSync(statusFile, JSON.stringify({
+                ...status,
+                state: 'repair-no-change',
+                lastInvalidResponseHash: responseHash,
+                unchangedRepairOutputs: Number(status.unchangedRepairOutputs || 0) + 1,
+                updatedAt: new Date().toISOString(),
+            }, null, 2) + '\n');
             runStore.setRepairAttempts(repairAttempts);
+            runStore.mark('repair-output-unchanged', true);
+            return {
+                success: false,
+                validation,
+                repairAvailable: false,
+                error: 'El agente terminó sin modificar agent-response.json. La reparación no fue consumida; corrige el archivo y usa Reimportar corrección.',
+            };
+        }
+        const effectiveRepairAttempts = repairAttempts + (changedByRepair ? 1 : 0);
+        if (effectiveRepairAttempts >= plan.budgets.maxRepairAttempts && isRepairSubmission) {
+            fs.writeFileSync(statusFile, JSON.stringify({
+                ...status,
+                state: 'repair-exhausted',
+                repairAttempts: effectiveRepairAttempts,
+                lastInvalidResponseHash: responseHash,
+                updatedAt: new Date().toISOString(),
+            }, null, 2) + '\n');
+            runStore.setRepairAttempts(effectiveRepairAttempts);
             runStore.mark('repair-exhausted', true);
             return {
                 success: false,
@@ -1582,10 +1776,12 @@ async function importAutomationResponseFromPackage(
         fs.writeFileSync(statusFile, JSON.stringify({
             ...status,
             state: 'targeted-repair',
-            repairAttempts: repairAttempts + 1,
+            repairAttempts: effectiveRepairAttempts,
+            lastInvalidResponseHash: responseHash,
+            unchangedRepairOutputs: 0,
             updatedAt: new Date().toISOString(),
         }, null, 2) + '\n');
-        runStore.setRepairAttempts(repairAttempts + 1);
+        runStore.setRepairAttempts(effectiveRepairAttempts);
         runStore.markRepairStarted();
         return {
             success: false,
@@ -1599,6 +1795,7 @@ async function importAutomationResponseFromPackage(
     const token = crypto.randomUUID();
     automationPreview = { token, scenario, plan, response };
     runStore.mark('ready-for-review');
+    emitAutomationProgress('READY_FOR_REVIEW', 'Validación completa', 6, 6);
     return { success: true, preview, validation, previewToken: token, conflicts: managed.conflicts };
 }
 
@@ -1608,6 +1805,111 @@ ipcMain.handle('import-automation-response', async () => {
         return await importAutomationResponseFromPackage(activeAutomationPackage);
     } catch (e: any) {
         if (activeAutomationPackage) new AgentRunStore(activeAutomationPackage).mark('import-failed', true);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('get-automation-qa-decisions', async () => {
+    try {
+        if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        const plan = JSON.parse(
+            fs.readFileSync(path.join(activeAutomationPackage, 'generation-plan.json'), 'utf-8')
+        ) as GenerationPlan;
+        const decisions = qaDecisionPromptsFromPlan(plan, activeAutomationPackage);
+        if (decisions.length) {
+            emitAutomationProgress('WAITING_FOR_QA', 'Se requiere confirmación de QA', 3, 6);
+        }
+        return {
+            success: true,
+            required: decisions.length > 0,
+            recordingId: plan.recordingId,
+            planId: plan.planId,
+            decisions,
+        };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('resolve-automation-qa-decisions', async (_, input: {
+    decisions: Array<{ gapId: string; optionId: string }>;
+}) => {
+    try {
+        if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        emitAutomationProgress('RESOLVING_DECISIONS', 'Aplicando decisiones de QA', 3, 6);
+        const plan = JSON.parse(
+            fs.readFileSync(path.join(activeAutomationPackage, 'generation-plan.json'), 'utf-8')
+        ) as GenerationPlan;
+        const prompts = qaDecisionPromptsFromPlan(plan, activeAutomationPackage);
+        if (!prompts.length) throw new Error('No hay decisiones QA pendientes.');
+        const selectedByGap = new Map<string, string>();
+        for (const entry of input?.decisions || []) {
+            if (!entry?.gapId || !entry?.optionId) continue;
+            if (selectedByGap.has(entry.gapId)) {
+                throw new Error(`La decisión para ${entry.gapId} está duplicada.`);
+            }
+            selectedByGap.set(entry.gapId, entry.optionId);
+        }
+        const qaResolutions: GapResolution[] = [];
+        for (const prompt of prompts) {
+            const optionId = selectedByGap.get(prompt.gapId);
+            if (!optionId) throw new Error(`Falta confirmar una decisión de QA.`);
+            const option = prompt.options.find(entry => entry.optionId === optionId);
+            if (!option) throw new Error('La decisión seleccionada no es válida para este gap.');
+            qaResolutions.push({
+                gapId: prompt.gapId,
+                decision: option.decision,
+                reason: `${option.reason} (confirmado por QA)`,
+                ...(option.symbol ? { symbol: option.symbol } : {}),
+                ...(option.candidate ? { evidence: [option.candidate.file] } : {}),
+            });
+            const target = plan.resolutions.find(resolution => resolution.gapId === prompt.gapId);
+            if (target && option.decision === 'reuse' && option.candidate) {
+                target.resolution = 'reuse';
+                target.locatorName = option.candidate.name;
+                target.source = {
+                    file: option.candidate.file,
+                    module: option.candidate.module,
+                    scope: target.source?.scope || 'squad',
+                };
+                target.reason = `${target.reason} QA confirmó reutilización ${option.candidate.module}.${option.candidate.name}.`;
+            }
+            if (target && option.decision === 'create') {
+                target.resolution = 'create';
+                target.reason = `${target.reason} QA confirmó crear componente nuevo.`;
+            }
+        }
+        fs.writeFileSync(
+            path.join(activeAutomationPackage, 'generation-plan.json'),
+            JSON.stringify(plan, null, 2) + '\n',
+            'utf-8'
+        );
+        const finalResolutions = mergedResolutionsWithQa(plan, qaResolutions, activeAutomationPackage);
+        fs.writeFileSync(
+            path.join(activeAutomationPackage, 'gap-resolutions.json'),
+            JSON.stringify({
+                schemaVersion: AUTOMATION_GAP_RESOLUTIONS_SCHEMA_VERSION,
+                recordingId: plan.recordingId,
+                planId: plan.planId,
+                resolutions: finalResolutions,
+            }, null, 2) + '\n',
+            'utf-8'
+        );
+        const response = deterministicGenerator.generate(activeAutomationPackage, finalResolutions);
+        emitAutomationProgress('GENERATING', 'Generando automatización', 4, 6);
+        fs.writeFileSync(
+            path.join(activeAutomationPackage, 'agent-response.json'),
+            JSON.stringify(response, null, 2) + '\n',
+            'utf-8'
+        );
+        const imported = await importAutomationResponseFromPackage(activeAutomationPackage);
+        if (imported.success) emitAutomationProgress('READY_FOR_REVIEW', 'Listo para revisión', 6, 6);
+        return {
+            success: imported.success,
+            ...(imported.success ? { imported } : { error: imported.error, validation: imported.validation }),
+        };
+    } catch (e: any) {
+        emitAutomationProgress('FAILED', 'No pudimos aplicar la decisión de QA', 0, 6, { error: e.message });
         return { success: false, error: e.message };
     }
 });
@@ -1653,9 +1955,7 @@ function applyAdditiveUpdates(
             throw new Error(`Completion no autorizado para ${completion.file}#${completion.name}.`);
         }
         const action = scenario.actions.find(step => step.sequence === completion.sequence);
-        const primary = action?.selectorCandidates?.find(candidate => candidate.primary);
-        const value = primary?.locatorValue
-            || action?.locatorValue
+        const value = action?.locatorValue
             || (action?.selector ? frameworkLocator(action.selector, completion.platform).value : '');
         if (!value) {
             throw new Error(`La acción ${completion.sequence} no contiene un locator primario aplicable.`);
@@ -1725,6 +2025,7 @@ ipcMain.handle('generate-automation-response', async (
         if (!automationPreview || automationPreview.token !== previewToken) {
             throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
         }
+        emitAutomationProgress('APPLYING', 'Aplicando automatización', 1, 2);
         const { scenario, plan } = automationPreview;
         runStore = new AgentRunStore(activeAutomationPackage);
         const response: AutomationAgentResponse = {
@@ -1784,8 +2085,12 @@ ipcMain.handle('generate-automation-response', async (
         }, null, 2) + '\n');
         automationPreview = null;
         runStore.mark('generated', true);
+        emitAutomationProgress('COMPLETED', 'Automatización aplicada correctamente', 2, 2);
         return { success: true, generated, validation, memoryVersion: memoryEntry.version, patched: patched.outcomes };
     } catch (e: any) {
+        emitAutomationProgress('FAILED', 'No pudimos aplicar la automatización', 0, 2, {
+            error: e.message,
+        });
         runStore?.mark('generation-failed', true);
         return { success: false, error: e.message };
     }

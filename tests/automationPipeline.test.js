@@ -20,6 +20,7 @@ const { frameworkContract } = require('../dist/core/frameworkContract');
 const { inferredStrategy } = require('../dist/core/locatorStrategy');
 const { projectPaths } = require('../dist/core/projectPaths');
 const { screenObjectNames } = require('../dist/core/semanticNaming');
+const { validatorRuleCodesFromSource } = require('../dist/core/validatorRuleCatalog');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
@@ -831,6 +832,41 @@ function validResponse(plan, recordingId = 'rec-test') {
     };
 }
 
+test('validator exige clave contraparte y prohíbe literal vacío en getElement', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]));
+    const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+
+    const missingCounterpart = validResponse(resolved.plan);
+    const missingCounterpartLocators = JSON.parse(
+        missingCounterpart.files.find(file => file.layer === 'locators').content
+    );
+    delete missingCounterpartLocators.consultaIos;
+    missingCounterpart.files.find(file => file.layer === 'locators').content =
+        JSON.stringify(missingCounterpartLocators);
+    const counterpartValidation = validator.validate(resolved.scenario, resolved.plan, missingCounterpart);
+    assert.equal(counterpartValidation.valid, false);
+    assert.equal(
+        counterpartValidation.errors.some(error => error.code === 'platform-coverage'),
+        true
+    );
+
+    const emptyLiteral = validResponse(resolved.plan);
+    const emptyScreen = emptyLiteral.files.find(file => file.layer === 'screen');
+    emptyScreen.content = emptyScreen.content
+        .replace('Locators.consultaIos.movementsList', "''");
+    const emptyLiteralValidation = validator.validate(resolved.scenario, resolved.plan, emptyLiteral);
+    assert.equal(emptyLiteralValidation.valid, false);
+    assert.equal(
+        emptyLiteralValidation.errors.some(error =>
+            error.code === 'getElement-order' && error.message.includes('literal vacío')
+        ),
+        true
+    );
+});
+
 test('validator exige cuatro capas, trazabilidad y Then', () => {
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
@@ -840,6 +876,20 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     const validation = validator.validate(resolved.scenario, resolved.plan, validResponse(resolved.plan));
     assert.equal(validation.valid, true);
     assert.equal(validation.qualityScore, 100);
+
+    const brokenSyntax = validResponse(resolved.plan);
+    const brokenSteps = brokenSyntax.files.find(file => file.layer === 'steps');
+    brokenSteps.content = brokenSteps.content
+        .replace('Then(/^se muestra la lista de movimientos$/', 'Then(../../../../../../../../../../../../^se muestra la lista de movimientos$/');
+    const syntaxValidation = validator.validate(resolved.scenario, resolved.plan, brokenSyntax);
+    assert.equal(syntaxValidation.valid, false);
+    assert.equal(
+        syntaxValidation.errors.some(error =>
+            error.code === 'typescript-syntax'
+            && /features\/yape-steps-definitions\/payment\/consulta-movimientos\.steps\.ts:\d+:\d+/.test(error.message)
+        ),
+        true
+    );
 
     const invented = validResponse(resolved.plan);
     const inventedLocators = JSON.parse(invented.files.find(file => file.layer === 'locators').content);
@@ -939,6 +989,44 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     assert.equal(browserValidation.errors.some(error =>
         error.code === 'output' && error.message.includes('no lo utiliza')
     ), true);
+});
+
+test('validator falla cuando falta un gap abierto en resolutions', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos'
+    }]));
+    const validator = new AutomationResponseValidator(undefined, emptyCatalog);
+    const planWithOpenGap = {
+        ...resolved.plan,
+        unresolvedGapIds: ['gap-open-1'],
+    };
+
+    const missing = validResponse(planWithOpenGap);
+    missing.resolutions = [];
+    const missingErrors = validator.validate(resolved.scenario, planWithOpenGap, missing).errors;
+    assert.equal(missingErrors.some(error => error.code === 'missing-gap-resolution'), true);
+
+    const unresolvedWithoutReason = validResponse(planWithOpenGap);
+    unresolvedWithoutReason.resolutions = [{ gapId: 'gap-open-1', decision: 'unresolved' }];
+    const withoutReasonErrors = validator.validate(
+        resolved.scenario,
+        planWithOpenGap,
+        unresolvedWithoutReason
+    ).errors;
+    assert.equal(withoutReasonErrors.some(error => error.code === 'unresolved-gap-without-reason'), true);
+
+    const unresolvedWithReason = validResponse(planWithOpenGap);
+    unresolvedWithReason.resolutions = [{
+        gapId: 'gap-open-1',
+        decision: 'unresolved',
+        reason: 'No hubo tiempo suficiente para completar el gap en esta corrida.',
+    }];
+    assert.equal(
+        validator.validate(resolved.scenario, planWithOpenGap, unresolvedWithReason)
+            .errors.some(error => error.code === 'missing-gap-resolution'),
+        false
+    );
 });
 
 test('validator no permite intercambiar selectores verificados entre acciones', () => {
@@ -1325,6 +1413,54 @@ test('validator exige el par primary exacto para create y verifica el TypeLocato
     );
 });
 
+test('validator relaja trace-locator cuando conserva selector primary verificado', () => {
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+        selectorCandidates: [selectorCandidate(
+            'primary-movements',
+            'id=movimientos',
+            'XPATH',
+            '//*[@resource-id="movimientos"]',
+        )],
+    }]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    const response = validResponse(resolved.plan);
+    response.actionTrace[0].locatorName = 'movementsListAlias';
+
+    const locators = JSON.parse(response.files.find(file => file.layer === 'locators').content);
+    locators.consultaAndroid.movementsListAlias = locators.consultaAndroid.movementsList;
+    locators.consultaIos.movementsListAlias = locators.consultaIos.movementsList;
+    delete locators.consultaAndroid.movementsList;
+    delete locators.consultaIos.movementsList;
+    response.files.find(file => file.layer === 'locators').content = JSON.stringify(locators);
+
+    response.files.find(file => file.layer === 'screen').content =
+        response.files.find(file => file.layer === 'screen').content
+            .replace(/Locators\.consultaIos\.movementsList/g, 'Locators.consultaIos.movementsListAlias')
+            .replace(/Locators\.consultaAndroid\.movementsList/g, 'Locators.consultaAndroid.movementsListAlias');
+
+    const previous = process.env.RECORDER_AGENT_RELAXED_CONTRACT;
+    process.env.RECORDER_AGENT_RELAXED_CONTRACT = '1';
+    try {
+        const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+            .validate(resolved.scenario, resolved.plan, response);
+        assert.equal(
+            validation.errors.some(error => ['trace-locator', 'invented-selector'].includes(error.code)),
+            false,
+        );
+        assert.equal(
+            validation.warnings.some(warning => warning.includes('trace-locator relajado')),
+            true,
+        );
+    } finally {
+        if (previous === undefined) delete process.env.RECORDER_AGENT_RELAXED_CONTRACT;
+        else process.env.RECORDER_AGENT_RELAXED_CONTRACT = previous;
+    }
+});
+
 test('validator permite un screenMethod agrupado que consume varios getters create', () => {
     const recorded = scenario([
         {
@@ -1372,6 +1508,7 @@ test('validator permite un screenMethod agrupado que consume varios getters crea
         ])),
         groupedIos: Object.fromEntries(creates.map(item => [item.locatorName, ''])),
     });
+
     const getters = creates.map(item =>
         `private get ${item.locatorName}(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(` +
         `${CONTRACT.typeLocatorSymbol}.XPATH, Locators.groupedIos.${item.locatorName}, ` +
@@ -1397,6 +1534,69 @@ test('validator permite un screenMethod agrupado que consume varios getters crea
     const errors = new AutomationResponseValidator(undefined, emptyCatalog)
         .validate(resolved.scenario, resolved.plan, response).errors;
     assert.equal(errors.some(error => error.code === 'trace-screen-method'), false);
+});
+
+test('validator permite relajar create-locator-contract y trace-screen-method por flag experimental', () => {
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+        selectorCandidates: [selectorCandidate(
+            'primary-movements',
+            'id=movimientos',
+            'XPATH',
+            '//*[@resource-id="movimientos"]',
+        )],
+    }]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+
+    const omitted = validResponse(resolved.plan);
+    const omittedLocators = JSON.parse(
+        omitted.files.find(file => file.layer === 'locators').content
+    );
+    delete omittedLocators.consultaAndroid.movementsList;
+    omitted.files.find(file => file.layer === 'locators').content = JSON.stringify(omittedLocators);
+
+    const hardcoded = validResponse(resolved.plan);
+    hardcoded.files.find(file => file.layer === 'screen').content =
+        hardcoded.files.find(file => file.layer === 'screen').content.replace(
+            'await this.uiHelper.waitForDisplayed(this.movementsList);',
+            'await this.uiHelper.waitForDisplayed("~Movimientos");',
+        );
+
+    const strictValidator = new AutomationResponseValidator(undefined, emptyCatalog);
+    assert.equal(
+        strictValidator.validate(resolved.scenario, resolved.plan, omitted).errors
+            .some(error => error.code === 'create-locator-contract'),
+        true,
+    );
+    assert.equal(
+        strictValidator.validate(resolved.scenario, resolved.plan, hardcoded).errors
+            .some(error => error.code === 'trace-screen-method'),
+        true,
+    );
+
+    const previous = process.env.RECORDER_AGENT_RELAXED_CONTRACT;
+    process.env.RECORDER_AGENT_RELAXED_CONTRACT = '1';
+    try {
+        const relaxedValidator = new AutomationResponseValidator(undefined, emptyCatalog);
+        const relaxedCreateErrors = relaxedValidator
+            .validate(resolved.scenario, resolved.plan, omitted).errors;
+        const relaxedTraceErrors = relaxedValidator
+            .validate(resolved.scenario, resolved.plan, hardcoded).errors;
+        assert.equal(
+            relaxedCreateErrors.some(error => error.code === 'create-locator-contract'),
+            false,
+        );
+        assert.equal(
+            relaxedTraceErrors.some(error => error.code === 'trace-screen-method'),
+            false,
+        );
+    } finally {
+        if (previous === undefined) delete process.env.RECORDER_AGENT_RELAXED_CONTRACT;
+        else process.env.RECORDER_AGENT_RELAXED_CONTRACT = previous;
+    }
 });
 
 test('validator autoriza completions solo por identidad exacta y getter trazado', () => {
@@ -1610,7 +1810,7 @@ test('validator bloquea steps y locators que duplican artefactos del framework',
         getCatalog: (squad, platform) => ({
             squad, platform, screenMethods: [], features: [], scenarios: [],
             stepDefinitions: [{
-                keyword: 'Then', expression: 'se muestra la lista de movimientos',
+                keyword: 'Then', expression: '^se muestra la lista de movimientos$',
                 file: 'features/yape-steps-definitions/payment/existing.steps.ts',
                 squad: 'payment', scope: 'squad'
             }],
@@ -1653,6 +1853,11 @@ test('memoria solo promociona calidad 100 y recupera la versión más reciente',
 // del intento fallido; no hay plan ni contexto que permita arrancar al agente.
 test('una grabación sin verificación no llega a armar el paquete', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-sin-then-'));
+    const failedPackage = path.join(root, 'generation', 'automation');
+    fs.mkdirSync(failedPackage, { recursive: true });
+    fs.writeFileSync(path.join(failedPackage, 'agent-response.json'), '{"stale":true}');
+    fs.writeFileSync(path.join(failedPackage, 'effective-generation-plan.json'), '{"stale":true}');
+    fs.writeFileSync(path.join(failedPackage, 'status.json'), '{"state":"ready-for-review"}');
     const builder = new AutomationPackageBuilder(
         new DeterministicResolver(emptyCatalog),
         new AutomationMemory(path.join(root, 'memory'))
@@ -1663,8 +1868,10 @@ test('una grabación sin verificación no llega a armar el paquete', () => {
         ]), root),
         error => error instanceof BlockingGapError && /VERIFICAR_TEXTO/.test(error.message)
     );
-    const failedPackage = path.join(root, 'generation', 'automation');
     assert.equal(fs.existsSync(path.join(failedPackage, 'generation-plan.json')), false);
+    assert.equal(fs.existsSync(path.join(failedPackage, 'agent-response.json')), false);
+    assert.equal(fs.existsSync(path.join(failedPackage, 'effective-generation-plan.json')), false);
+    assert.equal(fs.existsSync(path.join(failedPackage, 'status.json')), false);
     assert.ok(fs.existsSync(path.join(failedPackage, 'hints.json')));
     const blockedGaps = JSON.parse(fs.readFileSync(path.join(failedPackage, 'gaps.json'), 'utf-8'));
     assert.equal(blockedGaps.gaps[0].status, 'blocked-qa');
@@ -1697,9 +1904,12 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'collision-report.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'hints.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'gaps.json')));
-    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'query-requests.json')));
+    assert.equal(fs.existsSync(path.join(result.packageDirectory, 'query-requests.json')), false);
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'query-requests.schema.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'query-results.json')));
-    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'locator-candidates.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'validation-contract.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'agent-package-manifest.json')));
+    assert.ok(fs.existsSync(path.join(result.packageDirectory, 'english-vocabulary.json')));
     assert.ok(fs.existsSync(path.join(result.packageDirectory, 'verify-package.js')));
     // El verificador del sandbox carga las reglas del modulo compartido; sin la
     // copia se quedaria sin comprobar el contrato del Screen Object.
@@ -1708,6 +1918,11 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     const frameworkApi = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'framework-api.json'), 'utf8'
     ));
+    const englishVocabulary = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'english-vocabulary.json'), 'utf8'
+    ));
+    assert.equal(englishVocabulary.lista, 'list');
+    assert.equal(englishVocabulary.movimientos, 'movements');
     assert.deepEqual(
         frameworkApi.helpers.map(helper => helper.property),
         ['gestureHelper', 'keyboardHelper', 'uiHelper']
@@ -1715,6 +1930,37 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(frameworkApi.helpers
         .find(helper => helper.property === 'gestureHelper').methods
         .some(method => method.name === 'scrollDown'));
+    assert.equal(frameworkApi.locatorContract.typeLocator.import, CONTRACT.typeLocatorImport);
+    assert.equal(frameworkApi.locatorContract.typeLocator.exportKind, 'named');
+    assert.deepEqual(frameworkApi.locatorContract.typeLocator.members, [
+        'ID', 'XPATH', 'ANDROID', 'PREDICATESTRING', 'CLASSCHAIN', 'CLASSNAME',
+    ]);
+    assert.equal(frameworkApi.locatorContract.locatorProvider.import, CONTRACT.locatorFactoryImport);
+    assert.equal(frameworkApi.locatorContract.getElement.parameterCount, 4);
+    assert.deepEqual(frameworkApi.locatorContract.getElement.platformOrder, ['ios', 'android']);
+    assert.match(
+        frameworkApi.locatorContract.getElement.signature,
+        /getElement\(TypeLocator\.<IOS>, <valor ios>, TypeLocator\.<ANDROID>, <valor android>\)/
+    );
+    assert.equal(frameworkApi.locatorContract.constantsPrefixes.ID, '~');
+    assert.equal(frameworkApi.locatorContract.constantsPrefixes.XPATH, '');
+    assert.equal(frameworkApi.locatorContract.constantsPrefixes.ANDROID_LOCATOR, 'android=');
+    assert.equal(frameworkApi.locatorContract.constantsPrefixes.PREDICATE_STRING, '-ios predicate string:');
+    assert.equal(frameworkApi.locatorContract.constantsPrefixes.CLASS_CHAIN, '-ios class chain:');
+    assert.equal(frameworkApi.screenObjects[0].path.endsWith('.screen.ts'), true);
+    assert.equal(typeof frameworkApi.screenObjects[0].className, 'string');
+    assert.equal(typeof frameworkApi.screenObjects[0].instanceName, 'string');
+    assert.equal(typeof frameworkApi.screenObjects[0].importSource, 'string');
+    const validationContract = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'validation-contract.json'), 'utf8'
+    ));
+    const validatorSource = fs.readFileSync(
+        path.join(process.cwd(), 'core', 'automationResponseValidator.ts'),
+        'utf8'
+    );
+    const validatorCodes = validatorRuleCodesFromSource(validatorSource);
+    const declaredCodes = validationContract.rules.map(rule => rule.code).sort();
+    assert.deepEqual(declaredCodes, validatorCodes);
     // El verificador se genera como texto: tsc no lo revisa, asi que un error de
     // sintaxis solo aparecia cuando el agente lo ejecutaba.
     assert.doesNotThrow(
@@ -1734,7 +1980,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.ok(agentRun.responseBytes > 0);
     assert.equal(agentRun.tokensInput, null);
     assert.equal(agentRun.tokensOutput, null);
-    assert.equal(agentRun.agentExecutionMode, 'manual');
+    assert.equal(agentRun.agentExecutionMode, 'automatic');
     assert.equal(agentRun.agentInvocationCount, 0);
     assert.ok(agentRun.hintsGenerated > 0);
     assert.equal(agentRun.initialGapCount, 0);
@@ -1755,6 +2001,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.equal(Object.prototype.hasOwnProperty.call(locatorDoc, '_metadata'), false);
     assert.equal(Object.keys(locatorDoc).every(block => /(?:Android|Ios)$/.test(block)), true);
     const instructions = fs.readFileSync(path.join(result.packageDirectory, 'instructions.md'), 'utf8');
+    assert.match(instructions, /english-vocabulary\.json/);
     const verifier = fs.readFileSync(path.join(result.packageDirectory, 'verify-package.js'), 'utf8');
     assert.match(instructions, /Gherkin declarativo/);
     assert.match(instructions, /Agrupa acciones técnicas consecutivas/);
@@ -1773,12 +2020,17 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /Copialos literalmente en vez de componerlos/);
     assert.match(instructions, /`scrollDown` esta en `gestureHelper`, no en `uiHelper`/);
     assert.match(instructions, /metodo del propio Screen Object para que quede reutilizable/);
+    assert.match(instructions, /NO busques esos simbolos en el framework/);
     assert.match(instructions, /Nada de `_metadata`/);
     assert.match(instructions, /allowlist verificada e inmutable/);
     assert.match(instructions, /candidateId/);
     assert.match(instructions, /completionTargets/);
     assert.match(instructions, /key homonima de otro archivo o bloque no autoriza/);
     assert.match(instructions, /tier de ejecucion \(`@smoke_mobile`\)/);
+    assert.match(instructions, /Si te falta información, NO la busques fuera/);
+    assert.match(instructions, /NO uses comandos de shell \(cat, echo, redirecciones\)/);
+    assert.match(instructions, /Las rutas exactas que puedes leer son/);
+    assert.match(instructions, /Usa rutas RELATIVAS al directorio actual/);
     assert.match(verifier, /Gherkin técnico\/imperativo/);
     assert.match(verifier, /Acción técnica sin agrupar/);
     assert.match(verifier, /usa imports relativos/);
@@ -1793,16 +2045,10 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     const packagedScenario = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'scenario.json'), 'utf8'
     ));
-    const packagedCandidates = JSON.parse(fs.readFileSync(
-        path.join(result.packageDirectory, 'locator-candidates.json'), 'utf8'
-    ));
     assert.equal(packagedScenario.actions[0].selectorCandidates, undefined);
-    assert.equal(packagedCandidates.actions[0].primaryCandidateId, 'primary-movements');
-    assert.deepEqual(packagedCandidates.actions[0].candidates, [candidate]);
-    assert.equal(JSON.stringify(packagedCandidates).includes('screenshot'), false);
     const accounted = [
         'scenario.json', 'generation-plan.json', 'hints.json', 'gaps.json',
-        'reuse-context.json', 'collision-report.json', 'locator-candidates.json',
+        'reuse-context.json', 'collision-report.json',
         'instructions.md',
     ].reduce((total, name) =>
         total + fs.statSync(path.join(result.packageDirectory, name)).size, 0);
@@ -1820,6 +2066,56 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         cwd: result.packageDirectory,
         stdio: 'pipe'
     }));
+});
+
+test('package builder publica expresiones reservadas para evitar colisiones de step', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-reserved-steps-'));
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+    }]);
+    const base = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    base.plan.status = 'needs-agent';
+    base.plan.unresolvedGapIds = ['gap-step-collision'];
+    base.unresolvedContext.gaps = [{
+        id: 'gap-step-collision',
+        type: 'semantic-naming',
+        description: 'Evitar colisión de step',
+        requiredOutput: 'Definir wording único',
+        status: 'open',
+        blocking: false,
+        allowedQueries: ['findExistingStep'],
+        maxQueries: 1,
+        evidenceRequired: ['framework-step-index'],
+    }];
+    base.resolvedContext.frameworkAwareness = {
+        ...(base.resolvedContext.frameworkAwareness || {}),
+        exactStepDefinitions: [{
+            expression: '^el usuario consulta todos sus movimientos$',
+            file: 'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts',
+            scope: 'squad',
+        }],
+        selectorCollisions: [],
+        candidates: [],
+        decision: 'create-new',
+    };
+    const fakeResolver = { resolve: () => base };
+    const builder = new AutomationPackageBuilder(
+        fakeResolver,
+        new AutomationMemory(path.join(root, 'memory'))
+    );
+    const result = builder.prepare(recorded, root);
+    const collision = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'collision-report.json'), 'utf8'
+    ));
+    assert.equal(Array.isArray(collision.reservedStepExpressions), true);
+    assert.equal(collision.reservedStepExpressions[0].canonical, 'el usuario consulta todos sus movimientos');
+    assert.match(collision.reservedStepExpressions[0].reason, /step ambiguo/i);
+    const instructions = fs.readFileSync(
+        path.join(result.packageDirectory, 'instructions.md'), 'utf8'
+    );
+    assert.match(instructions, /reservedStepExpressions/);
+    assert.match(instructions, /DataTable NO desambigua/i);
 });
 
 // Caso real: el agente inlinó el usuario dentro del Given y perdió la tilde de
@@ -1911,9 +2207,9 @@ test('rechaza el Given reutilizado reescrito y el parámetro sin Examples', () =
     );
 });
 
-// El codigo va en ingles, el Gherkin en espanol. Solo se juzga lo que el agente
-// agrega: el framework arrastra ~90 identificadores en espanol heredados.
-test('rechaza identificadores en español y no toca el Gherkin ni lo heredado', () => {
+// El codigo va en ingles, el Gherkin en espanol. Se advierte lo nuevo en
+// espanol, pero no se bloquea la propuesta por este criterio.
+test('advierte identificadores en español y no toca el Gherkin ni lo heredado', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-english-'));
     const builder = new AutomationPackageBuilder(
         new DeterministicResolver(emptyCatalog),
@@ -1946,20 +2242,26 @@ test('rechaza identificadores en español y no toca el Gherkin ni lo heredado', 
         'public async verifyMovementsList()',
         'public async seMuestranLosMovimientosEsperados()'
     );
-    const errores = validator.validate(resolvedScenario, plan, enEspanol).errors
-        .filter(error => error.code === 'non-english-identifier');
-    assert.equal(errores.length, 1);
-    assert.match(errores[0].message, /seMuestranLosMovimientosEsperados/);
-    assert.match(errores[0].message, /está en español/);
+    const semantica = validator.validate(resolvedScenario, plan, enEspanol);
+    const errores = semantica.errors.filter(error => error.code === 'non-english-identifier');
+    assert.equal(errores.length, 0);
+    assert.equal(
+        semantica.warnings.some(warning =>
+            /non-english-identifier/.test(warning)
+            && /seMuestranLosMovimientosEsperados/.test(warning)
+            && /está en español/.test(warning)
+        ),
+        true
+    );
 
     fs.writeFileSync(
         path.join(result.packageDirectory, 'agent-response.json'),
         JSON.stringify(enEspanol)
     );
-    assert.throws(() => execFileSync(process.execPath, ['verify-package.js'], {
+    assert.doesNotThrow(() => execFileSync(process.execPath, ['verify-package.js'], {
         cwd: result.packageDirectory,
         stdio: 'pipe'
-    }), error => /Identificador en espanol/.test(String(error.stdout) + String(error.stderr)));
+    }));
 
     const instructions = fs.readFileSync(
         path.join(result.packageDirectory, 'instructions.md'), 'utf8'
@@ -2068,12 +2370,16 @@ test('package builder mantiene baselines grandes fuera del contexto mínimo', ()
     const reuse = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'reuse-context.json'), 'utf8'
     ));
+    const gapsProjection = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'gaps.json'), 'utf8'
+    ));
     const baseline = reuse.updateBaselines[0];
     assert.equal(result.agentRequired, true);
     assert.equal(Object.hasOwn(baseline, 'content'), false);
     assert.equal(baseline.preserve.count, 800);
     assert.equal(baseline.preserve.sample.length, 12);
     assert.ok(fs.statSync(path.join(result.packageDirectory, baseline.reference)).size > 20_000);
+    assert.equal(typeof gapsProjection.gaps[0].allowedQueryArgsSchemas, 'object');
     const mandatoryBytes = [
         'scenario.json', 'generation-plan.json', 'reuse-context.json',
         'collision-report.json', 'unresolved-context.json', 'instructions.md'
@@ -2081,7 +2387,7 @@ test('package builder mantiene baselines grandes fuera del contexto mínimo', ()
     assert.ok(mandatoryBytes <= 20_000);
 });
 
-test('reprocesar una grabación limpia solo el paquete y conserva la evidencia original', () => {
+test('reprocesar una grabación siempre reconstruye el paquete y conserva evidencia e historial', () => {
     const recording = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-reprocess-'));
     const recorded = scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
@@ -2092,17 +2398,37 @@ test('reprocesar una grabación limpia solo el paquete y conserva la evidencia o
     const evidenceDirectory = path.join(recording, 'actions', '001');
     fs.mkdirSync(packageDirectory, { recursive: true });
     fs.mkdirSync(evidenceDirectory, { recursive: true });
-    fs.writeFileSync(path.join(packageDirectory, 'stale-agent-response.json'), '{}');
+    const historyDirectory = path.join(packageDirectory, 'history', 'regeneration-001');
+    fs.mkdirSync(historyDirectory, { recursive: true });
+    fs.writeFileSync(path.join(historyDirectory, 'agent-response.json'), '{"archived":true}');
+    for (const stale of [
+        'agent-response.json', 'effective-generation-plan.json', 'validation.json',
+        'repair-context.json', 'context-breakdown.json', 'agent-execution.log',
+        'baseline-response.json',
+    ]) {
+        fs.writeFileSync(path.join(packageDirectory, stale), '{"stale":true}');
+    }
+    fs.mkdirSync(path.join(packageDirectory, '.gap-runs', 'old-gap'), { recursive: true });
+    fs.writeFileSync(path.join(packageDirectory, '.gap-runs', 'old-gap', 'output.json'), '{}');
     fs.writeFileSync(path.join(evidenceDirectory, 'screen.xml'), '<hierarchy/>');
 
     const builder = new AutomationPackageBuilder(
         new DeterministicResolver(emptyCatalog),
         new AutomationMemory(path.join(recording, 'memory'))
     );
-    const result = builder.prepareRecordedScenario(recording, true);
-    assert.equal(fs.existsSync(path.join(packageDirectory, 'stale-agent-response.json')), false);
+    const result = builder.prepareRecordedScenario(recording, false);
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'effective-generation-plan.json')), false);
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'repair-context.json')), false);
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'context-breakdown.json')), false);
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'agent-execution.log')), false);
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'baseline-response.json')), false);
+    assert.equal(fs.existsSync(path.join(packageDirectory, '.gap-runs')), false);
     assert.equal(fs.existsSync(path.join(evidenceDirectory, 'screen.xml')), true);
+    assert.equal(fs.existsSync(path.join(historyDirectory, 'agent-response.json')), true);
     assert.equal(fs.existsSync(path.join(result.packageDirectory, 'generation-plan.json')), true);
+    const status = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'status.json'), 'utf8'));
+    const plan = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'generation-plan.json'), 'utf8'));
+    assert.equal(status.planId, plan.planId);
 });
 
 test('regeneración versiona la propuesta anterior y conserva las cuatro rutas importadas', () => {
@@ -2125,6 +2451,10 @@ test('regeneración versiona la propuesta anterior y conserva las cuatro rutas i
     fs.writeFileSync(path.join(automation, 'status.json'), JSON.stringify({
         state: 'generated', regenerationIteration: 0
     }));
+    fs.writeFileSync(path.join(automation, 'agent-execution.log'), 'old provider output');
+    fs.writeFileSync(path.join(automation, 'context-breakdown.json'), '{"stale":true}');
+    fs.writeFileSync(path.join(automation, 'effective-generation-plan.json'), '{"stale":true}');
+    fs.mkdirSync(path.join(automation, '.gap-runs', 'old-gap'), { recursive: true });
     response.files.forEach(file => {
         const target = path.join(framework, file.path);
         fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -2175,6 +2505,10 @@ test('regeneración versiona la propuesta anterior y conserva las cuatro rutas i
     assert.equal(baseline.planId, resolved.plan.planId);
     assert.match(unresolved.gaps[0].description, /revisión general/);
     assert.equal(fs.existsSync(path.join(automation, 'agent-response.json')), false);
+    assert.equal(fs.existsSync(path.join(automation, 'effective-generation-plan.json')), false);
+    assert.equal(fs.existsSync(path.join(automation, 'agent-execution.log')), false);
+    assert.equal(fs.existsSync(path.join(automation, 'context-breakdown.json')), false);
+    assert.equal(fs.existsSync(path.join(automation, '.gap-runs')), false);
     assert.equal(fs.existsSync(path.join(
         automation, 'history', 'regeneration-001', 'agent-response.json'
     )), true);
@@ -2200,6 +2534,47 @@ test('launcher abre una terminal en el paquete sin ejecutar automáticamente el 
     assert.doesNotMatch(call.args.join(' '), /instructions\.md/);
 });
 
+test('launcher puede abrir terminal y ejecutar copilot con prompt automático', () => {
+    if (process.platform !== 'darwin') return;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-launcher-visible-'));
+    let call;
+    const launcher = new AutomationAgentLauncher((command, args, options) => {
+        call = { command, args, options };
+        return { unref() {} };
+    });
+    const result = launcher.openTerminalWithPrompt('copilot', root);
+    assert.equal(call.command, 'osascript');
+    assert.equal(call.options.cwd, root);
+    assert.equal(Array.isArray(call.args), true);
+    const joined = call.args.join(' ');
+    assert.match(joined, /Terminal/);
+    assert.match(joined, /copilot/);
+    assert.match(joined, /instructions\.md/);
+    assert.match(joined, /'-i'/);
+    assert.match(joined, /--deny-tool/);
+    assert.match(joined, /--no-custom-instructions/);
+    assert.doesNotMatch(joined, /--output-format json/);
+    assert.equal(result.packageDirectory, root);
+});
+
+test('launcher abre monitor legible de ejecución automática en macOS', () => {
+    if (process.platform !== 'darwin') return;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-launcher-monitor-'));
+    let call;
+    const launcher = new AutomationAgentLauncher((command, args, options) => {
+        call = { command, args, options };
+        return { unref() {} };
+    });
+    launcher.openExecutionMonitor(root);
+    assert.equal(call.command, 'osascript');
+    assert.equal(call.options.cwd, root);
+    const joined = call.args.join(' ');
+    assert.match(joined, /Copilot en vivo \(resumen\)/);
+    assert.match(joined, /grep --line-buffered/);
+    assert.match(joined, /assistant\.turn_end/);
+    assert.match(joined, /tail -n 200 -F agent-execution\.log/);
+});
+
 test('el flujo de automatización cruza renderer, preload y main por IPC explícito', () => {
     const root = path.resolve(__dirname, '..');
     const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf-8');
@@ -2215,7 +2590,10 @@ test('el flujo de automatización cruza renderer, preload y main por IPC explíc
     assert.match(controller, /prepareAutomationPackage/);
     assert.match(controller, /prepareAutomationRegeneration/);
     assert.match(controller, /generateAutomationResponse/);
-    assert.match(controller, /showAutomationHandoff\(result\.handoff\)/);
-    assert.match(controller, /btnLaunchAutomation\.disabled = false/);
-    assert.match(controller, /navigator\.clipboard\.writeText\(prompt\)/);
+    assert.match(controller, /launchAutomationAgent\(\{ mode: 'automatic' \}\)/);
+    assert.match(controller, /importAutomationResponse\(true\)/);
+    assert.match(controller, /updateAutomationProgress\(/);
+    assert.match(controller, /btnReimportAutomationCorrection\?\.addEventListener/);
+    assert.doesNotMatch(controller, /showAutomationHandoff/);
+    assert.doesNotMatch(controller, /btnLaunchAutomation/);
 });

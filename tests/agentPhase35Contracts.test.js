@@ -10,6 +10,7 @@ const {
     DEFAULT_AGENT_OPERATIONAL_BUDGETS,
     agentBudgetViolations,
     isAgentFallbackAllowed,
+    resolveRecorderGenerationMode,
 } = require('../dist/core/automationContracts');
 const {
     emptyQueryRequests,
@@ -29,6 +30,13 @@ const { AgentRunStore } = require('../dist/core/agentRunStore');
 const { deriveAutomationContextProjections } = require('../dist/core/automationContextProjections');
 const { GapQueryPolicy } = require('../dist/core/gapQueryPolicy');
 const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
+
+test('la generación determinista es el modo por defecto y legacy requiere opt-in', () => {
+    assert.equal(resolveRecorderGenerationMode(), 'deterministic');
+    assert.equal(resolveRecorderGenerationMode(''), 'deterministic');
+    assert.equal(resolveRecorderGenerationMode('deterministic'), 'deterministic');
+    assert.equal(resolveRecorderGenerationMode('legacy'), 'legacy');
+});
 
 function basePlan() {
     return {
@@ -78,6 +86,8 @@ function baseScenario() {
 test('query request válido', () => {
     const result = validateAgentContextQueryRequests({
         schemaVersion: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION,
+        recordingId: 'rec-1',
+        planId: 'plan-1',
         requests: [{ id: 'q1', gapId: 'gap-screen', query: 'findExistingScreen', args: { name: 'Movements' } }],
     });
     assert.equal(result.valid, true);
@@ -87,6 +97,8 @@ test('query request válido', () => {
 test('query request con versión inválida', () => {
     const result = validateAgentContextQueryRequests({
         schemaVersion: '2.0',
+        recordingId: 'rec-1',
+        planId: 'plan-1',
         requests: [],
     });
     assert.equal(result.valid, false);
@@ -96,6 +108,8 @@ test('query request con versión inválida', () => {
 test('query desconocida', () => {
     const result = validateAgentContextQueryRequests({
         schemaVersion: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION,
+        recordingId: 'rec-1',
+        planId: 'plan-1',
         requests: [{ id: 'q1', gapId: 'gap', query: 'searchEverything', args: {} }],
     });
     assert.equal(result.valid, false);
@@ -105,6 +119,8 @@ test('query desconocida', () => {
 test('gapId faltante', () => {
     const result = validateAgentContextQueryRequests({
         schemaVersion: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION,
+        recordingId: 'rec-1',
+        planId: 'plan-1',
         requests: [{ id: 'q1', query: 'findExample', args: {} }],
     });
     assert.equal(result.valid, false);
@@ -114,6 +130,8 @@ test('gapId faltante', () => {
 test('cantidad máxima de requests', () => {
     const result = validateAgentContextQueryRequests({
         schemaVersion: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION,
+        recordingId: 'rec-1',
+        planId: 'plan-1',
         requests: [
             { id: 'q1', gapId: 'g1', query: 'findExample', args: {} },
             { id: 'q2', gapId: 'g1', query: 'findExample', args: {} },
@@ -168,11 +186,11 @@ test('budget válido', () => {
     assert.deepEqual(violations, []);
 });
 
-test('context budget exceeded', () => {
+test('context bytes no generan violación bloqueante', () => {
     const violations = agentBudgetViolations(DEFAULT_AGENT_OPERATIONAL_BUDGETS, {
         contextBytes: DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxContextBytes + 1,
     });
-    assert.equal(violations.includes('CONTEXT_BUDGET_EXCEEDED'), true);
+    assert.equal(violations.includes('CONTEXT_BUDGET_EXCEEDED'), false);
 });
 
 test('total query budget exceeded', () => {
@@ -236,7 +254,7 @@ test('blocked QA mantiene agentInvocations en 0', () => {
 
 test('feature flag manual', () => {
     assert.equal(resolveAgentExecutionMode('manual'), 'manual');
-    assert.equal(resolveAgentExecutionMode(undefined), 'manual');
+    assert.equal(resolveAgentExecutionMode(undefined), 'automatic');
 });
 
 test('feature flag automatic', () => {
@@ -319,7 +337,7 @@ test('sanitización de logs', () => {
 });
 
 test('serialización/deserialización de contratos', () => {
-    const requests = emptyQueryRequests();
+    const requests = emptyQueryRequests('rec-1', 'plan-1');
     requests.requests.push({ id: 'q1', gapId: 'gap', query: 'findExample', args: { term: 'x' } });
     const parsedRequests = parseAgentContextQueryRequests(JSON.stringify(requests));
     assert.equal(parsedRequests.valid, true);

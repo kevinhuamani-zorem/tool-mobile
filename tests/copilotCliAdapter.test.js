@@ -2,6 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
+const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const { CopilotCliAdapter } = require('../dist/core/copilotCliAdapter');
 
@@ -26,16 +30,314 @@ test('adapter reporta AGENT_NOT_INSTALLED cuando el comando no existe', async ()
 });
 
 test('adapter devuelve éxito cuando el proceso termina en 0', async () => {
-    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+    let capturedArgs = [];
+    const adapter = new CopilotCliAdapter((_command, args, _options) => {
+        capturedArgs = args;
         const child = fakeChild();
         process.nextTick(() => {
             child.stdout.write('ok');
             child.emit('close', 0, null);
         });
         return child;
-    }, 'copilot', ['--ask']);
+    }, 'copilot', ['-p', '--silent']);
     const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 1000 });
     assert.equal(result.success, true);
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /ok/);
+    assert.equal(capturedArgs[0], '-p');
+    assert.equal(capturedArgs[1], 'hola');
+    assert.equal(capturedArgs.includes('--model'), true);
+    assert.equal(capturedArgs.includes('auto'), true);
+});
+
+test('adapter respeta un modelo explícito en args sin inyectar auto', async () => {
+    let capturedArgs = [];
+    const adapter = new CopilotCliAdapter((_command, args, _options) => {
+        capturedArgs = args;
+        const child = fakeChild();
+        process.nextTick(() => child.emit('close', 0, null));
+        return child;
+    }, 'copilot', ['-p', '--model', 'claude-sonnet-5']);
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 1000 });
+    assert.equal(result.success, true);
+    const modelFlags = capturedArgs.filter(value => value === '--model');
+    assert.equal(modelFlags.length, 1);
+    assert.equal(capturedArgs.includes('claude-sonnet-5'), true);
+});
+
+test('adapter termina PASS 2 cuando aparece salida validada por schema', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-stop-on-output-'));
+    const schemaPath = path.join(root, 'agent-response.schema.json');
+    const outputPath = path.join(root, 'agent-response.json');
+    fs.writeFileSync(schemaPath, JSON.stringify({
+        type: 'object',
+        required: ['ok'],
+        properties: { ok: { const: true } },
+        additionalProperties: false,
+    }));
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        return child;
+    }, 'copilot', ['-p']);
+    const started = Date.now();
+    setTimeout(() => {
+        fs.writeFileSync(outputPath, JSON.stringify({ ok: true }));
+    }, 50);
+    try {
+        const result = await adapter.execute({
+            cwd: root,
+            prompt: 'hola',
+            timeoutMs: 10_000,
+            stopOnValidatedOutput: {
+                outputFile: './agent-response.json',
+                schemaFile: './agent-response.schema.json',
+                pollIntervalMs: 25,
+            },
+        });
+        const elapsed = Date.now() - started;
+        assert.equal(result.success, true);
+        assert.equal(result.timedOut, false);
+        assert.equal(elapsed < 2_000, true);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('adapter corta por timeout aunque el hijo ignore SIGTERM', async () => {
+    const script = 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);';
+    const adapter = new CopilotCliAdapter(
+        spawn,
+        process.execPath,
+        ['-e', script, '{prompt}'],
+        50
+    );
+    const started = Date.now();
+    const result = await adapter.execute({
+        cwd: process.cwd(),
+        prompt: 'noop',
+        timeoutMs: 200,
+    });
+    const elapsed = Date.now() - started;
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, 'AGENT_TIMEOUT');
+    assert.equal(result.timedOut, true);
+    assert.equal(elapsed < 1_500, true);
+});
+
+test('adapter no corta cuando una herramienta es denegada', async () => {
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        process.nextTick(() => {
+            child.stdout.write(`${JSON.stringify({
+                type: 'assistant.message',
+                data: {
+                    toolRequests: [{
+                        toolCallId: 'tool-1',
+                        name: 'create',
+                        arguments: { path: '/tmp/query-requests.json', file_text: '{}' },
+                    }],
+                },
+            })}\n`);
+            child.stdout.write(`${JSON.stringify({
+                type: 'tool.execution_complete',
+                data: {
+                    toolCallId: 'tool-1',
+                    success: false,
+                    error: {
+                        message: 'Permission denied and could not request permission from user',
+                        code: 'denied',
+                    },
+                    toolTelemetry: {
+                        properties: {
+                            resolvedPathAgainstCwd: 'true',
+                        },
+                    },
+                },
+            })}\n`);
+            child.emit('close', 0, null);
+        });
+        return child;
+    }, 'copilot', ['-p']);
+    const started = Date.now();
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 10_000 });
+    const elapsed = Date.now() - started;
+    assert.equal(result.success, true);
+    assert.equal(result.errorCode, undefined);
+    assert.equal(Array.isArray(result.deniedToolAttempts), true);
+    assert.equal(result.deniedToolAttempts.length, 1);
+    assert.match(result.deniedToolAttempts[0].detail || '', /query-requests\.json/);
+    assert.equal(result.timedOut, false);
+    assert.equal(elapsed < 2_000, true);
+});
+
+test('adapter corta de inmediato cuando create falla por Path already exists', async () => {
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        process.nextTick(() => {
+            child.stdout.write(`${JSON.stringify({
+                type: 'assistant.message',
+                data: {
+                    toolRequests: [{
+                        toolCallId: 'tool-1',
+                        name: 'create',
+                        arguments: { path: '/tmp/query-requests.json', file_text: '{}' },
+                    }],
+                },
+            })}\n`);
+            child.stdout.write(`${JSON.stringify({
+                type: 'tool.execution_complete',
+                data: {
+                    toolCallId: 'tool-1',
+                    success: false,
+                    error: {
+                        message: 'Path already exists',
+                        code: 'failure',
+                    },
+                },
+            })}\n`);
+        });
+        return child;
+    }, 'copilot', ['-p']);
+    const started = Date.now();
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 10_000 });
+    const elapsed = Date.now() - started;
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, 'AGENT_OUTPUT_PATH_EXISTS');
+    assert.match(result.errorMessage || '', /create no sobrescribe/);
+    assert.match(result.errorMessage || '', /query-requests\.json/);
+    assert.equal(result.timedOut, false);
+    assert.equal(elapsed < 2_000, true);
+});
+
+test('adapter tolera una denegación aislada de bash y puede terminar en éxito', async () => {
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        process.nextTick(() => {
+            child.stdout.write(`${JSON.stringify({
+                type: 'assistant.message',
+                data: {
+                    toolRequests: [{
+                        toolCallId: 'tool-1',
+                        name: 'bash',
+                        arguments: { command: 'find / -maxdepth 1' },
+                    }],
+                },
+            })}\n`);
+            child.stdout.write(`${JSON.stringify({
+                type: 'tool.execution_complete',
+                data: {
+                    toolCallId: 'tool-1',
+                    success: false,
+                    error: {
+                        message: 'Permission denied and could not request permission from user',
+                        code: 'denied',
+                    },
+                },
+            })}\n`);
+            child.emit('close', 0, null);
+        });
+        return child;
+    }, 'copilot', ['-p']);
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 10_000 });
+    assert.equal(result.success, true);
+    assert.equal(result.errorCode, undefined);
+});
+
+test('adapter canonicaliza cwd antes de ejecutar el comando', async () => {
+    if (process.platform === 'win32') return;
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-adapter-cwd-'));
+    const realDir = path.join(tempRoot, 'real');
+    const linkDir = path.join(tempRoot, 'link');
+    fs.mkdirSync(realDir, { recursive: true });
+    fs.symlinkSync(realDir, linkDir);
+    const expectedCwd = fs.realpathSync.native(linkDir);
+    let capturedCwd = null;
+    const adapter = new CopilotCliAdapter((_command, _args, options) => {
+        capturedCwd = options?.cwd || null;
+        const child = fakeChild();
+        process.nextTick(() => child.emit('close', 0, null));
+        return child;
+    }, 'copilot', ['-p']);
+    try {
+        await adapter.execute({ cwd: linkDir, prompt: 'hola', timeoutMs: 1000 });
+    } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+    assert.equal(capturedCwd, expectedCwd);
+});
+
+test('denegación por ruta absoluta interna no corta y se contabiliza como formato', async () => {
+    const cwd = path.join(os.tmpdir(), `copilot-path-inside-${Date.now()}`);
+    fs.mkdirSync(cwd, { recursive: true });
+    const absoluteInside = path.join(cwd, 'scenario.json');
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        process.nextTick(() => {
+            child.stdout.write(`${JSON.stringify({
+                type: 'assistant.message',
+                data: {
+                    toolRequests: [{
+                        toolCallId: 'tool-inside',
+                        name: 'view',
+                        arguments: { path: absoluteInside },
+                    }],
+                },
+            })}\n`);
+            child.stdout.write(`${JSON.stringify({
+                type: 'tool.execution_complete',
+                data: {
+                    toolCallId: 'tool-inside',
+                    success: false,
+                    error: { message: 'Permission denied and could not request permission from user', code: 'denied' },
+                    toolTelemetry: { properties: { resolvedPathAgainstCwd: 'false' } },
+                },
+            })}\n`);
+            child.emit('close', 0, null);
+        });
+        return child;
+    }, 'copilot', ['-p']);
+    const result = await adapter.execute({ cwd, prompt: 'hola', timeoutMs: 5000 });
+    assert.equal(result.success, true);
+    assert.equal(result.deniedPathStats?.insideCwdCount, 1);
+    assert.equal(result.deniedPathStats?.outsideCwdCount, 0);
+    fs.rmSync(cwd, { recursive: true, force: true });
+});
+
+test('denegación fuera de cwd se contabiliza como fuga y no corta ejecución', async () => {
+    const cwd = path.join(os.tmpdir(), `copilot-path-outside-${Date.now()}`);
+    const outsidePath = path.join(os.tmpdir(), `copilot-outside-${Date.now()}.txt`);
+    fs.mkdirSync(cwd, { recursive: true });
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        process.nextTick(() => {
+            child.stdout.write(`${JSON.stringify({
+                type: 'assistant.message',
+                data: {
+                    toolRequests: [{
+                        toolCallId: 'tool-outside',
+                        name: 'view',
+                        arguments: { path: outsidePath },
+                    }],
+                },
+            })}\n`);
+            child.stdout.write(`${JSON.stringify({
+                type: 'tool.execution_complete',
+                data: {
+                    toolCallId: 'tool-outside',
+                    success: false,
+                    error: { message: 'Permission denied and could not request permission from user', code: 'denied' },
+                    toolTelemetry: { properties: { resolvedPathAgainstCwd: 'false' } },
+                },
+            })}\n`);
+            child.emit('close', 0, null);
+        });
+        return child;
+    }, 'copilot', ['-p']);
+    const result = await adapter.execute({ cwd, prompt: 'hola', timeoutMs: 5000 });
+    assert.equal(result.success, true);
+    assert.equal(result.errorCode, undefined);
+    assert.equal(result.deniedPathStats?.insideCwdCount, 0);
+    assert.equal(result.deniedPathStats?.outsideCwdCount, 1);
+    assert.equal(result.deniedToolAttempts?.[0]?.pathClass, 'outside');
+    fs.rmSync(cwd, { recursive: true, force: true });
 });

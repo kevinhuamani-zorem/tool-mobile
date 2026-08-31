@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+  "planId": "plan-b593f28e3c286b3b93d45e80",
+  "resolutions": [
+    {
+      "gapId": "gap-duplicate-element-1",
+      "decision": "unresolved",
+      "reason": "No se pudo confirmar si el locator existente home/home.lblSales (\"ver ventas\") es el mismo elemento que salesButton (android=new UiSelector().text(\"Ver ventas\")). findExistingScreen no encontro ningun screen object relacionado (not-found) y findExistingStep solo devolvio step definitions de payment sin relacion con \"ventas\", \"sales\" o \"lblSales\" (otp.steps.ts, confirmacion-envio-email-movements.steps.ts, payment.steps.ts). El presupuesto de queries para este gap (maxQueries: 2) esta agotado sin evidencia suficiente para decidir entre reutilizar home/home.lblSales o mantener salesButton como locator nuevo; requiere confirmacion de QA sobre si ambos botones pertenecen a la misma pantalla/flujo."
+    }
+  ]
+}

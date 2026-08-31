@@ -14,10 +14,9 @@ export function ScenarioBuilderModal() {
         <nav className="wizard-stepper" aria-label="Progreso">
           {[
             ['1', 'Evidencia'],
-            ['2', 'Contexto'],
-            ['3', 'Agente'],
-            ['4', 'Revisión'],
-            ['5', 'Generación']
+            ['2', 'Análisis'],
+            ['3', 'Generación'],
+            ['4', 'Revisión']
           ].map(([number, label], index) => (
             <button type="button" className={`wizard-step${index === 0 ? ' active' : ''}`}
                     data-wizard-target={index + 1} key={number}>
@@ -39,8 +38,8 @@ export function ScenarioBuilderModal() {
 
           <section className="wizard-page" data-wizard-page="2">
             <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 2</span><h3>Define el objetivo funcional</h3></div>
-              <span className="wizard-help">El resolver construirá el plan; el agente solo resolverá brechas.</span>
+              <div><span className="eyebrow">PASO 2</span><h3>Define el objetivo y analiza la grabación</h3></div>
+              <span className="wizard-help">El análisis identifica reutilización, componentes nuevos y decisiones pendientes.</span>
             </div>
             <div className="wizard-case-config automation-context-form">
               <div className="input-group">
@@ -82,6 +81,13 @@ export function ScenarioBuilderModal() {
               <input type="text" id="txtLocatorModule" defaultValue="nueva-pantalla" />
             </div>
             <button id="btnNuevoStep" style={{display: 'none'}} />
+            <div id="automationAnalysisSummary" className="generation-summary" style={{marginTop: '10px'}}>
+              <span className="generation-icon">ℹ</span>
+              <div>
+                <h3>Resumen pendiente</h3>
+                <p>Completa el objetivo y el resultado esperado para iniciar el análisis.</p>
+              </div>
+            </div>
             <div id="wizardGherkinHost" style={{display: 'none'}}>
               <div id="scenarioRows" className="scenario-rows wizard-gherkin-rows">
                 <div className="scenario-empty-hint" />
@@ -91,34 +97,62 @@ export function ScenarioBuilderModal() {
 
           <section className="wizard-page" data-wizard-page="3">
             <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 3</span><h3>Genera la propuesta de automatización</h3></div>
-              <span className="wizard-help">Tiempo objetivo: menos de 5 minutos y contexto máximo de 20 KB.</span>
+              <div><span className="eyebrow">PASO 3</span><h3>Generando automatización</h3></div>
+              <span className="wizard-help">El proceso usa estados reales del pipeline y avanza automáticamente.</span>
             </div>
             <div className="generation-summary automation-agent-summary">
               <span className="generation-icon">↗</span>
               <div>
-                <h3>Preprocesamiento determinista</h3>
-                <p>Reutiliza locators de squad/Home, normaliza selectores y prepara solo los gaps.</p>
+                <h3>Generación automática deterministic-first</h3>
+                <p>Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.</p>
               </div>
             </div>
             <div className="automation-agent-actions">
-              <button className="btn btn-navy" id="btnPrepareAutomation">Preparar paquete mínimo</button>
-              <button className="btn btn-dark" id="btnLaunchAutomation" disabled>Abrir Terminal del agente</button>
-              <button className="btn btn-blue" id="btnImportAutomation">Importar y validar respuesta</button>
+              <button className="btn btn-blue" id="btnRunAutomationPipeline">Iniciar generación automática</button>
             </div>
-            <div id="automationAgentHandoff" className="automation-agent-handoff" style={{display: 'none'}}>
-              <div className="automation-agent-handoff-header">
-                <div>
-                  <strong>Carpeta de trabajo del agente</strong>
-                  <code id="automationAgentPath" />
+            <div id="automationWorkingState" className="automation-working-state is-idle" aria-live="polite">
+              <div className="automation-working-heading">
+                <span className="automation-spinner" aria-hidden="true" />
+                <div className="automation-working-copy">
+                  <strong id="automationWorkingTitle">Listo para generar</strong>
+                  <span id="automationWorkingDetail">El progreso aparecerá aquí al iniciar.</span>
                 </div>
-                <button className="btn btn-dark" id="btnCopyAgentPrompt">Copiar prompt</button>
               </div>
-              <label htmlFor="automationAgentPrompt">Prompt inicial</label>
-              <textarea id="automationAgentPrompt" readOnly />
-              <small>Abre Copilot o Claude en la Terminal y pega este prompt.</small>
+            </div>
+            <div id="automationPipelineStatus" className="generate-result">Listo para iniciar.</div>
+            <ul id="automationPipelineStages" className="steps-list wizard-action-list">
+              <li data-product-stage="ANALYZING">○ Analizando grabación</li>
+              <li data-product-stage="RESOLVING_CONTEXT">○ Buscando componentes reutilizables</li>
+              <li data-product-stage="RESOLVING_DECISIONS">○ Resolviendo decisiones pendientes</li>
+              <li data-product-stage="GENERATING">○ Generando automatización</li>
+              <li data-product-stage="VALIDATING">○ Validando resultado</li>
+              <li data-product-stage="READY_FOR_REVIEW">○ Listo para revisión</li>
+            </ul>
+            <div id="automationPipelineSummary" className="wizard-help" style={{marginTop: '8px'}}>
+              Inicia la generación para ver el progreso.
+            </div>
+            <div id="automationQaRequired" className="generation-summary" style={{display: 'none', marginTop: '10px'}}>
+              <span className="generation-icon">⚠</span>
+              <div>
+                <h3>Necesitamos confirmar una decisión</h3>
+                <ul id="automationQaDecisionList" className="steps-list wizard-action-list" />
+                <button className="btn btn-green" id="btnConfirmQaDecision" style={{marginTop: '8px'}}>
+                  Confirmar y continuar
+                </button>
+              </div>
             </div>
             <div id="automationPackageStatus" className="generate-result" />
+            <div id="automationCorrectionReimport" className="automation-correction-reimport" style={{display: 'none'}}>
+              <div>
+                <strong>¿Copilot ya corrigió la propuesta?</strong>
+                <small id="automationCorrectionHint">
+                  Cuando el agente indique que la validación pasó, vuelve a importar el archivo corregido.
+                </small>
+              </div>
+              <button className="btn btn-blue" id="btnReimportAutomationCorrection">
+                ↻ Reimportar corrección del agente
+              </button>
+            </div>
             <div className="wizard-link-layout" style={{display: 'none'}}>
               <ul id="wizardLinkActions" /><div id="wizardLinkRows" />
             </div>
@@ -126,7 +160,7 @@ export function ScenarioBuilderModal() {
 
           <section className="wizard-page" data-wizard-page="4">
             <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 4</span><h3>Depura la propuesta y revisa los archivos</h3></div>
+              <div><span className="eyebrow">PASO 4</span><h3>Revisa y aplica la automatización</h3></div>
             </div>
             <p className="wizard-help">Los nombres propuestos, el TC y el contenido final se editan directamente en los archivos del preview.</p>
             <select id="cmbPreviewFile" className="field-select wizard-file-tabs" style={{display: 'none'}} />
@@ -155,26 +189,25 @@ export function ScenarioBuilderModal() {
                 </footer>
               </section>
             </div>
-            <div id="lblGenerateResult" className="generate-result" />
-            <button className="btn btn-navy" id="btnPreview">↻ Reimportar y validar</button>
-          </section>
-
-          <section className="wizard-page" data-wizard-page="5">
-            <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 5</span><h3>Genera el caso en fwk-mobile-test</h3></div>
+            <div className="review-approval-panel">
+              <div className="review-validation-status">
+                <span className="review-validation-icon">✓</span>
+                <div>
+                  <h3>Validación correcta</h3>
+                  <p id="lblGenerationFileCount">Se escribirán únicamente los archivos mostrados en la revisión.</p>
+                </div>
+              </div>
+              <div className="review-primary-actions">
+                <button className="btn btn-navy" id="btnPreview">↻ Revalidar</button>
+                <button className="btn btn-green btn-generate-final" id="btnGenerate">Aplicar automatización</button>
+              </div>
             </div>
-            <div className="generation-summary">
-              <span className="generation-icon">✓</span>
-              <div><h3>Todo listo para generar</h3>
-                <p id="lblGenerationFileCount">Se escribirán únicamente los archivos mostrados en la revisión.</p></div>
-            </div>
-            <button className="btn btn-green btn-generate-final" id="btnGenerate">💾 Generar archivos</button>
-            <div id="wizardGenerationResult" className="generate-result" />
+            <div id="lblGenerateResult" className="generate-result review-generation-result" />
           </section>
         </main>
 
         <footer className="workflow-wizard-footer">
-          <span className="enlazar-hint" id="enlazarHint">Paso 1 de 5 · Revisa las acciones</span>
+          <span className="enlazar-hint" id="enlazarHint">Paso 1 de 4 · Revisa las acciones</span>
           <div>
             <button className="btn btn-dark" id="btnWizardBack" disabled>← Atrás</button>
             <button className="btn btn-green" id="btnWizardNext">Continuar →</button>

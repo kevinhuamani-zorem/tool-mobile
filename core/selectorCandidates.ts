@@ -94,19 +94,6 @@ export function candidateAllowlist(step: RecordedStep, platform: MobilePlatform)
     stability: SelectorCandidateStability;
     priority: number;
 }> {
-    const compact = compactSelectorCandidates(step.selectorCandidates || [], step.selector || '', platform);
-    if (compact.length) {
-        return compact.map(candidate => ({
-            candidateId: candidate.candidateId,
-            selector: candidate.selector,
-            locatorType: candidate.locatorType,
-            locatorValue: candidate.locatorValue,
-            primary: candidate.primary,
-            stability: candidate.stability,
-            priority: candidate.priority,
-        }));
-    }
-    if ((step.selectorCandidates || []).length) return [];
     // `undefined` pertenece a recordings v1, cuyo store marcaba cualquier
     // selector ejecutado como verificado. Los clientes nuevos envían false de
     // forma explícita, por lo que un texto no verificado ya no se promociona.
@@ -139,19 +126,7 @@ export function locatorCandidatePackage(scenario: AutomationScenario): LocatorCa
         schemaVersion: 1,
         recordingId: scenario.recordingId,
         platform: scenario.platform,
-        actions: scenario.actions.flatMap(action => {
-            const candidates = compactSelectorCandidates(
-                action.selectorCandidates || [],
-                action.selector || '',
-                scenario.platform,
-            );
-            const primary = candidates.find(candidate => candidate.primary);
-            return primary ? [{
-                sequence: action.sequence,
-                primaryCandidateId: primary.candidateId,
-                candidates,
-            }] : [];
-        }),
+        actions: [],
     };
 }
 
@@ -172,31 +147,16 @@ export function attachLocatorCandidatePackage(
     scenario: AutomationScenario,
     packaged: LocatorCandidatePackage | undefined,
 ): AutomationScenario {
-    if (!packaged) return scenario;
     if (
-        packaged.schemaVersion !== 1
-        || packaged.recordingId !== scenario.recordingId
-        || packaged.platform !== scenario.platform
-        || !Array.isArray(packaged.actions)
+        packaged
+        && (
+            packaged.schemaVersion !== 1
+            || packaged.recordingId !== scenario.recordingId
+            || packaged.platform !== scenario.platform
+            || !Array.isArray(packaged.actions)
+        )
     ) {
         throw new Error('locator-candidates.json no coincide con la grabación');
     }
-    const bySequence = new Map(packaged.actions.map(entry => [entry.sequence, entry]));
-    return {
-        ...scenario,
-        actions: scenario.actions.map(action => {
-            const entry = bySequence.get(action.sequence);
-            if (!entry) return action;
-            const candidates = compactSelectorCandidates(
-                entry.candidates,
-                action.selector || '',
-                scenario.platform,
-            );
-            const primary = candidates.find(candidate => candidate.primary);
-            if (!primary || primary.candidateId !== entry.primaryCandidateId) {
-                throw new Error(`Candidatos inválidos para la acción ${action.sequence}`);
-            }
-            return { ...action, selectorCandidates: candidates };
-        }),
-    };
+    return scenario;
 }

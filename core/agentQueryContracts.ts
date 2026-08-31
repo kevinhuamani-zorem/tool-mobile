@@ -6,6 +6,7 @@ import {
     AgentContextQueryResult,
     AgentContextQueryResults,
     FrameworkContextQuery,
+    FRAMEWORK_CONTEXT_QUERIES,
     DEFAULT_AGENT_OPERATIONAL_BUDGETS,
 } from './automationContracts';
 
@@ -15,21 +16,14 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
         : undefined;
 }
 
-const SUPPORTED_QUERIES = new Set<FrameworkContextQuery>([
-    'inspectScenario',
-    'findExistingScreen',
-    'findExistingStep',
-    'findExample',
-    'findLocator',
-    'getContract',
-    'getHelperApi',
-    'validateImports',
-]);
+const SUPPORTED_QUERIES = new Set<FrameworkContextQuery>(FRAMEWORK_CONTEXT_QUERIES);
 
 const RESULT_STATUSES = new Set(['resolved', 'rejected', 'not-found', 'error']);
 
 const REJECTION_CODES = new Set([
     'query-not-allowed',
+    'invalid-args',
+    'query-truncated',
     'no-open-gap',
     'max-queries-exceeded',
     'duplicate-query',
@@ -49,10 +43,41 @@ export interface ContractValidationResult<T> {
     value?: T;
 }
 
-export function emptyQueryRequests(): AgentContextQueryRequests {
+export function emptyQueryRequests(recordingId = '', planId = ''): AgentContextQueryRequests {
     return {
         schemaVersion: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION,
+        recordingId,
+        planId,
         requests: [],
+    };
+}
+
+export function queryRequestsSchema(maxRequests = DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxTotalQueries): Record<string, unknown> {
+    return {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        required: ['schemaVersion', 'recordingId', 'planId', 'requests'],
+        properties: {
+            schemaVersion: { const: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION },
+            recordingId: { type: 'string', minLength: 1 },
+            planId: { type: 'string', minLength: 1 },
+            requests: {
+                type: 'array',
+                maxItems: Math.max(1, Math.floor(maxRequests)),
+                items: {
+                    type: 'object',
+                    required: ['id', 'gapId', 'query', 'args'],
+                    properties: {
+                        id: { type: 'string', minLength: 1 },
+                        gapId: { type: 'string', minLength: 1 },
+                        query: { enum: [...SUPPORTED_QUERIES] },
+                        args: { type: 'object' },
+                    },
+                    additionalProperties: false,
+                },
+            },
+        },
+        additionalProperties: false,
     };
 }
 
@@ -96,6 +121,22 @@ export function validateAgentContextQueryRequests(
             code: 'schema-version',
             path: '$.schemaVersion',
             message: `schemaVersion inválido: esperado ${AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION}.`,
+        });
+    }
+    const recordingId = typeof record.recordingId === 'string' ? record.recordingId.trim() : '';
+    const planId = typeof record.planId === 'string' ? record.planId.trim() : '';
+    if (!recordingId) {
+        errors.push({
+            code: 'recording-id',
+            path: '$.recordingId',
+            message: 'recordingId es obligatorio.',
+        });
+    }
+    if (!planId) {
+        errors.push({
+            code: 'plan-id',
+            path: '$.planId',
+            message: 'planId es obligatorio.',
         });
     }
     const requests = Array.isArray(record.requests) ? record.requests : undefined;
@@ -161,6 +202,8 @@ export function validateAgentContextQueryRequests(
         errors: [],
         value: {
             schemaVersion: AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION,
+            recordingId,
+            planId,
             requests: normalizedRequests,
         },
     };

@@ -32,11 +32,11 @@ La puerta exige:
   squad/Home;
 - equivalencia de selectores con o sin prefijos `id=`, `~` y `android=`.
 - protocolo Inspector v3 estricto, segunda validación contra el mismo
-  `elementId`, roundtrip de TypeLocator y cap compacto de cuatro candidatos;
-- `locator-candidates.json` como única allowlist de backups en el paquete, sin
-  XML, screenshots, source ni atributos;
-- reuse por alternativas verificadas con ranking determinista, gap QA ante
-  ambigüedad y rechazo de selectores inventados por el agente;
+  `elementId` y roundtrip de TypeLocator;
+- selector único verificado por acción (sin backups persistidos), sin XML,
+  screenshots, source ni atributos;
+- reuse por coincidencia exacta del selector verificado y rechazo de selectores
+  inventados por el agente;
 - imports internos por `@screenobjects`, `@utils` y `@locators`, sin rutas
   relativas ni imports de `browser` sin uso.
 - limpieza de placeholders vacíos al arrancar sin eliminar recordings con
@@ -52,13 +52,16 @@ La puerta exige:
 2. Definir objetivo y resultado esperado; preparar el paquete mínimo.
 3. Confirmar que selectores verificados y reuse squad/Home quedaron resueltos
    antes de abrir el agente.
-4. Revisar `reuse-context.json` y `collision-report.json`; ningún candidato debe
-   obligar al agente a explorar el framework.
+4. Revisar `reuse-context.json` y `collision-report.json`; ningún gap debe
+   obligar al agente a explorar el framework fuera de `allowedQueries`.
    Revisar primero `hints.json` y `gaps.json`: si `gaps` está vacío no debe
    existir ninguna consulta permitida y `blocked-qa` debe tener presupuesto cero.
 5. Confirmar que “Abrir Terminal del agente” esté habilitado, abra la carpeta
    mostrada y no ejecute ningún CLI automáticamente.
 6. Copiar el prompt inicial mostrado y comprobar que limita al agente al paquete.
+   En modo automático sobre macOS, confirmar además que PASS 2 abre Copilot en
+   Terminal, recibe el prompt sin pegarlo manualmente y que una respuesta válida
+   lleva el wizard a Revisión de forma automática.
 7. Revisar Feature, Steps, Screen Object y Locators en el visor de código.
 8. Modificar un archivo y confirmar que el estado cambie a `Editado`.
 9. Probar `Copiar contenido`, `Copiar ruta` y `Descartar cambios`.

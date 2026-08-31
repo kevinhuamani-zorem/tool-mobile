@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0",
+  "results": [
+    {
+      "requestId": "q-gap-weak-assertion-15-locator",
+      "gapId": "gap-weak-assertion-15",
+      "status": "resolved",
+      "data": {
+        "items": [
+          {
+            "type": "locator",
+            "name": "titleMovements",
+            "symbol": "titleMovements",
+            "path": "resources/locators/payment/movements.locator.json",
+            "scope": "payment"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { RecordedStep, toGherkinLine } from './models';
 import { screenObjectNames } from './semanticNaming';
 import { withGeneratedFileMetadata } from './generatedFileMetadata';
 import { featureScopeDirectory, normalizeFeatureScope } from './featureScope';
+import { detectRepetition } from './repetitionDetector';
 
 export type TestPathType = 'Happy Path' | 'Unhappy Path';
 export type MobilePlatform = 'android' | 'ios';
@@ -36,6 +37,15 @@ export interface GenerationRequest {
     scenarioRows?: {
         keyword: 'Given' | 'When' | 'Then' | 'And' | 'But';
         text: string;
+        dataTable?: {
+            headers: string[];
+            rows: string[][];
+        };
+        repetitionExecution?: {
+            loopStartIndex: number;
+            loopLength: number;
+            parameter: string;
+        };
         actions?: RecordedStep[];
         status?: 'reused' | 'missing';
         /**
@@ -152,7 +162,8 @@ export class FwkMobileGenerator {
     preview(
         request: GenerationRequest,
         steps: RecordedStep[],
-        reused: ReusedLocator[] = []
+        reused: ReusedLocator[] = [],
+        options: { preserveDistinctActionLocators?: boolean } = {},
     ): GeneratedPreview {
         const normalized = this.normalizeRequest(request);
         // Solo sirven los que traen referencia para la plataforma del caso: sin
@@ -166,7 +177,10 @@ export class FwkMobileGenerator {
             featureScopeDirectory(projectPaths.features, normalized.squad, normalized.featureScope),
             `${normalized.fileName}.feature`
         );
-        const missingRows = normalized.scenarioRows?.filter(row => row.status === 'missing') || [];
+        const missingRows = this.normalizeScenarioRows(
+            normalized.scenarioRows?.filter(row => row.status === 'missing') || [],
+            Boolean(options.preserveDistinctActionLocators),
+        );
         const generationActions = normalized.scenarioRows
             ? missingRows.flatMap(row => row.actions || [])
             : steps;
@@ -377,7 +391,15 @@ export class FwkMobileGenerator {
         if (request.dataName && !examples.username) examples.username = request.dataName;
         const outline = Object.keys(examples).length > 0;
         const scenarioLines = request.scenarioRows?.length
-            ? request.scenarioRows.map(row => `    ${row.keyword} ${row.text.trim()}`)
+            ? request.scenarioRows.flatMap(row => [
+                `    ${row.keyword} ${row.text.trim()}`,
+                ...((row.dataTable?.headers?.length && row.dataTable.rows.length)
+                    ? [
+                        `      | ${row.dataTable.headers.join(' | ')} |`,
+                        ...row.dataTable.rows.map(values => `      | ${values.join(' | ')} |`),
+                    ]
+                    : []),
+            ])
             : steps.map((step, index) => `    ${toGherkinLine(step, index)}`);
         // Tags segun el estandar del repo: dominio de producto sobre `Feature:`,
         // y en el Scenario funcionalidad + tier de ejecucion. Faltar el tier es
@@ -496,19 +518,33 @@ export class FwkMobileGenerator {
         );
         const screenInstanceName = screenObjectNames(screenPath).instanceName;
         const effectiveKeywords = this.effectiveStepKeywords(rows);
-        const imports = [...new Set(effectiveKeywords)].sort();
+        const imports = [...new Set([
+            ...effectiveKeywords,
+            ...(rows.some(row => Boolean(row.dataTable?.headers?.length)) ? ['DataTable'] : []),
+        ])].sort();
         const blocks = rows.map((row, index) => {
             const keyword = effectiveKeywords[index];
             const parameters = [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
                 .map(match => match[1]);
             const expression = this.stepExpression(row.text);
-            const args = parameters.map(name => `${name}: string`).join(', ');
-            const callArgs = parameters.join(', ');
             const methodName = scenarioRowMethodName(row, index);
+            const dataTableBinding = this.dataTableBinding(row, methodName);
+            const args = [
+                ...parameters.map(name => `${name}: string`),
+                ...(dataTableBinding ? ['dataTable: DataTable'] : []),
+            ].join(', ');
+            const callArgs = [
+                ...parameters,
+                ...(dataTableBinding ? [dataTableBinding.callArgument] : []),
+            ].join(', ');
+            const setup = dataTableBinding
+                ? [`    const ${dataTableBinding.callArgument} = ${dataTableBinding.extractExpression};`]
+                : [];
             return {
                 key: `${keyword}:${expression}`,
                 content: [
                 `${keyword}(/^${expression}$/, async (${args}) => {`,
+                ...setup,
                 `    await ${screenInstanceName}.${methodName}(${callArgs});`,
                 `});`
                 ].join('\n')
@@ -597,6 +633,21 @@ export class FwkMobileGenerator {
             }
             const selector = locators.find(([key]) => key === name)?.[1] || '';
             const activeType = this.locatorType(selector, request.platform);
+            const dynamicParameter = selector.match(/\{([A-Za-z_][A-Za-z0-9_]*)\}/)?.[1];
+            if (dynamicParameter) {
+                return [
+                    `    public ${name}(${dynamicParameter}: string) {`,
+                    `        const iosValue = Locators[${JSON.stringify(iosBlock)}].${name}.replace('{${dynamicParameter}}', ${dynamicParameter});`,
+                    `        const androidValue = Locators[${JSON.stringify(androidBlock)}].${name}.replace('{${dynamicParameter}}', ${dynamicParameter});`,
+                    ...getterBody(
+                        request.platform === 'ios' ? activeType : 'XPATH',
+                        'iosValue',
+                        request.platform === 'android' ? activeType : 'XPATH',
+                        'androidValue'
+                    ),
+                    `    }`
+                ].join('\n');
+            }
             return [
                 `    public get ${name}() {`,
                 ...getterBody(
@@ -617,14 +668,19 @@ export class FwkMobileGenerator {
         const methods = rows.map((row, index) => {
             const parameters = [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
                 .map(match => match[1]);
-            const args = parameters.map(name => `${name}: string`).join(', ');
             const rowActions = row.actions || [];
-            const actions = rowActions.flatMap((action, actionIndex) =>
-                this.actionLines(action, parameters, actionIndex, {
-                    hasTimeout, next: rowActions[actionIndex + 1],
-                })
-            );
             const methodName = scenarioRowMethodName(row, index);
+            const dataTableBinding = this.dataTableBinding(row, methodName);
+            const args = [
+                ...parameters.map(name => `${name}: string`),
+                ...(dataTableBinding ? [dataTableBinding.signature] : []),
+            ].join(', ');
+            const actions = this.methodActions(rowActions, {
+                hasTimeout,
+                parameters,
+                dataTableBinding,
+                repetitionExecution: row.repetitionExecution,
+            });
             return {
                 name: methodName,
                 content: [
@@ -698,7 +754,12 @@ export class FwkMobileGenerator {
         actionIndex: number,
         options: { hasTimeout: boolean; next?: RecordedStep } = { hasTimeout: false }
     ): string[] {
-        const locator = action.variableName ? `this.${action.variableName}` : undefined;
+        const dynamicParameter = String(action.selector || '').match(/\{([A-Za-z_][A-Za-z0-9_]*)\}/)?.[1];
+        const locator = action.variableName
+            ? (dynamicParameter && parameters.includes(dynamicParameter)
+                ? `this.${action.variableName}(${dynamicParameter})`
+                : `this.${action.variableName}`)
+            : undefined;
         const value = this.codeValue(action.value || '', parameters);
         const element = `element${actionIndex + 1}`;
         const ready = (target: string): string =>
@@ -817,6 +878,165 @@ export class FwkMobileGenerator {
         const placeholder = value.match(/^<([A-Za-z_][A-Za-z0-9_]*)>$/)?.[1];
         if (placeholder && parameters.includes(placeholder)) return placeholder;
         return JSON.stringify(value);
+    }
+
+    private normalizeScenarioRows(
+        rows: NonNullable<GenerationRequest['scenarioRows']>,
+        preserveDistinctActionLocators = false,
+    ): NonNullable<GenerationRequest['scenarioRows']> {
+        return rows.map(row => {
+            if (!row.dataTable?.headers?.length || !row.actions?.length) return row;
+            const repetition = detectRepetition(row.actions);
+            if (!repetition || row.dataTable.headers.length !== 1) return row;
+            const cycleStart = row.actions.findIndex(action => action.sequence === repetition.startSequence);
+            if (cycleStart < 0) return row;
+            const loopActions = row.actions.slice(cycleStart, cycleStart + repetition.length);
+            if (!loopActions.length) return row;
+            const varying = loopActions[repetition.varyingOffset];
+            if (!varying) return row;
+            // Un ciclo solo puede compactarse sobre un locator parametrizable
+            // cuando todas las vueltas representan la misma clave lógica. Si
+            // cada opción tiene su propio locator verificado (p.ej. filtros de
+            // 7/15/30/90 días), colapsarlas bajo la primera clave elimina
+            // trazabilidad y puede convertir un getter reutilizado en una
+            // llamada inválida `getter(valor)`.
+            const varyingNames = Array.from({ length: repetition.repetitions }, (_, round) =>
+                row.actions![cycleStart + round * repetition.length + repetition.varyingOffset]?.variableName || ''
+            );
+            if (preserveDistinctActionLocators && new Set(varyingNames).size !== 1) return row;
+            const parameter = row.dataTable.headers[0];
+            if (!parameter) return row;
+            const selector = this.selectorTemplate(String(varying.selector || ''), parameter);
+            if (!selector) return row;
+            const loopStart = cycleStart;
+            const postStart = cycleStart + repetition.length * repetition.repetitions;
+            const compactActions = [
+                ...row.actions.slice(0, cycleStart),
+                ...loopActions.map((action, index) =>
+                    index === repetition.varyingOffset ? { ...action, selector } : action
+                ),
+                ...row.actions.slice(postStart),
+            ];
+            return {
+                ...row,
+                repetitionExecution: {
+                    loopStartIndex: loopStart,
+                    loopLength: repetition.length,
+                    parameter,
+                },
+                actions: compactActions,
+            };
+        });
+    }
+
+    private methodActions(
+        rowActions: RecordedStep[],
+        options: {
+            hasTimeout: boolean;
+            parameters: string[];
+            dataTableBinding?: {
+                itemVariable: string;
+                callArgument: string;
+                signature: string;
+                extractExpression: string;
+            };
+            repetitionExecution?: {
+                loopStartIndex: number;
+                loopLength: number;
+                parameter: string;
+            };
+        }
+    ): string[] {
+        if (!options.dataTableBinding || !options.repetitionExecution) {
+            return rowActions.flatMap((action, actionIndex) =>
+                this.actionLines(action, options.parameters, actionIndex, {
+                    hasTimeout: options.hasTimeout,
+                    next: rowActions[actionIndex + 1],
+                })
+            );
+        }
+        const { loopStartIndex, loopLength, parameter } = options.repetitionExecution;
+        const pre = rowActions.slice(0, loopStartIndex);
+        const loop = rowActions.slice(loopStartIndex, loopStartIndex + loopLength);
+        const post = rowActions.slice(loopStartIndex + loopLength);
+        const loopVar = options.dataTableBinding.itemVariable;
+        const loopParams = [...options.parameters, parameter];
+        const preLines = pre.flatMap((action, actionIndex) =>
+            this.actionLines(action, options.parameters, actionIndex, {
+                hasTimeout: options.hasTimeout,
+                next: pre[actionIndex + 1] || loop[0],
+            })
+        );
+        const loopLines = loop.flatMap((action, actionIndex) =>
+            this.actionLines(action, loopParams, actionIndex, {
+                hasTimeout: options.hasTimeout,
+                next: loop[actionIndex + 1] || post[0],
+            })
+        ).map(line => `    ${line.replace(new RegExp(`\\b${parameter}\\b`, 'g'), loopVar)}`);
+        const postLines = post.flatMap((action, actionIndex) =>
+            this.actionLines(action, options.parameters, actionIndex, {
+                hasTimeout: options.hasTimeout,
+                next: post[actionIndex + 1],
+            })
+        );
+        return [
+            ...preLines,
+            `for (const ${loopVar} of ${options.dataTableBinding.callArgument}) {`,
+            ...loopLines,
+            `}`,
+            ...postLines,
+        ];
+    }
+
+    private dataTableBinding(
+        row: NonNullable<GenerationRequest['scenarioRows']>[number],
+        methodName: string,
+    ): {
+        itemVariable: string;
+        callArgument: string;
+        signature: string;
+        extractExpression: string;
+    } | undefined {
+        if (!row.dataTable?.headers?.length) return undefined;
+        if (row.dataTable.headers.length !== 1) {
+            const rowsName = `${methodName}Rows`;
+            return {
+                itemVariable: 'row',
+                callArgument: rowsName,
+                signature: `${rowsName}: Array<Record<string, string>>`,
+                extractExpression: 'dataTable.hashes()',
+            };
+        }
+        const header = row.dataTable.headers[0];
+        const base = this.safeIdentifier(header, 'rowValue');
+        const itemVariable = `${base}Value`;
+        const callArgument = `${base}Values`;
+        return {
+            itemVariable,
+            callArgument,
+            signature: `${callArgument}: string[]`,
+            extractExpression: `dataTable.hashes().map((row) => row[${JSON.stringify(header)}])`,
+        };
+    }
+
+    private safeIdentifier(source: string, fallback: string): string {
+        const normalized = String(source || '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Za-z0-9_]+/g, ' ')
+            .trim();
+        if (!normalized) return fallback;
+        const parts = normalized.split(/\s+/);
+        const output = parts[0].toLowerCase() + parts.slice(1)
+            .map(part => part[0].toUpperCase() + part.slice(1).toLowerCase())
+            .join('');
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(output)) return fallback;
+        return output;
+    }
+
+    private selectorTemplate(selector: string, parameter: string): string | undefined {
+        const match = String(selector).match(/(["'])([^"']+)\1/);
+        if (!match) return undefined;
+        return selector.replace(match[0], `${match[1]}{${parameter}}${match[1]}`);
     }
 
 }

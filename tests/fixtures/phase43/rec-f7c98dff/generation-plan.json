@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "1.0.0",
+  "planId": "plan-b593f28e3c286b3b93d45e80",
+  "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+  "fingerprint": "56fc5eb0ef7aa757cd14f024414c2ff3e69b434d7818950d31741c3d90b8235e",
+  "deterministicCoverage": 1,
+  "status": "needs-agent",
+  "resolutions": [
+    {
+      "sequence": 1,
+      "action": "CLICK",
+      "intent": "boton de ventas",
+      "resolution": "create",
+      "locatorName": "salesButton",
+      "selector": "android=new UiSelector().text(\"Ver ventas\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-1); se crea un locator lógico nuevo.",
+      "reuseCandidates": [
+        {
+          "file": "resources/locators/home/home.locator.json",
+          "module": "home/home",
+          "name": "lblSales"
+        }
+      ],
+      "completionTargets": [],
+      "gapId": "gap-duplicate-element-1"
+    },
+    {
+      "sequence": 2,
+      "action": "VERIFICAR_EXISTE",
+      "intent": "mensaje de no hay ventas",
+      "resolution": "create",
+      "locatorName": "noSalesMessage",
+      "selector": "android=new UiSelector().text(\"Aún no hay ninguna venta.\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-2); se crea un locator lógico nuevo."
+    }
+  ],
+  "files": [
+    {
+      "layer": "feature",
+      "path": "features/yape-features/payment/verify-sales-message.feature",
+      "operation": "create"
+    },
+    {
+      "layer": "steps",
+      "path": "features/yape-steps-definitions/payment/verify-sales-message.steps.ts",
+      "operation": "create"
+    },
+    {
+      "layer": "screen",
+      "path": "screenobjects/payment/verify-sales-message.screen.ts",
+      "operation": "create"
+    },
+    {
+      "layer": "locators",
+      "path": "resources/locators/payment/verify-sales-message.locator.json",
+      "operation": "create"
+    }
+  ],
+  "unresolvedGapIds": [
+    "gap-duplicate-element-1"
+  ],
+  "budgets": {
+    "maxDurationMs": 300000,
+    "maxContextBytes": 20000,
+    "maxResponseBytes": 400000,
+    "maxAgentInvocations": 2,
+    "maxTotalQueries": 24,
+    "maxQueriesPerGap": 6,
+    "maxRepairAttempts": 1
+  }
+}

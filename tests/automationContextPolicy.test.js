@@ -126,6 +126,30 @@ test('rechaza una query no autorizada sin tocar FrameworkQueryService', () => {
     assert.equal(fake.calls.length, 0);
 });
 
+test('rechaza argumentos inválidos con razón invalid-args y sin llamar al servicio', () => {
+    const fake = service();
+    const decision = new GapQueryPolicy(projection([gap()]).gaps, fake)
+        .request('gap-screen', 'findExistingScreen', {
+            symbolOrPath: 'home/home.lblRecentMovements',
+            intent: 'abrir movimientos',
+        });
+    assert.equal(decision.accepted, false);
+    assert.equal(decision.reason, 'invalid-args');
+    assert.match(decision.message || '', /Campos válidos:/);
+    assert.equal(fake.calls.length, 0);
+});
+
+test('acepta query válida con symbol en args', () => {
+    const fake = service();
+    const decision = new GapQueryPolicy(projection([gap()]).gaps, fake)
+        .request('gap-screen', 'findExistingScreen', {
+            symbol: 'lblRecentMovements',
+            intent: 'abrir movimientos',
+        });
+    assert.equal(decision.accepted, true);
+    assert.equal(fake.calls.length, 1);
+});
+
 test('rechaza cualquier query cuando no existe un gap abierto', () => {
     const fake = service();
     const decision = new GapQueryPolicy(projection([]).gaps, fake)
@@ -199,14 +223,21 @@ test('normaliza gaps de recordings anteriores sin romper su contrato', () => {
     assert.equal(legacy.status, 'open');
     assert.equal(legacy.resolvedBy, null);
     assert.deepEqual(legacy.allowedQueries, ['findExample']);
+    assert.equal(typeof legacy.allowedQueryArgsSchemas.findExample, 'object');
     assert.deepEqual(legacy.expectedAnswerSchema.required, ['gapId', 'decision']);
 });
 
-test('la política conserva límites de bytes/resultados del FrameworkQueryService', () => {
+test('la política rechaza resultados truncados en vez de aceptarlos en silencio', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gap-query-limit-'));
     const feature = path.join(root, 'features/yape-features/payment/movements.feature');
     fs.mkdirSync(path.dirname(feature), { recursive: true });
-    fs.writeFileSync(feature, 'Feature: Movimientos\n  Scenario: Consultar movimientos\n    Then visualiza movimientos\n');
+    fs.writeFileSync(
+        feature,
+        `Feature: Movimientos
+${Array.from({ length: 20 }, (_value, index) => `  Scenario: Consultar movimientos ${index}
+    Then visualiza movimientos ${index}`).join('\n')}
+`
+    );
     const service = new FrameworkQueryService(new CodeGraph({
         frameworkRoot: root, cacheFile: path.join(root, '.cache', 'graph.json'),
     }), root);
@@ -214,11 +245,20 @@ test('la política conserva límites de bytes/resultados del FrameworkQueryServi
         type: 'refinement', allowedQueries: ['inspectScenario'], maxQueries: 1,
     })]).gaps;
     const decision = new GapQueryPolicy(projected, service).request(
-        'gap-scenario', 'inspectScenario', { squad: 'payment', term: 'movimientos', limit: 1, maxBytes: 900 },
+        'gap-scenario', 'inspectScenario', { squad: 'payment', term: 'movimientos', limit: 10, maxBytes: 768 },
     );
+    assert.equal(decision.accepted, false);
+    assert.equal(decision.reason, 'query-truncated');
+    assert.match(decision.message || '', /truncated=true/);
+});
+
+test('GapQueryPolicy inyecta maxBytes cuando args no lo especifica', () => {
+    const fake = service();
+    const policy = new GapQueryPolicy(projection([gap()]).gaps, fake, undefined, { maxBytes: 7777 });
+    const decision = policy.request('gap-screen', 'findExistingScreen', { symbol: 'lblSales' });
     assert.equal(decision.accepted, true);
-    assert.ok(decision.response.items.length <= 1);
-    assert.ok(decision.response.metrics.returnedBytes <= 900);
+    assert.equal(fake.calls.length, 1);
+    assert.equal(fake.calls[0].input.maxBytes, 7777);
 });
 
 test('actualiza métricas de proyección y consultas aceptadas/rechazadas', () => {
@@ -232,14 +272,16 @@ test('actualiza métricas de proyección y consultas aceptadas/rechazadas', () =
     policy.request('gap-screen', 'findExistingScreen', { term: 'A' });
     policy.request('gap-screen', 'findExistingScreen', { term: 'A' });
     policy.request('gap-screen', 'findLocator', {});
+    policy.request('gap-screen', 'findExistingScreen', { symbolOrPath: 'home/home.lblRecentMovements' });
     const artifact = store.read();
     assert.equal(artifact.initialGapCount, 1);
     assert.equal(artifact.finalGapCount, 1);
     assert.ok(artifact.hintsGenerated >= 1);
-    assert.equal(artifact.queriesRequested, 3);
+    assert.equal(artifact.queriesRequested, 4);
     assert.equal(artifact.queriesAccepted, 1);
-    assert.equal(artifact.queriesRejected, 2);
+    assert.equal(artifact.queriesRejected, 3);
     assert.equal(artifact.duplicateQueriesAvoided, 1);
+    assert.equal(artifact.invalidArgsRejected, 1);
     assert.equal(artifact.queryCount, 1);
     assert.equal(artifact.cacheHits, 1);
     policy.resolve('gap-screen', 'deterministic');

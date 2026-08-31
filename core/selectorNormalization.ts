@@ -70,10 +70,29 @@ export function normalizeStepText(value: string): string {
         .trim();
 }
 
+export function canonicalStepExpression(expression: string): string {
+    const trimmed = String(expression || '').trim();
+    const withoutDelimiters = trimmed
+        .replace(/^\/\^?/, '')
+        .replace(/\$?\/[a-z]*$/i, '');
+    const withoutAnchors = withoutDelimiters
+        .replace(/^\^/, '')
+        .replace(/\$$/, '');
+    const parameterized = withoutAnchors
+        .replace(/\{(?:int|float|string|word)\}/gi, '<param>')
+        .replace(/\(\.\*\)/g, '<param>')
+        .replace(/\(\.\+\)/g, '<param>')
+        .replace(/\(\[\^"\\\]\+\)/g, '<param>')
+        .replace(/\(\[\^'\\\]\+\)/g, '<param>')
+        .replace(/\(\\d\+\)/g, '<param>');
+    return normalizeStepText(parameterized);
+}
+
 export const selectorNormalization = {
     normalizeSelector,
     selectorAliases,
     normalizeStepText,
+    canonicalStepExpression,
     slug,
     camel,
 };

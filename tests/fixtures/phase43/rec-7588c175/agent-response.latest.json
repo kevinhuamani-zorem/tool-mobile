@@ -1,0 +1,141 @@
+{
+  "recordingId": "rec-7588c175-1ed9-4348-ac49-feddddc73b84",
+  "planId": "plan-e536c99b0091d9912a37941f",
+  "resolutions": [
+    {
+      "gapId": "gap-weak-assertion-15",
+      "decision": "unresolved",
+      "reason": "Las 2 consultas permitidas (findExistingStep, findExample) no devolvieron ningun step, ejemplo o locator existente que fije un titulo/texto/accessibility id especifico para el contenedor de movimientos. Sin una fuente verificada alternativa, no se puede reemplazar el XPath generico \"../../../../../../../../../../../../android.view.View\" por un predicado o identificador propio del resultado. Se requiere que la grabacion aporte el texto real del titulo del contenedor o un accessibility id verificado antes de fortalecer la asercion; hasta entonces el Then no puede garantizar que valide especificamente el resultado del filtro aplicado."
+    },
+    {
+      "gapId": "gap-duplicate-element-1",
+      "decision": "create",
+      "reason": "findExistingScreen no encontro coincidencia (not-found) y findExistingStep solo devolvio step definitions no relacionados con un boton 'mostrar movimientos' (validacion de OTP, confirmacion de envio de correo, ingreso a yapear). El locator citado en el gap, home/home.lblRecentMovements, usa el prefijo 'lbl' que indica un elemento de texto/etiqueta informativa de la pantalla Home, mientras que la accion 1 requiere un elemento interactuable (boton) dentro del flujo de movimientos. Comparten el mismo texto visible pero son elementos funcionalmente distintos (etiqueta estatica vs boton clicable en otra pantalla), por lo que se conserva el locator nuevo showMovementsButton."
+    },
+    {
+      "gapId": "gap-duplicate-element-4",
+      "decision": "reuse",
+      "reason": "El gap indica que el selector recordado (~Ver todos) coincide exactamente con el valor ya fijado en payment/confirmacion-envio-email-movements.seeAllMovements. Aunque findExistingScreen no localizo el archivo (not-found) y findExistingStep solo devolvio step definitions relacionados, la coincidencia exacta de accessibility id entre ambos botones 'Ver todos' del mismo squad (payment) es evidencia suficiente de que se trata del mismo elemento logico. Se debe reutilizar el locator existente seeAllMovements de payment/confirmacion-envio-email-movements en lugar de crear seeAllMovementsButton como fuente de verdad nueva."
+    },
+    {
+      "gapId": "gap-duplicate-element-6",
+      "decision": "reuse",
+      "reason": "El gap indica que el selector recordado (new UiSelector().text(\"Solo hoy\")) coincide exactamente con el valor ya fijado en payment/movements.btntoday, dentro del mismo squad (payment) y en el mismo dominio funcional (filtro de movimientos). Ambas consultas (findExistingScreen, findExistingStep) devolvieron not-found por no indexar directamente ese locator, pero la coincidencia exacta de texto/selector reportada en la descripcion del gap es evidencia suficiente de duplicidad. Se debe reutilizar payment/movements.btntoday en lugar de crear filterOnlyToday como locator nuevo."
+    }
+  ],
+  "actionTrace": [
+    {
+      "sequence": 1,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "showMovementsButton"
+    },
+    {
+      "sequence": 2,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer"
+    },
+    {
+      "sequence": 3,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer"
+    },
+    {
+      "sequence": 4,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "seeAllMovementsButton"
+    },
+    {
+      "sequence": 5,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 6,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterOnlyToday"
+    },
+    {
+      "sequence": 7,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 8,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterLast7Days"
+    },
+    {
+      "sequence": 9,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 10,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "last15Days"
+    },
+    {
+      "sequence": 11,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 12,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "last30Days"
+    },
+    {
+      "sequence": 13,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 14,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "last90Days"
+    },
+    {
+      "sequence": 15,
+      "gherkinStep": "Then se muestran los movimientos esperados",
+      "screenMethod": "showMovementsExpected",
+      "locatorName": "validateMovementsTitleContainer"
+    }
+  ],
+  "files": [
+    {
+      "layer": "feature",
+      "path": "features/yape-features/payment/movements-cases-filter-container.feature",
+      "content": "# Generado por Appium Visual Recorder\n# Author: Kevinarnold.zorem\n# Fecha de creación: 2026-08-28T19:47:42.264Z\n# locator-module: payment/movements-cases-filter-container\n\n@payment\nFeature: Contenedor movimientos casuisticas filtro\n\n  @filtromovimientos @smoke_mobile @android\n  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Contenedor movimientos casuisticas filtro\n    Given el usuario <username> inicia sesión en Yape\n    When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro\n      | filtro |\n      | Solo hoy |\n      | Útimos 7 días |\n      | Útimos 15 días |\n      | Útimos 30 días |\n      | Útimos 90 días |\n    Then se muestran los movimientos esperados\n\n    Examples:\n      | username |\n      | Usuario QA Temporal |\n"
+    },
+    {
+      "layer": "steps",
+      "path": "features/yape-steps-definitions/payment/movements-cases-filter-container.steps.ts",
+      "content": "// Generado por Appium Visual Recorder\n// Author: Kevinarnold.zorem\n// Fecha de creación: 2026-08-28T19:47:42.264Z\nimport { DataTable, Then, When } from '@wdio/cucumber-framework';\nimport movementsCasesFilterContainerScreen from '@screenobjects/payment/movements-cases-filter-container.screen.ts';\n\nWhen(/^el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro$/, async (dataTable: DataTable) => {\n    const filtroValues = dataTable.hashes().map((row) => row[\"filtro\"]);\n    await movementsCasesFilterContainerScreen.userViewAllMovementsEnMovementsCasesFilterContainer(filtroValues);\n});\n\nThen(/^se muestran los movimientos esperados$/, async () => {\n    await movementsCasesFilterContainerScreen.showMovementsExpected();\n});\n"
+    },
+    {
+      "layer": "screen",
+      "path": "screenobjects/payment/movements-cases-filter-container.screen.ts",
+      "content": "// Generado por Appium Visual Recorder\n// Author: Kevinarnold.zorem\n// Fecha de creación: 2026-08-28T19:47:42.264Z\nimport { $ } from '@wdio/globals';\nimport BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorProvider from '@common/locators/locator-provider.js';\nimport { TypeLocator } from '@common/enums/locator-type.enum.js';\nimport Locators from '@locators/payment/movements-cases-filter-container.locator.json' with { type: 'json' };\nimport { getTimeoutFromEnv } from '@common/utils/env/environment-config.js';\n\nconst timeout: number = getTimeoutFromEnv();\n\nclass MovementsCasesFilterContainerScreen extends BaseScreen {\n\n    public get showMovementsButton() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, Locators[\"movementsCasesFilterContainerIos\"].showMovementsButton,\n            TypeLocator.ANDROID, Locators[\"movementsCasesFilterContainerAndroid\"].showMovementsButton\n        );\n        return $(locator);\n    }\n\n    public get seeAllMovementsButton() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, Locators[\"movementsCasesFilterContainerIos\"].seeAllMovementsButton,\n            TypeLocator.ID, Locators[\"movementsCasesFilterContainerAndroid\"].seeAllMovementsButton\n        );\n        return $(locator);\n    }\n\n    public get filterMovementsButton() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, Locators[\"movementsCasesFilterContainerIos\"].filterMovementsButton,\n            TypeLocator.ID, Locators[\"movementsCasesFilterContainerAndroid\"].filterMovementsButton\n        );\n        return $(locator);\n    }\n\n    public filterOnlyToday(filtro: string) {\n        const iosValue = Locators[\"movementsCasesFilterContainerIos\"].filterOnlyToday.replace('{filtro}', filtro);\n        const androidValue = Locators[\"movementsCasesFilterContainerAndroid\"].filterOnlyToday.replace('{filtro}', filtro);\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, iosValue,\n            TypeLocator.ANDROID, androidValue\n        );\n        return $(locator);\n    }\n\n    public get validateMovementsTitleContainer() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, Locators[\"movementsCasesFilterContainerIos\"].validateMovementsTitleContainer,\n            TypeLocator.XPATH, Locators[\"movementsCasesFilterContainerAndroid\"].validateMovementsTitleContainer\n        );\n        return $(locator);\n    }\n\n    public async userViewAllMovementsEnMovementsCasesFilterContainer(filtroValues: string[]): Promise<void> {\n        await this.uiHelper.waitForElementExistByLocator(this.showMovementsButton, true);\n        await this.showMovementsButton.click();\n        await this.gestureHelper.verticalScrollingToEnd();\n        await this.gestureHelper.verticalScrollingToEnd();\n        await this.uiHelper.waitForElementExistByLocator(this.seeAllMovementsButton, true);\n        await this.seeAllMovementsButton.click();\n        for (const filtroValue of filtroValues) {\n            await this.uiHelper.waitForElementExistByLocator(this.filterMovementsButton, true);\n            await this.filterMovementsButton.click();\n            await this.uiHelper.waitForElementExistByLocator(this.filterOnlyToday(filtroValue), true);\n            await this.filterOnlyToday(filtroValue).click();\n        }\n    }\n\n    public async showMovementsExpected(): Promise<void> {\n        await this.uiHelper.waitForElementDisplayedAndExpect(this.validateMovementsTitleContainer, timeout, 'The expected element was not displayed');\n    }\n}\n\nexport default new MovementsCasesFilterContainerScreen();\n"
+    },
+    {
+      "layer": "locators",
+      "path": "resources/locators/payment/movements-cases-filter-container.locator.json",
+      "content": "{\n    \"movementsCasesFilterContainerAndroid\": {\n        \"showMovementsButton\": \"new UiSelector().text(\\\"Mostrar movimientos\\\")\",\n        \"seeAllMovementsButton\": \"Ver todos\",\n        \"filterMovementsButton\": \"Botón de filtrar\",\n        \"filterOnlyToday\": \"new UiSelector().text(\\\"{filtro}\\\")\",\n        \"validateMovementsTitleContainer\": \"//android.view.View\"\n    },\n    \"movementsCasesFilterContainerIos\": {\n        \"showMovementsButton\": \"\",\n        \"seeAllMovementsButton\": \"\",\n        \"filterMovementsButton\": \"\",\n        \"filterOnlyToday\": \"\",\n        \"validateMovementsTitleContainer\": \"\"\n    }\n}\n"
+    }
+  ],
+  "assumptions": [
+    "Salida materializada por DeterministicGenerator."
+  ]
+}

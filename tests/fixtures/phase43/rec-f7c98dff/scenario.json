@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "1.0.0",
+  "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+  "revision": 18,
+  "fingerprint": "56fc5eb0ef7aa757cd14f024414c2ff3e69b434d7818950d31741c3d90b8235e",
+  "createdAt": "2026-08-30T06:53:19.340Z",
+  "squad": "payment",
+  "platform": "android",
+  "environment": "qa",
+  "objective": "el usuario tiene que poder acceder a ventas",
+  "acceptanceCriteria": "se verifica que el mensaje de que no tiene ventas",
+  "request": {
+    "squad": "payment",
+    "featureScope": "",
+    "featureName": "Verifica mensaje tiene ventas",
+    "scenarioName": "Verifica mensaje tiene ventas",
+    "fileName": "verify-sales-message",
+    "locatorModule": "verify-sales-message",
+    "caseId": "TC-10239",
+    "pathType": "Happy Path",
+    "tag": "ventas",
+    "dataName": "Usuario QA Temporal",
+    "platform": "android",
+    "createdAt": "2026-08-30T06:53:19.340Z",
+    "scenarioRows": [
+      {
+        "keyword": "Given",
+        "text": "el usuario <username> inicia sesión en Yape",
+        "status": "reused",
+        "actions": []
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario tiene que poder acceder a ventas",
+        "status": "missing",
+        "wording": "qa",
+        "actions": [
+          {
+            "sequence": 1
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se verifica que el mensaje de que no tiene ventas",
+        "status": "missing",
+        "wording": "qa",
+        "actions": [
+          {
+            "sequence": 2
+          }
+        ]
+      }
+    ],
+    "examples": {
+      "username": "Usuario QA Temporal"
+    }
+  },
+  "actions": [
+    {
+      "action": "CLICK",
+      "sequence": 1,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "boton de ventas",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Ver ventas\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Ver ventas\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "VERIFICAR_EXISTE",
+      "sequence": 2,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "mensaje de no hay ventas",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Aún no hay ninguna venta.\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Aún no hay ninguna venta.\")",
+      "selectorVerified": true
+    }
+  ]
+}

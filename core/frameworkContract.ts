@@ -32,6 +32,8 @@ export interface FrameworkContract {
     locatorFactorySymbol: string;
     typeLocatorImport: string;
     typeLocatorSymbol: string;
+    typeLocatorExportKind: 'named' | 'default';
+    typeLocatorMembers: string[];
     /**
      * Extension con la que el framework importa Screen Objects. Es la que usan
      * los Steps generados; los anclajes traen la suya, que puede diferir.
@@ -101,6 +103,8 @@ const DEFAULTS = {
     locatorFactorySymbol: 'LocatorFactory',
     typeLocatorImport: '@utils/Enums.ts',
     typeLocatorSymbol: 'TypeLocator',
+    typeLocatorExportKind: 'named' as const,
+    typeLocatorMembers: ['ID', 'XPATH', 'ANDROID', 'PREDICATESTRING', 'CLASSCHAIN', 'CLASSNAME'],
     importExtension: '.ts',
     locatorComposition: {
         android: {
@@ -118,6 +122,12 @@ const DEFAULTS = {
         },
     } as LocatorComposition,
 };
+
+interface TypeLocatorDetails {
+    exportKind: 'named' | 'default';
+    members: string[];
+    found: boolean;
+}
 
 const SCAN_ROOTS = ['screenobjects', 'support', 'features'];
 const SKIPPED_DIRECTORIES = new Set(['node_modules', '.git', 'dist', 'tools', 'runtime']);
@@ -412,6 +422,66 @@ function readSignature(locatorFactoryFile: string | undefined, frameworkRoot: st
     return { parameterCount: parameters.length, platformOrder };
 }
 
+function inferTypeLocatorMembersFromComposition(composition: LocatorComposition): string[] {
+    const set = new Set<string>([
+        ...Object.keys(composition.android || {}),
+        ...Object.keys(composition.ios || {}),
+    ]);
+    const preferredOrder = DEFAULTS.typeLocatorMembers;
+    const ordered = preferredOrder.filter(member => set.has(member));
+    const rest = [...set].filter(member => !preferredOrder.includes(member)).sort();
+    return [...ordered, ...rest];
+}
+
+function readTypeLocatorDetails(
+    frameworkRoot: string,
+    typeLocatorFile: string | undefined,
+    typeLocatorSymbol: string,
+    composition: LocatorComposition,
+): TypeLocatorDetails {
+    if (!typeLocatorFile) {
+        return {
+            exportKind: DEFAULTS.typeLocatorExportKind,
+            members: inferTypeLocatorMembersFromComposition(composition),
+            found: false,
+        };
+    }
+    const absolute = path.join(frameworkRoot, typeLocatorFile);
+    let content: string;
+    try {
+        content = fs.readFileSync(absolute, 'utf-8');
+    } catch {
+        return {
+            exportKind: DEFAULTS.typeLocatorExportKind,
+            members: inferTypeLocatorMembersFromComposition(composition),
+            found: false,
+        };
+    }
+    const pattern = new RegExp(
+        `export\\s+(default\\s+)?(?:const\\s+)?enum\\s+${typeLocatorSymbol}\\s*\\{([\\s\\S]*?)\\}`,
+        'm',
+    );
+    const match = content.match(pattern);
+    if (!match) {
+        return {
+            exportKind: DEFAULTS.typeLocatorExportKind,
+            members: inferTypeLocatorMembersFromComposition(composition),
+            found: false,
+        };
+    }
+    const body = match[2] || '';
+    const members = body
+        .split(',')
+        .map(raw => raw.replace(/\/\/.*$/gm, '').trim())
+        .map(raw => raw.match(/^([A-Za-z_$][\w$]*)/)?.[1] || '')
+        .filter(Boolean);
+    return {
+        exportKind: match[1] ? 'default' : 'named',
+        members: members.length ? members : inferTypeLocatorMembersFromComposition(composition),
+        found: true,
+    };
+}
+
 /** Selector que el framework producira para este par en tiempo de ejecucion. */
 export function composeLocator(
     contract: Pick<FrameworkContract, 'locatorComposition'>,
@@ -500,6 +570,19 @@ function resolve(frameworkRoot: string): { contract: FrameworkContract; files: s
         );
     }
 
+    const typeLocatorDetails = readTypeLocatorDetails(
+        frameworkRoot,
+        anchors.typeLocator.file,
+        typeLocatorSymbol,
+        composition,
+    );
+    if (!typeLocatorDetails.found) {
+        warnings.push(
+            'No se pudo leer la declaración de TypeLocator del framework: ' +
+            'se usa la lista de miembros derivada de la composicion.',
+        );
+    }
+
     return { files: [...readFiles], contract: {
         aliases,
         baseScreenImport: importFor('baseScreen', DEFAULTS.baseScreenImport),
@@ -508,6 +591,8 @@ function resolve(frameworkRoot: string): { contract: FrameworkContract; files: s
         locatorFactorySymbol: anchors.locatorFactory.capture || DEFAULTS.locatorFactorySymbol,
         typeLocatorImport: importFor('typeLocator', DEFAULTS.typeLocatorImport),
         typeLocatorSymbol,
+        typeLocatorExportKind: typeLocatorDetails.exportKind,
+        typeLocatorMembers: typeLocatorDetails.members,
         importExtension: extensions.for('@screenobjects/'),
         locatorSignature: readSignature(anchors.locatorFactory.file, frameworkRoot),
         timeoutHelperImport: anchors.timeoutHelper.file

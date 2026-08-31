@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "1.0.0",
+  "planId": "plan-e536c99b0091d9912a37941f",
+  "recordingId": "rec-7588c175-1ed9-4348-ac49-feddddc73b84",
+  "fingerprint": "c2f2ba86a5a5d95ce21cf07ee93fcb753b1572cda9e26a9acfce43a410df9ce6",
+  "deterministicCoverage": 1,
+  "status": "needs-agent",
+  "resolutions": [
+    {
+      "sequence": 1,
+      "action": "CLICK",
+      "intent": "boton de mostrar movimientos",
+      "resolution": "create",
+      "locatorName": "showMovementsButton",
+      "selector": "android=new UiSelector().text(\"Mostrar movimientos\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-1); se crea un locator lógico nuevo.",
+      "reuseCandidates": [
+        {
+          "file": "resources/locators/home/home.locator.json",
+          "module": "home/home",
+          "name": "lblRecentMovements"
+        }
+      ],
+      "completionTargets": [],
+      "gapId": "gap-duplicate-element-1"
+    },
+    {
+      "sequence": 2,
+      "action": "SCROLL_DOWN",
+      "intent": "scroll_down elemento 2",
+      "selector": "",
+      "resolution": "builtin",
+      "confidence": 1,
+      "reason": "La acción usa un helper del framework y no requiere locator."
+    },
+    {
+      "sequence": 3,
+      "action": "SCROLL_DOWN",
+      "intent": "scroll_down elemento 3",
+      "selector": "",
+      "resolution": "builtin",
+      "confidence": 1,
+      "reason": "La acción usa un helper del framework y no requiere locator."
+    },
+    {
+      "sequence": 4,
+      "action": "CLICK",
+      "intent": "boton de ver todos los movimientos",
+      "resolution": "create",
+      "locatorName": "seeAllMovementsButton",
+      "selector": "~Ver todos",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-4); se crea un locator lógico nuevo.",
+      "reuseCandidates": [
+        {
+          "file": "resources/locators/payment/confirmacion-envio-email-movements.locator.json",
+          "module": "payment/confirmacion-envio-email-movements",
+          "name": "seeAllMovements"
+        }
+      ],
+      "completionTargets": [],
+      "gapId": "gap-duplicate-element-4"
+    },
+    {
+      "sequence": 5,
+      "action": "CLICK",
+      "intent": "boton de filtro de movimientos",
+      "resolution": "create",
+      "locatorName": "filterMovementsButton",
+      "selector": "~Botón de filtrar",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-5); se crea un locator lógico nuevo."
+    },
+    {
+      "sequence": 6,
+      "action": "CLICK",
+      "intent": "filtrar por solo hoy",
+      "resolution": "create",
+      "locatorName": "filterOnlyToday",
+      "selector": "android=new UiSelector().text(\"Solo hoy\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-6); se crea un locator lógico nuevo.",
+      "reuseCandidates": [
+        {
+          "file": "resources/locators/payment/movements.locator.json",
+          "module": "payment/movements",
+          "name": "btntoday"
+        }
+      ],
+      "completionTargets": [],
+      "gapId": "gap-duplicate-element-6"
+    },
+    {
+      "sequence": 7,
+      "action": "CLICK",
+      "intent": "boton de filtro de movimientos",
+      "resolution": "create",
+      "locatorName": "filterMovementsButton",
+      "selector": "~Botón de filtrar",
+      "confidence": 1,
+      "reason": "Mismo identificador y misma estrategia (ID) que la accion 5: es el mismo elemento, no se duplica el locator."
+    },
+    {
+      "sequence": 8,
+      "action": "CLICK",
+      "intent": "filtrar por ultimos 7 dias",
+      "resolution": "create",
+      "locatorName": "filterLast7Days",
+      "selector": "android=new UiSelector().text(\"Útimos 7 días\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-8); se crea un locator lógico nuevo."
+    },
+    {
+      "sequence": 9,
+      "action": "CLICK",
+      "intent": "filtro de movimientos",
+      "resolution": "create",
+      "locatorName": "filterMovementsButton",
+      "selector": "~Botón de filtrar",
+      "confidence": 1,
+      "reason": "Mismo identificador y misma estrategia (ID) que la accion 5: es el mismo elemento, no se duplica el locator."
+    },
+    {
+      "sequence": 10,
+      "action": "CLICK",
+      "intent": "ultimos 15 dias",
+      "resolution": "create",
+      "locatorName": "last15Days",
+      "selector": "android=new UiSelector().text(\"Útimos 15 días\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-10); se crea un locator lógico nuevo."
+    },
+    {
+      "sequence": 11,
+      "action": "CLICK",
+      "intent": "filtrar",
+      "resolution": "create",
+      "locatorName": "filterMovementsButton",
+      "selector": "~Botón de filtrar",
+      "confidence": 1,
+      "reason": "Mismo identificador y misma estrategia (ID) que la accion 5: es el mismo elemento, no se duplica el locator."
+    },
+    {
+      "sequence": 12,
+      "action": "CLICK",
+      "intent": "ultimos 30 dias",
+      "resolution": "create",
+      "locatorName": "last30Days",
+      "selector": "android=new UiSelector().text(\"Útimos 30 días\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-12); se crea un locator lógico nuevo."
+    },
+    {
+      "sequence": 13,
+      "action": "CLICK",
+      "intent": "filtrar",
+      "resolution": "create",
+      "locatorName": "filterMovementsButton",
+      "selector": "~Botón de filtrar",
+      "confidence": 1,
+      "reason": "Mismo identificador y misma estrategia (ID) que la accion 5: es el mismo elemento, no se duplica el locator."
+    },
+    {
+      "sequence": 14,
+      "action": "CLICK",
+      "intent": "ultimos 90 dias",
+      "resolution": "create",
+      "locatorName": "last90Days",
+      "selector": "android=new UiSelector().text(\"Útimos 90 días\")",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-14); se crea un locator lógico nuevo."
+    },
+    {
+      "sequence": 15,
+      "action": "VERIFICAR_EXISTE",
+      "intent": "se valida el title del contenedor movimientos",
+      "resolution": "create",
+      "locatorName": "validateMovementsTitleContainer",
+      "selector": "//android.view.View",
+      "confidence": 1,
+      "reason": "Selector primary verificado (legacy-primary-15); se crea un locator lógico nuevo."
+    }
+  ],
+  "files": [
+    {
+      "layer": "feature",
+      "path": "features/yape-features/payment/movements-cases-filter-container.feature",
+      "operation": "create"
+    },
+    {
+      "layer": "steps",
+      "path": "features/yape-steps-definitions/payment/movements-cases-filter-container.steps.ts",
+      "operation": "create"
+    },
+    {
+      "layer": "screen",
+      "path": "screenobjects/payment/movements-cases-filter-container.screen.ts",
+      "operation": "create"
+    },
+    {
+      "layer": "locators",
+      "path": "resources/locators/payment/movements-cases-filter-container.locator.json",
+      "operation": "create"
+    }
+  ],
+  "repetition": {
+    "startSequence": 5,
+    "length": 2,
+    "repetitions": 5,
+    "varyingOffset": 1,
+    "values": [
+      "Solo hoy",
+      "Útimos 7 días",
+      "Útimos 15 días",
+      "Útimos 30 días",
+      "Útimos 90 días"
+    ],
+    "parameter": "filtro",
+    "sequences": [
+      [
+        5,
+        6
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        9,
+        10
+      ],
+      [
+        11,
+        12
+      ],
+      [
+        13,
+        14
+      ]
+    ]
+  },
+  "unresolvedGapIds": [
+    "gap-weak-assertion-15",
+    "gap-duplicate-element-1",
+    "gap-duplicate-element-4",
+    "gap-duplicate-element-6"
+  ],
+  "budgets": {
+    "maxDurationMs": 300000,
+    "maxContextBytes": 20000,
+    "maxResponseBytes": 400000,
+    "maxAgentInvocations": 2,
+    "maxTotalQueries": 24,
+    "maxQueriesPerGap": 6,
+    "maxRepairAttempts": 1
+  }
+}

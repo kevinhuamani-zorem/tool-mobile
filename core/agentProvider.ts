@@ -4,6 +4,18 @@ export interface AgentProviderRunInput {
     cwd: string;
     prompt: string;
     timeoutMs: number;
+    traceFile?: string;
+    traceLabel?: string;
+    stopOnValidatedOutput?: {
+        outputFile: string;
+        schemaFile: string;
+        pollIntervalMs?: number;
+    };
+}
+
+export interface AgentDeniedPathStats {
+    insideCwdCount: number;
+    outsideCwdCount: number;
 }
 
 export interface AgentProviderRunResult {
@@ -16,6 +28,13 @@ export interface AgentProviderRunResult {
     cancelled: boolean;
     errorCode?: AgentProviderErrorCode;
     errorMessage?: string;
+    creditsCost?: number;
+    deniedPathStats?: AgentDeniedPathStats;
+    deniedToolAttempts?: Array<{
+        tool: string;
+        detail: string;
+        pathClass?: 'inside' | 'outside' | 'unknown';
+    }>;
 }
 
 export interface AgentProvider {

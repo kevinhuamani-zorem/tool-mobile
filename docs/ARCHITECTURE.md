@@ -84,6 +84,13 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 | Observabilidad | `agentRunStore` | Métricas seguras por ejecución en `agent-run.json` |
 | Modelo | `models` | Acciones, steps y tipos compartidos |
 
+En generación determinista, `gap-resolutions.json` no reemplaza al plan con
+texto libre. Una decisión `reuse` selecciona `{file,module,name}` de los
+candidatos autorizados y el recorder deriva `effective-generation-plan.json`.
+`DeterministicGenerator` y `AutomationResponseValidator` consumen ese mismo
+plan efectivo; así reutilización, trazabilidad y validación tienen una sola
+fuente de verdad.
+
 ## Workspace
 
 La raíz se deriva de la ubicación instalada:
@@ -111,19 +118,11 @@ workspace para cambiar el target. Todas las rutas operativas nacen en
    entonces emite el selector confirmado; el recorder oculta la ventana sin
    destruirla y conserva sesión, proxy y selección para la siguiente apertura.
 
-El evento v3 incluye hasta 50 candidatos que el Inspector ya comprobó como
-únicos y pertenecientes al mismo elemento WebDriver. Esa comprobación no cruza
-el límite de confianza: `main` vuelve a ejecutar todos los candidatos
-secuencialmente contra la sesión activa, exige una sola coincidencia con el
-`elementId` seleccionado y comprueba que el par real `(TypeLocator, valor)`
-reconstruya el mismo elemento. El primary inválido rechaza la importación; las
-alternativas inválidas o con estrategia todavía no soportada se aíslan y omiten
-con diagnóstico. Una estrategia no soportada en el primary bloquea visiblemente.
-Solo se conservan cuatro
-candidatos compactos y nunca atributos, XML, screenshots, source, capabilities
-o credenciales. Validaciones solapadas llevan una generación monotónica: solo
-la selección más reciente puede publicar candidatos. Ejecutar una acción no
-convierte por sí solo un selector manual en verificado.
+El evento v3 puede traer múltiples candidatos, pero el recorder persiste un
+único selector elegido por QA. `main` revalida ese selector contra la sesión
+activa y comprueba que el par real `(TypeLocator, valor)` lo reconstruya. Si no
+cumple, la importación se rechaza con diagnóstico. Nunca se persisten atributos,
+XML, screenshots, source, capabilities ni credenciales.
 
 ### Caso nuevo con agente de automatización
 
@@ -138,18 +137,30 @@ convierte por sí solo un selector manual en verificado.
 5. Se escriben `generation-plan.json`, `reuse-context.json`,
    `collision-report.json`, contextos resuelto/no resuelto y contrato
    bajo `runtime/recordings/<id>/generation/automation`.
-   `locator-candidates.json` es la única copia compacta de los backups
-   verificados dentro del paquete; `scenario.json` no los duplica. Al importar,
-   `main` toma el `scenario.json` original del recording como fuente autoritativa,
-   reconstruye con el mismo resolver su normalización y representación compacta,
-   y rechaza cambios tanto en ese escenario esperado como en la allowlist
-   expuesta al agente.
+   Al importar, `main` toma el `scenario.json` original del recording como
+   fuente autoritativa, reconstruye con el mismo resolver su normalización y
+   rechaza cambios respecto de ese escenario esperado.
+   Preparar nuevamente una grabación reinicia antes todos los artefactos
+   mutables de la corrida anterior —respuesta, plan efectivo, consultas,
+   reparación, validación, logs y baselines—. Solo `history/` se conserva;
+   por ello un fallo temprano del resolver nunca deja una respuesta antigua
+   disponible para importar.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
    no se invoca al agente. La memoria de calidad 100 también se reutiliza.
 7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
-   o ejecuta el orquestador automático. En modo automático el agente opera en
+   o ejecuta el orquestador automático. En macOS, la pasada que materializa la
+   salida se abre como una sesión visible de Copilot con el prompt exacto del
+   recorder; el proceso principal espera el JSON validado por schema y lo
+   importa automáticamente para continuar a Revisión. PASS 1 permanece bajo el
+   adapter controlado para resolver consultas antes de abrir la sesión visible.
+   En modo automático el agente opera en
    dos pasadas (`query-requests/query-results` y luego `agent-response`) bajo
-   `GapQueryPolicy` y budgets del plan.
+   `GapQueryPolicy` y budgets del plan. Con múltiples gaps la estrategia
+   predeterminada es `compact-case` (un solo PASS 1 + PASS 2 para el caso
+   completo); `per-gap-parallel` queda solo como opt-in.
+   PASS 1 usa una proyección compacta para decidir consultas; PASS 2 usa otra
+   proyección orientada a generar las cuatro capas. Cada pasada valida su
+   contexto contra `maxContextBytes`.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
    Los rellenos de plataforma solo aceptan la identidad determinista completa
@@ -159,6 +170,9 @@ convierte por sí solo un selector manual en verificado.
    son `create`; no dependen de que exista un `update` en el plan.
 9. Puede emitirse una sola reparación dirigida a archivos afectados.
 10. El usuario revisa el preview, genera y recién entonces se promociona memoria.
+
+La generación determinista es el modo predeterminado. `legacy` permanece
+únicamente como opt-in técnico mediante `RECORDER_GENERATION_MODE=legacy`.
 
 ### Observabilidad por ejecución
 

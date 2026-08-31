@@ -126,6 +126,37 @@ test('un nombre propio no lo detectaba likelyDynamicText y ahora sí se marca', 
     assert.ok(result.unresolvedContext.gaps.some(gap => gap.type === 'verification-semantics'));
 });
 
+test('desambigua un step cuando el texto ya existe en el framework', () => {
+    const catalog = {
+        getCatalog: () => ({
+            squad: 'payment',
+            featureScope: '',
+            platform: 'android',
+            locators: [],
+            features: [],
+            scenarios: [],
+            screenMethods: [],
+            artifactBundles: [],
+            stepDefinitions: [{
+                expression: '^el usuario consulta todos sus movimientos$',
+                file: 'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts',
+                squad: 'payment',
+                scope: 'squad',
+                keyword: 'When',
+                signature: 'When(/^el usuario consulta todos sus movimientos$/)',
+            }],
+        }),
+    };
+    const result = new DeterministicResolver(catalog).resolve(scenario([
+        action('CLICK', 'boton de ver todos los movimientos', '~Ver todos'),
+        action('VERIFICAR_EXISTE', 'lista de movimientos', 'id=movimientos'),
+    ]));
+    const behavior = result.scenario.request.scenarioRows.find(row => row.keyword === 'When');
+    assert.ok(behavior, 'debe existir un row de comportamiento');
+    assert.notEqual(behavior.text, 'el usuario consulta todos sus movimientos');
+    assert.match(behavior.text, /^el usuario consulta todos sus movimientos /);
+});
+
 test('no marca la aserción cuando el selector no depende del valor', () => {
     const result = new DeterministicResolver(emptyCatalog()).resolve(scenario([
         action('VERIFICAR_TEXTO', 'nombre del yapero', '~lblNombreYapero', 'Kevin Hua'),

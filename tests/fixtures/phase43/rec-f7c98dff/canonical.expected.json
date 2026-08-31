@@ -1,0 +1,96 @@
+{
+  "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+  "planIdPresent": true,
+  "files": {
+    "feature": {
+      "tags": [
+        "@payment",
+        "@ventas @smoke_mobile @android"
+      ],
+      "scenario": "Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Verifica mensaje tiene ventas",
+      "gherkinSteps": [
+        "Given el usuario <username> inicia sesión en Yape",
+        "When el usuario tiene que poder acceder a ventas",
+        "Then se verifica que el mensaje de que no tiene ventas"
+      ],
+      "dataTables": [
+        "| username |",
+        "| Usuario QA Temporal |"
+      ]
+    },
+    "steps": {
+      "importsDataTable": false,
+      "definitions": [
+        {
+          "keyword": "When",
+          "expression": "el usuario tiene que poder acceder a ventas",
+          "args": "",
+          "usesDataTable": false,
+          "method": "userPoderAccederSales",
+          "methodArgs": ""
+        },
+        {
+          "keyword": "Then",
+          "expression": "se verifica que el mensaje de que no tiene ventas",
+          "args": "",
+          "usesDataTable": false,
+          "method": "verifyNoSalesMessage",
+          "methodArgs": ""
+        }
+      ]
+    },
+    "screen": {
+      "importsDataTableDrivenSignals": false,
+      "methods": [
+        {
+          "name": "userPoderAccederSales",
+          "args": "",
+          "hasLoop": false,
+          "usesDynamicLocator": false
+        },
+        {
+          "name": "verifyNoSalesMessage",
+          "args": "",
+          "hasLoop": false,
+          "usesDynamicLocator": false
+        }
+      ]
+    },
+    "locators": {
+      "verifySalesMessageAndroid": {
+        "noSalesMessage": "new UiSelector().text(\"Aún no hay ninguna venta.\")",
+        "salesButton": "new UiSelector().text(\"Ver ventas\")"
+      },
+      "verifySalesMessageIos": {
+        "noSalesMessage": "",
+        "salesButton": ""
+      }
+    }
+  },
+  "resolutions": [
+    {
+      "gapId": "gap-duplicate-element-1",
+      "decision": "unresolved"
+    }
+  ],
+  "actionTrace": [
+    {
+      "sequence": 1,
+      "gherkinStep": "When el usuario tiene que poder acceder a ventas",
+      "screenMethod": "userPoderAccederSales",
+      "locatorName": "salesButton"
+    },
+    {
+      "sequence": 2,
+      "gherkinStep": "Then se verifica que el mensaje de que no tiene ventas",
+      "screenMethod": "verifyNoSalesMessage",
+      "locatorName": "noSalesMessage"
+    }
+  ],
+  "fingerprints": {
+    "feature": "e6bb5e371938baabab382fc65972c95fbd9f833e2be6be0b29a71c57616ddf3e",
+    "steps": "626375ad94503f163e0a014338bbd93be535d316213e74a775f56c39db09afec",
+    "screen": "7cceed001f7cbcdb881f139197ab7e55e89a0425b03ab1d4a13a37b98dd9968f",
+    "locators": "ba295e70a4e3687da6e8e88ddd1f68e8ab8f5bb46ee7ef6214dfe4ae6a347723"
+  }
+}

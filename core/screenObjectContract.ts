@@ -18,9 +18,22 @@
 
 export interface ScreenObjectProblem {
     code: 'json-import-attribute' | 'locator-import-alias' | 'getElement-arity'
-        | 'getElement-order' | 'type-locator-import' | 'helper-method';
+        | 'getElement-order' | 'type-locator-import' | 'helper-method'
+        | 'screen-alias' | 'screen-singleton-name' | 'screen-class-name';
     message: string;
 }
+
+export const SCREEN_OBJECT_CONTRACT_RULE_CODES: ScreenObjectProblem['code'][] = [
+    'json-import-attribute',
+    'locator-import-alias',
+    'getElement-arity',
+    'getElement-order',
+    'type-locator-import',
+    'helper-method',
+    'screen-alias',
+    'screen-singleton-name',
+    'screen-class-name',
+];
 
 export interface ScreenObjectRules {
     /** Nombre del enum de estrategias en ESTE framework (`TypeLocator`). */
@@ -41,6 +54,47 @@ export interface ScreenObjectRules {
      * ya la trae escrita.
      */
     expectedImports?: Record<string, string>;
+    /** Nombres esperados del Screen Object para esta ruta planificada. */
+    expectedNames?: {
+        className: string;
+        instanceName: string;
+        importSource?: string;
+        baseScreenClass?: string;
+    };
+    /** Steps propuestos, usado para validar alias importado del Screen Object. */
+    stepsContent?: string;
+}
+
+const GENERIC_SCREEN_ALIASES = new Set([
+    'generatedScreen', 'screen', 'page', 'screenObject', 'obj',
+]);
+
+function pascalCase(value: string): string {
+    return value
+        .split(/[^A-Za-z0-9]+/)
+        .filter(Boolean)
+        .map(segment => segment[0].toUpperCase() + segment.slice(1))
+        .join('');
+}
+
+export function screenObjectNames(moduleOrPath: string): {
+    moduleName: string;
+    className: string;
+    instanceName: string;
+} {
+    const normalized = String(moduleOrPath || '').replace(/\\/g, '/');
+    const fileName = normalized.split('/').pop() || normalized;
+    const moduleName = fileName
+        .replace(/\.screen\.(?:ts|js)$/i, '')
+        .replace(/\.screen$/i, '');
+    const baseName = pascalCase(moduleName);
+    if (!baseName) throw new Error(`No se pudo derivar un nombre semántico de ${moduleOrPath}`);
+    const className = `${baseName}Screen`;
+    return {
+        moduleName,
+        className,
+        instanceName: `${className[0].toLowerCase()}${className.slice(1)}`,
+    };
 }
 
 /** Atributo de tipo de un import de JSON, en cualquiera de sus escrituras. */
@@ -197,6 +251,42 @@ export function screenObjectProblems(
 ): ScreenObjectProblem[] {
     const problems: ScreenObjectProblem[] = [];
     const source = String(content || '');
+    const expected = rules.expectedNames;
+
+    if (expected?.className) {
+        const classPattern = expected.baseScreenClass
+            ? new RegExp(`class\\s+${expected.className}\\s+extends\\s+${expected.baseScreenClass}\\b`)
+            : new RegExp(`class\\s+${expected.className}\\b`);
+        if (!classPattern.test(source)) {
+            problems.push({
+                code: 'screen-class-name',
+                message: expected.baseScreenClass
+                    ? `Clase Screen Object inválida: esperado ${expected.className} extends ${expected.baseScreenClass}.`
+                    : `Clase Screen Object inválida. Esperado: ${expected.className}.`,
+            });
+        }
+        if (!new RegExp(`export\\s+default\\s+new\\s+${expected.className}\\s*\\(`).test(source)) {
+            problems.push({
+                code: 'screen-singleton-name',
+                message: `Singleton Screen Object inválido: esperado ${expected.className}.`,
+            });
+        }
+    }
+    if (expected?.instanceName) {
+        const imports = [...String(rules.stepsContent || '').matchAll(
+            /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm
+        )];
+        const selected = expected.importSource
+            ? imports.find(match => match[2] === expected.importSource)
+            : imports[0];
+        const alias = selected?.[1];
+        if (!alias || GENERIC_SCREEN_ALIASES.has(alias) || alias !== expected.instanceName) {
+            problems.push({
+                code: 'screen-alias',
+                message: `Alias Screen Object inválido: ${alias || 'ausente'}. Esperado: ${expected.instanceName}.`,
+            });
+        }
+    }
 
     for (const entry of locatorImports(source)) {
         const expected = expectedSpecifier(entry.source, rules.expectedImports);
@@ -229,8 +319,8 @@ export function screenObjectProblems(
                 code: 'getElement-arity',
                 message: `getElement(${call.text}) recibe ${call.arguments.length} argumentos y son `
                     + `${rules.parameterCount} siempre, tambien cuando falta una plataforma: `
-                    + `${signatureHint(rules)}. Si ${order[0]} no tiene locator, su valor va vacio, `
-                    + 'pero el argumento se escribe.',
+                    + `${signatureHint(rules)}. Si ${order[0]} no tiene selector aun, igual referencia `
+                    + `la clave del locator ${order[0]} (con '' en JSON), nunca un literal vacio.`,
             });
             continue;
         }
@@ -249,6 +339,12 @@ export function screenObjectProblems(
             if (new RegExp(`${other}\\b`, 'i').test(value) && !new RegExp(`${platform}\\b`, 'i').test(value)) {
                 problemsHere.push(
                     `el argumento ${index * 2 + 2} corresponde a ${platform} y apunta a un bloque de ${other}: "${value}"`
+                );
+            }
+            if (/^['"]\s*['"]$/.test(value.trim())) {
+                problemsHere.push(
+                    `el argumento ${index * 2 + 2} de ${platform} no puede ser literal vacío: `
+                    + 'debe apuntar a la clave del locator JSON para esa plataforma'
                 );
             }
             return problemsHere;
@@ -280,4 +376,6 @@ export const screenObjectContract = {
     signatureHint,
     getElementCalls,
     callArguments,
+    screenObjectNames,
+    SCREEN_OBJECT_CONTRACT_RULE_CODES,
 };

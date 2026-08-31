@@ -12,6 +12,7 @@ import {
     UnresolvedContext,
     UnresolvedGap,
 } from './automationContracts';
+import { frameworkQueryInputSchema } from './frameworkQueryService';
 
 export interface ProjectionInput {
     scenario: AutomationScenario;
@@ -39,7 +40,11 @@ const GAP_QUERY_RULES: Record<UnresolvedGap['type'], {
     'test-data': { allowedQueries: ['findExample'], maxQueries: 1, evidenceRequired: ['framework-example'] },
     'test-input': { allowedQueries: ['findExample'], maxQueries: 1, evidenceRequired: ['qa-input-or-framework-example'] },
     'semantic-naming': { allowedQueries: ['findExistingScreen', 'findExistingStep'], maxQueries: 2, evidenceRequired: ['framework-symbol-or-path'] },
-    'verification-semantics': { allowedQueries: ['findExistingStep', 'findExample'], maxQueries: 2, evidenceRequired: ['observable-expected-result'] },
+    'verification-semantics': {
+        allowedQueries: ['findExistingScreen', 'findExistingStep', 'findLocator', 'findExample'],
+        maxQueries: 4,
+        evidenceRequired: ['observable-expected-result-or-framework-locator'],
+    },
     repetition: { allowedQueries: ['findExample'], maxQueries: 1, evidenceRequired: ['recorded-action-sequence'] },
     refinement: { allowedQueries: ['inspectScenario', 'findExistingScreen'], maxQueries: 2, evidenceRequired: ['validated-baseline'] },
     'qa-decision': { allowedQueries: [], maxQueries: 0, evidenceRequired: ['explicit-qa-decision'] },
@@ -110,12 +115,17 @@ function normalizeGap(gap: UnresolvedGap, resolutions: ActionResolution[]): Auto
     ));
     const blocking = Boolean(gap.blocking);
     const status = gap.status || (blocking ? 'blocked-qa' : 'open');
+    const allowedQueries = blocking ? [] : (gap.allowedQueries || rule.allowedQueries);
+    const allowedQueryArgsSchemas = Object.fromEntries(
+        allowedQueries.map(query => [query, gap.allowedQueryArgsSchemas?.[query] || frameworkQueryInputSchema()])
+    ) as Partial<Record<FrameworkContextQuery, Record<string, string>>>;
     return {
         ...gap,
         intent: gap.intent || linked?.intent || gap.description,
         reason: gap.reason || gap.description,
         blocking,
-        allowedQueries: blocking ? [] : (gap.allowedQueries || rule.allowedQueries),
+        allowedQueries,
+        allowedQueryArgsSchemas,
         maxQueries: blocking ? 0 : (gap.maxQueries ?? rule.maxQueries),
         expectedAnswerSchema: gap.expectedAnswerSchema || {
             type: 'object',

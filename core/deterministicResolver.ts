@@ -18,7 +18,11 @@ import { GenerationRequest } from './fwkMobileGenerator';
 import { ArtifactBundle, FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog } from './reuseAnalyzer';
 import { Action, RecordedStep, recordedStepContext } from './models';
 import { normalizeFeatureScope } from './featureScope';
-import { TECHNICAL_STOP_WORDS } from './selectorNormalization';
+import {
+    canonicalStepExpression as canonicalStepExpressionShared,
+    normalizeStepText as normalizeStepTextShared,
+    TECHNICAL_STOP_WORDS,
+} from './selectorNormalization';
 import { spanishTokens, translateToEnglish, translateToSlug } from './englishIdentifiers';
 import { frameworkContract } from './frameworkContract';
 import { ElementIdentityIndex } from './elementIdentity';
@@ -260,12 +264,7 @@ const CANDIDATE_STABILITY_ORDER: Record<SelectorCandidateStability, number> = {
 };
 
 function normalizeStepText(value: string): string {
-    return value.toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/<[^>]+>/g, '<param>')
-        .replace(/[^a-z0-9<>]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    return normalizeStepTextShared(value);
 }
 
 function stepSimilarity(left: string[], right: string[]): number {
@@ -274,6 +273,56 @@ function stepSimilarity(left: string[], right: string[]): number {
     if (!a.size || !b.size) return 0;
     const common = [...a].filter(step => b.has(step)).length;
     return (2 * common) / (a.size + b.size);
+}
+
+function collidesWithFrameworkStep(
+    text: string,
+    definitions: SquadReuseCatalog['stepDefinitions'],
+): boolean {
+    const canonical = canonicalStepExpressionShared(text);
+    return definitions.some(definition => {
+        if (canonicalStepExpressionShared(definition.expression) === canonical) return true;
+        try {
+            return new RegExp(definition.expression).test(text);
+        } catch {
+            return false;
+        }
+    });
+}
+
+function disambiguateStepText(
+    baseText: string,
+    usedCanonicals: Set<string>,
+    definitions: SquadReuseCatalog['stepDefinitions'],
+    technicalName: string,
+    caseId: string,
+): string {
+    const trimmed = String(baseText || '').trim().replace(/\s+/g, ' ');
+    const scope = titleFromSlug(technicalName).toLowerCase();
+    const caseToken = String(caseId || '').toLowerCase();
+    const candidates = [
+        trimmed,
+        `${trimmed} en ${scope}`,
+        `${trimmed} para ${scope}`,
+        `${trimmed} para ${caseToken}`,
+        `${trimmed} en ${scope} ${caseToken}`,
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+        const canonical = canonicalStepExpressionShared(candidate);
+        if (usedCanonicals.has(canonical)) continue;
+        if (collidesWithFrameworkStep(candidate, definitions)) continue;
+        usedCanonicals.add(canonical);
+        return candidate;
+    }
+    for (let attempt = 2; attempt <= 12; attempt += 1) {
+        const candidate = `${trimmed} en ${scope} variante ${attempt}`;
+        const canonical = canonicalStepExpressionShared(candidate);
+        if (usedCanonicals.has(canonical)) continue;
+        if (collidesWithFrameworkStep(candidate, definitions)) continue;
+        usedCanonicals.add(canonical);
+        return candidate;
+    }
+    return trimmed;
 }
 
 function frameworkCandidates(
@@ -467,6 +516,23 @@ function plannedFile(
             baseHash: crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex'),
         } : {}),
     };
+}
+
+function attachRepetitionDataTable(
+    rows: NonNullable<GenerationRequest['scenarioRows']>,
+    repetition: NonNullable<ReturnType<typeof detectRepetition>>,
+): NonNullable<GenerationRequest['scenarioRows']> {
+    const table = {
+        headers: [repetition.parameter],
+        rows: repetition.values.map(value => [String(value ?? '')]),
+    };
+    const targetIndex = rows.findIndex(row => {
+        if (!row.actions?.length) return false;
+        if (/^VERIFICAR_/.test(row.actions[0]?.action || '')) return false;
+        return row.actions.some(action => action.sequence === repetition.startSequence);
+    });
+    if (targetIndex < 0) return rows;
+    return rows.map((row, index) => index === targetIndex ? { ...row, dataTable: table } : row);
 }
 
 export class DeterministicResolver {
@@ -868,34 +934,10 @@ export class DeterministicResolver {
             });
         }
 
-        // Un ciclo repetido casi siempre significa "probar todas las opciones",
-        // pero convertirlo en Examples cambia el caso a N ejecuciones completas.
-        // El recorder lo detecta y lo propone; la lectura la elige el QA.
+        // Regla determinística: cuando hay ciclo repetitivo, se sintetiza una
+        // DataTable en el step funcional para exponer claramente las variantes
+        // sin multiplicar escenarios ni depender del agente.
         const repetition = detectRepetition(rawScenario.actions);
-        if (repetition) {
-            const last = repetition.startSequence + repetition.length * repetition.repetitions - 1;
-            gaps.push({
-                id: 'gap-repetition',
-                sequence: repetition.startSequence,
-                type: 'repetition',
-                description:
-                    `Las acciones ${repetition.startSequence}-${last} repiten ${repetition.repetitions} veces ` +
-                    `el mismo ciclo de ${repetition.length} accion(es), variando solo <${repetition.parameter}>: ` +
-                    `${repetition.values.join(', ')}.`,
-                requiredOutput: [
-                    `Recomendado: un solo escenario con una data table de Cucumber en el step, iterando los ` +
-                    `${repetition.repetitions} valores de <${repetition.parameter}>. El step acumula los fallos y ` +
-                    'lanza uno solo al final nombrando cual fallo, asi se evaluan todos y se sabe cual rompio ' +
-                    'sin repetir el login. El framework ya usa DataTable en marketplace, nexus y home.',
-                    `Alternativa: Scenario Outline con ${repetition.repetitions} filas de Examples, solo si cada ` +
-                    'valor necesita correr aislado y eso justifica repetir el login completo en cada fila.',
-                    `Alternativa: encadenar las ${repetition.repetitions} vueltas sin tabla, solo si lo que se ` +
-                    'valida es la acumulacion y no cada valor por separado.',
-                    `En cualquiera, el locator va parametrizado con {${repetition.parameter}} y .replace(), ` +
-                    'como ya hacen home.locator.json y pautas.locator.json.',
-                ].join(' '),
-            });
-        }
 
         const scenarioRows: NonNullable<GenerationRequest['scenarioRows']> = [{
             keyword: 'Given',
@@ -972,7 +1014,21 @@ export class DeterministicResolver {
             if (chunk.assertion) assertionSeen = true;
             else behaviorSeen = true;
         });
-        normalizedRequest.scenarioRows = scenarioRows;
+        const usedCanonicals = new Set<string>();
+        const uniqueScenarioRows = scenarioRows.map(row =>
+            row.status === 'missing'
+                ? { ...row, text: disambiguateStepText(
+                    row.text,
+                    usedCanonicals,
+                    catalog.stepDefinitions,
+                    technicalName,
+                    normalizedRequest.caseId,
+                ) }
+                : row
+        );
+        normalizedRequest.scenarioRows = repetition
+            ? attachRepetitionDataTable(uniqueScenarioRows, repetition)
+            : uniqueScenarioRows;
         normalizedRequest.examples = examples;
         const scenario: AutomationScenario = { ...rawScenario, request: normalizedRequest };
         const candidates = frameworkCandidates(catalog, scenario, resolutions);
@@ -1163,7 +1219,11 @@ export class DeterministicResolver {
                 frameworkAwareness: {
                     candidates,
                     exactStepDefinitions: catalog.stepDefinitions.filter(definition =>
-                        scenarioRows.some(row => {
+                        uniqueScenarioRows.some(row => {
+                            if (
+                                selectorNormalization.canonicalStepExpression(definition.expression)
+                                === selectorNormalization.canonicalStepExpression(row.text)
+                            ) return true;
                             try {
                                 return new RegExp(definition.expression).test(row.text);
                             } catch {
@@ -1210,6 +1270,7 @@ export const selectorNormalization = {
     normalizeSelector,
     selectorAliases,
     normalizeStepText,
+    canonicalStepExpression: canonicalStepExpressionShared,
     slug,
     camel,
 };

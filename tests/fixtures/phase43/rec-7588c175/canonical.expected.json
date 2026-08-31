@@ -1,0 +1,200 @@
+{
+  "recordingId": "rec-7588c175-1ed9-4348-ac49-feddddc73b84",
+  "planIdPresent": true,
+  "files": {
+    "feature": {
+      "tags": [
+        "@payment",
+        "@filtromovimientos @smoke_mobile @android"
+      ],
+      "scenario": "Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Contenedor movimientos casuisticas filtro",
+      "gherkinSteps": [
+        "Given el usuario <username> inicia sesión en Yape",
+        "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+        "Then se muestran los movimientos esperados"
+      ],
+      "dataTables": [
+        "| filtro |",
+        "| Solo hoy |",
+        "| Útimos 7 días |",
+        "| Útimos 15 días |",
+        "| Útimos 30 días |",
+        "| Útimos 90 días |",
+        "| username |",
+        "| Usuario QA Temporal |"
+      ]
+    },
+    "steps": {
+      "importsDataTable": true,
+      "definitions": [
+        {
+          "keyword": "When",
+          "expression": "el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+          "args": "dataTable: DataTable",
+          "usesDataTable": true,
+          "method": "userViewAllMovementsEnMovementsCasesFilterContainer",
+          "methodArgs": "filtroValues"
+        },
+        {
+          "keyword": "Then",
+          "expression": "se muestran los movimientos esperados",
+          "args": "",
+          "usesDataTable": true,
+          "method": "showMovementsExpected",
+          "methodArgs": ""
+        }
+      ]
+    },
+    "screen": {
+      "importsDataTableDrivenSignals": false,
+      "methods": [
+        {
+          "name": "userViewAllMovementsEnMovementsCasesFilterContainer",
+          "args": "filtroValues: string[]",
+          "hasLoop": false,
+          "usesDynamicLocator": false
+        },
+        {
+          "name": "showMovementsExpected",
+          "args": "",
+          "hasLoop": false,
+          "usesDynamicLocator": false
+        }
+      ]
+    },
+    "locators": {
+      "movementsCasesFilterContainerAndroid": {
+        "filterLast7Days": "new UiSelector().text(\"Útimos 7 días\")",
+        "filterMovementsButton": "Botón de filtrar",
+        "last15Days": "new UiSelector().text(\"Útimos 15 días\")",
+        "last30Days": "new UiSelector().text(\"Útimos 30 días\")",
+        "last90Days": "new UiSelector().text(\"Útimos 90 días\")",
+        "showMovementsButton": "new UiSelector().text(\"Mostrar movimientos\")"
+      },
+      "movementsCasesFilterContainerIos": {
+        "filterLast7Days": "",
+        "filterMovementsButton": "",
+        "last15Days": "",
+        "last30Days": "",
+        "last90Days": "",
+        "showMovementsButton": ""
+      }
+    }
+  },
+  "resolutions": [
+    {
+      "gapId": "gap-duplicate-element-1",
+      "decision": "create"
+    },
+    {
+      "gapId": "gap-duplicate-element-4",
+      "decision": "reuse"
+    },
+    {
+      "gapId": "gap-duplicate-element-6",
+      "decision": "reuse"
+    },
+    {
+      "gapId": "gap-weak-assertion-15",
+      "decision": "reuse"
+    }
+  ],
+  "actionTrace": [
+    {
+      "sequence": 1,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "showMovementsButton"
+    },
+    {
+      "sequence": 2,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": ""
+    },
+    {
+      "sequence": 3,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": ""
+    },
+    {
+      "sequence": 4,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "seeAllMovements"
+    },
+    {
+      "sequence": 5,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 6,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "btntoday"
+    },
+    {
+      "sequence": 7,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 8,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterLast7Days"
+    },
+    {
+      "sequence": 9,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 10,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "last15Days"
+    },
+    {
+      "sequence": 11,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 12,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "last30Days"
+    },
+    {
+      "sequence": 13,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "filterMovementsButton"
+    },
+    {
+      "sequence": 14,
+      "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "locatorName": "last90Days"
+    },
+    {
+      "sequence": 15,
+      "gherkinStep": "Then se muestran los movimientos esperados",
+      "screenMethod": "showMovementsExpected",
+      "locatorName": "titleMovements"
+    }
+  ],
+  "fingerprints": {
+    "feature": "626ea7792b51659f4f4e5ec1e61e065ac8e5bd9b741df4ec02a1148f35797376",
+    "steps": "1f3c6a0934c2ca98b2377b647f8f05ef177da0fd845ebb92d63a2295f72d7412",
+    "screen": "f8ad465ab4f3acca3d49a42609b4ef1cebf56bb2f3e483e6e800a561818adc50",
+    "locators": "2390ee56600123053f6e93b61e92000a430b97a4d8738fdcb2313c2386a2ecc7"
+  }
+}

@@ -36,9 +36,30 @@ class MovementsScreen {
   get title() { return Locators.movementsAndroid.title; }
 }
 `);
+    write('screenobjects/home/home.screen.ts', `
+import HomeLocators from '@locators/home/home.locator.json' with { type: 'json' };
+/**
+ * class for all Page Objects
+ */
+export default class HomeScreen {
+  public get lblSales() { return HomeLocators.homeAndroid.lblSales; }
+  public async openSales(): Promise<void> { return this.lblSales; }
+}
+`);
+    write('screenobjects/commons/base.screen.ts', `
+/**
+ * class for all Page Objects
+ */
+export default abstract class BaseScreen {
+  public get marker() { return 'ok'; }
+}
+`);
     const locator = write('resources/locators/payment/movements.locator.json', JSON.stringify({
         movementsAndroid: { openMovements: '~Movimientos', title: '~Título movimientos' },
         movementsIos: { openMovements: '~Movements', title: '' },
+    }));
+    write('resources/locators/home/home.locator.json', JSON.stringify({
+        homeAndroid: { lblSales: 'android=new UiSelector().text("Ver ventas")' },
     }));
     write('tsconfig.json', JSON.stringify({ compilerOptions: { paths: {
         '@screenobjects/*': ['screenobjects/*'], '@locators/*': ['resources/locators/*'],
@@ -109,4 +130,38 @@ test('aplica límites de resultados y bytes y maneja consultas inválidas', () =
     assert.equal(invalid.success, false);
     assert.equal(invalid.error.code, 'framework-query-failed');
     assert.equal(invalid.items.length, 0);
+});
+
+test('findExistingScreen prioriza módulo/símbolo del gap sobre resultados irrelevantes', () => {
+    const fx = fixture();
+    const response = fx.create().findExistingScreen({
+        squad: 'payment',
+        path: 'resources/locators/home/home.locator.json',
+        symbol: 'lblSales',
+        intent: 'boton de ventas',
+        limit: 6,
+    });
+    assert.equal(response.success, true);
+    assert.ok(response.items.length > 0);
+    assert.match(response.items[0].path || '', /screenobjects\/home\/home\.screen\.ts$/);
+    assert.equal(response.items.some(item => item.name === 'for' || item.name === 'handles'), false);
+});
+
+test('rechaza argumentos desconocidos con lista de campos válidos', () => {
+    const fx = fixture();
+    const invalid = fx.create().findExistingScreen({
+        symbolOrPath: 'home/home.lblRecentMovements',
+        intent: 'abrir movimientos',
+    });
+    assert.equal(invalid.success, false);
+    assert.equal(invalid.error.code, 'invalid-query-args');
+    assert.match(invalid.error.message, /Campos válidos:/);
+    assert.match(invalid.error.message, /symbol/);
+
+    const valid = fx.create().findExistingScreen({
+        symbol: 'lblSales',
+        intent: 'boton de ventas',
+    });
+    assert.equal(valid.success, true);
+    assert.ok(valid.items.length > 0);
 });

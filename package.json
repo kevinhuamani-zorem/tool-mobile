@@ -17,7 +17,10 @@
     "quality:metrics": "npm run build:main && node scripts/quality-metrics.js",
     "quality": "npm run typecheck && npm test && npm run quality:metrics && npm run build",
     "codegraph:export": "npm run build:main --silent && node scripts/export-codegraph.js",
-    "codegraph:recorder": "npm run build:main --silent && node scripts/export-recorder-codegraph.js"
+    "codegraph:recorder": "npm run build:main --silent && node scripts/export-recorder-codegraph.js",
+    "phase43:refresh-canonical": "npm run build:main && node scripts/phase43-refresh-canonical.js",
+    "test:phase43:deterministic": "npm run build:main && node --test tests/phase43DeterministicRegression.test.js",
+    "test:phase43:baseline": "node scripts/phase43-baseline.js"
   },
   "author": "Kevin Huamani",
   "license": "MIT",

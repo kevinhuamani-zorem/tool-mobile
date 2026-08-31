@@ -6,6 +6,7 @@ import {
     AutomationAgentResponse,
     AutomationScenario,
     AutomationValidation,
+    FRAMEWORK_CONTEXT_QUERIES,
     GenerationPlan,
 } from './automationContracts';
 import { GeneratedPreview } from './fwkMobileGenerator';
@@ -13,8 +14,7 @@ import { OutputValidator } from './outputValidator';
 import { projectPaths } from './projectPaths';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
-import { isGenericScreenAlias, screenObjectNames } from './semanticNaming';
-import { screenObjectProblems, typeLocatorImportProblem } from './screenObjectContract';
+import { screenObjectNames, screenObjectProblems, typeLocatorImportProblem } from './screenObjectContract';
 import { frameworkHelpersOf } from './frameworkHelpers';
 import { recordedStepContext } from './models';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
@@ -48,6 +48,51 @@ function changedLocatorValues(
         .map(entry => [`${entry.blockName}\u0000${entry.name}`, entry.selector]));
     return current.filter(entry =>
         inherited.get(`${entry.blockName}\u0000${entry.name}`) !== entry.selector
+    );
+}
+
+function hasLocatorKeyForPlatform(content: string, name: string, platform: 'android' | 'ios'): boolean {
+    try {
+        const document = JSON.parse(content) as Record<string, unknown>;
+        const suffix = platform.toLowerCase();
+        return Object.entries(document).some(([blockName, block]) =>
+            blockName !== '_metadata'
+            && blockName.toLowerCase().endsWith(suffix)
+            && block
+            && typeof block === 'object'
+            && !Array.isArray(block)
+            && Object.prototype.hasOwnProperty.call(block as Record<string, unknown>, name)
+        );
+    } catch {
+        return false;
+    }
+}
+
+function groupRepairErrors(
+    errors: Array<{ code: string; message: string; file?: string }>,
+): NonNullable<AutomationValidation['repairContext']>['groups'] {
+    const groups = new Map<string, {
+        code: string;
+        file?: string;
+        count: number;
+        messages: string[];
+    }>();
+    for (const error of errors) {
+        const key = `${error.code}\u0000${error.file || ''}`;
+        const group = groups.get(key) || {
+            code: error.code,
+            ...(error.file ? { file: error.file } : {}),
+            count: 0,
+            messages: [],
+        };
+        group.count += 1;
+        if (!group.messages.includes(error.message) && group.messages.length < 3) {
+            group.messages.push(error.message);
+        }
+        groups.set(key, group);
+    }
+    return [...groups.values()].sort((left, right) =>
+        right.count - left.count || left.code.localeCompare(right.code)
     );
 }
 
@@ -664,7 +709,32 @@ function importsFrom(content: string, source: string): boolean {
         .some(match => match[1] === source);
 }
 
+function tsSyntaxDiagnostics(
+    filePath: string,
+    content: string,
+): string[] {
+    const result = ts.transpileModule(content, {
+        fileName: filePath,
+        compilerOptions: {
+            module: ts.ModuleKind.ESNext,
+            target: ts.ScriptTarget.ES2022,
+        },
+        reportDiagnostics: true,
+    });
+    return (result.diagnostics || []).map(diagnostic => {
+        const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+        if (!diagnostic.file) return `${filePath}: ${message}`;
+        const position = ts.getLineAndCharacterOfPosition(
+            diagnostic.file,
+            typeof diagnostic.start === 'number' ? diagnostic.start : 0
+        );
+        return `${filePath}:${position.line + 1}:${position.character + 1} ${message}`;
+    });
+}
+
 export class AutomationResponseValidator {
+    private readonly relaxedContract = process.env.RECORDER_AGENT_RELAXED_CONTRACT === '1';
+
     constructor(
         private readonly outputValidator = new OutputValidator(),
         private readonly reuseAnalyzer = new ReuseAnalyzer()
@@ -706,12 +776,43 @@ export class AutomationResponseValidator {
         response.resolutions.forEach((resolution, index) => {
             // `reason` es la traza que lee el QA: se acepta y se publica en el
             // esquema. Lo que no se acepta es inventar campos.
-            const extras = unexpectedFields(resolution, ['gapId', 'decision', 'reason']);
+            const extras = unexpectedFields(resolution, ['gapId', 'decision', 'reason', 'needs']);
             if (extras.length) {
                 errors.push({
                     code: 'resolution-shape',
                     message: `resolutions[${index}] contiene campos no permitidos: ${extras.join(', ')}`,
                 });
+            }
+            if (resolution.needs !== undefined) {
+                if (!Array.isArray(resolution.needs) || !resolution.needs.length) {
+                    errors.push({
+                        code: 'resolution-needs-shape',
+                        message: `resolutions[${index}].needs debe ser un arreglo no vacío cuando se declara.`,
+                    });
+                } else {
+                    resolution.needs.forEach((need, needIndex) => {
+                        const needExtras = unexpectedFields(need, ['query', 'args']);
+                        if (needExtras.length) {
+                            errors.push({
+                                code: 'resolution-needs-shape',
+                                message: `resolutions[${index}].needs[${needIndex}] contiene campos no permitidos: ${needExtras.join(', ')}`,
+                            });
+                            return;
+                        }
+                        if (!FRAMEWORK_CONTEXT_QUERIES.includes(need.query as any)) {
+                            errors.push({
+                                code: 'resolution-needs-query',
+                                message: `resolutions[${index}].needs[${needIndex}].query no es soportada: ${String((need as any).query)}.`,
+                            });
+                        }
+                        if (!need.args || typeof need.args !== 'object' || Array.isArray(need.args)) {
+                            errors.push({
+                                code: 'resolution-needs-args',
+                                message: `resolutions[${index}].needs[${needIndex}].args debe ser un objeto.`,
+                            });
+                        }
+                    });
+                }
             }
         });
         response.actionTrace.forEach((trace, index) => {
@@ -733,6 +834,17 @@ export class AutomationResponseValidator {
                 });
             }
         });
+        for (const file of response.files.filter(candidate =>
+            candidate.layer === 'steps' || candidate.layer === 'screen'
+        )) {
+            for (const diagnostic of tsSyntaxDiagnostics(file.path, file.content)) {
+                errors.push({
+                    code: 'typescript-syntax',
+                    message: `Sintaxis TypeScript inválida: ${diagnostic}`,
+                    file: file.path,
+                });
+            }
+        }
 
         // `completions`: adoptar una clave existente y rellenar su hueco.
         //
@@ -829,9 +941,34 @@ export class AutomationResponseValidator {
             if (!file.content.trim()) errors.push({ code: 'empty-file', message: 'Archivo vacío', file: file.path });
         }
 
-        const resolvedGaps = new Set(response.resolutions.map(item => item.gapId));
+        const resolutionByGap = new Map<string, { gapId: string; decision: string; reason?: string }>();
+        for (const resolution of response.resolutions) {
+            if (!resolutionByGap.has(resolution.gapId)) resolutionByGap.set(resolution.gapId, resolution);
+        }
         for (const gapId of plan.unresolvedGapIds) {
-            if (!resolvedGaps.has(gapId)) errors.push({ code: 'unresolved-gap', message: `Gap no resuelto: ${gapId}` });
+            const resolution = resolutionByGap.get(gapId);
+            if (!resolution) {
+                errors.push({
+                    code: 'missing-gap-resolution',
+                    message: `Falta resolución para gap abierto: ${gapId}`,
+                });
+                continue;
+            }
+            if (!String(resolution.decision || '').trim()) {
+                errors.push({
+                    code: 'gap-resolution-decision',
+                    message: `La resolución de ${gapId} no declara decisión.`,
+                });
+                continue;
+            }
+            const unresolvedDecision = /^(unresolved|failed|error|blocked|not-resolved)$/i
+                .test(String(resolution.decision || '').trim());
+            if (unresolvedDecision && !String(resolution.reason || '').trim()) {
+                errors.push({
+                    code: 'unresolved-gap-without-reason',
+                    message: `El gap ${gapId} quedó no resuelto sin causa explícita.`,
+                });
+            }
         }
         const traced = new Set(response.actionTrace.map(item => item.sequence));
         for (const action of scenario.actions) {
@@ -905,22 +1042,23 @@ export class AutomationResponseValidator {
                 primaryByLocator.set(name, allowed);
             };
             plan.resolutions.forEach(resolution => addPrimary(resolution.locatorName, resolution.sequence));
+            const traceLocatorMismatches: Array<{
+                sequence: number;
+                expectedName: string;
+                actualName: string;
+                planned?: GenerationPlan['resolutions'][number];
+            }> = [];
             response.actionTrace.forEach(trace => {
                 const planned = plan.resolutions.find(resolution => resolution.sequence === trace.sequence);
                 const expectedName = adoptedBySequence.get(trace.sequence)
                     || completionBySequence.get(trace.sequence)?.name
                     || planned?.locatorName;
                 if (expectedName && trace.locatorName !== expectedName) {
-                    errors.push({
-                        code: 'trace-locator',
-                        message:
-                            `La acción ${trace.sequence} traza ${trace.locatorName}, pero el plan exige ` +
-                            `${expectedName}` +
-                            ((planned?.reuseCandidates || []).length
-                                ? `. Solo puedes adoptar uno de los locators que ofrece su gap: ` +
-                                  `${planned!.reuseCandidates!.map(candidate => candidate.name).join(', ')}.`
-                                : '.'),
-                        file: locatorFile.path,
+                    traceLocatorMismatches.push({
+                        sequence: trace.sequence,
+                        expectedName,
+                        actualName: trace.locatorName || '',
+                        planned,
                     });
                     return;
                 }
@@ -938,6 +1076,56 @@ export class AutomationResponseValidator {
                 screenContent,
                 screenFile ? screenObjectNames(screenFile.path).className : '',
             );
+            const currentLocators = responseLocatorValues(locatorFile.content);
+            const locatorTypesFor = (
+                getterName: string,
+                blockName: string,
+                locatorName: string
+            ): Set<string> => {
+                const key =
+                    `${getterName}\u0000${scenario.platform}\u0000${locatorFile.path}\u0000` +
+                    `${blockName}\u0000${locatorName}`;
+                return referencedTypes.get(key) || new Set<string>();
+            };
+            const acceptedTraceAliases = new Set<string>();
+            const expectedGetterByAlias = new Map<string, string>();
+            for (const mismatch of traceLocatorMismatches) {
+                const expectedPairs = primaryByLocator.get(mismatch.expectedName) || new Set<string>();
+                const candidates = currentLocators.filter(entry =>
+                    entry.name === mismatch.actualName
+                    && entry.blockName.toLowerCase().endsWith(scenario.platform)
+                );
+                const semanticMatch = candidates.some(entry => {
+                    const candidateTypes = new Set<string>([
+                        ...locatorTypesFor(entry.name, entry.blockName, entry.name),
+                        ...locatorTypesFor(mismatch.expectedName, entry.blockName, entry.name),
+                    ]);
+                    return candidateTypes.size === 1
+                        && expectedPairs.has(`${[...candidateTypes][0]}\u0000${entry.selector.trim()}`);
+                });
+                if (semanticMatch) {
+                    acceptedTraceAliases.add(mismatch.actualName);
+                    expectedGetterByAlias.set(mismatch.actualName, mismatch.expectedName);
+                    if (expectedPairs.size) primaryByLocator.set(mismatch.actualName, new Set(expectedPairs));
+                    warnings.push(
+                        `trace-locator relajado: la acción ${mismatch.sequence} traza ` +
+                        `${mismatch.actualName} en vez de ${mismatch.expectedName}, ` +
+                        'pero conserva el selector primary verificado.'
+                    );
+                    continue;
+                }
+                errors.push({
+                    code: 'trace-locator',
+                    message:
+                        `La acción ${mismatch.sequence} traza ${mismatch.actualName}, pero el plan exige ` +
+                        `${mismatch.expectedName}` +
+                        ((mismatch.planned?.reuseCandidates || []).length
+                            ? `. Solo puedes adoptar uno de los locators que ofrece su gap: ` +
+                              `${mismatch.planned!.reuseCandidates!.map(candidate => candidate.name).join(', ')}.`
+                            : '.'),
+                    file: locatorFile.path,
+                });
+            }
             const tracedGettersByMethod = new Map<string, Set<string>>();
             response.actionTrace.forEach(trace => {
                 if (!trace.screenMethod) return;
@@ -950,7 +1138,6 @@ export class AutomationResponseValidator {
                 getters.add(expectedName);
                 tracedGettersByMethod.set(trace.screenMethod, getters);
             });
-            const currentLocators = responseLocatorValues(locatorFile.content);
             // Una accion que adopto un candidato del gap ya no crea nada: su par
             // (TypeLocator, valor) es el del locator que ya vive en el
             // framework. Exigirle el par de la grabacion era pedirle que
@@ -977,12 +1164,22 @@ export class AutomationResponseValidator {
                     return types.size === 1
                         && pairs.has(`${[...types][0]}\u0000${entry.selector.trim()}`);
                 });
-                if (exact.length !== 1 || entries.length !== 1) {
+                if (!this.relaxedContract && (exact.length !== 1 || entries.length !== 1)) {
                     errors.push({
                         code: 'create-locator-contract',
                         message:
                             `El create de ${name} debe declarar una sola vez el par primary exacto ` +
                             '(TypeLocator, valor) en el getter homónimo y bloque de la plataforma grabada.',
+                        file: locatorFile.path,
+                    });
+                }
+                const oppositePlatform = scenario.platform === 'android' ? 'ios' : 'android';
+                if (!hasLocatorKeyForPlatform(locatorFile.content, name, oppositePlatform)) {
+                    errors.push({
+                        code: 'platform-coverage',
+                        message:
+                            `El locator ${name} debe declarar tambien su clave en ${oppositePlatform.toUpperCase()} `
+                            + "aunque quede vacia (''). No uses literales vacios dentro de getElement.",
                         file: locatorFile.path,
                     });
                 }
@@ -1021,7 +1218,7 @@ export class AutomationResponseValidator {
                         return types.size === 1 && types.has(primary.locatorType);
                     })()
                 );
-                if (
+                if (!this.relaxedContract && (
                     !trace?.screenMethod
                     || !usage
                     || usage.hardcodedSelector
@@ -1029,7 +1226,7 @@ export class AutomationResponseValidator {
                     || !completionMappingValid
                     || !usage.getters.has(expectedGetter)
                     || [...usage.getters].some(getter => !tracedGetters?.has(getter))
-                ) {
+                )) {
                     errors.push({
                         code: 'trace-screen-method',
                         message:
@@ -1039,18 +1236,35 @@ export class AutomationResponseValidator {
                     });
                 }
             }
+            if (this.relaxedContract) {
+                warnings.push(
+                    'Modo experimental activo: se omitieron create-locator-contract y trace-screen-method.'
+                );
+            }
             for (const proposed of changedLocatorValues(locatorFile.content, baseline)) {
                 const recordedPlatformBlock = proposed.blockName.toLowerCase().endsWith(scenario.platform);
-                const key =
-                    `${proposed.name}\u0000${scenario.platform}\u0000` +
-                    `${locatorFile.path}\u0000${proposed.blockName}\u0000${proposed.name}`;
-                const types = referencedTypes.get(key) || new Set<string>();
+                const types = new Set<string>([
+                    ...locatorTypesFor(proposed.name, proposed.blockName, proposed.name),
+                    ...(expectedGetterByAlias.has(proposed.name)
+                        ? [...locatorTypesFor(
+                            expectedGetterByAlias.get(proposed.name)!,
+                            proposed.blockName,
+                            proposed.name
+                        )]
+                        : []),
+                ]);
                 const pairs = primaryByLocator.get(proposed.name) || new Set<string>();
                 const exactTypes = [...types].filter(type =>
                     pairs.has(`${type}\u0000${proposed.selector.trim()}`)
                 );
                 if (
                     createNames.has(proposed.name)
+                    && recordedPlatformBlock
+                    && exactTypes.length === 1
+                    && types.size === 1
+                ) continue;
+                if (
+                    acceptedTraceAliases.has(proposed.name)
                     && recordedPlatformBlock
                     && exactTypes.length === 1
                     && types.size === 1
@@ -1264,11 +1478,11 @@ export class AutomationResponseValidator {
                         const markers = spanishTokens(symbol.name);
                         if (!markers.length || reported.has(symbol.name)) continue;
                         reported.add(symbol.name);
-                        errors.push({
-                            code: 'non-english-identifier',
-                            message: `El ${symbol.kind} "${symbol.name}" está en español (${markers.join(', ')}). ` +
-                                'El código del framework se nombra en inglés; el español solo va en el Gherkin.',
-                        });
+                        warnings.push(
+                            `non-english-identifier: El ${symbol.kind} "${symbol.name}" está en español ` +
+                            `(${markers.join(', ')}). El código del framework se nombra en inglés; ` +
+                            'el español solo va en el Gherkin.'
+                        );
                     }
                 }
                 const screenPlan = plan.files.find(file => file.layer === 'screen');
@@ -1286,19 +1500,6 @@ export class AutomationResponseValidator {
                     const screenImport = screenImports.find(match => match[2] === expectedSource);
                     const alias = screenImport?.[1];
                     const source = screenImport?.[2];
-                    if (!alias) {
-                        errors.push({
-                            code: 'screen-alias',
-                            message: `Steps debe importar el Screen Object como ${expected.instanceName}.`,
-                            file: stepsPlan.path,
-                        });
-                    } else if (isGenericScreenAlias(alias) || alias !== expected.instanceName) {
-                        errors.push({
-                            code: 'screen-alias',
-                            message: `Alias de Screen Object inválido: ${alias}. Esperado: ${expected.instanceName}.`,
-                            file: stepsPlan.path,
-                        });
-                    }
                     if (alias && !(preview.stepContent || '').includes(`${alias}.`)) {
                         errors.push({
                             code: 'screen-alias-usage',
@@ -1372,11 +1573,18 @@ export class AutomationResponseValidator {
                         platformOrder: contract.locatorSignature.platformOrder,
                         parameterCount: contract.locatorSignature.parameterCount,
                         expectedImports,
+                        stepsContent: preview.stepContent || '',
+                        expectedNames: {
+                            className: expected.className,
+                            instanceName: expected.instanceName,
+                            importSource: expectedSource,
+                            baseScreenClass: contract.baseScreenClass,
+                        },
                     })) {
                         errors.push({
                             code: problem.code,
                             message: problem.message,
-                            file: screenPlan.path,
+                            file: problem.code === 'screen-alias' ? stepsPlan.path : screenPlan.path,
                         });
                     }
                     // Cobertura de plataforma: ninguna clave referenciada puede
@@ -1430,20 +1638,6 @@ export class AutomationResponseValidator {
                             file: screenPlan.path,
                         });
                     }
-                    if (!new RegExp(`class\\s+${expected.className}\\s+extends\\s+${contract.baseScreenClass}\\b`).test(screenContent)) {
-                        errors.push({
-                            code: 'screen-class-name',
-                            message: `Clase Screen Object inválida. Esperado: ${expected.className}.`,
-                            file: screenPlan.path,
-                        });
-                    }
-                    if (!new RegExp(`export\\s+default\\s+new\\s+${expected.className}\\s*\\(`).test(screenContent)) {
-                        errors.push({
-                            code: 'screen-singleton-name',
-                            message: `El singleton debe exportar new ${expected.className}().`,
-                            file: screenPlan.path,
-                        });
-                    }
                 }
                 if (/Locators\.[A-Za-z_$][\w$]*-/.test(preview.screenContent || '')) {
                     errors.push({
@@ -1487,8 +1681,13 @@ export class AutomationResponseValidator {
                 );
                 const stepsPath = response.files.find(file => file.layer === 'steps')?.path;
                 for (const definition of definitions) {
+                    const normalizedDefinition = selectorNormalization.canonicalStepExpression(definition);
                     const collision = catalog.stepDefinitions.find(existing =>
-                        existing.expression === definition && existing.file !== stepsPath
+                        existing.file !== stepsPath
+                        && (
+                            existing.expression === definition
+                            || selectorNormalization.canonicalStepExpression(existing.expression) === normalizedDefinition
+                        )
                     );
                     if (collision) {
                         errors.push({
@@ -1546,7 +1745,12 @@ export class AutomationResponseValidator {
             errors: unique,
             warnings,
             ...(valid ? {} : {
-                repairContext: { attempt, errors: unique, affectedFiles },
+                repairContext: {
+                    attempt,
+                    errors: unique,
+                    affectedFiles,
+                    groups: groupRepairErrors(unique),
+                },
             }),
         };
     }

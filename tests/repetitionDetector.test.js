@@ -126,16 +126,21 @@ function scenarioWith(actions) {
     };
 }
 
-test('el plan propone la repetición y deja la decisión al QA', () => {
+test('el plan detecta repetición y agrega DataTable de forma determinística', () => {
     const result = new DeterministicResolver(emptyCatalog).resolve(scenarioWith(FILTROS));
 
     assert.equal(result.plan.repetition.repetitions, 4);
     assert.equal(result.plan.repetition.parameter, 'filtro');
-    const gap = result.unresolvedContext.gaps.find(item => item.type === 'repetition');
-    assert.ok(gap, 'el ciclo debe llegar como gap, no aplicarse solo');
-    assert.match(gap.requiredOutput, /Recomendado: un solo escenario con una data table/);
-    assert.match(gap.requiredOutput, /Alternativa: Scenario Outline/);
-    assert.match(gap.requiredOutput, /\{filtro\} y \.replace\(\)/);
+    assert.equal(result.unresolvedContext.gaps.some(item => item.type === 'repetition'), false);
+    const whenRow = result.scenario.request.scenarioRows.find(row => row.keyword === 'When');
+    assert.ok(whenRow?.dataTable, 'la fila funcional debe contener DataTable');
+    assert.deepEqual(whenRow.dataTable.headers, ['filtro']);
+    assert.deepEqual(whenRow.dataTable.rows, [
+        ['Solo hoy'],
+        ['Ultimos 7 dias'],
+        ['Ultimos 30 dias'],
+        ['Ultimos 90 dias'],
+    ]);
 });
 
 test('la falta de aserción es un gap bloqueante propio, no una nota dentro de otro gap', () => {
@@ -145,12 +150,6 @@ test('la falta de aserción es un gap bloqueante propio, no una nota dentro de o
     assert.equal(gap.blocking, true);
     assert.equal(sinAsercion.unresolvedContext.gaps[0].id, 'gap-missing-assertion');
     assert.match(gap.requiredOutput, /VERIFICAR_TEXTO/);
-    // El gap de repetición ya no repite el aviso: vive en su propio gap.
-    assert.doesNotMatch(
-        sinAsercion.unresolvedContext.gaps.find(item => item.type === 'repetition').requiredOutput,
-        /asercion/
-    );
-
     const conAsercion = new DeterministicResolver(emptyCatalog).resolve(scenarioWith([
         ...FILTROS,
         { action: 'VERIFICAR_EXISTE', selector: '~lblResultado', contextHint: 'resultado', value: '', sequence: 11 },

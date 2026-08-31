@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "recordingId": "rec-7588c175-1ed9-4348-ac49-feddddc73b84",
+  "planId": "plan-e536c99b0091d9912a37941f",
+  "reusedLocators": [],
+  "elementDeclarations": [
+    {
+      "module": "payment/movements",
+      "import": "@locators/payment/movements.locator.json",
+      "importLine": "import LocatorMovements from '@locators/payment/movements.locator.json' with { type: 'json' };",
+      "identifier": "LocatorMovements",
+      "needsImport": true,
+      "groups": {
+        "android": "movementsAndroid",
+        "ios": "movementsIos"
+      },
+      "elements": [
+        {
+          "name": "btntoday",
+          "locators": {
+            "android": {
+              "value": "new UiSelector().className(\"android.view.View\").instance(3)",
+              "type": "ANDROID",
+              "reference": "LocatorMovements.movementsAndroid.btntoday"
+            },
+            "ios": {
+              "value": "Solo hoy",
+              "type": "ID",
+              "reference": "LocatorMovements.movementsIos.btntoday"
+            }
+          },
+          "getter": "    public get btntoday() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.ID, LocatorMovements.movementsIos.btntoday,\n            TypeLocator.ANDROID, LocatorMovements.movementsAndroid.btntoday\n        );\n        return $(locator);\n    }",
+          "usedBy": {
+            "screens": [
+              "screenobjects/payment/movements.screen.ts"
+            ],
+            "steps": []
+          }
+        }
+      ]
+    },
+    {
+      "module": "home/home",
+      "import": "@locators/home/home.locator.json",
+      "importLine": "import LocatorHome from '@locators/home/home.locator.json' with { type: 'json' };",
+      "identifier": "LocatorHome",
+      "needsImport": true,
+      "groups": {
+        "android": "homeAndroid",
+        "ios": "homeIos"
+      },
+      "elements": [
+        {
+          "name": "lblRecentMovements",
+          "locators": {
+            "android": {
+              "value": "//android.widget.TextView[@text=\"Mostrar movimientos\"]",
+              "type": "XPATH",
+              "reference": "LocatorHome.homeAndroid.lblRecentMovements"
+            },
+            "ios": {
+              "value": "",
+              "type": "ID",
+              "reference": "LocatorHome.homeIos.lblRecentMovements",
+              "status": "missing"
+            }
+          },
+          "getter": "    public get lblRecentMovements() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.ID, LocatorHome.homeIos.lblRecentMovements,\n            TypeLocator.XPATH, LocatorHome.homeAndroid.lblRecentMovements\n        );\n        return $(locator);\n    }",
+          "usedBy": {
+            "screens": [
+              "screenobjects/home/home.screen.ts",
+              "screenobjects/payment/confirmacion-envio-email-movements.screen.ts"
+            ],
+            "steps": [
+              "features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "module": "payment/confirmacion-envio-email-movements",
+      "import": "@locators/payment/confirmacion-envio-email-movements.locator.json",
+      "importLine": "import LocatorConfirmacionEnvioEmailMovements from '@locators/payment/confirmacion-envio-email-movements.locator.json' with { type: 'json' };",
+      "identifier": "LocatorConfirmacionEnvioEmailMovements",
+      "needsImport": true,
+      "groups": {
+        "android": "confirmacionEnvioEmailMovementsAndroid",
+        "ios": "confirmacionEnvioEmailMovementsIos"
+      },
+      "elements": [
+        {
+          "name": "seeAllMovements",
+          "locators": {
+            "android": {
+              "value": "new UiSelector().description(\"Ver todos\")",
+              "type": "ANDROID",
+              "reference": "LocatorConfirmacionEnvioEmailMovements.confirmacionEnvioEmailMovementsAndroid.seeAllMovements"
+            },
+            "ios": {
+              "value": "",
+              "type": "ID",
+              "reference": "LocatorConfirmacionEnvioEmailMovements.confirmacionEnvioEmailMovementsIos.seeAllMovements",
+              "status": "missing"
+            }
+          },
+          "getter": "    public get seeAllMovements() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.ID, LocatorConfirmacionEnvioEmailMovements.confirmacionEnvioEmailMovementsIos.seeAllMovements,\n            TypeLocator.ANDROID, LocatorConfirmacionEnvioEmailMovements.confirmacionEnvioEmailMovementsAndroid.seeAllMovements\n        );\n        return $(locator);\n    }",
+          "usedBy": {
+            "screens": [
+              "screenobjects/payment/confirmacion-envio-email-movements.screen.ts"
+            ],
+            "steps": [
+              "features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "frameworkAwareness": {
+    "candidates": [],
+    "exactStepDefinitions": [],
+    "selectorCollisions": [],
+    "decision": "create-new"
+  },
+  "frameworkContract": {
+    "stepsOnlyOrchestrate": true,
+    "screenExtendsBaseScreen": true,
+    "sharedLocatorNameAcrossPlatforms": true,
+    "allowedScopes": [
+      "squad",
+      "home"
+    ],
+    "baseScreenClass": "BaseScreen",
+    "baseScreenImport": "@screenobjects/commons/base.screen.ts",
+    "locatorFactoryImport": "@common/locators/locator-provider.js",
+    "typeLocatorImport": "@common/enums/locator-type.enum.js"
+  }
+}

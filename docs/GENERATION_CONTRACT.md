@@ -9,6 +9,11 @@ al agente y no puede contener prompts, XML, screenshots, secretos ni datos del
 caso. Los tokens son anulables porque el agente se inicia manualmente y el CLI
 actual no garantiza métricas de consumo.
 
+En modo automático también registra `pass1ContextBytes` y `pass2ContextBytes`,
+además de un desglose por componente (`pass1ContextBreakdown` y
+`pass2ContextBreakdown`) para explicar exactamente qué bytes entraron en cada
+invocación. `contextBytes` conserva el máximo por invocación.
+
 Además registra el número inicial/final de gaps, hints generados/usados, gaps
 resueltos determinísticamente y consultas solicitadas, aceptadas, rechazadas,
 duplicadas o evitadas por ausencia de gap. Una consulta rechazada no incrementa
@@ -42,6 +47,25 @@ autoriza búsquedas.
 - results: `requestId`, `gapId`, `status` (`resolved|rejected|not-found|error`)
   y `code` estructurado cuando hay rechazo.
 
+Una resolución con `decision: "reuse"` debe incluir
+`selectedCandidate: {file,module,name}`. Los valores se copian exactamente de
+un candidato del plan o de un resultado aceptado de `findLocator`. El recorder
+lo aplica en `effective-generation-plan.json`; el agente no crea aliases ni
+reescribe el locator existente. Las aserciones con selector débil pueden usar
+`findLocator`; si no existe evidencia observable, permanecen sin resolver en
+vez de inventar texto o XPath.
+
+El generador determinista conserva locators distintos dentro de una secuencia
+repetida. Solo compacta a un loop cuando la posición variable representa la
+misma clave lógica parametrizable; nunca convierte varias claves verificadas en
+una llamada al primer getter.
+
+Los errores de reparación se agrupan por código y archivo en
+`repair-context.json`. El resultado inválido inicial abre la reparación sin
+consumir el intento. El intento se consume solo si `agent-response.json` cambia
+materialmente y continúa inválido; una reimportación idéntica queda como
+`repair-no-change` para corrección explícita.
+
 ## Salida fwk-mobile
 
 Un caso completo puede producir:
@@ -71,6 +95,9 @@ escritura y se debe preparar un paquete nuevo.
 El presupuesto operativo del plan vive en una sola fuente (`GenerationPlan.budgets`):
 `maxDurationMs`, `maxContextBytes`, `maxResponseBytes`, `maxAgentInvocations`,
 `maxTotalQueries`, `maxQueriesPerGap` y `maxRepairAttempts`.
+
+En Fase 4.1, `maxContextBytes` se valida **por invocación**: PASS 1 y PASS 2
+usan contextos distintos y cada uno debe caber individualmente.
 
 Las cuatro capas llevan metadata de procedencia agregada por el recorder:
 `Generado por Appium Visual Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
@@ -157,12 +184,12 @@ El mismo nombre lógico aparece en bloques de plataforma del módulo:
 }
 ```
 
-Para una generación nueva solo es obligatorio el bloque de la plataforma
-grabada. Una ejecución Android puede entregar únicamente el bloque Android (o
-dejar iOS vacío), y una ejecución iOS puede hacer lo equivalente. La ausencia
-de la plataforma contraria se informa como cobertura pendiente, pero no bloquea
-la importación ni la generación. El Feature lleva solamente el tag de las
-plataformas con cobertura completa.
+Para una generación nueva solo es obligatorio el selector de la plataforma
+grabada. Aun así, el JSON debe declarar ambas plataformas con las mismas claves
+lógicas: si la plataforma contraria todavía no tiene selector, su valor queda
+en `''`. Lo permitido es valor vacío, no clave ausente ni literal vacío dentro
+de `getElement(...)`. El Feature lleva solamente el tag de las plataformas con
+cobertura completa.
 
 Al completar cobertura solo se actualiza el bloque de la plataforma activa. El
 selector capturado se traduce al par `(TypeLocator, valor)` que la clase
@@ -192,21 +219,14 @@ interpretar. Si no sale el mismo par, la verificación lo dice en el momento de
 capturar y el resolver abre `gap-locator-roundtrip`, que es bloqueante: un
 locator que no resuelve no es algo que el agente pueda arreglar adivinando.
 
-Una selección explícita del Inspector puede guardar `selectorCandidates`. El
-candidato primary es siempre el selector elegido por el QA y sigue siendo el
-único valor por defecto para `create`. Cada candidato compacto conserva
-`candidateId`, selector canónico, estrategia del Inspector, `locatorType`,
-`locatorValue`, prioridad, estabilidad, motivo y la verificación de captura
-(`protocolVersion=3`, una coincidencia, mismo elemento y fecha). Se deduplica por
-par `(TypeLocator, valor)` y se ordena primary primero; luego
-`stable → contextual → structural → manual`, prioridad y `candidateId`. Se
-persisten como máximo cuatro. Editar el selector o elegir otro borra los backups.
-En una entrada sensible se descarta cualquier backup que contenga el valor
-capturado; si el primary depende de la credencial, la acción se rechaza para no
-persistir el secreto dentro de un selector. Esta validación y sanitización ocurre
-antes de ejecutar o mutar el recording. Si la persistencia falla después de una
-acción válida, `actions.json`, manifest y estado en memoria vuelven al baseline;
-el renderer restaura siempre el botón en `finally` y muestra el error.
+Cada selección explícita del Inspector persiste un único selector verificado por
+acción. `actions.json` conserva `selector`, `selectorVerified`, `locatorType` y
+`locatorValue`; no guarda alternativas ni backups. En una entrada sensible el
+selector se rechaza si contiene el valor capturado, para no persistir secretos.
+Esta validación ocurre antes de ejecutar o mutar el recording. Si la
+persistencia falla después de una acción válida, `actions.json`, manifest y
+estado en memoria vuelven al baseline; el renderer restaura siempre el botón en
+`finally` y muestra el error.
 
 Cuando un recording generado solo carece de iOS (o Android), el QA únicamente
 selecciona y verifica los locators pendientes en una sesión de esa plataforma.
@@ -216,14 +236,9 @@ framework contienen ambos bloques completos.
 
 Los locators compartidos se indexan en orden squad → commons → home → global.
 Una coincidencia debe conservar módulo, scope y ruta de origen.
-El resolver puede usar cualquier candidato verificado para encontrar una
-coincidencia exacta existente, pero nunca escribe alternativas como fallbacks.
-Ordena por scope y estabilidad; si persisten matches materiales del mismo rango,
-abre un gap bloqueante de decisión QA. La resolución conserva el `candidateId`
-que causó el reuse. Para `create`, el validator admite únicamente el par primary
-exacto: cruza el `TypeLocator` declarado en el getter del Screen Object con el
-valor del bloque de plataforma en el JSON. Un backup, un tipo distinto o un
-valor intercambiado entre acciones se rechazan aunque cada componente exista
+Para `create`, el validator admite únicamente el par exacto de la grabación
+(`locatorType` + `locatorValue`) en la plataforma grabada; un tipo distinto o
+un valor intercambiado entre acciones se rechazan aunque cada componente exista
 por separado en la grabación. Además, cada acción `create` declara
 `actionTrace.screenMethod`: el validator analiza el método real de la clase
 esperada y exige que consuma el getter de `locatorName`, directamente o mediante
@@ -291,19 +306,13 @@ mantenibilidad y consistencia sin alterar el comportamiento grabado.
 
 ## Contrato del pipeline de automatización
 
-El paquete mínimo contiene `scenario.json`, `locator-candidates.json`,
-`generation-plan.json`,
+El paquete mínimo contiene `scenario.json`, `generation-plan.json`,
 `reuse-context.json`, `collision-report.json`, `unresolved-context.json`,
 `instructions.md`, schema y verificador. `reuse-context.json` limita el contexto
 a los cinco casos más cercanos; `collision-report.json` expone coincidencias
 exactas de steps y selectores sin entregar archivos completos del framework.
-`locator-candidates.json` es una allowlist read-only; el agente puede citar un
-`candidateId`, pero no inventar ni modificar selectores. El validator rechaza
-valores nuevos fuera de la allowlist de la acción y plataforma asociadas, el
-intercambio de selectores entre locators y campos de selector introducidos en
-resolutions, completions o metadatos de files. Al importar, el recorder vuelve
-a resolver la copia autoritativa del recording y reconstruye con el mismo helper
-el `scenario.json` compacto esperado antes de hidratarlo; `platform` forma parte
+Al importar, el recorder vuelve a resolver la copia autoritativa del recording y
+reconstruye con el mismo helper el `scenario.json` esperado; `platform` forma parte
 explícita del package para que una verificación Android nunca se pueda
 reinterpretar como iOS, ni al revés.
 El agente devuelve un solo `agent-response.json` con:
@@ -341,8 +350,9 @@ requeridos vacíos; por ejemplo, un caso parcial permanece como
 
 No puede cambiar rutas, releer el framework, reemplazar selectores verificados
 ni inventar una quinta capa. Un fallo produce `repair-context.json` con errores
-y archivos afectados. Solo se permite una reparación. iOS puede quedar vacío
-con warning cuando la evidencia activa es Android, conservando el nombre lógico.
+y archivos afectados. Solo se permite una reparación. iOS puede quedar con
+valor vacío cuando la evidencia activa es Android, conservando el nombre
+lógico y su clave declarada en el JSON.
 
 Si el resolver encuentra el mismo comportamiento y cobertura total de selectores
 en un caso con cuatro capas, `generation-plan.json` incluye `existingCase`, usa
@@ -392,14 +402,15 @@ autocorrija antes de devolver nada.
 | `getElement` recibe siempre 4 argumentos | 860 / 860 |
 | Argumentos 1 y 3 son `TypeLocator.<ESTRATEGIA>` | 860 / 860 |
 | El valor de iOS va antes que el de Android | 858 / 860 |
+| Los valores de `getElement` referencian claves de locator, nunca `''` literal | contrato del validador |
 
 La firma se lee de la declaración real de `getElement` (`locatorSignature`), no
 de una constante: si el framework reordena los parámetros, la instrucción y la
 regla que la verifica se mueven con él.
 
-La última regla atrapa además un fallo silencioso: **intercambiar los valores de
-iOS y Android** mantiene los 4 argumentos, compila y pasa el review, pero ejecuta
-el locator de la plataforma equivocada.
+Las últimas reglas atrapan además dos fallos silenciosos: **intercambiar los
+valores de iOS y Android** (ejecuta la plataforma equivocada) y **pasar `''`
+literal** (pierde la trazabilidad de la clave y rompe completions posteriores).
 
 Los mensajes traen la línea ya corregida. El agente tiene un solo intento de
 reparación (`maxRepairAttempts: 1`) y estos cuatro errores son mecánicos:

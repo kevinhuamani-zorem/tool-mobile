@@ -10,6 +10,7 @@ import {
 
 const ALLOWED_ARTIFACTS = new Set([
     'agent-response.json',
+    'gap-resolutions.json',
     'query-requests.json',
     'query-results.json',
 ]);
@@ -25,7 +26,10 @@ export interface AgentOutputSummary {
 export function resolveAgentExecutionMode(
     mode?: string | null,
 ): AgentExecutionMode {
-    return mode === 'automatic' ? 'automatic' : DEFAULT_AGENT_EXECUTION_MODE;
+    const normalized = String(mode || '').trim().toLowerCase();
+    if (normalized === 'automatic') return 'automatic';
+    if (normalized === 'manual') return 'manual';
+    return DEFAULT_AGENT_EXECUTION_MODE;
 }
 
 export function canFallbackToManual(

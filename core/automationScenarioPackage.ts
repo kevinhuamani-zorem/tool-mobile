@@ -46,19 +46,22 @@ export type PackagedAutomationScenario = Omit<AutomationScenario, 'request'> & {
 /**
  * Builds the exact scenario representation exposed to the automation agent.
  *
- * The resolved request remains authoritative, while verified selector backups
- * travel only in locator-candidates.json and row actions reference sequences.
+ * The resolved request remains authoritative, while row actions reference
+ * sequences only.
  */
 export function packageAutomationScenario(
     scenario: AutomationScenario
 ): PackagedAutomationScenario {
     const rows = scenario.request.scenarioRows;
+    const actions = scenario.actions.map(action => {
+        const { selectorCandidates: _selectorCandidates, ...rest } = action as typeof action & {
+            selectorCandidates?: unknown;
+        };
+        return rest;
+    });
     return {
         ...scenario,
-        actions: scenario.actions.map(action => {
-            const { selectorCandidates: _selectorCandidates, ...compact } = action;
-            return compact;
-        }),
+        actions,
         request: {
             ...scenario.request,
             scenarioRows: rows?.map(row => ({

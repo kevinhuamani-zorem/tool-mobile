@@ -9,6 +9,8 @@ export type FrameworkQueryName = FrameworkContextQuery;
 export interface FrameworkQueryInput {
     squad?: string;
     term?: string;
+    symbol?: string;
+    intent?: string;
     path?: string;
     imports?: string[];
     limit?: number;
@@ -48,11 +50,81 @@ export interface FrameworkQueryResponse {
     error?: { code: string; message: string };
 }
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 50;
-const DEFAULT_BYTES = 8_192;
 const MIN_BYTES = 768;
-const MAX_BYTES = 20_000;
+const MAX_BYTES = 200_000;
+const FRAMEWORK_QUERY_INPUT_FIELDS = [
+    'squad',
+    'term',
+    'symbol',
+    'intent',
+    'path',
+    'imports',
+    'limit',
+    'maxBytes',
+] as const;
+type FrameworkQueryInputField = typeof FRAMEWORK_QUERY_INPUT_FIELDS[number];
+const FRAMEWORK_QUERY_INPUT_TYPES: Record<FrameworkQueryInputField, string> = {
+    squad: 'string',
+    term: 'string',
+    symbol: 'string',
+    intent: 'string',
+    path: 'string',
+    imports: 'string[]',
+    limit: 'number',
+    maxBytes: 'number',
+};
+
+function validFieldsMessage(): string {
+    return FRAMEWORK_QUERY_INPUT_FIELDS
+        .map(field => `${field}:${FRAMEWORK_QUERY_INPUT_TYPES[field]}`)
+        .join(', ');
+}
+
+export function frameworkQueryInputSchema() {
+    return { ...FRAMEWORK_QUERY_INPUT_TYPES };
+}
+
+export function validateFrameworkQueryInput(input: Record<string, unknown>): {
+    valid: boolean;
+    message?: string;
+} {
+    const allowed = new Set<string>(FRAMEWORK_QUERY_INPUT_FIELDS);
+    const unknown = Object.keys(input).filter(key => !allowed.has(key));
+    if (unknown.length) {
+        return {
+            valid: false,
+            message: `Argumentos no soportados: ${unknown.join(', ')}. ` +
+                `Campos válidos: ${validFieldsMessage()}.`,
+        };
+    }
+    if (input.squad !== undefined && typeof input.squad !== 'string') {
+        return { valid: false, message: `squad debe ser string. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.term !== undefined && typeof input.term !== 'string') {
+        return { valid: false, message: `term debe ser string. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.symbol !== undefined && typeof input.symbol !== 'string') {
+        return { valid: false, message: `symbol debe ser string. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.intent !== undefined && typeof input.intent !== 'string') {
+        return { valid: false, message: `intent debe ser string. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.path !== undefined && typeof input.path !== 'string') {
+        return { valid: false, message: `path debe ser string. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.imports !== undefined && (!Array.isArray(input.imports) || input.imports.some(value => typeof value !== 'string'))) {
+        return { valid: false, message: `imports debe ser string[]. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.limit !== undefined && (typeof input.limit !== 'number' || !Number.isFinite(input.limit))) {
+        return { valid: false, message: `limit debe ser number. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    if (input.maxBytes !== undefined && (typeof input.maxBytes !== 'number' || !Number.isFinite(input.maxBytes))) {
+        return { valid: false, message: `maxBytes debe ser number. Campos válidos: ${validFieldsMessage()}.` };
+    }
+    return { valid: true };
+}
 
 function tokens(value = ''): Set<string> {
     return new Set(value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -82,18 +154,86 @@ function nodeItem(node: CodeGraphNode): FrameworkQueryItem {
 function rank(nodes: CodeGraphNode[], input: FrameworkQueryInput): CodeGraphNode[] {
     const squad = input.squad || 'global';
     const scopes = scopeOrder(squad);
-    const wanted = tokens(`${input.term || ''} ${input.path || ''}`);
+    const wanted = tokens(`${input.term || ''} ${input.symbol || ''} ${input.intent || ''} ${input.path || ''}`);
+    const moduleHint = (input.path || '').split('/').pop()
+        ?.replace(/\.locator\.json$/i, '')
+        ?.replace(/\.screen\.(ts|js)$/i, '')
+        ?.toLowerCase();
     return nodes.filter(node => scopes.includes(node.squad)).map(node => {
         const found = tokens(`${node.name} ${node.text || ''} ${node.file}`);
         const overlap = [...wanted].filter(token => found.has(token)).length;
         const exact = input.path && node.file === input.path ? 100 : 0;
-        return { node, score: exact + overlap * 10 + (scopes.length - scopes.indexOf(node.squad)) };
+        const moduleMatch = moduleHint && (
+            node.file.toLowerCase().includes(`/${moduleHint}.`)
+            || node.file.toLowerCase().includes(`/${moduleHint}/`)
+        ) ? 25 : 0;
+        return { node, score: exact + moduleMatch + overlap * 10 + (scopes.length - scopes.indexOf(node.squad)) };
     }).filter(candidate => !wanted.size || candidate.score > scopes.length)
         .sort((left, right) => right.score - left.score
             || scopes.indexOf(left.node.squad) - scopes.indexOf(right.node.squad)
             || left.node.file.localeCompare(right.node.file)
             || left.node.name.localeCompare(right.node.name))
         .map(candidate => candidate.node);
+}
+
+function overlapCount(left: Set<string>, right: Set<string>): number {
+    let total = 0;
+    for (const token of left) if (right.has(token)) total += 1;
+    return total;
+}
+
+function screenNodesFromLocatorContext(
+    snapshot: CodeGraphSnapshot,
+    input: FrameworkQueryInput,
+): CodeGraphNode[] {
+    const pathHint = (input.path || '').replace(/\\/g, '/');
+    const symbol = (input.symbol || input.term || '').trim();
+    if (!pathHint && !symbol) return [];
+    const locatorNodes = snapshot.nodes.filter(node =>
+        node.type === 'locator' && (
+            (pathHint && node.file === pathHint)
+            || (symbol && node.name === symbol)
+        )
+    );
+    if (!locatorNodes.length) return [];
+    const methodById = new Map(snapshot.nodes
+        .filter(node => node.type === 'method')
+        .map(node => [node.id, node]));
+    const screenById = new Map(snapshot.nodes
+        .filter(node => node.type === 'screenObject')
+        .map(node => [node.id, node]));
+    const containingScreenByMethod = new Map<string, CodeGraphNode>();
+    for (const edge of snapshot.edges) {
+        if (edge.type !== 'contains') continue;
+        const screen = screenById.get(edge.from);
+        if (!screen) continue;
+        if (methodById.has(edge.to)) containingScreenByMethod.set(edge.to, screen);
+    }
+    const locatorIds = new Set(locatorNodes.map(node => node.id));
+    const wanted = tokens(`${input.term || ''} ${input.symbol || ''} ${input.intent || ''} ${input.path || ''}`);
+    const hits = new Map<string, { node: CodeGraphNode; score: number }>();
+    for (const edge of snapshot.edges) {
+        if (edge.type !== 'uses' || !locatorIds.has(edge.to)) continue;
+        const method = methodById.get(edge.from);
+        if (!method) continue;
+        const scopeScore = scopeOrder(input.squad || 'global').includes(method.squad) ? 1 : 0;
+        const methodTokens = tokens(`${method.name} ${method.file}`);
+        const score = 100 + overlapCount(wanted, methodTokens) * 10 + scopeScore;
+        const best = hits.get(method.id);
+        if (!best || score > best.score) hits.set(method.id, { node: method, score });
+        const screen = containingScreenByMethod.get(method.id);
+        if (screen) {
+            const screenTokens = tokens(`${screen.name} ${screen.file}`);
+            const screenScore = 95 + overlapCount(wanted, screenTokens) * 8 + scopeScore;
+            const current = hits.get(screen.id);
+            if (!current || screenScore > current.score) hits.set(screen.id, { node: screen, score: screenScore });
+        }
+    }
+    return [...hits.values()]
+        .sort((left, right) => right.score - left.score
+            || left.node.file.localeCompare(right.node.file)
+            || left.node.name.localeCompare(right.node.name))
+        .map(entry => entry.node);
 }
 
 export class FrameworkQueryService {
@@ -129,8 +269,33 @@ export class FrameworkQueryService {
 
     execute(query: FrameworkQueryName, input: FrameworkQueryInput = {}): FrameworkQueryResponse {
         const started = process.hrtime.bigint();
+        const normalizedInput = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+        const argsValidation = validateFrameworkQueryInput(normalizedInput);
+        if (!argsValidation.valid) {
+            return {
+                schemaVersion: 1,
+                query,
+                success: false,
+                items: [],
+                relations: [],
+                metrics: {
+                    durationMs: Number(process.hrtime.bigint() - started) / 1_000_000,
+                    indexDurationMs: 0,
+                    cacheHit: false,
+                    filesExamined: 0,
+                    filesRead: 0,
+                    bytesRead: 0,
+                    resultCount: 0,
+                    returnedBytes: 0,
+                    truncated: false,
+                },
+                error: { code: 'invalid-query-args', message: argsValidation.message || 'Argumentos inválidos.' },
+            };
+        }
         const limit = Math.max(1, Math.min(input.limit || DEFAULT_LIMIT, MAX_LIMIT));
-        const maxBytes = Math.max(MIN_BYTES, Math.min(input.maxBytes || DEFAULT_BYTES, MAX_BYTES));
+        const maxBytes = input.maxBytes == null
+            ? undefined
+            : Math.max(MIN_BYTES, Math.min(input.maxBytes, MAX_BYTES));
         let snapshot: CodeGraphSnapshot | undefined;
         try {
             snapshot = this.graph.snapshot();
@@ -138,8 +303,19 @@ export class FrameworkQueryService {
             let directItems: FrameworkQueryItem[] | undefined;
             if (query === 'inspectScenario') nodes = rank(snapshot.nodes.filter(node =>
                 node.type === 'scenario' || node.type === 'gherkinStep'), input);
-            else if (query === 'findExistingScreen') nodes = rank(snapshot.nodes.filter(node =>
-                node.type === 'screenObject' || node.type === 'method'), input);
+            else if (query === 'findExistingScreen') {
+                const targeted = screenNodesFromLocatorContext(snapshot, input);
+                if (targeted.length) {
+                    const rest = rank(snapshot.nodes.filter(node =>
+                        (node.type === 'screenObject' || node.type === 'method')
+                        && !targeted.some(candidate => candidate.id === node.id)
+                    ), input);
+                    nodes = [...targeted, ...rest];
+                } else {
+                    nodes = rank(snapshot.nodes.filter(node =>
+                        node.type === 'screenObject' || node.type === 'method'), input);
+                }
+            }
             else if (query === 'findExistingStep') nodes = rank(snapshot.nodes.filter(node =>
                 node.type === 'stepDefinition'), input);
             else if (query === 'findExample') {
@@ -187,8 +363,7 @@ export class FrameworkQueryService {
             const relations = snapshot.edges.filter(edge =>
                 nodeIds.has(edge.from) || nodeIds.has(edge.to)
             ).slice(0, limit * 2).map(edge => this.relation(edge, snapshot!));
-            return this.bounded(query, candidates, relations, snapshot, started, maxBytes,
-                (directItems || nodes).length > limit);
+            return this.bounded(query, candidates, relations, snapshot, started, maxBytes);
         } catch (error) {
             const durationMs = Number(process.hrtime.bigint() - started) / 1_000_000;
             return {
@@ -242,12 +417,33 @@ export class FrameworkQueryService {
         relations: Array<{ from: string; to: string; type: string }>,
         snapshot: CodeGraphSnapshot,
         started: bigint,
-        maxBytes: number,
-        initiallyTruncated: boolean,
+        maxBytes?: number,
     ): FrameworkQueryResponse {
+        if (maxBytes == null) {
+            const response: FrameworkQueryResponse = {
+                schemaVersion: 1,
+                query,
+                success: true,
+                items: [...candidates],
+                relations: [...relations],
+                metrics: {
+                    durationMs: Number(process.hrtime.bigint() - started) / 1_000_000,
+                    indexDurationMs: snapshot.metrics.indexDurationMs,
+                    cacheHit: snapshot.metrics.cacheHit,
+                    filesExamined: snapshot.metrics.filesExamined,
+                    filesRead: snapshot.metrics.filesRead,
+                    bytesRead: snapshot.metrics.bytesRead,
+                    resultCount: candidates.length,
+                    returnedBytes: 0,
+                    truncated: false,
+                },
+            };
+            response.metrics.returnedBytes = Buffer.byteLength(JSON.stringify(response), 'utf-8');
+            return response;
+        }
         const items: FrameworkQueryItem[] = [];
         const keptRelations: typeof relations = [];
-        let truncated = initiallyTruncated;
+        let truncated = false;
         const base = (candidateItems: FrameworkQueryItem[], candidateRelations: typeof relations): FrameworkQueryResponse => ({
             schemaVersion: 1, query, success: true, items: candidateItems, relations: candidateRelations,
             metrics: {
@@ -287,7 +483,7 @@ export class FrameworkQueryService {
 
 export const frameworkQueryDefaults = {
     limit: DEFAULT_LIMIT,
-    maxBytes: DEFAULT_BYTES,
+    maxBytes: undefined,
     maxLimit: MAX_LIMIT,
     maxResponseBytes: MAX_BYTES,
 };

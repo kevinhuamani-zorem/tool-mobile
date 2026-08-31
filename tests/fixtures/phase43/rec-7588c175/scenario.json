@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "1.0.0",
+  "recordingId": "rec-7588c175-1ed9-4348-ac49-feddddc73b84",
+  "revision": 28,
+  "fingerprint": "c2f2ba86a5a5d95ce21cf07ee93fcb753b1572cda9e26a9acfce43a410df9ce6",
+  "createdAt": "2026-08-28T19:47:42.264Z",
+  "squad": "payment",
+  "platform": "android",
+  "environment": "qa",
+  "objective": "el usuario debe poder usar todos los filtros de movimientos disponibles",
+  "acceptanceCriteria": "validar que pueda ver el contenedor de movimientos para todas las casuisticas",
+  "request": {
+    "squad": "payment",
+    "featureScope": "",
+    "featureName": "Contenedor movimientos casuisticas filtro",
+    "scenarioName": "Contenedor movimientos casuisticas filtro",
+    "fileName": "movements-cases-filter-container",
+    "locatorModule": "movements-cases-filter-container",
+    "caseId": "TC-10239",
+    "pathType": "Happy Path",
+    "tag": "filtromovimientos",
+    "dataName": "Usuario QA Temporal",
+    "platform": "android",
+    "createdAt": "2026-08-28T19:47:42.264Z",
+    "scenarioRows": [
+      {
+        "keyword": "Given",
+        "text": "el usuario <username> inicia sesión en Yape",
+        "status": "reused",
+        "actions": []
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
+        "status": "missing",
+        "wording": "domain",
+        "actions": [
+          {
+            "sequence": 1
+          },
+          {
+            "sequence": 2
+          },
+          {
+            "sequence": 3
+          },
+          {
+            "sequence": 4
+          },
+          {
+            "sequence": 5
+          },
+          {
+            "sequence": 6
+          },
+          {
+            "sequence": 7
+          },
+          {
+            "sequence": 8
+          },
+          {
+            "sequence": 9
+          },
+          {
+            "sequence": 10
+          },
+          {
+            "sequence": 11
+          },
+          {
+            "sequence": 12
+          },
+          {
+            "sequence": 13
+          },
+          {
+            "sequence": 14
+          }
+        ],
+        "dataTable": {
+          "headers": [
+            "filtro"
+          ],
+          "rows": [
+            [
+              "Solo hoy"
+            ],
+            [
+              "Útimos 7 días"
+            ],
+            [
+              "Útimos 15 días"
+            ],
+            [
+              "Útimos 30 días"
+            ],
+            [
+              "Útimos 90 días"
+            ]
+          ]
+        }
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestran los movimientos esperados",
+        "status": "missing",
+        "wording": "domain",
+        "actions": [
+          {
+            "sequence": 15
+          }
+        ]
+      }
+    ],
+    "examples": {
+      "username": "Usuario QA Temporal"
+    }
+  },
+  "actions": [
+    {
+      "action": "CLICK",
+      "sequence": 1,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "boton de mostrar movimientos",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Mostrar movimientos\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Mostrar movimientos\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "SCROLL_DOWN",
+      "sequence": 2,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "",
+      "elementIntent": "",
+      "selector": "",
+      "value": "",
+      "description": "",
+      "selectorVerified": false
+    },
+    {
+      "action": "SCROLL_DOWN",
+      "sequence": 3,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "",
+      "elementIntent": "",
+      "selector": "",
+      "value": "",
+      "description": "",
+      "selectorVerified": false
+    },
+    {
+      "action": "CLICK",
+      "sequence": 4,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "boton de ver todos los movimientos",
+      "elementIntent": "",
+      "selector": "~Ver todos",
+      "value": "",
+      "description": "",
+      "locatorType": "ID",
+      "locatorValue": "Ver todos",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 5,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "boton de filtro de movimientos",
+      "elementIntent": "",
+      "selector": "~Botón de filtrar",
+      "value": "",
+      "description": "",
+      "locatorType": "ID",
+      "locatorValue": "Botón de filtrar",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 6,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "filtrar por solo hoy",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Solo hoy\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Solo hoy\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 7,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "boton de filtro de movimientos",
+      "elementIntent": "",
+      "selector": "~Botón de filtrar",
+      "value": "",
+      "description": "",
+      "locatorType": "ID",
+      "locatorValue": "Botón de filtrar",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 8,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "filtrar por ultimos 7 dias",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Útimos 7 días\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Útimos 7 días\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 9,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "filtro de movimientos",
+      "elementIntent": "",
+      "selector": "~Botón de filtrar",
+      "value": "",
+      "description": "",
+      "locatorType": "ID",
+      "locatorValue": "Botón de filtrar",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 10,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "ultimos 15 dias",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Útimos 15 días\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Útimos 15 días\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 11,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "filtrar",
+      "elementIntent": "",
+      "selector": "~Botón de filtrar",
+      "value": "",
+      "description": "",
+      "locatorType": "ID",
+      "locatorValue": "Botón de filtrar",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 12,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "ultimos 30 dias",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Útimos 30 días\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Útimos 30 días\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 13,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "filtrar",
+      "elementIntent": "",
+      "selector": "~Botón de filtrar",
+      "value": "",
+      "description": "",
+      "locatorType": "ID",
+      "locatorValue": "Botón de filtrar",
+      "selectorVerified": true
+    },
+    {
+      "action": "CLICK",
+      "sequence": 14,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "ultimos 90 dias",
+      "elementIntent": "",
+      "selector": "android=new UiSelector().text(\"Útimos 90 días\")",
+      "value": "",
+      "description": "",
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().text(\"Útimos 90 días\")",
+      "selectorVerified": true
+    },
+    {
+      "action": "VERIFICAR_EXISTE",
+      "sequence": 15,
+      "platform": "android",
+      "variableName": "",
+      "contextHint": "se valida el title del contenedor movimientos",
+      "elementIntent": "",
+      "selector": "//android.view.View",
+      "value": "",
+      "description": "",
+      "locatorType": "XPATH",
+      "locatorValue": "//android.view.View",
+      "selectorVerified": true
+    }
+  ]
+}

@@ -31,15 +31,18 @@ Ejecución del agente de automatización:
 - `RECORDER_AGENT_EXECUTION_MODE=manual` (default): abre Terminal para handoff.
 - `RECORDER_AGENT_EXECUTION_MODE=automatic`: ejecuta dos pasadas controladas
   (query-requests/query-results y luego agent-response) con budgets y policy de
-  fallback.
+  fallback. En macOS, PASS 2 abre la interfaz de Copilot en Terminal con el
+  prompt generado; el recorder observa el artefacto validado e importa la
+  propuesta automáticamente. La Terminal puede permanecer abierta para revisar
+  la conversación sin bloquear el wizard.
 
 El botón **Inspector** del header abre o focaliza la misma ventana embebida. Una
 selección ordinaria permanece dentro de Appium Inspector; el recorder solo
 importa el selector cuando el QA pulsa **Usar en Recorder**, lo somete a una
 segunda validación en el proceso principal, oculta la ventana solo cuando el
 primary vuelve a resolver de forma única al mismo elemento y conserva la sesión
-para reabrirla. Hasta cuatro candidatos verificados acompañan la acción solo para
-análisis de generación/reuse; no son fallbacks de ejecución. El botón
+para reabrirla. El recorder guarda un único selector verificado por acción; no
+persiste candidatos alternos ni fallbacks de ejecución. El botón
 inferior **Inspeccionar** activa exclusivamente la inspección local sobre la
 captura/XML del recorder.
 
@@ -50,8 +53,8 @@ host concede exclusivamente `clipboard-write` al iframe.
 
 Si el primary falla la segunda validación, el Inspector permanece visible y el
 recorder muestra el error. Alternativas inválidas se omiten y se informa su
-cantidad. Editar manualmente el selector o elegir otro candidato local elimina
-los backups para evitar reutilizar evidencia obsoleta.
+cantidad. Editar manualmente el selector invalida la verificación previa y exige
+validar de nuevo antes de guardar la acción.
 
 ## Diagnóstico por síntomas
 
@@ -174,6 +177,13 @@ capas se reemplazan únicamente si siguen registradas y no fueron modificadas
 fuera del recorder. Si el caso no aparece, comprueba que la generación anterior
 tenga validación 100 y que sus cuatro archivos todavía existan.
 
+Cada reproceso reconstruye automáticamente `generation/automation`: elimina la
+respuesta, plan efectivo, consultas, reparación, validación, logs y baselines de
+la corrida anterior. Conserva las acciones/evidencia del recording y el
+directorio histórico de refinamientos. No es necesario marcar una limpieza para
+evitar que Copilot reutilice una salida anterior; la limpieza explícita también
+descarta ese historial.
+
 ### El agente consume demasiado contexto o excede cinco minutos
 
 Comprueba que Terminal se abrió en `generation/automation`, que se usó el prompt
@@ -194,6 +204,14 @@ Si el modo es `automatic`, revisa `agent-run.json` y `status.json` del package.
 Solo errores del provider `AGENT_NOT_INSTALLED` y `AGENT_UNAVAILABLE` habilitan
 fallback automático a handoff manual; errores de contrato/presupuesto se
 detienen sin fallback.
+
+`bash` permanece denegado de forma permanente en el flujo agentic. No se
+habilita como vía temporal ni de desbloqueo: el agente debe operar únicamente
+con los artefactos del paquete y rutas relativas.
+
+Si falla antes de invocar Copilot por `CONTEXT_BUDGET_EXCEEDED`, `status.json`
+queda en `failed` con `errorCode` explícito y `agent-run.json` conserva el
+desglose por pasada (`pass1ContextBreakdown`, `pass2ContextBreakdown`).
 
 ## Logs y secretos
 

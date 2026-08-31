@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { CodeGraph } = require('../dist/core/codeGraph');
 const { projectPaths } = require('../dist/core/projectPaths');
@@ -157,6 +158,32 @@ test('subgraphOf parte de archivos concretos y queda acotado', () => {
 test('subgraphOf sin semillas no devuelve el framework entero', () => {
     const graph = new CodeGraph();
     assert.equal(graph.subgraphOf({ files: ['no/existe.screen.ts'] }).metrics.selectedNodes, 0);
+});
+
+test('extrae className real aunque el JSDoc contenga "class"', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-classname-'));
+    fs.mkdirSync(path.join(root, 'screenobjects/payment'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'features/yape-features/payment'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'features/yape-steps-definitions/payment'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'resources/locators/payment'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'screenobjects/payment/sample.screen.ts'), `
+/**
+ * class for all Page Objects
+ */
+export default class RealScreenName {
+  public async open(): Promise<void> {}
+}
+`);
+    fs.writeFileSync(path.join(root, 'resources/locators/payment/sample.locator.json'), JSON.stringify({
+        sampleAndroid: { open: '~Open' },
+    }));
+    const cacheFile = path.join(root, '.cache', 'codegraph.json');
+    const graph = new CodeGraph({ frameworkRoot: root, cacheFile });
+    const snapshot = graph.snapshot();
+    const node = snapshot.nodes.find(item =>
+        item.type === 'screenObject' && item.file === 'screenobjects/payment/sample.screen.ts'
+    );
+    assert.equal(node?.name, 'RealScreenName');
 });
 
 // El radio de impacto de reutilizar: quien mas depende del locator.

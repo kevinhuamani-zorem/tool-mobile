@@ -4,7 +4,8 @@ import crypto from 'crypto';
 import type { CodeGraphBuildMetrics } from './codeGraph';
 import type { FrameworkQueryMetrics } from './frameworkQueryService';
 import type { ProjectionMetrics } from './automationContextProjections';
-import { AgentExecutionMode } from './automationContracts';
+import { AgentExecutionMode, DEFAULT_AGENT_EXECUTION_MODE } from './automationContracts';
+import type { ContextBreakdown } from './agentContextEnvelope';
 
 export interface AgentRunArtifact {
     schemaVersion: 1;
@@ -15,6 +16,7 @@ export interface AgentRunArtifact {
     updatedAt: string;
     finishedAt?: string;
     totalDurationMs: number;
+    caseDurationMs: number;
     resolverDurationMs: number;
     indexDurationMs: number;
     agentDurationMs: number;
@@ -23,7 +25,19 @@ export interface AgentRunArtifact {
     queryCount: number;
     filesRead: number;
     bytesRead: number;
+    /** Máximo contexto usado por una invocación individual (PASS 1 o PASS 2). */
     contextBytes: number;
+    /** Suma real de contexto leído por todas las invocaciones del agente. */
+    totalContextBytes: number;
+    /** Alias explícito del agregado pass1+pass2 para telemetría y reportes. */
+    aggregatedContextBytes: number;
+    pass1DurationMs: number;
+    pass2DurationMs: number;
+    gapDurationsMs: Record<string, { pass1Ms: number; pass2Ms: number; totalMs: number; invocations: number }>;
+    pass1ContextBytes: number;
+    pass2ContextBytes: number;
+    pass1ContextBreakdown: ContextBreakdown | null;
+    pass2ContextBreakdown: ContextBreakdown | null;
     responseBytes: number;
     tokensInput: number | null;
     tokensOutput: number | null;
@@ -40,6 +54,20 @@ export interface AgentRunArtifact {
     queriesRejected: number;
     duplicateQueriesAvoided: number;
     queriesAvoidedNoGap: number;
+    invalidArgsRejected: number;
+    queryTruncatedRejected: number;
+    openGapCount: number;
+    resolvedGapCount: number;
+    unresolvedGapCount: number;
+    deniedPathInsideCwdCount: number;
+    deniedPathOutsideCwdCount: number;
+    missingContextRequests: Array<{
+        source: 'pass2-needs' | 'denied-tool';
+        gapId?: string;
+        query?: string;
+        detail: string;
+    }>;
+    creditsCost: number | null;
     agentProvider: string | null;
     agentVersion: string | null;
     agentExecutionMode: AgentExecutionMode;
@@ -76,6 +104,7 @@ export class AgentRunStore {
             startedAt: new Date(now).toISOString(),
             updatedAt: new Date(now).toISOString(),
             totalDurationMs: 0,
+            caseDurationMs: 0,
             resolverDurationMs: 0,
             indexDurationMs: 0,
             agentDurationMs: 0,
@@ -85,6 +114,15 @@ export class AgentRunStore {
             filesRead: 0,
             bytesRead: 0,
             contextBytes: 0,
+            totalContextBytes: 0,
+            aggregatedContextBytes: 0,
+            pass1DurationMs: 0,
+            pass2DurationMs: 0,
+            gapDurationsMs: {},
+            pass1ContextBytes: 0,
+            pass2ContextBytes: 0,
+            pass1ContextBreakdown: null,
+            pass2ContextBreakdown: null,
             responseBytes: 0,
             tokensInput: null,
             tokensOutput: null,
@@ -101,9 +139,18 @@ export class AgentRunStore {
             queriesRejected: 0,
             duplicateQueriesAvoided: 0,
             queriesAvoidedNoGap: 0,
+            invalidArgsRejected: 0,
+            queryTruncatedRejected: 0,
+            openGapCount: 0,
+            resolvedGapCount: 0,
+            unresolvedGapCount: 0,
+            deniedPathInsideCwdCount: 0,
+            deniedPathOutsideCwdCount: 0,
+            missingContextRequests: [],
+            creditsCost: null,
             agentProvider: null,
             agentVersion: null,
-            agentExecutionMode: 'manual',
+            agentExecutionMode: DEFAULT_AGENT_EXECUTION_MODE,
             agentInvocationCount: 0,
             agentExitCode: null,
             agentTimedOut: false,
@@ -131,15 +178,50 @@ export class AgentRunStore {
                 queriesRejected: parsed.queriesRejected || 0,
                 duplicateQueriesAvoided: parsed.duplicateQueriesAvoided || 0,
                 queriesAvoidedNoGap: parsed.queriesAvoidedNoGap || 0,
+                invalidArgsRejected: parsed.invalidArgsRejected || 0,
+                queryTruncatedRejected: parsed.queryTruncatedRejected || 0,
+                openGapCount: parsed.openGapCount || 0,
+                resolvedGapCount: parsed.resolvedGapCount || 0,
+                unresolvedGapCount: parsed.unresolvedGapCount || 0,
+                deniedPathInsideCwdCount: parsed.deniedPathInsideCwdCount || 0,
+                deniedPathOutsideCwdCount: parsed.deniedPathOutsideCwdCount || 0,
+                missingContextRequests: Array.isArray((parsed as any).missingContextRequests)
+                    ? (parsed as any).missingContextRequests
+                    : [],
+                creditsCost: Number.isFinite(parsed.creditsCost as number) ? Number(parsed.creditsCost) : null,
                 agentProvider: parsed.agentProvider || null,
                 agentVersion: parsed.agentVersion || null,
-                agentExecutionMode: parsed.agentExecutionMode === 'automatic' ? 'automatic' : 'manual',
+                agentExecutionMode: parsed.agentExecutionMode === 'manual' ? 'manual' : 'automatic',
                 agentInvocationCount: parsed.agentInvocationCount || 0,
+                pass1ContextBytes: parsed.pass1ContextBytes || 0,
+                pass2ContextBytes: parsed.pass2ContextBytes || 0,
+                pass1ContextBreakdown: parsed.pass1ContextBreakdown || null,
+                pass2ContextBreakdown: parsed.pass2ContextBreakdown || null,
                 agentExitCode: Number.isInteger(parsed.agentExitCode) ? parsed.agentExitCode : null,
                 agentTimedOut: Boolean(parsed.agentTimedOut),
                 agentCancelled: Boolean(parsed.agentCancelled),
                 fallbackUsed: Boolean(parsed.fallbackUsed),
                 fallbackReason: parsed.fallbackReason || null,
+                totalContextBytes: Number.isFinite(parsed.totalContextBytes)
+                    ? Math.max(0, Number(parsed.totalContextBytes))
+                    : (Number(parsed.pass1ContextBytes || 0) + Number(parsed.pass2ContextBytes || 0)) || Number(parsed.contextBytes || 0),
+                aggregatedContextBytes: Number.isFinite((parsed as any).aggregatedContextBytes)
+                    ? Math.max(0, Number((parsed as any).aggregatedContextBytes))
+                    : (Number.isFinite(parsed.totalContextBytes)
+                        ? Math.max(0, Number(parsed.totalContextBytes))
+                        : (Number(parsed.pass1ContextBytes || 0) + Number(parsed.pass2ContextBytes || 0)) || Number(parsed.contextBytes || 0)),
+                caseDurationMs: Number.isFinite((parsed as any).caseDurationMs)
+                    ? Math.max(0, Number((parsed as any).caseDurationMs))
+                    : Math.max(0, Number(parsed.totalDurationMs || 0)),
+                pass1DurationMs: Number.isFinite((parsed as any).pass1DurationMs)
+                    ? Math.max(0, Number((parsed as any).pass1DurationMs))
+                    : 0,
+                pass2DurationMs: Number.isFinite((parsed as any).pass2DurationMs)
+                    ? Math.max(0, Number((parsed as any).pass2DurationMs))
+                    : 0,
+                gapDurationsMs: (parsed as any).gapDurationsMs && typeof (parsed as any).gapDurationsMs === 'object'
+                    ? (parsed as any).gapDurationsMs
+                    : {},
             };
         } catch {
             return undefined;
@@ -162,10 +244,98 @@ export class AgentRunStore {
         }));
     }
     setContextBytes(contextBytes: number): void {
-        this.update(run => ({ ...run, contextBytes: Math.max(0, contextBytes) }));
+        this.update(run => ({
+            ...run,
+            contextBytes: Math.max(0, contextBytes),
+        }));
+    }
+    setPassContext(pass: 'pass1' | 'pass2', contextBytes: number, breakdown: ContextBreakdown): void {
+        this.update(run => ({
+            ...run,
+            ...(pass === 'pass1'
+                ? { pass1ContextBytes: Math.max(0, contextBytes), pass1ContextBreakdown: breakdown }
+                : { pass2ContextBytes: Math.max(0, contextBytes), pass2ContextBreakdown: breakdown }),
+            contextBytes: Math.max(0, Math.max(
+                pass === 'pass1' ? contextBytes : run.pass1ContextBytes || 0,
+                pass === 'pass2' ? contextBytes : run.pass2ContextBytes || 0,
+            )),
+            totalContextBytes: Math.max(0,
+                (pass === 'pass1' ? contextBytes : run.pass1ContextBytes || 0)
+                + (pass === 'pass2' ? contextBytes : run.pass2ContextBytes || 0)
+            ),
+            aggregatedContextBytes: Math.max(0,
+                (pass === 'pass1' ? contextBytes : run.pass1ContextBytes || 0)
+                + (pass === 'pass2' ? contextBytes : run.pass2ContextBytes || 0)
+            ),
+        }));
     }
     setResponseBytes(responseBytes: number): void {
         this.update(run => ({ ...run, responseBytes: Math.max(0, responseBytes) }));
+    }
+    addPassDuration(pass: 'pass1' | 'pass2', durationMs: number): void {
+        this.update(run => ({
+            ...run,
+            ...(pass === 'pass1'
+                ? { pass1DurationMs: run.pass1DurationMs + Math.max(0, durationMs) }
+                : { pass2DurationMs: run.pass2DurationMs + Math.max(0, durationMs) }),
+        }));
+    }
+    addGapPassDuration(gapId: string, pass: 'pass1' | 'pass2', durationMs: number): void {
+        if (!gapId) return;
+        this.update(run => {
+            const current = run.gapDurationsMs?.[gapId] || { pass1Ms: 0, pass2Ms: 0, totalMs: 0, invocations: 0 };
+            const safeDuration = Math.max(0, durationMs);
+            const next = {
+                pass1Ms: current.pass1Ms + (pass === 'pass1' ? safeDuration : 0),
+                pass2Ms: current.pass2Ms + (pass === 'pass2' ? safeDuration : 0),
+                totalMs: current.totalMs + safeDuration,
+                invocations: current.invocations + 1,
+            };
+            return {
+                ...run,
+                gapDurationsMs: {
+                    ...run.gapDurationsMs,
+                    [gapId]: next,
+                },
+            };
+        });
+    }
+    setGapCounts(openGapCount: number, resolvedGapCount: number, unresolvedGapCount: number): void {
+        this.update(run => ({
+            ...run,
+            openGapCount: Math.max(0, openGapCount),
+            resolvedGapCount: Math.max(0, resolvedGapCount),
+            unresolvedGapCount: Math.max(0, unresolvedGapCount),
+        }));
+    }
+    recordDeniedPathStats(stats?: { insideCwdCount?: number; outsideCwdCount?: number } | null): void {
+        if (!stats) return;
+        this.update(run => ({
+            ...run,
+            deniedPathInsideCwdCount: run.deniedPathInsideCwdCount + Math.max(0, Number(stats.insideCwdCount || 0)),
+            deniedPathOutsideCwdCount: run.deniedPathOutsideCwdCount + Math.max(0, Number(stats.outsideCwdCount || 0)),
+        }));
+    }
+    recordMissingContextRequest(request: {
+        source: 'pass2-needs' | 'denied-tool';
+        gapId?: string;
+        query?: string;
+        detail: string;
+    }): void {
+        if (!request?.detail) return;
+        this.update(run => {
+            const existing = Array.isArray(run.missingContextRequests) ? run.missingContextRequests : [];
+            const next = [...existing, request].slice(-200);
+            return { ...run, missingContextRequests: next };
+        });
+    }
+    setCreditsCost(creditsCost: number): void {
+        this.update(run => ({
+            ...run,
+            creditsCost: Number.isFinite(creditsCost)
+                ? (run.creditsCost == null ? creditsCost : run.creditsCost + creditsCost)
+                : run.creditsCost,
+        }));
     }
     setRepairAttempts(repairAttempts: number): void {
         this.update(run => ({ ...run, repairAttempts: Math.max(0, repairAttempts) }));
@@ -230,7 +400,8 @@ export class AgentRunStore {
     }
     recordGapQuery(
         decision: 'accepted' | 'no-open-gap' | 'gap-not-found' | 'gap-blocking'
-            | 'gap-resolved' | 'query-not-allowed' | 'duplicate-query' | 'max-queries-reached',
+            | 'gap-resolved' | 'query-not-allowed' | 'invalid-args' | 'query-truncated'
+            | 'duplicate-query' | 'max-queries-reached',
         metrics?: FrameworkQueryMetrics,
     ): void {
         this.update(run => ({
@@ -240,6 +411,8 @@ export class AgentRunStore {
             queriesRejected: run.queriesRejected + (decision === 'accepted' ? 0 : 1),
             duplicateQueriesAvoided: run.duplicateQueriesAvoided + (decision === 'duplicate-query' ? 1 : 0),
             queriesAvoidedNoGap: run.queriesAvoidedNoGap + (decision === 'no-open-gap' ? 1 : 0),
+            invalidArgsRejected: run.invalidArgsRejected + (decision === 'invalid-args' ? 1 : 0),
+            queryTruncatedRejected: run.queryTruncatedRejected + (decision === 'query-truncated' ? 1 : 0),
             queryCount: run.queryCount + (decision === 'accepted' ? 1 : 0),
             indexDurationMs: run.indexDurationMs + Math.max(0, metrics?.indexDurationMs || 0),
             filesRead: run.filesRead + Math.max(0, metrics?.filesRead || 0),
@@ -298,6 +471,7 @@ export class AgentRunStore {
             ...run,
             updatedAt: new Date(now).toISOString(),
             totalDurationMs: Math.max(0, (run.finishedAt ? Date.parse(run.finishedAt) : now) - started),
+            caseDurationMs: Math.max(0, (run.finishedAt ? Date.parse(run.finishedAt) : now) - started),
         };
         fs.mkdirSync(path.dirname(this.file), { recursive: true });
         const temporary = `${this.file}.${process.pid}.tmp`;

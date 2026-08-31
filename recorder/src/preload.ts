@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { SelectorCandidate } from '../../core/models';
 
 contextBridge.exposeInMainWorld('api', {
     // ── Framework ────────────────────────────────────────────────────────────
@@ -51,22 +50,36 @@ contextBridge.exposeInMainWorld('api', {
         selector: string;
         strategy: string;
         tag?: string;
-        selectorCandidates: SelectorCandidate[];
-        selectorCandidateToken: string;
         validationWarnings: string[];
+        selectorCandidateToken: string;
     }) => void) => {
         const wrapped = (_event: Electron.IpcRendererEvent, elementUsed: {
             selector: string;
             strategy: string;
             tag?: string;
-            selectorCandidates: SelectorCandidate[];
-            selectorCandidateToken: string;
             validationWarnings: string[];
+            selectorCandidateToken: string;
         }) => listener(elementUsed);
         ipcRenderer.on('embedded-inspector-element-used', wrapped);
         return () => ipcRenderer.removeListener('embedded-inspector-element-used', wrapped);
     },
-    clearInspectorCandidates: () => ipcRenderer.invoke('clear-inspector-candidates'),
+    onAutomationProgress: (listener: (progress: {
+        stage: string;
+        message: string;
+        completed: number;
+        total: number;
+        error?: string;
+    }) => void) => {
+        const wrapped = (_event: Electron.IpcRendererEvent, payload: {
+            stage: string;
+            message: string;
+            completed: number;
+            total: number;
+            error?: string;
+        }) => listener(payload);
+        ipcRenderer.on('automation-progress', wrapped);
+        return () => ipcRenderer.removeListener('automation-progress', wrapped);
+    },
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),
     deleteStep:          (idx: number)          => ipcRenderer.invoke('delete-step', idx),
@@ -77,8 +90,11 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('generate-fwk-files', request, previewToken, reviewedContents),
     prepareAutomationPackage: (input: any) => ipcRenderer.invoke('prepare-automation-package', input),
     prepareAutomationRegeneration: (input: any) => ipcRenderer.invoke('prepare-automation-regeneration', input),
-    launchAutomationAgent: () => ipcRenderer.invoke('launch-automation-agent'),
+    launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean }) =>
+        ipcRenderer.invoke('launch-automation-agent', input),
     importAutomationResponse: () => ipcRenderer.invoke('import-automation-response'),
+    getAutomationQaDecisions: () => ipcRenderer.invoke('get-automation-qa-decisions'),
+    resolveAutomationQaDecisions: (input: any) => ipcRenderer.invoke('resolve-automation-qa-decisions', input),
     generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>) =>
         ipcRenderer.invoke('generate-automation-response', previewToken, reviewedContents),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),

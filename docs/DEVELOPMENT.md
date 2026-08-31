@@ -52,12 +52,67 @@ copia el resultado a `node_modules/.cache`.
 | `npm run quality` | Puerta completa: tipos, tests, métricas y build |
 | `npm run codegraph:recorder -- --search X` | Consulta dependencias internas |
 | `npm run codegraph:export -- --squad X` | Exporta subgrafo del target |
+| `npm run phase43:refresh-canonical` | Regenera los golden canónicos de `tests/fixtures/phase43/*` |
+| `npm run test:phase43:deterministic` | Ejecuta regresión determinística L1 sin agente real |
+| `npm run test:phase43:baseline` | Corre baseline completo y escribe clasificación en `runtime/phase43/` |
 
 Flags útiles del pipeline agentic:
 
-- `RECORDER_AGENT_EXECUTION_MODE=manual|automatic` (default `manual`).
+- `RECORDER_AGENT_EXECUTION_MODE=manual|automatic` (default `automatic`).
+- `RECORDER_GENERATION_MODE=deterministic|legacy` (default `deterministic`).
+  `legacy` se conserva solo para diagnóstico; solicita al agente las cuatro
+  capas completas y no debe usarse en el flujo normal del QA.
+- `RECORDER_AGENT_MULTI_GAP_STRATEGY=compact-case|per-gap-parallel` (default
+  `compact-case`). `per-gap-parallel` se usa solo para diagnóstico o pruebas
+  dirigidas.
+- `RECORDER_AGENT_RELAXED_CONTRACT=1` activa modo experimental: omite los
+  rechazos `create-locator-contract` y `trace-screen-method` durante la
+  validación para priorizar velocidad/iteración. Default desactivado.
+- `RECORDER_AGENT_QUERY_RESULT_MAX_ITEMS` y
+  `RECORDER_AGENT_QUERY_RESULT_MAX_STRING` compactan el payload de
+  `query-results` que viaja en el prompt de PASS 2 (defaults `12` y `320`),
+  reduciendo latencia sin alterar los artifacts del paquete.
 - `RECORDER_COPILOT_CLI_COMMAND` y `RECORDER_COPILOT_CLI_ARGS` para adaptar
   el comando del provider sin tocar código.
+- `RECORDER_COPILOT_MODEL` para definir el modelo del provider cuando
+  `RECORDER_COPILOT_CLI_ARGS` no incluye `--model` (default `auto`).
+  Por defecto el adapter usa:
+  `copilot -p "<prompt>" --output-format json --allow-tool=write --model auto`.
+
+## Wizard de finalización (UX producto)
+
+En el modo predeterminado `deterministic`, el flujo visible de finalización es:
+
+1. Evidencia
+2. Análisis
+3. Generación
+4. Revisión
+
+La ejecución es automática (sin paso "Agente" en el happy path): análisis,
+resolución semántica si aplica, generación determinística, validación y revisión.
+En macOS, Copilot se muestra en Terminal durante la pasada de generación con
+`copilot -i`; al escribir una salida nueva que cumple el schema, el recorder la
+importa y avanza a Revisión sin que el QA pulse un botón adicional.
+
+El progreso de ese pipeline lo emite `main.ts` por IPC (`automation-progress`) y
+el renderer solo refleja los estados backend (`ANALYZING`, `RESOLVING_CONTEXT`,
+`RESOLVING_DECISIONS`, `WAITING_FOR_QA`, `GENERATING`, `VALIDATING`,
+`READY_FOR_REVIEW`, `APPLYING`, `COMPLETED`, `FAILED`).
+
+Cuando aparece `WAITING_FOR_QA`, la decisión humana se confirma en el mismo
+wizard (`get-automation-qa-decisions` + `resolve-automation-qa-decisions`) y el
+pipeline continúa sin salir del flujo principal.
+
+Las herramientas técnicas (carpeta runtime, prompt, import manual, terminal) se
+mantienen en **Opciones avanzadas / diagnóstico** y no forman parte del flujo
+principal de QA.
+
+Notas de validación:
+
+- `non-english-identifier` queda como warning (visible en `validation.json`) y
+  deja de bloquear `readyForPr`.
+- Si el Feature llega sin `@android`/`@ios` requeridos por cobertura real, el
+  recorder los agrega de forma determinista antes de validar.
 
 Los grafos y métricas se guardan en `runtime/` y no se versionan.
 
@@ -134,6 +189,11 @@ eso `npm test` ejecuta `build:main` primero. Cubre al menos:
 
 El procedimiento completo, umbrales y controles manuales están en
 [`GENERATION_QUALITY_ASSURANCE.md`](GENERATION_QUALITY_ASSURANCE.md).
+
+Para Fase 4.3, usa primero `test:phase43:deterministic` para validar
+invariantes contractuales con fixtures estables y luego `test:phase43:baseline`
+para capturar el estado real de la suite y clasificar fallos en
+`PREEXISTING_CONFIRMED` o `PHASE_4_2_REGRESSION`.
 
 ## Git e higiene
 

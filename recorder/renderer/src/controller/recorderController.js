@@ -198,7 +198,6 @@ export async function initializeRecorder() {
     let activeScenarioCoverage = null;
     let currentAssignment = null;
     let verifiedSelector = '';
-    let selectorCandidates = [];
     let selectorCandidateToken = '';
     let advanceAssignmentAfterSave = false;
     let workflowMode = 'new';
@@ -994,7 +993,6 @@ export async function initializeRecorder() {
                     : '✓ Paquete reconstruido desde la grabación. Abre el agente e importa su propuesta.';
             automationPackageStatus.className = 'generate-result ok';
         }
-        showAutomationHandoff(result.handoff);
         enlazarModal.style.display = 'flex';
         setWizardPage(3);
         sessionOnboarding.style.display = 'none';
@@ -1477,9 +1475,12 @@ export async function initializeRecorder() {
     }
 
     function clearSelectorCandidateBackups() {
-        selectorCandidates = [];
         selectorCandidateToken = '';
-        void api.clearInspectorCandidates();
+        // Sin backups alternos: el recorder conserva solo el selector elegido por QA.
+    }
+
+    function clearInspectorCandidates() {
+        clearSelectorCandidateBackups();
     }
 
     api.onInspectorConnected(() => {
@@ -1500,8 +1501,7 @@ export async function initializeRecorder() {
         txtSelector.value = elementUsed.selector;
         txtVarName.value = currentAssignment?.name || txtVarName.value;
         verifiedSelector = elementUsed.selector;
-        selectorCandidates = elementUsed.selectorCandidates;
-        selectorCandidateToken = elementUsed.selectorCandidateToken;
+        selectorCandidateToken = elementUsed.selectorCandidateToken || '';
         renderAssignmentTarget();
         updateAssignmentButton();
         setVerify('✓ Selector y backups revalidados contra la sesión activa', 'ok');
@@ -1514,15 +1514,23 @@ export async function initializeRecorder() {
         setStatus('✓ Selector importado desde Appium Inspector', '#00CC00');
     });
 
+    api.onAutomationProgress?.(progress => {
+        if (!progress || !progress.stage) return;
+        const detail = progress.error
+            ? progress.error
+            : (progress.total ? `${progress.completed}/${progress.total}` : '');
+        updateProductStage(
+            progress.stage,
+            progress.message || 'Actualizando progreso...',
+            detail,
+            progress.stage === 'FAILED',
+        );
+    });
+
     function setGenerate(msg, type) {
         if (!lblGenerate) return;
         lblGenerate.textContent = msg;
-        lblGenerate.className = 'generate-result' + (type ? ' ' + type : '');
-        const wizardResult = document.getElementById('wizardGenerationResult');
-        if (wizardResult) {
-            wizardResult.textContent = msg;
-            wizardResult.className = 'generate-result' + (type ? ' ' + type : '');
-        }
+        lblGenerate.className = 'generate-result review-generation-result' + (type ? ' ' + type : '');
     }
 
     function buildGenerationRequest() {
@@ -2788,7 +2796,7 @@ export async function initializeRecorder() {
             }
 
             txtSelector.value = candidates[0].selector;
-            clearSelectorCandidateBackups();
+            clearInspectorCandidates();
             txtVarName.value  = currentAssignment?.name || '';
             verifiedSelector = '';
             if (candidates.length > 1) renderSelectorChips(candidates, txtVarName.value);
@@ -2870,10 +2878,7 @@ export async function initializeRecorder() {
             contextHint,
             selector,
             selectorVerified: verifiedSelector === selector,
-            ...(selectorCandidateToken && selectorCandidates.length ? {
-                selectorCandidates,
-                selectorCandidateToken,
-            } : {}),
+            selectorCandidateToken,
             value,
             description: desc,
             ...(selectedCatalogLocator ? {
@@ -3895,16 +3900,25 @@ export async function initializeRecorder() {
     const wizardGherkinHost    = document.getElementById('wizardGherkinHost');
     const txtAutomationObjective = document.getElementById('txtAutomationObjective');
     const txtAutomationAcceptance = document.getElementById('txtAutomationAcceptance');
-    const btnPrepareAutomation = document.getElementById('btnPrepareAutomation');
-    const btnLaunchAutomation = document.getElementById('btnLaunchAutomation');
-    const btnImportAutomation = document.getElementById('btnImportAutomation');
+    const automationAnalysisSummary = document.getElementById('automationAnalysisSummary');
+    const btnRunAutomationPipeline = document.getElementById('btnRunAutomationPipeline');
+    const automationPipelineStatus = document.getElementById('automationPipelineStatus');
+    const automationPipelineSummary = document.getElementById('automationPipelineSummary');
+    const automationPipelineStages = document.getElementById('automationPipelineStages');
+    const automationWorkingState = document.getElementById('automationWorkingState');
+    const automationWorkingTitle = document.getElementById('automationWorkingTitle');
+    const automationWorkingDetail = document.getElementById('automationWorkingDetail');
+    const automationCorrectionReimport = document.getElementById('automationCorrectionReimport');
+    const automationCorrectionHint = document.getElementById('automationCorrectionHint');
+    const btnReimportAutomationCorrection = document.getElementById('btnReimportAutomationCorrection');
+    const automationQaRequired = document.getElementById('automationQaRequired');
+    const automationQaDecisionList = document.getElementById('automationQaDecisionList');
+    const btnConfirmQaDecision = document.getElementById('btnConfirmQaDecision');
     const automationPackageStatus = document.getElementById('automationPackageStatus');
-    const automationAgentHandoff = document.getElementById('automationAgentHandoff');
-    const automationAgentPath = document.getElementById('automationAgentPath');
-    const automationAgentPrompt = document.getElementById('automationAgentPrompt');
-    const btnCopyAgentPrompt = document.getElementById('btnCopyAgentPrompt');
     let wizardPage = 1;
     let automationWorkflow = false;
+    let automationPipelineRunning = false;
+    let pendingQaDecisionPrompts = [];
     [txtAutomationObjective, txtAutomationAcceptance].filter(Boolean).forEach(field => {
         field.addEventListener('input', invalidatePreview);
     });
@@ -3917,8 +3931,131 @@ export async function initializeRecorder() {
 
     const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
 
+    const PRODUCT_STAGES = [
+        'ANALYZING',
+        'RESOLVING_CONTEXT',
+        'RESOLVING_DECISIONS',
+        'GENERATING',
+        'VALIDATING',
+        'READY_FOR_REVIEW'
+    ];
+    const PRODUCT_STAGE_ALIASES = {
+        WAITING_FOR_QA: 'RESOLVING_DECISIONS',
+        APPLYING: 'READY_FOR_REVIEW',
+        COMPLETED: 'READY_FOR_REVIEW',
+        FAILED: 'ANALYZING'
+    };
+
+    function updateAutomationProgress(normalizedStage, summary, detail, error) {
+        if (!automationWorkingState) return;
+        const stateClass = error
+            ? 'is-error'
+            : normalizedStage === 'READY_FOR_REVIEW'
+                ? 'is-complete'
+                : automationPipelineRunning
+                    ? 'is-running'
+                    : 'is-idle';
+        automationWorkingState.className = `automation-working-state ${stateClass}`;
+        if (automationWorkingTitle) automationWorkingTitle.textContent = summary;
+        if (automationWorkingDetail) automationWorkingDetail.textContent = detail || 'Procesando la automatización.';
+    }
+
+    function updateProductStage(stage, summary, detail, error = false) {
+        const normalizedStage = PRODUCT_STAGE_ALIASES[stage] || stage;
+        updateAutomationProgress(normalizedStage, summary, detail, error);
+        if (automationPipelineStatus) {
+            automationPipelineStatus.textContent = summary;
+            automationPipelineStatus.className = `generate-result ${error ? 'err' : 'ok'}`.trim();
+        }
+        if (automationPipelineSummary) {
+            automationPipelineSummary.textContent = detail || '';
+        }
+        if (!automationPipelineStages) return;
+        const currentIndex = PRODUCT_STAGES.indexOf(normalizedStage);
+        automationPipelineStages.querySelectorAll('[data-product-stage]').forEach(node => {
+            const itemStage = node.dataset.productStage;
+            const itemIndex = PRODUCT_STAGES.indexOf(itemStage);
+            if (itemIndex < 0) return;
+            if (error && itemIndex === currentIndex) {
+                node.textContent = node.textContent.replace(/^./, '✗');
+                node.classList.add('step-used');
+                return;
+            }
+            if (itemIndex < currentIndex) {
+                node.textContent = node.textContent.replace(/^./, '✓');
+                node.classList.add('step-used');
+            } else if (itemIndex === currentIndex) {
+                node.textContent = node.textContent.replace(/^./, '●');
+                node.classList.remove('step-used');
+            } else {
+                node.textContent = node.textContent.replace(/^./, '○');
+                node.classList.remove('step-used');
+            }
+        });
+    }
+
+    function setCorrectionReimportVisible(visible, hint = '') {
+        if (!automationCorrectionReimport) return;
+        automationCorrectionReimport.style.display = visible ? 'flex' : 'none';
+        if (visible && automationCorrectionHint && hint) {
+            automationCorrectionHint.textContent = hint;
+        }
+    }
+
+    function showQaRequiredDecisions(items) {
+        if (!automationQaRequired || !automationQaDecisionList) return;
+        pendingQaDecisionPrompts = Array.isArray(items) ? items : [];
+        automationQaDecisionList.innerHTML = '';
+        if (!pendingQaDecisionPrompts.length) {
+            automationQaDecisionList.innerHTML =
+                '<li class="step-empty">No se recibieron opciones automáticas; revisa la grabación y vuelve a analizar.</li>';
+        } else {
+            pendingQaDecisionPrompts.forEach(item => {
+                const option = document.createElement('li');
+                const options = (item.options || []).map((candidate, index) => {
+                    const gapId = escapeHtml(item.gapId);
+                    const optionId = escapeHtml(candidate.optionId);
+                    const title = escapeHtml(candidate.title);
+                    const reason = escapeHtml(candidate.reason);
+                    return `<label class="qa-decision-option" style="display:block; margin-top:6px;">
+                        <input type="radio" name="qa-decision-${gapId}" value="${optionId}" ${index === 0 ? 'checked' : ''}/>
+                        <strong>${title}</strong><br/><small>${reason}</small>
+                    </label>`;
+                }).join('');
+                option.innerHTML = `<strong>${escapeHtml(item.title)}</strong><br/>
+                    <small>${escapeHtml(item.description || '')}</small>
+                    ${options || '<div class="step-empty">Sin opciones disponibles.</div>'}`;
+                automationQaDecisionList.appendChild(option);
+            });
+        }
+        if (btnConfirmQaDecision) btnConfirmQaDecision.disabled = !pendingQaDecisionPrompts.length;
+        automationQaRequired.style.display = '';
+    }
+
+    function collectQaDecisions() {
+        return pendingQaDecisionPrompts.map(prompt => {
+            const selected = [...automationQaDecisionList.querySelectorAll('input[type="radio"]:checked')]
+                .find(input => input.name === `qa-decision-${prompt.gapId}`);
+            return {
+                gapId: prompt.gapId,
+                optionId: selected?.value || '',
+            };
+        });
+    }
+
+    function summarizeAutomationAnalysis(result) {
+        if (!automationAnalysisSummary) return;
+        const processed = enlazarSteps.length;
+        const unresolved = Number(result?.unresolvedGaps || 0);
+        const reusable = Math.max(0, processed - unresolved);
+        automationAnalysisSummary.innerHTML = `<span class="generation-icon">✓</span><div>
+            <h3>Análisis completado</h3>
+            <p>${processed} acciones procesadas · ${reusable} componentes reutilizables · ${unresolved} decisión(es) pendiente(s)</p>
+        </div>`;
+    }
+
     function setWizardPage(page) {
-        wizardPage = Math.max(1, Math.min(5, page));
+        wizardPage = Math.max(1, Math.min(4, page));
         wizardPages.forEach(element => {
             element.classList.toggle('active', Number(element.dataset.wizardPage) === wizardPage);
         });
@@ -3927,16 +4064,20 @@ export async function initializeRecorder() {
             element.classList.toggle('complete', index + 1 < wizardPage);
         });
         btnWizardBack.disabled = wizardPage === 1;
-        btnWizardNext.style.display = wizardPage === 5 ? 'none' : '';
+        btnWizardNext.style.display = wizardPage >= 3 ? 'none' : '';
         btnConfirmarEscenario.style.display = 'none';
         const labels = [
-            'Revisa las acciones grabadas',
-            'Define objetivo y resultado esperado',
-            'Prepara el plan e importa la propuesta',
-            'Revisa los archivos',
-            'Genera los archivos'
+            'Revisa la evidencia grabada',
+            'Analiza el caso a generar',
+            'Generación automática en progreso',
+            'Revisa y aplica cambios'
         ];
-        enlazarHint.textContent = `Paso ${wizardPage} de 5 · ${labels[wizardPage - 1]}`;
+        enlazarHint.textContent = `Paso ${wizardPage} de 4 · ${labels[wizardPage - 1]}`;
+        if (btnWizardNext) {
+            btnWizardNext.textContent = wizardPage === 1
+                ? 'Analizar grabación →'
+                : 'Iniciar generación →';
+        }
     }
 
     async function validateStepImpacts() {
@@ -4223,10 +4364,13 @@ export async function initializeRecorder() {
             automationPackageStatus.textContent = '';
             automationPackageStatus.className = 'generate-result';
         }
-        if (btnLaunchAutomation) btnLaunchAutomation.disabled = true;
-        if (automationAgentHandoff) automationAgentHandoff.style.display = 'none';
-        if (automationAgentPath) automationAgentPath.textContent = '';
-        if (automationAgentPrompt) automationAgentPrompt.value = '';
+        if (automationQaRequired) automationQaRequired.style.display = 'none';
+        setCorrectionReimportVisible(false);
+        updateProductStage(
+            'ANALYZING',
+            'Listo para iniciar.',
+            'Inicia la generación automática para ver el progreso del caso.'
+        );
         activeRowIndex = -1;
         updateEnlazarHint();
         renderEnlazarSteps();
@@ -4283,103 +4427,213 @@ export async function initializeRecorder() {
     }
 
     async function importAutomationResponse(preserveReviewed = false) {
-        disableBtn(btnImportAutomation, '⏳ Validando...');
         const result = await api.importAutomationResponse();
-        enableBtn(btnImportAutomation);
         if (!result.success) {
-            if (result.repairAvailable) btnLaunchAutomation.disabled = false;
             automationPackageStatus.textContent = '✗ ' + (result.error || 'Respuesta inválida');
             automationPackageStatus.className = 'generate-result err';
+            setCorrectionReimportVisible(
+                true,
+                'La corrección todavía no es válida. Puedes pedir al agente que continúe y volver a importarla.'
+            );
             return result;
         }
+        setCorrectionReimportVisible(false);
         automationWorkflow = true;
         showAutomationPreview(result, preserveReviewed);
-        automationPackageStatus.textContent = '✓ agent-response.json importado y validado al 100%';
+        automationPackageStatus.textContent = '✓ Automatización validada y lista para revisión';
         automationPackageStatus.className = 'generate-result ok';
         return result;
     }
 
-    function showAutomationHandoff(handoff) {
-        if (!handoff) return;
-        automationAgentPath.textContent = handoff.packageDirectory || '';
-        automationAgentPrompt.value = handoff.prompt || '';
-        automationAgentHandoff.style.display = 'block';
-        btnLaunchAutomation.disabled = false;
-    }
-
-    btnPrepareAutomation?.addEventListener('click', async () => {
+    async function runAutomationPipeline() {
+        if (automationPipelineRunning) return;
         const objective = txtAutomationObjective.value.trim();
         const acceptanceCriteria = txtAutomationAcceptance.value.trim();
         if (!objective || !acceptanceCriteria) {
-            automationPackageStatus.textContent = '⚠ Completa el objetivo y el resultado esperado.';
-            automationPackageStatus.className = 'generate-result err';
+            enlazarHint.textContent = '⚠ Completa el objetivo y el resultado esperado.';
+            setWizardPage(2);
             return;
         }
-        disableBtn(btnPrepareAutomation, '⏳ Resolviendo...');
-        const result = await api.prepareAutomationPackage({
+        automationPipelineRunning = true;
+        automationQaRequired && (automationQaRequired.style.display = 'none');
+        setCorrectionReimportVisible(false);
+        if (btnRunAutomationPipeline) disableBtn(btnRunAutomationPipeline, '⏳ Generando...');
+        updateProductStage(
+            'ANALYZING',
+            'Analizando grabación...',
+            `Analizando ${enlazarSteps.length} acciones grabadas.`
+        );
+        const prepare = await api.prepareAutomationPackage({
             request: buildGenerationRequest(),
             objective,
             acceptanceCriteria
         });
-        enableBtn(btnPrepareAutomation);
-        if (!result.success) {
-            automationPackageStatus.textContent = '✗ ' + result.error;
+        if (!prepare.success) {
+            updateProductStage('ANALYZING', 'No pudimos completar el análisis.', prepare.error || 'Error desconocido', true);
+            automationPackageStatus.textContent = `✗ ${prepare.error || 'No se pudo analizar el caso.'}`;
             automationPackageStatus.className = 'generate-result err';
+            if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
+            automationPipelineRunning = false;
             return;
         }
         automationWorkflow = true;
-        showAutomationHandoff(result.handoff);
-        const percent = Math.round(result.result.deterministicCoverage * 100);
-        automationPackageStatus.textContent = result.result.responseAvailable
-            ? `✓ Plan ${percent}% determinista · respuesta disponible`
-            : `✓ Plan ${percent}% determinista · ${result.result.unresolvedGaps} gap(s) preparados para el agente`;
-        automationPackageStatus.className = 'generate-result ok';
-        if (result.result.responseAvailable) await importAutomationResponse();
+        summarizeAutomationAnalysis(prepare.result);
+        updateProductStage(
+            'RESOLVING_CONTEXT',
+            'Preparando estructura de automatización...',
+            `${Math.round(prepare.result.deterministicCoverage * 100)}% resuelto automáticamente.`
+        );
+        if (!prepare.result.responseAvailable) {
+            const unresolved = Number(prepare.result.unresolvedGaps || 0);
+            updateProductStage(
+                'RESOLVING_DECISIONS',
+                `Resolviendo ${unresolved} decisión${unresolved === 1 ? '' : 'es'}...`,
+                'Buscando resolución automática para las decisiones pendientes.'
+            );
+            const launched = await api.launchAutomationAgent({ mode: 'automatic' });
+            if (!launched.success) {
+                const code = String(launched.run?.errorCode || launched.errorCode || '');
+                if (code === 'GAP_BLOCKED') {
+                    const qa = await api.getAutomationQaDecisions();
+                    if (qa?.success) {
+                        showQaRequiredDecisions(qa.decisions || []);
+                    } else {
+                        showQaRequiredDecisions([{
+                            title: 'Se requiere intervención de QA',
+                            description: qa?.error || 'Existe una decisión bloqueante que no se puede resolver automáticamente.',
+                            options: [],
+                        }]);
+                    }
+                    updateProductStage(
+                        'WAITING_FOR_QA',
+                        'Necesitamos confirmar una decisión.',
+                        'Revisa las opciones y vuelve a intentar la generación.',
+                        true
+                    );
+                } else if (launched.fallbackSuggested) {
+                    setCorrectionReimportVisible(
+                        true,
+                        'Cuando Copilot termine la corrección y confirme PASS, reimporta el resultado sin reiniciar el flujo.'
+                    );
+                    updateProductStage(
+                        'FAILED',
+                        'No pudimos completar la resolución automática.',
+                        'Verifica que Copilot esté disponible e inténtalo nuevamente.',
+                        true
+                    );
+                } else {
+                    setCorrectionReimportVisible(
+                        true,
+                        'Si Copilot continúa abierto, espera a que termine la corrección y reimporta el resultado.'
+                    );
+                    updateProductStage(
+                        'RESOLVING_DECISIONS',
+                        'No pudimos resolver las decisiones automáticamente.',
+                        launched.error || 'El proveedor no está disponible en este momento.',
+                        true
+                    );
+                }
+                automationPackageStatus.textContent = `✗ ${launched.error || 'No se pudo continuar con la generación automática.'}`;
+                automationPackageStatus.className = 'generate-result err';
+                if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
+                automationPipelineRunning = false;
+                return;
+            }
+        }
+
+        updateProductStage('GENERATING', 'Generando automatización...', 'Materializando las cuatro capas del caso.');
+        const imported = await importAutomationResponse(true);
+        if (!imported.success) {
+            updateProductStage(
+                'VALIDATING',
+                'No pudimos validar la automatización.',
+                imported.error || 'Valida los detalles e inténtalo de nuevo.',
+                true
+            );
+            if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
+            automationPipelineRunning = false;
+            return;
+        }
+        updateProductStage('VALIDATING', 'Validando resultado...', 'La validación contractual finalizó correctamente.');
+        updateProductStage('READY_FOR_REVIEW', 'Automatización generada.', 'Revisa los cambios antes de aplicarlos.');
+        setWizardPage(4);
+        if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
+        automationPipelineRunning = false;
+    }
+
+    btnRunAutomationPipeline?.addEventListener('click', async () => {
+        await runAutomationPipeline();
     });
 
-    btnLaunchAutomation?.addEventListener('click', async () => {
-        disableBtn(btnLaunchAutomation, '⏳ Abriendo...');
-        const result = await api.launchAutomationAgent();
-        enableBtn(btnLaunchAutomation);
-        if (!result.success) {
-            automationPackageStatus.textContent = `✗ ${result.error}`;
+    btnReimportAutomationCorrection?.addEventListener('click', async () => {
+        if (automationPipelineRunning) return;
+        automationPipelineRunning = true;
+        disableBtn(btnReimportAutomationCorrection, '⏳ Reimportando...');
+        updateProductStage(
+            'VALIDATING',
+            'Reimportando la corrección del agente...',
+            'Validando nuevamente el agent-response.json actualizado.'
+        );
+        const imported = await importAutomationResponse(true);
+        if (!imported.success) {
+            updateProductStage(
+                'VALIDATING',
+                'La corrección todavía no es válida.',
+                imported.error || 'Pide al agente que continúe corrigiendo la propuesta.',
+                true
+            );
+            enableBtn(btnReimportAutomationCorrection);
+            automationPipelineRunning = false;
+            return;
+        }
+        updateProductStage('VALIDATING', 'Corrección validada.', 'La propuesta actual cumple el contrato del recorder.');
+        updateProductStage('READY_FOR_REVIEW', 'Automatización corregida.', 'Revisa los cambios antes de aplicarlos.');
+        enableBtn(btnReimportAutomationCorrection);
+        automationPipelineRunning = false;
+        setWizardPage(4);
+    });
+
+    btnConfirmQaDecision?.addEventListener('click', async () => {
+        const decisions = collectQaDecisions();
+        if (decisions.some(item => !item.optionId)) {
+            automationPackageStatus.textContent = '⚠ Completa todas las decisiones de QA para continuar.';
             automationPackageStatus.className = 'generate-result err';
             return;
         }
-        if (result.automatic && result.imported?.success) {
-            automationWorkflow = true;
-            showAutomationPreview(result.imported, true);
-            automationPackageStatus.textContent =
-                `✓ Ejecución automática completada (${result.run?.invocations || 0} pasada(s)). Propuesta válida lista para revisión.`;
-            automationPackageStatus.className = 'generate-result ok';
+        disableBtn(btnConfirmQaDecision, '⏳ Confirmando...');
+        updateProductStage(
+            'RESOLVING_DECISIONS',
+            'Aplicando decisiones de QA...',
+            'El recorder validará las decisiones y continuará automáticamente.'
+        );
+        const result = await api.resolveAutomationQaDecisions({ decisions });
+        enableBtn(btnConfirmQaDecision);
+        if (!result.success) {
+            updateProductStage(
+                'RESOLVING_DECISIONS',
+                'No pudimos aplicar la decisión de QA.',
+                result.error || 'Revisa las opciones e inténtalo nuevamente.',
+                true
+            );
+            automationPackageStatus.textContent = `✗ ${result.error || 'No se pudo aplicar la decisión de QA.'}`;
+            automationPackageStatus.className = 'generate-result err';
             return;
         }
-        if (result.launch) showAutomationHandoff(result.launch);
-        automationPackageStatus.textContent = result.fallback
-            ? `✓ Fallback manual activado (${result.fallbackReason}). Inicia ${result.launch.provider} y pega el prompt mostrado.`
-            : `✓ Terminal abierta en el paquete. Inicia ${result.launch.provider} y pega el prompt mostrado.`;
-        automationPackageStatus.className = `generate-result ${result.success ? 'ok' : 'err'}`;
-    });
-
-    btnCopyAgentPrompt?.addEventListener('click', async () => {
-        const prompt = automationAgentPrompt.value.trim();
-        if (!prompt) return;
-        try {
-            await navigator.clipboard.writeText(prompt);
-            const previous = btnCopyAgentPrompt.textContent;
-            btnCopyAgentPrompt.textContent = '✓ Prompt copiado';
-            setTimeout(() => { btnCopyAgentPrompt.textContent = previous; }, 1500);
-        } catch {
-            automationAgentPrompt.focus();
-            automationAgentPrompt.select();
-            automationPackageStatus.textContent = 'Selecciona y copia manualmente el prompt.';
-            automationPackageStatus.className = 'generate-result';
+        automationQaRequired.style.display = 'none';
+        pendingQaDecisionPrompts = [];
+        if (result.imported?.success) {
+            automationWorkflow = true;
+            showAutomationPreview(result.imported, true);
+            updateProductStage('READY_FOR_REVIEW', 'Automatización generada.', 'Revisa los cambios antes de aplicarlos.');
+            setWizardPage(4);
+            return;
         }
-    });
-
-    btnImportAutomation?.addEventListener('click', async () => {
-        const result = await importAutomationResponse();
-        if (result.success) setWizardPage(4);
+        updateProductStage(
+            'VALIDATING',
+            'No pudimos validar la automatización.',
+            result.error || 'Valida los detalles e inténtalo de nuevo.',
+            true
+        );
     });
 
     btnWizardBack?.addEventListener('click', () => setWizardPage(wizardPage - 1));
@@ -4398,22 +4652,8 @@ export async function initializeRecorder() {
                 return;
             }
             setWizardPage(3);
+            await runAutomationPipeline();
             return;
-        }
-        if (wizardPage === 3) {
-            if (!lastPreviewToken) {
-                enlazarHint.textContent = '⚠ Prepara el paquete e importa una propuesta válida.';
-                return;
-            }
-            setWizardPage(4);
-            return;
-        }
-        if (wizardPage === 4) {
-            if (!lastPreviewToken) {
-                enlazarHint.textContent = '⚠ Actualiza y revisa el preview antes de continuar.';
-                return;
-            }
-            setWizardPage(5);
         }
     });
 

@@ -6,9 +6,20 @@ export const AUTOMATION_PIPELINE_VERSION = '1.0.0';
 export const AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION = 1;
 export const AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION = '1.0';
 export const AUTOMATION_QUERY_RESULTS_SCHEMA_VERSION = '1.0';
+export const AUTOMATION_GAP_RESOLUTIONS_SCHEMA_VERSION = '1.0';
 
 export type AgentExecutionMode = 'manual' | 'automatic';
-export const DEFAULT_AGENT_EXECUTION_MODE: AgentExecutionMode = 'manual';
+export const DEFAULT_AGENT_EXECUTION_MODE: AgentExecutionMode = 'automatic';
+
+export type RecorderGenerationMode = 'legacy' | 'deterministic';
+export const DEFAULT_RECORDER_GENERATION_MODE: RecorderGenerationMode = 'deterministic';
+
+export function resolveRecorderGenerationMode(value?: string | null): RecorderGenerationMode {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'legacy') return 'legacy';
+    if (normalized === 'deterministic') return 'deterministic';
+    return DEFAULT_RECORDER_GENERATION_MODE;
+}
 
 export type AgentExecutionState =
     | 'prepared'
@@ -26,6 +37,8 @@ export type AgentDomainErrorCode =
     | 'DUPLICATE_QUERY'
     | 'QUERY_POLICY_VIOLATION'
     | 'SCHEMA_INVALID'
+    | 'GAP_CONTEXT_OVERFLOW'
+    | 'QUERY_RESULT_TRUNCATED'
     | 'DURATION_BUDGET_EXCEEDED'
     | 'CONTEXT_BUDGET_EXCEEDED'
     | 'RESPONSE_BUDGET_EXCEEDED'
@@ -35,6 +48,8 @@ export type AgentDomainErrorCode =
 export type AgentProviderErrorCode =
     | 'AGENT_NOT_INSTALLED'
     | 'AGENT_UNAVAILABLE'
+    | 'AGENT_TOOL_DENIED'
+    | 'AGENT_OUTPUT_PATH_EXISTS'
     | 'AGENT_TIMEOUT'
     | 'AGENT_CANCELLED'
     | 'AGENT_NON_ZERO_EXIT'
@@ -52,6 +67,8 @@ export const DEFAULT_AGENT_FALLBACK_POLICY: AgentFallbackPolicy = {
     DUPLICATE_QUERY: false,
     QUERY_POLICY_VIOLATION: false,
     SCHEMA_INVALID: false,
+    GAP_CONTEXT_OVERFLOW: false,
+    QUERY_RESULT_TRUNCATED: false,
     DURATION_BUDGET_EXCEEDED: false,
     CONTEXT_BUDGET_EXCEEDED: false,
     RESPONSE_BUDGET_EXCEEDED: false,
@@ -59,6 +76,8 @@ export const DEFAULT_AGENT_FALLBACK_POLICY: AgentFallbackPolicy = {
     TOTAL_QUERY_BUDGET_EXCEEDED: false,
     AGENT_NOT_INSTALLED: true,
     AGENT_UNAVAILABLE: true,
+    AGENT_TOOL_DENIED: false,
+    AGENT_OUTPUT_PATH_EXISTS: false,
     AGENT_TIMEOUT: false,
     AGENT_CANCELLED: false,
     AGENT_NON_ZERO_EXIT: false,
@@ -87,8 +106,8 @@ export const DEFAULT_AGENT_OPERATIONAL_BUDGETS: AgentOperationalBudgets = {
     maxContextBytes: 20_000,
     maxResponseBytes: 400_000,
     maxAgentInvocations: 2,
-    maxTotalQueries: 8,
-    maxQueriesPerGap: 2,
+    maxTotalQueries: 24,
+    maxQueriesPerGap: 6,
     maxRepairAttempts: 1,
 };
 
@@ -146,8 +165,6 @@ export function agentBudgetViolations(
     usage: AgentBudgetUsage,
 ): AgentDomainErrorCode[] {
     const violations: AgentDomainErrorCode[] = [];
-    if ((usage.totalDurationMs || 0) > budgets.maxDurationMs) violations.push('DURATION_BUDGET_EXCEEDED');
-    if ((usage.contextBytes || 0) > budgets.maxContextBytes) violations.push('CONTEXT_BUDGET_EXCEEDED');
     if ((usage.responseBytes || 0) > budgets.maxResponseBytes) violations.push('RESPONSE_BUDGET_EXCEEDED');
     if ((usage.agentInvocations || 0) > budgets.maxAgentInvocations) {
         violations.push('AGENT_INVOCATION_BUDGET_EXCEEDED');
@@ -364,6 +381,7 @@ export interface UnresolvedGap {
     intent?: string;
     reason?: string;
     allowedQueries?: FrameworkContextQuery[];
+    allowedQueryArgsSchemas?: Partial<Record<FrameworkContextQuery, Record<string, string>>>;
     maxQueries?: number;
     expectedAnswerSchema?: Record<string, unknown>;
     evidenceRequired?: string[];
@@ -380,6 +398,17 @@ export type FrameworkContextQuery =
     | 'getContract'
     | 'getHelperApi'
     | 'validateImports';
+
+export const FRAMEWORK_CONTEXT_QUERIES: FrameworkContextQuery[] = [
+    'inspectScenario',
+    'findExistingScreen',
+    'findExistingStep',
+    'findExample',
+    'findLocator',
+    'getContract',
+    'getHelperApi',
+    'validateImports',
+];
 
 export type GapResolver = 'qa' | 'deterministic' | 'agent';
 export type GapStatus = 'open' | 'resolved' | 'blocked-qa';
@@ -417,6 +446,7 @@ export interface AutomationGap extends Omit<UnresolvedGap, 'resolvedBy'> {
     reason: string;
     blocking: boolean;
     allowedQueries: FrameworkContextQuery[];
+    allowedQueryArgsSchemas: Partial<Record<FrameworkContextQuery, Record<string, string>>>;
     maxQueries: number;
     expectedAnswerSchema: Record<string, unknown>;
     evidenceRequired: string[];
@@ -440,6 +470,8 @@ export interface AgentContextQueryRequest {
 
 export interface AgentContextQueryRequests {
     schemaVersion: typeof AUTOMATION_QUERY_REQUESTS_SCHEMA_VERSION;
+    recordingId: string;
+    planId: string;
     requests: AgentContextQueryRequest[];
 }
 
@@ -447,6 +479,8 @@ export type AgentContextQueryResultStatus = 'resolved' | 'rejected' | 'not-found
 
 export type AgentContextQueryRejectionCode =
     | 'query-not-allowed'
+    | 'invalid-args'
+    | 'query-truncated'
     | 'no-open-gap'
     | 'max-queries-exceeded'
     | 'duplicate-query'
@@ -480,12 +514,45 @@ export interface AgentGeneratedFile {
     content: string;
 }
 
+export interface AgentUnresolvedNeed {
+    query: FrameworkContextQuery;
+    args: Record<string, unknown>;
+}
+
+export type GapResolutionDecision = 'reuse' | 'create' | 'resolved' | 'qa-required' | 'unresolved';
+
+export interface GapResolution {
+    gapId: string;
+    decision: GapResolutionDecision;
+    reason?: string;
+    symbol?: string;
+    /**
+     * Candidato exacto elegido de los ofrecidos por el plan o por findLocator.
+     * `symbol` se conserva para respuestas antiguas, pero no es suficiente para
+     * materializar reuse sin volver a interpretar texto libre.
+     */
+    selectedCandidate?: {
+        file: string;
+        module: string;
+        name: string;
+    };
+    evidence?: string[];
+    needs?: AgentUnresolvedNeed[];
+}
+
+export interface GapResolutionFile {
+    schemaVersion: typeof AUTOMATION_GAP_RESOLUTIONS_SCHEMA_VERSION;
+    recordingId: string;
+    planId: string;
+    resolutions: GapResolution[];
+}
+
 export interface AutomationAgentResponse {
     /** Backward compatible: respuestas viejas podían omitirlo; se asume v1. */
     schemaVersion?: number;
     recordingId: string;
     planId: string;
-    resolutions: Array<{ gapId: string; decision: string }>;
+    resolutions: Array<{ gapId: string; decision: string; reason?: string; needs?: AgentUnresolvedNeed[] }>;
     actionTrace: Array<{
         sequence: number;
         gherkinStep: string;
@@ -524,6 +591,12 @@ export interface AutomationValidation {
         attempt: number;
         errors: Array<{ code: string; message: string; file?: string }>;
         affectedFiles: string[];
+        groups?: Array<{
+            code: string;
+            file?: string;
+            count: number;
+            messages: string[];
+        }>;
     };
 }
 

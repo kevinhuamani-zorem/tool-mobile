@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "recordingId": "rec-7588c175-1ed9-4348-ac49-feddddc73b84",
+  "planId": "plan-e536c99b0091d9912a37941f",
+  "resolutions": [
+    {
+      "gapId": "gap-weak-assertion-15",
+      "decision": "reuse",
+      "reason": "findLocator confirmó el título observable ya existente del módulo de movimientos.",
+      "selectedCandidate": {
+        "file": "resources/locators/payment/movements.locator.json",
+        "module": "payment/movements",
+        "name": "titleMovements"
+      }
+    },
+    {
+      "gapId": "gap-duplicate-element-1",
+      "decision": "create",
+      "reason": "findExistingScreen no encontro coincidencia (not-found) y findExistingStep solo devolvio step definitions no relacionados con un boton 'mostrar movimientos' (validacion de OTP, confirmacion de envio de correo, ingreso a yapear). El locator citado en el gap, home/home.lblRecentMovements, usa el prefijo 'lbl' que indica un elemento de texto/etiqueta informativa de la pantalla Home, mientras que la accion 1 requiere un elemento interactuable (boton) dentro del flujo de movimientos. Comparten el mismo texto visible pero son elementos funcionalmente distintos (etiqueta estatica vs boton clicable en otra pantalla), por lo que se conserva el locator nuevo showMovementsButton.",
+      "symbol": "showMovementsButton"
+    },
+    {
+      "gapId": "gap-duplicate-element-4",
+      "decision": "reuse",
+      "reason": "El gap indica que el selector recordado (~Ver todos) coincide exactamente con el valor ya fijado en payment/confirmacion-envio-email-movements.seeAllMovements. Aunque findExistingScreen no localizo el archivo (not-found) y findExistingStep solo devolvio step definitions relacionados, la coincidencia exacta de accessibility id entre ambos botones 'Ver todos' del mismo squad (payment) es evidencia suficiente de que se trata del mismo elemento logico. Se debe reutilizar el locator existente seeAllMovements de payment/confirmacion-envio-email-movements en lugar de crear seeAllMovementsButton como fuente de verdad nueva.",
+      "symbol": "payment/confirmacion-envio-email-movements.locator.json#seeAllMovements",
+      "evidence": [
+        "payment/confirmacion-envio-email-movements.locator.json#seeAllMovements"
+      ],
+      "selectedCandidate": {
+        "file": "resources/locators/payment/confirmacion-envio-email-movements.locator.json",
+        "module": "payment/confirmacion-envio-email-movements",
+        "name": "seeAllMovements"
+      }
+    },
+    {
+      "gapId": "gap-duplicate-element-6",
+      "decision": "reuse",
+      "reason": "El gap indica que el selector recordado (new UiSelector().text(\"Solo hoy\")) coincide exactamente con el valor ya fijado en payment/movements.btntoday, dentro del mismo squad (payment) y en el mismo dominio funcional (filtro de movimientos). Ambas consultas (findExistingScreen, findExistingStep) devolvieron not-found por no indexar directamente ese locator, pero la coincidencia exacta de texto/selector reportada en la descripcion del gap es evidencia suficiente de duplicidad. Se debe reutilizar payment/movements.btntoday en lugar de crear filterOnlyToday como locator nuevo.",
+      "symbol": "payment/movements.locator.json#btntoday",
+      "evidence": [
+        "payment/movements.locator.json#btntoday"
+      ],
+      "selectedCandidate": {
+        "file": "resources/locators/payment/movements.locator.json",
+        "module": "payment/movements",
+        "name": "btntoday"
+      }
+    }
+  ]
+}

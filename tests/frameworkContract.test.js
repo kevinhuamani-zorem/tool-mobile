@@ -77,6 +77,8 @@ test('resuelve los anclajes desde el framework, no desde una constante', () => {
     assert.equal(contract.baseScreenImport, '@screenobjects/commons/base.screen.ts');
     assert.equal(contract.locatorFactoryImport, '@utils/LocatorFactory.ts');
     assert.equal(contract.typeLocatorImport, '@utils/Enums.ts');
+    assert.equal(contract.typeLocatorExportKind, 'named');
+    assert.deepEqual(contract.typeLocatorMembers, ['XPATH']);
     assert.equal(contract.baseScreenClass, 'BaseScreen');
     assert.deepEqual(contract.warnings, []);
 });

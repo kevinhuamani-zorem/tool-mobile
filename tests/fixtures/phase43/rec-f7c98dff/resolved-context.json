@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+  "planId": "plan-b593f28e3c286b3b93d45e80",
+  "reusedLocators": [],
+  "elementDeclarations": [
+    {
+      "module": "home/home",
+      "import": "@locators/home/home.locator.json",
+      "importLine": "import LocatorHome from '@locators/home/home.locator.json' with { type: 'json' };",
+      "identifier": "LocatorHome",
+      "needsImport": true,
+      "groups": {
+        "android": "homeAndroid",
+        "ios": "homeIos"
+      },
+      "elements": [
+        {
+          "name": "lblSales",
+          "locators": {
+            "android": {
+              "value": "//android.widget.TextView[@text=\"Ver ventas\"]",
+              "type": "XPATH",
+              "reference": "LocatorHome.homeAndroid.lblSales"
+            },
+            "ios": {
+              "value": "Ver ventas",
+              "type": "ID",
+              "reference": "LocatorHome.homeIos.lblSales"
+            }
+          },
+          "getter": "    public get lblSales() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.ID, LocatorHome.homeIos.lblSales,\n            TypeLocator.XPATH, LocatorHome.homeAndroid.lblSales\n        );\n        return $(locator);\n    }",
+          "usedBy": {
+            "screens": [
+              "screenobjects/home/home.screen.ts"
+            ],
+            "steps": [
+              "features/yape-steps-definitions/yape-empresas-platform-solutions/sales-report.steps.ts"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "frameworkAwareness": {
+    "candidates": [],
+    "exactStepDefinitions": [],
+    "selectorCollisions": [],
+    "decision": "create-new"
+  },
+  "frameworkContract": {
+    "stepsOnlyOrchestrate": true,
+    "screenExtendsBaseScreen": true,
+    "sharedLocatorNameAcrossPlatforms": true,
+    "allowedScopes": [
+      "squad",
+      "home"
+    ],
+    "baseScreenClass": "BaseScreen",
+    "baseScreenImport": "@screenobjects/commons/base.screen.ts",
+    "locatorFactoryImport": "@common/locators/locator-provider.js",
+    "typeLocatorImport": "@common/enums/locator-type.enum.js"
+  }
+}

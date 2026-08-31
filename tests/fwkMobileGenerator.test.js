@@ -294,3 +294,47 @@ test('el tier de ejecucion se puede fijar desde la peticion', () => {
     }, actions);
     assert.match(preview.featureContent, /@x @regression_mobile @android/);
 });
+
+test('renderiza DataTable cuando la fila del escenario la incluye', () => {
+    const actions = [
+        { action: 'CLICK', variableName: 'openFilters', selector: '~Filtrar' },
+        { action: 'CLICK', variableName: 'selectToday', selector: 'android=new UiSelector().text("Solo hoy")' },
+        { action: 'CLICK', variableName: 'openFilters', selector: '~Filtrar' },
+        { action: 'CLICK', variableName: 'selectLast7Days', selector: 'android=new UiSelector().text("Ultimos 7 dias")' },
+        { action: 'CLICK', variableName: 'openFilters', selector: '~Filtrar' },
+        { action: 'CLICK', variableName: 'selectLast30Days', selector: 'android=new UiSelector().text("Ultimos 30 dias")' },
+    ];
+    const withSequence = actions.map((action, index) => ({ ...action, sequence: index + 1 }));
+    const preview = new FwkMobileGenerator().preview({
+        squad: 'payment',
+        featureName: 'Movimientos',
+        scenarioName: 'Filtros',
+        fileName: 'movimientos-filtros',
+        locatorModule: 'movimientos-filtros',
+        caseId: 'TC-3',
+        pathType: 'Happy Path',
+        tag: 'movimientos',
+        platform: 'android',
+        scenarioRows: [{
+            keyword: 'When',
+            text: 'el usuario consulta sus movimientos',
+            status: 'missing',
+            methodName: 'consultarMovimientos',
+            dataTable: {
+                headers: ['filtro'],
+                rows: [['Solo hoy'], ['Ultimos 7 dias']],
+            },
+            actions: withSequence,
+        }],
+    }, withSequence);
+
+    assert.match(preview.featureContent, /\|\s*filtro\s*\|/);
+    assert.match(preview.featureContent, /\|\s*Solo hoy\s*\|/);
+    assert.match(preview.featureContent, /\|\s*Ultimos 7 dias\s*\|/);
+    assert.match(preview.stepContent, /import \{ DataTable, When \} from '@wdio\/cucumber-framework';/);
+    assert.match(preview.stepContent, /dataTable\.hashes\(\)\.map\(\(row\) => row\["filtro"\]\)/);
+    assert.match(preview.stepContent, /await movimientosFiltrosScreen\.consultarMovimientos\(filtroValues\);/);
+    assert.match(preview.screenContent, /public selectToday\(filtro: string\)/);
+    assert.match(preview.screenContent, /for \(const filtroValue of filtroValues\)/);
+    assert.match(preview.screenContent, /this\.selectToday\(filtroValue\)/);
+});

@@ -6,7 +6,6 @@ import { GenerationRequest, MobilePlatform } from './fwkMobileGenerator';
 import { RecordedStep, recordedStepContext } from './models';
 import { projectPaths } from './projectPaths';
 import { frameworkLocator, roundTrip } from './locatorStrategy';
-import { compactSelectorCandidates } from './selectorCandidates';
 
 interface RecordingContext {
     squad: string;
@@ -109,12 +108,6 @@ export function prepareRecordedStep(
     const selectorVerified = step.selectorVerified === undefined
         ? Boolean(step.selector)
         : step.selectorVerified === true;
-    const candidates = sensitive && step.value
-        ? (step.selectorCandidates || []).filter(candidate =>
-            !containsSensitiveValue(step.value!, candidate.selector, platform)
-            && !containsSensitiveValue(step.value!, candidate.locatorValue, platform)
-        )
-        : step.selectorCandidates || [];
     if (
         sensitive
         && step.value
@@ -126,9 +119,6 @@ export function prepareRecordedStep(
             'selecciona un locator que no dependa de la credencial.'
         );
     }
-    const selectorCandidates = selectorVerified && step.selector
-        ? compactSelectorCandidates(candidates, step.selector, platform)
-        : [];
     return {
         action: step.action,
         sequence,
@@ -146,9 +136,11 @@ export function prepareRecordedStep(
             module: step.locatorSource.module,
             scope: step.locatorSource.scope,
         } : undefined,
+        selectorCandidates: Array.isArray(step.selectorCandidates)
+            ? step.selectorCandidates.map(candidate => ({ ...candidate }))
+            : undefined,
         ...locatorFields(step, platform),
         selectorVerified,
-        ...(selectorCandidates.length ? { selectorCandidates } : { selectorCandidates: undefined }),
     };
 }
 

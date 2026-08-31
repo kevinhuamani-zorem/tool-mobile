@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import ts from 'typescript';
 import { projectPaths } from './projectPaths';
 import { RecordedStep, recordedStepContext } from './models';
 import { locatorKeysIn } from './locatorReferences';
@@ -38,7 +39,7 @@ interface CachedFile {
 }
 
 interface CodeGraphCache {
-    version: 2;
+    version: 3;
     builtAt: string;
     files: Record<string, CachedFile>;
 }
@@ -185,8 +186,17 @@ function words(value: string): Set<string> {
         .filter(token => token.length >= 3));
 }
 
+function classNameOfScreen(content: string, file: string): string {
+    const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const declarations = source.statements
+        .filter((statement): statement is ts.ClassDeclaration => ts.isClassDeclaration(statement));
+    const named = declarations.find(declaration => declaration.name?.text)?.name?.text;
+    if (named) return named;
+    return path.basename(file, '.ts');
+}
+
 export class CodeGraph {
-    private cache: CodeGraphCache = { version: 2, builtAt: '', files: {} };
+    private cache: CodeGraphCache = { version: 3, builtAt: '', files: {} };
     private reindexedFiles = 0;
     private buildMetrics: CodeGraphBuildMetrics = {
         cacheHit: false,
@@ -259,7 +269,7 @@ export class CodeGraph {
         }
 
         this.cache = {
-            version: 2,
+            version: 3,
             builtAt: new Date().toISOString(),
             files: nextFiles
         };
@@ -553,8 +563,7 @@ export class CodeGraph {
     private parseScreen(content: string, file: string, squad: string) {
         const nodes: CodeGraphNode[] = [];
         const edges: CodeGraphEdge[] = [];
-        const className = content.match(/\bclass\s+([A-Za-z_$][\w$]*)/)?.[1]
-            || path.basename(file, '.ts');
+        const className = classNameOfScreen(content, file);
         const screenId = nodeId('screenObject', file, className);
         nodes.push({ id: screenId, type: 'screenObject', name: className, file, squad });
         const pattern = /\b(?:public\s+|private\s+|protected\s+)?(?:async\s+)?(?:get\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*(?::[^{]+)?\{/g;
@@ -761,9 +770,9 @@ export class CodeGraph {
     private readCache(): CodeGraphCache {
         try {
             const parsed = JSON.parse(fs.readFileSync(this.cacheFile, 'utf-8'));
-            if (parsed?.version === 2 && parsed.files) return parsed;
+            if (parsed?.version === 3 && parsed.files) return parsed;
         } catch { /* cache inexistente o corrupto */ }
-        return { version: 2, builtAt: '', files: {} };
+        return { version: 3, builtAt: '', files: {} };
     }
 
     private writeCache(): void {

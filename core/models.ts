@@ -48,8 +48,6 @@ export interface RecordedStep {
     elementIntent?: string;
     selector?: string;
     selectorVerified?: boolean;
-    /** Allowlist compacta verificada contra la misma identidad WebDriver. */
-    selectorCandidates?: SelectorCandidate[];
     /**
      * Miembro de `TypeLocator` con el que el framework compondra este selector.
      * Se persiste — no se recalcula al generar — para que la grabacion sea
@@ -69,6 +67,11 @@ export interface RecordedStep {
         module: string;
         scope: 'squad' | 'commons' | 'home' | 'global';
     };
+    /**
+     * Candidatos validados por el recorder para el selector usado explícitamente.
+     * Solo viajan en la evidencia local; el paquete agentic no los publica.
+     */
+    selectorCandidates?: SelectorCandidate[];
 }
 
 export function recordedStepContext(step: RecordedStep): string {

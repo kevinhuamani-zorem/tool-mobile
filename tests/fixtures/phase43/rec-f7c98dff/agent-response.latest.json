@@ -1,0 +1,50 @@
+{
+  "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+  "planId": "plan-b593f28e3c286b3b93d45e80",
+  "resolutions": [
+    {
+      "gapId": "gap-duplicate-element-1",
+      "decision": "unresolved",
+      "reason": "No se pudo confirmar si el locator existente home/home.lblSales (\"ver ventas\") es el mismo elemento que salesButton (android=new UiSelector().text(\"Ver ventas\")). findExistingScreen no encontro ningun screen object relacionado (not-found) y findExistingStep solo devolvio step definitions de payment sin relacion con \"ventas\", \"sales\" o \"lblSales\" (otp.steps.ts, confirmacion-envio-email-movements.steps.ts, payment.steps.ts). El presupuesto de queries para este gap (maxQueries: 2) esta agotado sin evidencia suficiente para decidir entre reutilizar home/home.lblSales o mantener salesButton como locator nuevo; requiere confirmacion de QA sobre si ambos botones pertenecen a la misma pantalla/flujo."
+    }
+  ],
+  "actionTrace": [
+    {
+      "sequence": 1,
+      "gherkinStep": "When el usuario tiene que poder acceder a ventas",
+      "screenMethod": "userPoderAccederSales",
+      "locatorName": "salesButton"
+    },
+    {
+      "sequence": 2,
+      "gherkinStep": "Then se verifica que el mensaje de que no tiene ventas",
+      "screenMethod": "verifyNoSalesMessage",
+      "locatorName": "noSalesMessage"
+    }
+  ],
+  "files": [
+    {
+      "layer": "feature",
+      "path": "features/yape-features/payment/verify-sales-message.feature",
+      "content": "# Generado por Appium Visual Recorder\n# Author: Kevinarnold.zorem\n# Fecha de creación: 2026-08-30T06:53:19.340Z\n# locator-module: payment/verify-sales-message\n\n@payment\nFeature: Verifica mensaje tiene ventas\n\n  @ventas @smoke_mobile @android\n  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Verifica mensaje tiene ventas\n    Given el usuario <username> inicia sesión en Yape\n    When el usuario tiene que poder acceder a ventas\n    Then se verifica que el mensaje de que no tiene ventas\n\n    Examples:\n      | username |\n      | Usuario QA Temporal |\n"
+    },
+    {
+      "layer": "steps",
+      "path": "features/yape-steps-definitions/payment/verify-sales-message.steps.ts",
+      "content": "// Generado por Appium Visual Recorder\n// Author: Kevinarnold.zorem\n// Fecha de creación: 2026-08-30T06:53:19.340Z\nimport { Then, When } from '@wdio/cucumber-framework';\nimport verifySalesMessageScreen from '@screenobjects/payment/verify-sales-message.screen.ts';\n\nWhen(/^el usuario tiene que poder acceder a ventas$/, async () => {\n    await verifySalesMessageScreen.userPoderAccederSales();\n});\n\nThen(/^se verifica que el mensaje de que no tiene ventas$/, async () => {\n    await verifySalesMessageScreen.verifyNoSalesMessage();\n});\n"
+    },
+    {
+      "layer": "screen",
+      "path": "screenobjects/payment/verify-sales-message.screen.ts",
+      "content": "// Generado por Appium Visual Recorder\n// Author: Kevinarnold.zorem\n// Fecha de creación: 2026-08-30T06:53:19.340Z\nimport { $ } from '@wdio/globals';\nimport BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport LocatorProvider from '@common/locators/locator-provider.js';\nimport { TypeLocator } from '@common/enums/locator-type.enum.js';\nimport Locators from '@locators/payment/verify-sales-message.locator.json' with { type: 'json' };\nimport { getTimeoutFromEnv } from '@common/utils/env/environment-config.js';\n\nconst timeout: number = getTimeoutFromEnv();\n\nclass VerifySalesMessageScreen extends BaseScreen {\n\n    public get salesButton() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, Locators[\"verifySalesMessageIos\"].salesButton,\n            TypeLocator.ANDROID, Locators[\"verifySalesMessageAndroid\"].salesButton\n        );\n        return $(locator);\n    }\n\n    public get noSalesMessage() {\n        const locator = LocatorProvider.getElement(\n            TypeLocator.XPATH, Locators[\"verifySalesMessageIos\"].noSalesMessage,\n            TypeLocator.ANDROID, Locators[\"verifySalesMessageAndroid\"].noSalesMessage\n        );\n        return $(locator);\n    }\n\n    public async userPoderAccederSales(): Promise<void> {\n        await this.uiHelper.waitForElementExistByLocator(this.salesButton, true);\n        await this.salesButton.click();\n    }\n\n    public async verifyNoSalesMessage(): Promise<void> {\n        await this.uiHelper.waitForElementDisplayedAndExpect(this.noSalesMessage, timeout, 'The expected element was not displayed');\n    }\n}\n\nexport default new VerifySalesMessageScreen();\n"
+    },
+    {
+      "layer": "locators",
+      "path": "resources/locators/payment/verify-sales-message.locator.json",
+      "content": "{\n    \"verifySalesMessageAndroid\": {\n        \"salesButton\": \"new UiSelector().text(\\\"Ver ventas\\\")\",\n        \"noSalesMessage\": \"new UiSelector().text(\\\"Aún no hay ninguna venta.\\\")\"\n    },\n    \"verifySalesMessageIos\": {\n        \"salesButton\": \"\",\n        \"noSalesMessage\": \"\"\n    }\n}\n"
+    }
+  ],
+  "assumptions": [
+    "Salida materializada por DeterministicGenerator."
+  ]
+}

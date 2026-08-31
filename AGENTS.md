@@ -79,7 +79,11 @@ generadores, validadores o plantillas.
 10. **IA opt-in y contexto mínimo.** Copilot solo se ejecuta por una
     decisión explícita del usuario. Reciben el paquete confinado bajo
     `runtime/recordings`, sin secretos, y no deben explorar el target ni leer
-    XML/capturas salvo que un gap puntual lo exija.
+    XML/capturas salvo que un gap puntual lo exija. En macOS la pasada que
+    genera la salida se muestra con `copilot -i` y el prompt exacto del
+    recorder; el backend espera un artefacto nuevo válido por schema antes de
+    importarlo y avanzar a Revisión. No uses el monitor de logs como sustituto
+    de esa sesión visible.
 11. **No borres datos funcionales de entrada.** Teléfonos, montos, correos y
     textos usados por el caso permanecen en el recording local para convertirlos
     en parámetros/Examples. Solo contraseña, clave, PIN, OTP, token y secretos

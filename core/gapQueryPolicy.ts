@@ -9,6 +9,7 @@ import {
     FrameworkQueryInput,
     FrameworkQueryResponse,
     FrameworkQueryService,
+    validateFrameworkQueryInput,
 } from './frameworkQueryService';
 
 export type GapQueryRejection =
@@ -17,6 +18,8 @@ export type GapQueryRejection =
     | 'gap-blocking'
     | 'gap-resolved'
     | 'query-not-allowed'
+    | 'invalid-args'
+    | 'query-truncated'
     | 'duplicate-query'
     | 'max-queries-reached';
 
@@ -27,6 +30,7 @@ export interface GapQueryDecision {
     query: FrameworkContextQuery;
     reason: 'accepted' | GapQueryRejection;
     response?: FrameworkQueryResponse;
+    message?: string;
 }
 
 function stable(value: unknown): string {
@@ -46,6 +50,7 @@ export class GapQueryPolicy {
         projection: AutomationGapsProjection,
         private readonly service: Pick<FrameworkQueryService, 'execute'>,
         private readonly telemetry?: AgentRunStore,
+        private readonly options: { maxBytes?: number } = {},
     ) {
         for (const gap of projection.gaps) this.gaps.set(gap.id, gap);
         this.telemetry?.setFinalGapCount(this.openGapCount());
@@ -59,6 +64,8 @@ export class GapQueryPolicy {
         if (!open.length) return this.reject(gapId, query, 'no-open-gap');
         if (!gap) return this.reject(gapId, query, 'gap-not-found');
         if (!gap.allowedQueries.includes(query)) return this.reject(gapId, query, 'query-not-allowed');
+        const argsValidation = validateFrameworkQueryInput(input as Record<string, unknown>);
+        if (!argsValidation.valid) return this.reject(gapId, query, 'invalid-args', argsValidation.message);
         const fingerprint = `${gapId}:${query}:${stable(input)}`;
         if (this.executed.has(fingerprint)) return this.reject(gapId, query, 'duplicate-query');
         if ((this.acceptedPerGap.get(gapId) || 0) >= gap.maxQueries) {
@@ -66,7 +73,23 @@ export class GapQueryPolicy {
         }
         this.executed.add(fingerprint);
         this.acceptedPerGap.set(gapId, (this.acceptedPerGap.get(gapId) || 0) + 1);
-        const response = this.service.execute(query, input);
+        const response = this.service.execute(query, {
+            ...input,
+            ...(Number.isFinite(this.options.maxBytes) && input.maxBytes === undefined
+                ? { maxBytes: this.options.maxBytes }
+                : {}),
+        });
+        if (!response.success && response.error?.code === 'invalid-query-args') {
+            return this.reject(gapId, query, 'invalid-args', response.error.message);
+        }
+        if (response.success && response.metrics.truncated) {
+            return this.reject(
+                gapId,
+                query,
+                'query-truncated',
+                `La query ${query} para ${gapId} devolvió truncated=true.`
+            );
+        }
         this.telemetry?.recordGapQuery('accepted', response.metrics);
         return { schemaVersion: 1, accepted: true, gapId, query, reason: 'accepted', response };
     }
@@ -89,8 +112,8 @@ export class GapQueryPolicy {
         return [...this.gaps.values()].filter(gap => gap.status !== 'resolved').length;
     }
 
-    private reject(gapId: string, query: FrameworkContextQuery, reason: GapQueryRejection): GapQueryDecision {
+    private reject(gapId: string, query: FrameworkContextQuery, reason: GapQueryRejection, message?: string): GapQueryDecision {
         this.telemetry?.recordGapQuery(reason);
-        return { schemaVersion: 1, accepted: false, gapId, query, reason };
+        return { schemaVersion: 1, accepted: false, gapId, query, reason, ...(message ? { message } : {}) };
     }
 }

@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { screenObjectProblems, signatureHint, callArguments } = require('../dist/core/screenObjectContract');
+const fs = require('fs');
+const path = require('path');
+const {
+    screenObjectProblems,
+    signatureHint,
+    callArguments,
+    SCREEN_OBJECT_CONTRACT_RULE_CODES,
+} = require('../dist/core/screenObjectContract');
 const { frameworkContract } = require('../dist/core/frameworkContract');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
 const { projectPaths } = require('../dist/core/projectPaths');
@@ -62,7 +69,7 @@ test('getElement con solo la plataforma activa es un error', () => {
     const problems = screenObjectProblems(dos, RULES);
     assert.deepEqual(problems.map(p => p.code), ['getElement-arity']);
     assert.match(problems[0].message, /son 4 siempre/);
-    assert.match(problems[0].message, /su valor va vacio, pero el argumento se escribe/);
+    assert.match(problems[0].message, /nunca un literal vacio/);
 });
 
 test('el valor antes del TypeLocator es un error', () => {
@@ -87,6 +94,17 @@ test('intercambiar los valores de iOS y Android es un error', () => {
     const problems = screenObjectProblems(cruzado, RULES);
     assert.deepEqual(problems.map(p => p.code), ['getElement-order']);
     assert.match(problems[0].message, /apunta a un bloque de android/);
+});
+
+test('usar literal vacio en getElement es un error aunque el locator exista', () => {
+    const vacio = ENUM_IMPORT + `
+        const locator = LocatorProvider.getElement(
+            TypeLocator.ID, '',
+            TypeLocator.ANDROID, LocatorContac.yapearAndroid.titleYapear
+        );`;
+    const problems = screenObjectProblems(vacio, RULES);
+    assert.deepEqual(problems.map(p => p.code), ['getElement-order']);
+    assert.match(problems[0].message, /no puede ser literal vacío/);
 });
 
 test('la llamada correcta no produce ningun problema', () => {
@@ -152,4 +170,40 @@ test('el import nombrado correcto no produce nada', () => {
         screenObjectProblems(ENUM_IMPORT + 'const x = TypeLocator.ID;', RULES).map(p => p.code),
         []
     );
+});
+
+test('nombra alias y singleton desde los nombres esperados del Screen Object', () => {
+    const problems = screenObjectProblems(
+        `class WrongScreen extends ${CONTRACT.baseScreenClass} {}\nexport default new WrongScreen();`,
+        {
+            ...RULES,
+            stepsContent: `import badAlias from '@screenobjects/payment/verify-sales-message.screen.ts';`,
+            expectedNames: {
+                className: 'VerifySalesMessageScreen',
+                instanceName: 'verifySalesMessageScreen',
+                importSource: '@screenobjects/payment/verify-sales-message.screen.ts',
+                baseScreenClass: CONTRACT.baseScreenClass,
+            },
+        }
+    );
+    assert.deepEqual(
+        problems
+            .filter(problem => ['screen-alias', 'screen-class-name', 'screen-singleton-name'].includes(problem.code))
+            .map(problem => problem.code)
+            .sort(),
+        ['screen-alias', 'screen-class-name', 'screen-singleton-name']
+    );
+});
+
+test('el validador no debe hardcodear reglas de alias/clase/singleton fuera del contrato', () => {
+    const validatorSource = fs.readFileSync(
+        path.join(process.cwd(), 'core', 'automationResponseValidator.ts'),
+        'utf8'
+    );
+    assert.ok(SCREEN_OBJECT_CONTRACT_RULE_CODES.includes('screen-alias'));
+    assert.ok(SCREEN_OBJECT_CONTRACT_RULE_CODES.includes('screen-class-name'));
+    assert.ok(SCREEN_OBJECT_CONTRACT_RULE_CODES.includes('screen-singleton-name'));
+    assert.equal(/code:\s*'screen-class-name'/.test(validatorSource), false);
+    assert.equal(/code:\s*'screen-singleton-name'/.test(validatorSource), false);
+    assert.equal(/Alias Screen Object inválido/.test(validatorSource), false);
 });
