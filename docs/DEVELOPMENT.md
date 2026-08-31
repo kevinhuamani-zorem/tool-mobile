@@ -107,6 +107,17 @@ Las herramientas técnicas (carpeta runtime, prompt, import manual, terminal) se
 mantienen en **Opciones avanzadas / diagnóstico** y no forman parte del flujo
 principal de QA.
 
+Para una propuesta ya válida, **Revalidar** y **Reimportar corrección del
+agente** vuelven a leer `agent-response.json` y reemplazan el preview actual.
+Los cambios locales no aplicados del editor se descartan para que la corrección
+externa de Copilot sea visible y se valide exactamente como quedó en el paquete.
+
+Si Copilot no modifica una propuesta inválida, **Usar generación anterior**
+permite abrir sus cuatro capas en Revisión y editarlas. En ese modo
+**Revalidar** valida el contenido del editor sin consumir otra reparación y
+**Aplicar automatización** permanece bloqueado hasta que la validación sea
+correcta.
+
 Notas de validación:
 
 - `non-english-identifier` queda como warning (visible en `validation.json`) y

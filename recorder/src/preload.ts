@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld('api', {
     launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean }) =>
         ipcRenderer.invoke('launch-automation-agent', input),
     importAutomationResponse: () => ipcRenderer.invoke('import-automation-response'),
+    revalidateAutomationResponse: (reviewedContents: Record<string, string>) =>
+        ipcRenderer.invoke('revalidate-automation-response', reviewedContents),
     getAutomationQaDecisions: () => ipcRenderer.invoke('get-automation-qa-decisions'),
     resolveAutomationQaDecisions: (input: any) => ipcRenderer.invoke('resolve-automation-qa-decisions', input),
     generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>) =>

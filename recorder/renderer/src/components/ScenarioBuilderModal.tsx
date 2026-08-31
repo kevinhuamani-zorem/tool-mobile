@@ -149,9 +149,14 @@ export function ScenarioBuilderModal() {
                   Cuando el agente indique que la validación pasó, vuelve a importar el archivo corregido.
                 </small>
               </div>
-              <button className="btn btn-blue" id="btnReimportAutomationCorrection">
-                ↻ Reimportar corrección del agente
-              </button>
+              <div className="automation-correction-actions">
+                <button className="btn btn-dark" id="btnUsePreviousAutomation" style={{display: 'none'}}>
+                  Usar generación anterior
+                </button>
+                <button className="btn btn-blue" id="btnReimportAutomationCorrection">
+                  ↻ Reimportar corrección del agente
+                </button>
+              </div>
             </div>
             <div className="wizard-link-layout" style={{display: 'none'}}>
               <ul id="wizardLinkActions" /><div id="wizardLinkRows" />

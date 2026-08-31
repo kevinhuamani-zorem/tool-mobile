@@ -1597,7 +1597,12 @@ ipcMain.handle('launch-automation-agent', async (_, input?: {
                 run,
                 ...(imported.success
                     ? { imported }
-                    : { error: imported.error, validation: imported.validation, repairAvailable: imported.repairAvailable }),
+                    : {
+                        error: imported.error,
+                        validation: imported.validation,
+                        repairAvailable: imported.repairAvailable,
+                        draft: imported.draft,
+                    }),
             };
         }
         if (run.fallback) {
@@ -1643,7 +1648,11 @@ ipcMain.handle('launch-automation-agent', async (_, input?: {
 });
 
 async function importAutomationResponseFromPackage(
-    packageDirectory: string
+    packageDirectory: string,
+    options: {
+        reviewedContents?: Record<string, string>;
+        trackRepair?: boolean;
+    } = {},
 ): Promise<Record<string, any>> {
     const runStore = new AgentRunStore(packageDirectory);
     runStore.markAgentFinished();
@@ -1680,6 +1689,17 @@ async function importAutomationResponseFromPackage(
         JSON.parse(fs.readFileSync(responsePath, 'utf-8')) as AutomationAgentResponse,
         scenario.createdAt
     );
+    if (options.reviewedContents) {
+        response = {
+            ...response,
+            files: response.files.map(file => ({
+                ...file,
+                content: options.reviewedContents?.[
+                    path.join(projectPaths.frameworkRoot, file.path)
+                ] ?? file.content,
+            })),
+        };
+    }
     const normalized = normalizeAgentResponseEnglishIdentifiers(response);
     response = withGeneratedResponseMetadata(normalized.response, scenario.createdAt);
     const tagged = enforceAgentResponsePlatformTags(response, scenario.platform);
@@ -1717,7 +1737,32 @@ async function importAutomationResponseFromPackage(
         path.join(packageDirectory, 'validation.json'),
         JSON.stringify(validation, null, 2) + '\n'
     );
+    const draftPreview = Array.isArray(response.files) &&
+        response.files.some(file =>
+            file?.layer === 'feature' &&
+            typeof file.path === 'string' &&
+            typeof file.content === 'string'
+        ) &&
+        response.files.every(file =>
+            file &&
+            typeof file.path === 'string' &&
+            typeof file.content === 'string'
+        )
+        ? automationResponseValidator.toPreview(response)
+        : null;
+    const draftPayload = draftPreview
+        ? { draft: { preview: draftPreview, validation } }
+        : {};
     if (!validation.valid) {
+        if (options.trackRepair === false) {
+            return {
+                success: false,
+                validation,
+                repairAvailable: true,
+                error: validation.errors.map(item => item.message).join(' | '),
+                ...draftPayload,
+            };
+        }
         const existingAutomation = validation.errors.find(item => item.code === 'existing-automation');
         if (existingAutomation) {
             fs.writeFileSync(statusFile, JSON.stringify({
@@ -1731,6 +1776,7 @@ async function importAutomationResponseFromPackage(
                 validation,
                 repairAvailable: false,
                 error: existingAutomation.message,
+                ...draftPayload,
             };
         }
         const isRepairSubmission = Boolean(previousInvalidHash);
@@ -1750,6 +1796,7 @@ async function importAutomationResponseFromPackage(
                 validation,
                 repairAvailable: false,
                 error: 'El agente terminó sin modificar agent-response.json. La reparación no fue consumida; corrige el archivo y usa Reimportar corrección.',
+                ...draftPayload,
             };
         }
         const effectiveRepairAttempts = repairAttempts + (changedByRepair ? 1 : 0);
@@ -1767,6 +1814,7 @@ async function importAutomationResponseFromPackage(
                 success: false,
                 validation,
                 error: 'Se agotó la única reparación permitida: ' + validation.errors.map(item => item.message).join(' | '),
+                ...draftPayload,
             };
         }
         fs.writeFileSync(
@@ -1788,6 +1836,7 @@ async function importAutomationResponseFromPackage(
             validation,
             repairAvailable: true,
             error: validation.errors.map(item => item.message).join(' | '),
+            ...draftPayload,
         };
     }
     const preview = automationResponseValidator.toPreview(response);
@@ -1805,6 +1854,24 @@ ipcMain.handle('import-automation-response', async () => {
         return await importAutomationResponseFromPackage(activeAutomationPackage);
     } catch (e: any) {
         if (activeAutomationPackage) new AgentRunStore(activeAutomationPackage).mark('import-failed', true);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('revalidate-automation-response', async (
+    _,
+    reviewedContents: Record<string, string>,
+) => {
+    try {
+        if (!activeAutomationPackage) throw new Error('Primero prepara el paquete');
+        if (!reviewedContents || typeof reviewedContents !== 'object' || Array.isArray(reviewedContents)) {
+            throw new Error('No se recibieron archivos revisados para validar.');
+        }
+        return await importAutomationResponseFromPackage(activeAutomationPackage, {
+            reviewedContents,
+            trackRepair: false,
+        });
+    } catch (e: any) {
         return { success: false, error: e.message };
     }
 });

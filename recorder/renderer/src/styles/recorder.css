@@ -2248,6 +2248,14 @@ body {
     flex: 0 0 auto;
     min-width: 260px;
 }
+.automation-correction-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 10px;
+}
+.automation-correction-actions .btn {
+    min-width: 220px;
+}
 .automation-working-state {
     max-width: 980px;
     margin: 0 auto 18px;
@@ -2336,6 +2344,10 @@ body {
     .automation-correction-reimport .btn {
         width: 100%;
         min-width: 0;
+    }
+    .automation-correction-actions {
+        flex-direction: column;
+        width: 100%;
     }
 }
 

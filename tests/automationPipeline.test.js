@@ -2582,7 +2582,7 @@ test('el flujo de automatización cruza renderer, preload y main por IPC explíc
     const controller = fs.readFileSync(path.join(root, 'recorder/renderer/src/controller/recorderController.js'), 'utf-8');
     for (const channel of [
         'prepare-automation-package', 'prepare-automation-regeneration', 'launch-automation-agent',
-        'import-automation-response', 'generate-automation-response'
+        'import-automation-response', 'revalidate-automation-response', 'generate-automation-response'
     ]) {
         assert.match(main, new RegExp(`ipcMain\\.handle\\('${channel}'`));
         assert.match(preload, new RegExp(channel));

@@ -3003,7 +3003,8 @@ export async function initializeRecorder() {
     }
 
     btnPreview.addEventListener('click', async () => {
-        if (automationWorkflow) await importAutomationResponse(true);
+        if (automationWorkflow && invalidAutomationDraft) await revalidateReviewedAutomation();
+        else if (automationWorkflow) await importAutomationResponse(false);
         else await refreshGenerationPreview();
     });
 
@@ -3911,6 +3912,7 @@ export async function initializeRecorder() {
     const automationCorrectionReimport = document.getElementById('automationCorrectionReimport');
     const automationCorrectionHint = document.getElementById('automationCorrectionHint');
     const btnReimportAutomationCorrection = document.getElementById('btnReimportAutomationCorrection');
+    const btnUsePreviousAutomation = document.getElementById('btnUsePreviousAutomation');
     const automationQaRequired = document.getElementById('automationQaRequired');
     const automationQaDecisionList = document.getElementById('automationQaDecisionList');
     const btnConfirmQaDecision = document.getElementById('btnConfirmQaDecision');
@@ -3918,6 +3920,7 @@ export async function initializeRecorder() {
     let wizardPage = 1;
     let automationWorkflow = false;
     let automationPipelineRunning = false;
+    let invalidAutomationDraft = null;
     let pendingQaDecisionPrompts = [];
     [txtAutomationObjective, txtAutomationAcceptance].filter(Boolean).forEach(field => {
         field.addEventListener('input', invalidatePreview);
@@ -3997,6 +4000,9 @@ export async function initializeRecorder() {
     function setCorrectionReimportVisible(visible, hint = '') {
         if (!automationCorrectionReimport) return;
         automationCorrectionReimport.style.display = visible ? 'flex' : 'none';
+        if (btnUsePreviousAutomation) {
+            btnUsePreviousAutomation.style.display = visible && invalidAutomationDraft ? '' : 'none';
+        }
         if (visible && automationCorrectionHint && hint) {
             automationCorrectionHint.textContent = hint;
         }
@@ -4359,6 +4365,7 @@ export async function initializeRecorder() {
         const sr = await api.getSteps();
         enlazarSteps = sr.steps || [];
         automationWorkflow = false;
+        invalidAutomationDraft = null;
         invalidatePreview();
         if (automationPackageStatus) {
             automationPackageStatus.textContent = '';
@@ -4396,11 +4403,11 @@ export async function initializeRecorder() {
         }, 0);
     });
 
-    function showAutomationPreview(result, preserveReviewed = false) {
+    function showAutomationPreview(result, preserveReviewed = false, valid = true) {
         const reviewedByPath = preserveReviewed
             ? new Map(previewDocuments.map(document => [document.path, document.content]))
             : new Map();
-        lastPreviewToken = result.previewToken;
+        lastPreviewToken = result.previewToken || '';
         const proposedDocuments = [
             { path: result.preview.featurePath, content: result.preview.featureContent },
             ...(result.preview.locatorPath ? [{ path: result.preview.locatorPath, content: result.preview.locatorContent }] : []),
@@ -4422,13 +4429,22 @@ export async function initializeRecorder() {
         codeReviewWorkspace.style.display = 'grid';
         renderPreviewFileTree();
         showPreviewDocument(0);
-        lblGenerationFileCount.textContent = `${previewDocuments.length} archivo(s) validados al 100%.`;
-        setGenerate(`✓ Propuesta válida · ${previewDocuments.length} capas · lista para revisión`, 'ok');
+        if (valid) {
+            enableBtn(btnGenerate);
+            lblGenerationFileCount.textContent = `${previewDocuments.length} archivo(s) validados al 100%.`;
+            setGenerate(`✓ Propuesta válida · ${previewDocuments.length} capas · lista para revisión`, 'ok');
+        } else {
+            btnGenerate.disabled = true;
+            lblGenerationFileCount.textContent =
+                `${previewDocuments.length} archivo(s) recuperados · edítalos y pulsa Revalidar.`;
+            setGenerate('✗ La propuesta anterior debe revalidarse antes de aplicar.', 'err');
+        }
     }
 
     async function importAutomationResponse(preserveReviewed = false) {
         const result = await api.importAutomationResponse();
         if (!result.success) {
+            invalidAutomationDraft = result.draft || null;
             automationPackageStatus.textContent = '✗ ' + (result.error || 'Respuesta inválida');
             automationPackageStatus.className = 'generate-result err';
             setCorrectionReimportVisible(
@@ -4437,11 +4453,32 @@ export async function initializeRecorder() {
             );
             return result;
         }
+        invalidAutomationDraft = null;
         setCorrectionReimportVisible(false);
         automationWorkflow = true;
         showAutomationPreview(result, preserveReviewed);
         automationPackageStatus.textContent = '✓ Automatización validada y lista para revisión';
         automationPackageStatus.className = 'generate-result ok';
+        return result;
+    }
+
+    async function revalidateReviewedAutomation() {
+        const reviewedContents = Object.fromEntries(
+            previewDocuments.map(document => [document.path, document.content])
+        );
+        disableBtn(btnPreview, '⏳ Revalidando...');
+        const result = await api.revalidateAutomationResponse(reviewedContents);
+        enableBtn(btnPreview);
+        if (!result.success) {
+            invalidAutomationDraft = result.draft || invalidAutomationDraft;
+            if (result.draft) showAutomationPreview(result.draft, false, false);
+            setGenerate('✗ ' + (result.error || 'La propuesta editada todavía no es válida.'), 'err');
+            return result;
+        }
+        invalidAutomationDraft = null;
+        setCorrectionReimportVisible(false);
+        showAutomationPreview(result, false, true);
+        updateProductStage('READY_FOR_REVIEW', 'Automatización validada.', 'La propuesta editada ya puede aplicarse.');
         return result;
     }
 
@@ -4492,6 +4529,7 @@ export async function initializeRecorder() {
             );
             const launched = await api.launchAutomationAgent({ mode: 'automatic' });
             if (!launched.success) {
+                invalidAutomationDraft = launched.draft || null;
                 const code = String(launched.run?.errorCode || launched.errorCode || '');
                 if (code === 'GAP_BLOCKED') {
                     const qa = await api.getAutomationQaDecisions();
@@ -4574,7 +4612,7 @@ export async function initializeRecorder() {
             'Reimportando la corrección del agente...',
             'Validando nuevamente el agent-response.json actualizado.'
         );
-        const imported = await importAutomationResponse(true);
+        const imported = await importAutomationResponse(false);
         if (!imported.success) {
             updateProductStage(
                 'VALIDATING',
@@ -4590,6 +4628,13 @@ export async function initializeRecorder() {
         updateProductStage('READY_FOR_REVIEW', 'Automatización corregida.', 'Revisa los cambios antes de aplicarlos.');
         enableBtn(btnReimportAutomationCorrection);
         automationPipelineRunning = false;
+        setWizardPage(4);
+    });
+
+    btnUsePreviousAutomation?.addEventListener('click', () => {
+        if (!invalidAutomationDraft) return;
+        automationWorkflow = true;
+        showAutomationPreview(invalidAutomationDraft, false, false);
         setWizardPage(4);
     });
 

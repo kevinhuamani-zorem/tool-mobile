@@ -32,6 +32,8 @@ test('generación automática muestra progreso visual y oculta controles técnic
     assert.match(modal, /id="automationCorrectionReimport"/);
     assert.match(modal, /id="btnReimportAutomationCorrection"/);
     assert.match(modal, /Reimportar corrección del agente/);
+    assert.match(modal, /id="btnUsePreviousAutomation"/);
+    assert.match(modal, /Usar generación anterior/);
     assert.match(modal, /data-product-stage="ANALYZING"/);
     assert.match(modal, /data-product-stage="VALIDATING"/);
     assert.match(modal, /data-product-stage="READY_FOR_REVIEW"/);
@@ -70,7 +72,14 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(controller, /function setCorrectionReimportVisible\(/);
     assert.match(controller, /btnReimportAutomationCorrection\?\.addEventListener\('click'/);
     assert.match(controller, /Reimportando la corrección del agente/);
-    assert.match(controller, /const imported = await importAutomationResponse\(true\);/);
+    assert.match(controller, /if \(automationWorkflow && invalidAutomationDraft\) await revalidateReviewedAutomation\(\);/);
+    assert.match(controller, /else if \(automationWorkflow\) await importAutomationResponse\(false\);/);
+    assert.match(controller, /const imported = await importAutomationResponse\(false\);/);
+    assert.equal((controller.match(/importAutomationResponse\(false\)/g) || []).length, 2);
+    assert.match(controller, /btnUsePreviousAutomation\?\.addEventListener\('click'/);
+    assert.match(controller, /showAutomationPreview\(invalidAutomationDraft, false, false\);/);
+    assert.match(controller, /api\.revalidateAutomationResponse\(reviewedContents\)/);
+    assert.match(controller, /btnGenerate\.disabled = true/);
     assert.match(controller, /updateProductStage\('READY_FOR_REVIEW'/);
     assert.match(controller, /setWizardPage\(4\);/);
     assert.match(controller, /wizardPage = Math\.max\(1, Math\.min\(4, page\)\)/);
