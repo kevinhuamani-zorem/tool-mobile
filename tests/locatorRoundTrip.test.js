@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
     frameworkLocator, roundTrip, strategyOf, strategyValue,
-} = require('../dist/core/locatorStrategy');
-const { frameworkContract } = require('../dist/core/frameworkContract');
-const { projectPaths } = require('../dist/core/projectPaths');
+} = require('../dist/core/indexing');
+const { frameworkContract } = require('../dist/core/workspace');
+const { projectPaths } = require('../dist/core/workspace');
 
 const contract = frameworkContract(projectPaths.frameworkRoot);
 
@@ -81,7 +81,7 @@ test('el inspector de Android ya no emite selectores id=', () => {
 });
 
 const os = require('node:os');
-const { AutomationRecordingStore } = require('../dist/core/automationRecordingStore');
+const { AutomationRecordingStore } = require('../dist/core/automation');
 
 // Sin esto, actions.json guardaba solo el selector. El selector por si solo no
 // dice si va como ID, XPATH o ANDROID, y de esa ambiguedad salian locators que
@@ -137,7 +137,7 @@ test('actions.json conserva tildes del selector y las guarda como NFC', () => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
+const { RecordingPlatformUpdater } = require('../dist/core/coverage');
 
 // La segunda casuistica de "Completar una grabacion" escribe directo en el JSON
 // del framework, asi que arrastraba el mismo fallo de `id=`.

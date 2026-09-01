@@ -1,8 +1,8 @@
-const { calculateGenerationQuality } = require('../dist/core/generationQuality');
-const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
-const { CodeGraph } = require('../dist/core/codeGraph');
-const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
-const { DeterministicResolver } = require('../dist/core/deterministicResolver');
+const { calculateGenerationQuality } = require('../dist/core/generation');
+const { FwkMobileGenerator } = require('../dist/core/generation');
+const { CodeGraph } = require('../dist/core/indexing');
+const { RecorderCodeGraph } = require('../dist/core/indexing');
+const { DeterministicResolver } = require('../dist/core/automation');
 
 const actions = [
     { action: 'CLICK', variableName: 'btnLogin' },

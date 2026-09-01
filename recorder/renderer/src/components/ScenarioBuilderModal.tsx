@@ -168,6 +168,17 @@ export function ScenarioBuilderModal() {
               <div><span className="eyebrow">PASO 4</span><h3>Revisa y aplica la automatización</h3></div>
             </div>
             <p className="wizard-help">Los nombres propuestos, el TC y el contenido final se editan directamente en los archivos del preview.</p>
+            <section id="qaObservationsPanel" className="qa-observations-panel" style={{display: 'none'}}>
+              <div className="qa-observations-heading">
+                <div>
+                  <strong>⚠ Observaciones para QA</strong>
+                  <small>Son hallazgos informativos de la aplicación; no bloquean ni modifican los locators.</small>
+                </div>
+                <button type="button" className="btn btn-dark" id="btnCopyQaReport">Copiar reporte</button>
+              </div>
+              <ul id="qaObservationsList" />
+              <span id="qaReportCopyStatus" className="wizard-help" />
+            </section>
             <select id="cmbPreviewFile" className="field-select wizard-file-tabs" style={{display: 'none'}} />
             <div id="codeReviewWorkspace" className="code-review-workspace" style={{display: 'none'}}>
               <aside className="code-file-explorer">

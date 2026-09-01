@@ -8,25 +8,28 @@ const { execFileSync } = require('node:child_process');
 const {
     AutomationRecordingStore,
     prepareRecordedStep,
-} = require('../dist/core/automationRecordingStore');
-const { DeterministicResolver } = require('../dist/core/deterministicResolver');
-const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
-const { AutomationMemory } = require('../dist/core/automationMemory');
-const { AutomationPackageBuilder, BlockingGapError } = require('../dist/core/automationPackageBuilder');
-const { AutomationAgentLauncher } = require('../dist/core/automationAgentLauncher');
-const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
-const { RecordingCoverageAnalyzer } = require('../dist/core/recordingCoverageAnalyzer');
-const { frameworkContract } = require('../dist/core/frameworkContract');
-const { inferredStrategy } = require('../dist/core/locatorStrategy');
-const { projectPaths } = require('../dist/core/projectPaths');
-const { screenObjectNames } = require('../dist/core/semanticNaming');
-const { locatorImportIdentifier } = require('../dist/core/screenObjectContract');
-const { validatorRuleCodesFromSource } = require('../dist/core/validatorRuleCatalog');
+} = require('../dist/core/automation');
+const { DeterministicResolver } = require('../dist/core/automation');
+const { AutomationResponseValidator } = require('../dist/core/validation');
+const { AutomationMemory } = require('../dist/core/automation');
+const { AutomationPackageBuilder, BlockingGapError } = require('../dist/core/automation');
+const { AutomationAgentLauncher } = require('../dist/core/automation');
+const { FwkMobileGenerator } = require('../dist/core/generation');
+const { RecordingCoverageAnalyzer } = require('../dist/core/coverage');
+const { frameworkContract } = require('../dist/core/workspace');
+const { inferredStrategy } = require('../dist/core/indexing');
+const { projectPaths } = require('../dist/core/workspace');
+const { screenObjectNames } = require('../dist/core/shared');
+const { locatorImportIdentifier } = require('../dist/core/automation');
+const {
+    defaultValidatorSourcePath,
+    validatorRuleCodesFromSource,
+} = require('../dist/core/validation');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
-const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
-const { FrameworkScanner } = require('../dist/core/frameworkScanner');
-const { ReuseAnalyzer } = require('../dist/core/reuseAnalyzer');
+const { RecordingPlatformUpdater } = require('../dist/core/coverage');
+const { FrameworkScanner } = require('../dist/core/workspace');
+const { ReuseAnalyzer } = require('../dist/core/indexing');
 
 test('la captura solicita contexto funcional y no un nombre técnico de locator', () => {
     const workspace = fs.readFileSync(path.join(
@@ -57,14 +60,14 @@ test('completar una grabación ofrece seguir grabando o completar locators', () 
     ), 'utf8');
     const controller = fs.readFileSync(path.join(
         __dirname,
-        '../recorder/renderer/src/controller/recorderController.js'
+        '../recorder/renderer/src/features/platform-completion/platformCompletionFeature.js'
     ), 'utf8');
     const preload = fs.readFileSync(path.join(__dirname, '../recorder/src/preload.ts'), 'utf8');
 
     assert.match(onboarding, /id="rdbCompleteSteps"/);
     assert.match(onboarding, /id="rdbCompleteLocators"/);
     assert.match(controller, /rdbCompleteSteps\?\.checked/);
-    assert.match(controller, /await sessionReady;[\s\S]{0,200}api\.resumeRecording/);
+    assert.match(controller, /await state\.sessionReady;[\s\S]{0,200}api\.resumeRecording/);
     assert.match(controller, /rdbCompleteLocators\.disabled = Boolean\(selected && !selected\.hasPlan\)/);
     assert.match(preload, /resumeRecording:.*'resume-recording'/);
 });
@@ -76,7 +79,7 @@ test('configuración separa squad de la ruta anidada de Features', () => {
     ), 'utf8');
     const controller = fs.readFileSync(path.join(
         __dirname,
-        '../recorder/renderer/src/controller/recorderController.js'
+        '../recorder/renderer/src/features/generation/generationFeature.js'
     ), 'utf8');
     assert.match(configuration, /id="cmbFrameworkFeatureScope"/);
     assert.match(configuration, /Solo limita el mapa de Features/);
@@ -84,7 +87,7 @@ test('configuración separa squad de la ruta anidada de Features', () => {
 });
 
 test('scanner y catálogo resuelven las cuatro capas de un Feature anidado por relaciones', () => {
-    const scanner = new FrameworkScanner().scan();
+    const scanner = new FrameworkScanner(new ReuseAnalyzer()).scan();
     const interoperabilidad = scanner.squads.find(squad => squad.name === 'interoperabilidad');
     assert.ok(interoperabilidad.featureScopes.some(scope => scope.path === 'tapp/payment'));
     const catalog = new ReuseAnalyzer().getCatalog('interoperabilidad', 'ios', 'tapp/payment');
@@ -169,7 +172,7 @@ test('recording persiste datos funcionales y oculta únicamente secretos', () =>
     assert.equal(actions[1].value, '<password>');
     assert.equal(actions[0].selectorVerified, true);
     assert.equal(actions[0].contextHint, 'numero a yapear');
-    assert.equal(actions[0].selectorCandidates[0].candidateId, 'primary-phone');
+    assert.equal(actions[0].selectorCandidates, undefined);
     assert.equal(JSON.stringify(actions).includes('forbidden'), false);
     assert.equal(JSON.stringify(actions).includes('hierarchy'), false);
 });
@@ -203,9 +206,7 @@ test('recording descarta backups derivados de secretos y rechaza un primary sens
         ],
     }], context);
     const actions = JSON.parse(fs.readFileSync(path.join(store.getActiveDirectory(), 'actions.json')));
-    assert.deepEqual(actions[0].selectorCandidates.map(candidate => candidate.candidateId), [
-        'primary-password',
-    ]);
+    assert.equal(actions[0].selectorCandidates, undefined);
     assert.equal(JSON.stringify(actions).includes('secreto'), false);
 
     assert.throws(() => store.replaceActions([{
@@ -929,7 +930,9 @@ test('generador consolida pasos repetidos y usa acceso seguro a bloques locator'
     assert.equal((preview.stepContent.match(/el usuario desplaza movimientos/g) || []).length, 1);
     // El step sigue en espanol; el metodo que lo implementa, no.
     assert.equal((preview.screenContent.match(/userScrollMovements\(/g) || []).length, 1);
-    assert.match(preview.screenContent, /Locators\["movementsFilterAndroid"\]\.verTodos/);
+    // Contrato vigente (locator-bracket-notation): el acceso es siempre por
+    // notacion de punto, nunca por corchetes.
+    assert.match(preview.screenContent, /LocatorMovementsFilter\.movementsFilterAndroid\.verTodos/);
 });
 
 test('resolver agrupa acciones técnicas en comportamiento y propone rutas compactas', () => {
@@ -1043,6 +1046,19 @@ function validResponse(plan, recordingId = 'rec-test') {
     };
 }
 
+// `validResponse` importa los locators con el alias genérico "Locators" por
+// simplicidad de fixture; el contrato vigente (locator-import-identifier)
+// exige el alias derivado del archivo. Los tests que verifican una respuesta
+// completamente válida necesitan el identificador real para no chocar contra
+// esa regla; los que solo buscan un código de error puntual no la necesitan.
+function withPlanLocatorIdentifier(plan, response) {
+    const locatorPath = plan.files.find(file => file.layer === 'locators').path;
+    const identifier = locatorImportIdentifier(locatorPath);
+    const screen = response.files.find(file => file.layer === 'screen');
+    if (screen) screen.content = screen.content.replace(/\bLocators\b/g, identifier);
+    return response;
+}
+
 test('validator exige clave contraparte y prohíbe literal vacío en getElement', () => {
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
@@ -1084,7 +1100,10 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
         elementIntent: 'lista de movimientos'
     }]));
     const validator = new AutomationResponseValidator(undefined, emptyCatalog);
-    const validation = validator.validate(resolved.scenario, resolved.plan, validResponse(resolved.plan));
+    const validation = validator.validate(
+        resolved.scenario, resolved.plan,
+        withPlanLocatorIdentifier(resolved.plan, validResponse(resolved.plan)),
+    );
     assert.equal(validation.valid, true);
     assert.equal(validation.qualityScore, 100);
 
@@ -1094,10 +1113,12 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
         .replace('Then(/^se muestra la lista de movimientos$/', 'Then(../../../../../../../../../../../../^se muestra la lista de movimientos$/');
     const syntaxValidation = validator.validate(resolved.scenario, resolved.plan, brokenSyntax);
     assert.equal(syntaxValidation.valid, false);
+    const stepsPathPattern = resolved.plan.files.find(file => file.layer === 'steps').path
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     assert.equal(
         syntaxValidation.errors.some(error =>
             error.code === 'typescript-syntax'
-            && /features\/yape-steps-definitions\/payment\/consulta-movimientos\.steps\.ts:\d+:\d+/.test(error.message)
+            && new RegExp(`${stepsPathPattern}:\\d+:\\d+`).test(error.message)
         ),
         true
     );
@@ -1132,8 +1153,19 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     delete androidOnlyLocators.consultaIos;
     androidOnly.files.find(file => file.layer === 'locators').content =
         JSON.stringify(androidOnlyLocators);
-    const androidOnlyValidation = validator.validate(resolved.scenario, resolved.plan, androidOnly);
-    assert.equal(androidOnlyValidation.valid, true);
+    const androidOnlyValidation = validator.validate(
+        resolved.scenario, resolved.plan,
+        withPlanLocatorIdentifier(resolved.plan, androidOnly),
+    );
+    // Contrato vigente (mismo caso que "validator exige clave contraparte..."):
+    // a un locator creado le falta la clave contraparte, y eso es un error
+    // bloqueante, no solo una advertencia. El warning de cobertura del
+    // output-level validator convive con ese error.
+    assert.equal(androidOnlyValidation.valid, false);
+    assert.equal(
+        androidOnlyValidation.errors.some(error => error.code === 'platform-coverage'),
+        true
+    );
     assert.equal(
         androidOnlyValidation.warnings.some(warning => warning.includes('Cobertura iOS pendiente')),
         true
@@ -1159,7 +1191,8 @@ test('validator exige cuatro capas, trazabilidad y Then', () => {
     assert.equal(
         validator.validate(resolved.scenario, resolved.plan, completedIos)
             .errors.some(error => error.code === 'platform-tag' && error.message.includes('@ios')),
-        true
+        false,
+        'tener locators iOS históricos no demuestra que este Scenario Android se validó en iOS',
     );
     completedIos.files.find(file => file.layer === 'feature').content =
         completedIos.files.find(file => file.layer === 'feature').content.replace('@android', '@android @ios');
@@ -1473,15 +1506,18 @@ test('validator exige el par primary exacto para create y verifica el TypeLocato
         true,
     );
 
-    const backupLiteralWithDecoyUsage = validResponse(resolved.plan);
-    backupLiteralWithDecoyUsage.files.find(file => file.layer === 'screen').content =
-        backupLiteralWithDecoyUsage.files.find(file => file.layer === 'screen').content.replace(
+    const literalDecoyUsage = validResponse(resolved.plan);
+    // Contrato vigente: un único selector verificado por acción. El decoy ya
+    // no viene de un backup retirado; es el propio selector primary
+    // hardcodeado en paralelo al getter trazado.
+    literalDecoyUsage.files.find(file => file.layer === 'screen').content =
+        literalDecoyUsage.files.find(file => file.layer === 'screen').content.replace(
             'await this.uiHelper.waitForDisplayed(this.movementsList);',
             'await this.uiHelper.waitForDisplayed(this.movementsList); ' +
-            'await this.uiHelper.waitForDisplayed("Movimientos");',
+            'await this.uiHelper.waitForDisplayed("id=movimientos");',
         );
     assert.equal(
-        validator.validate(resolved.scenario, resolved.plan, backupLiteralWithDecoyUsage).errors
+        validator.validate(resolved.scenario, resolved.plan, literalDecoyUsage).errors
             .some(error => error.code === 'trace-screen-method'),
         true,
     );
@@ -1587,16 +1623,18 @@ test('validator exige el par primary exacto para create y verifica el TypeLocato
         );
     }
 
-    const backupLocalLiteral = validResponse(resolved.plan);
-    backupLocalLiteral.files.find(file => file.layer === 'screen').content =
-        backupLocalLiteral.files.find(file => file.layer === 'screen').content.replace(
+    const localLiteralDecoy = validResponse(resolved.plan);
+    // Contrato vigente: mismo caso que arriba pero via variable local; ya no
+    // depende de un backup retirado, usa el propio selector primary.
+    localLiteralDecoy.files.find(file => file.layer === 'screen').content =
+        localLiteralDecoy.files.find(file => file.layer === 'screen').content.replace(
             'await this.uiHelper.waitForDisplayed(this.movementsList);',
-            'const backup = "Movimientos"; ' +
+            'const decoy = "id=movimientos"; ' +
             'await this.uiHelper.waitForDisplayed(this.movementsList); ' +
-            'await this.uiHelper.waitForDisplayed(backup);',
+            'await this.uiHelper.waitForDisplayed(decoy);',
         );
     assert.equal(
-        validator.validate(resolved.scenario, resolved.plan, backupLocalLiteral).errors
+        validator.validate(resolved.scenario, resolved.plan, localLiteralDecoy).errors
             .some(error => error.code === 'trace-screen-method'),
         true,
     );
@@ -1850,6 +1888,7 @@ test('validator autoriza completions solo por identidad exacta y getter trazado'
         .replace(/Locators\.consultaIos\.movementsList/g, 'Locators.sharedIos.sharedMovements')
         .replace(/Locators\.consultaAndroid\.movementsList/g, 'Locators.sharedAndroid.sharedMovements')
         .replace(/movementsList/g, 'sharedMovements');
+    withPlanLocatorIdentifier(resolved.plan, response);
     response.actionTrace[0].locatorName = 'sharedMovements';
     response.completions = [{
         file: targetFile,
@@ -2171,6 +2210,14 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     );
     assert.match(agentInstructions, /LocatorMovements\.movementsAndroid\.showMovements/);
     assert.match(agentInstructions, /framework-api\.json > locatorContract\.modules/);
+    assert.match(agentInstructions, /decision:'replace-existing'/);
+    assert.match(agentInstructions, /Tipo\/selector salen de la grabación y se conserva la otra plataforma/);
+    assert.match(agentInstructions, /CORRECCIÓN: modifica gap-resolutions\.json, nunca agent-response\.json/);
+    const gapResolutionSchema = JSON.parse(fs.readFileSync(
+        path.join(result.packageDirectory, 'gap-resolutions.schema.json'), 'utf8'
+    ));
+    assert.ok(gapResolutionSchema.properties.resolutions.items.properties.decision.enum
+        .includes('replace-existing'));
     assert.equal(frameworkApi.screenObjects[0].path.endsWith('.screen.ts'), true);
     assert.equal(typeof frameworkApi.screenObjects[0].className, 'string');
     assert.equal(typeof frameworkApi.screenObjects[0].instanceName, 'string');
@@ -2179,7 +2226,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         path.join(result.packageDirectory, 'validation-contract.json'), 'utf8'
     ));
     const validatorSource = fs.readFileSync(
-        path.join(process.cwd(), 'core', 'automationResponseValidator.ts'),
+        defaultValidatorSourcePath(),
         'utf8'
     );
     const validatorCodes = validatorRuleCodesFromSource(validatorSource);
@@ -2251,7 +2298,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.match(instructions, /completionTargets/);
     assert.match(instructions, /key homonima de otro archivo o bloque no autoriza/);
     assert.match(instructions, /tier de ejecucion \(`@smoke_mobile`\)/);
-    assert.match(instructions, /Si te falta información, NO la busques fuera/);
+    assert.match(instructions, /Si falta información, no la busques afuera/);
     assert.match(instructions, /NO uses comandos de shell \(cat, echo, redirecciones\)/);
     assert.match(instructions, /Las rutas exactas que puedes leer son/);
     assert.match(instructions, /Usa rutas RELATIVAS al directorio actual/);
@@ -2466,6 +2513,7 @@ test('advierte identificadores en español y no toca el Gherkin ni lo heredado',
         'public async verifyMovementsList()',
         'public async seMuestranLosMovimientosEsperados()'
     );
+    withPlanLocatorIdentifier(plan, enEspanol);
     const semantica = validator.validate(resolvedScenario, plan, enEspanol);
     const errores = semantica.errors.filter(error => error.code === 'non-english-identifier');
     assert.equal(errores.length, 0);
@@ -2608,7 +2656,7 @@ test('package builder mantiene baselines grandes fuera del contexto mínimo', ()
         'scenario.json', 'generation-plan.json', 'reuse-context.json',
         'collision-report.json', 'unresolved-context.json', 'instructions.md'
     ].reduce((total, file) => total + fs.statSync(path.join(result.packageDirectory, file)).size, 0);
-    assert.ok(mandatoryBytes <= 20_000);
+    assert.ok(mandatoryBytes <= 20_000, `contexto obligatorio: ${mandatoryBytes} bytes`);
 });
 
 test('reprocesar una grabación siempre reconstruye el paquete y conserva evidencia e historial', () => {
@@ -2754,7 +2802,11 @@ test('launcher abre una terminal en el paquete sin ejecutar automáticamente el 
     assert.equal(call.command, process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd.exe' : 'x-terminal-emulator');
     assert.ok(call.args.some(value => String(value).includes(root)));
     assert.match(result.prompt, /instructions\.md/);
-    assert.match(result.prompt, /No leas resolved-context\.json/);
+    // Contrato vigente: sin repair-context.json el modo por defecto es
+    // deterministic (DEFAULT_RECORDER_GENERATION_MODE), cuyo prompt inicial
+    // confina al agente a gaps.json/gap-resolutions.json y no menciona
+    // resolved-context.json (eso solo aplica al modo legacy).
+    assert.match(result.prompt, /No uses comandos de shell ni explores fwk-mobile-test/);
     assert.doesNotMatch(call.args.join(' '), /instructions\.md/);
 });
 
@@ -2802,22 +2854,35 @@ test('launcher abre monitor legible de ejecución automática en macOS', () => {
 test('el flujo de automatización cruza renderer, preload y main por IPC explícito', () => {
     const root = path.resolve(__dirname, '..');
     const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf-8');
+    const automationHandlers = fs.readFileSync(
+        path.join(root, 'recorder/src/ipc/automationHandlers.ts'),
+        'utf-8',
+    );
     const preload = fs.readFileSync(path.join(root, 'recorder/src/preload.ts'), 'utf-8');
     const controller = fs.readFileSync(path.join(root, 'recorder/renderer/src/controller/recorderController.js'), 'utf-8');
+    const featuresDir = path.join(root, 'recorder/renderer/src/features');
+    const rendererCombined = [controller, ...fs.readdirSync(featuresDir, { recursive: true })
+        .filter(file => file.endsWith('.js'))
+        .map(file => fs.readFileSync(path.join(featuresDir, file), 'utf-8'))]
+        .join('\n');
+    // main.ts es el composition root: arma servicios/estado y delega el
+    // registro de los canales de automatización a `ipc/automationHandlers.ts`.
+    assert.match(main, /registerAutomationHandlers\(\{/);
     for (const channel of [
         'prepare-automation-package', 'prepare-automation-regeneration', 'launch-automation-agent',
         'import-automation-response', 'revalidate-automation-response', 'generate-automation-response'
     ]) {
-        assert.match(main, new RegExp(`ipcMain\\.handle\\('${channel}'`));
+        assert.match(automationHandlers, new RegExp(`ipcMain\\.handle\\('${channel}'`));
+        assert.doesNotMatch(main, new RegExp(`ipcMain\\.handle\\('${channel}'`));
         assert.match(preload, new RegExp(channel));
     }
-    assert.match(controller, /prepareAutomationPackage/);
-    assert.match(controller, /prepareAutomationRegeneration/);
-    assert.match(controller, /generateAutomationResponse/);
-    assert.match(controller, /launchAutomationAgent\(\{ mode: 'automatic' \}\)/);
-    assert.match(controller, /importAutomationResponse\(true\)/);
-    assert.match(controller, /updateAutomationProgress\(/);
-    assert.match(controller, /btnReimportAutomationCorrection\?\.addEventListener/);
-    assert.doesNotMatch(controller, /showAutomationHandoff/);
-    assert.doesNotMatch(controller, /btnLaunchAutomation/);
+    assert.match(rendererCombined, /prepareAutomationPackage/);
+    assert.match(rendererCombined, /prepareAutomationRegeneration/);
+    assert.match(rendererCombined, /generateAutomationResponse/);
+    assert.match(rendererCombined, /launchAutomationAgent\(\{ mode: 'automatic' \}\)/);
+    assert.match(rendererCombined, /importAutomationResponse\(true\)/);
+    assert.match(rendererCombined, /updateAutomationProgress\(/);
+    assert.match(rendererCombined, /on\(btnReimportAutomationCorrection, 'click'/);
+    assert.doesNotMatch(rendererCombined, /showAutomationHandoff/);
+    assert.doesNotMatch(rendererCombined, /btnLaunchAutomation/);
 });

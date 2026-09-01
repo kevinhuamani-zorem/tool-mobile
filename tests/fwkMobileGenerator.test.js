@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
-const { frameworkContract } = require('../dist/core/frameworkContract');
-const { projectPaths } = require('../dist/core/projectPaths');
+const { FwkMobileGenerator } = require('../dist/core/generation');
+const { frameworkContract } = require('../dist/core/workspace');
+const { projectPaths } = require('../dist/core/workspace');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const EXT = CONTRACT.importExtension;

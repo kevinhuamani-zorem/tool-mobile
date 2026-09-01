@@ -2,13 +2,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
-const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
-const { projectPaths } = require('../dist/core/projectPaths');
+const { RecorderCodeGraph } = require('../dist/core/indexing');
+const { projectPaths } = require('../dist/core/workspace');
 
 test('relaciona un canal IPC con los módulos internos del recorder', () => {
-    // `query` rankea y corta: el límite tiene que dar aire para que el nodo del
-    // controller entre. Con 50 se caía cada vez que ese archivo crecía, y lo que
-    // el test comprueba es la relación, no el ranking.
+    // `query` rankea y corta: el límite tiene que dar aire para que un nodo del
+    // renderer entre. Con 50 se caía cada vez que ese archivo crecía, y lo que
+    // el test comprueba es la relación, no el ranking. Desde la fase de
+    // features (ver docs/adr/0001-modular-core-architecture.md, paso 9) el
+    // renderer ya no concentra la lógica en un único `recorderController.js`;
+    // basta con que algún módulo bajo `features/` participe del grafo.
     const graph = new RecorderCodeGraph().query({
         ipc: 'preview-fwk-files',
         limit: 120
@@ -18,7 +21,7 @@ test('relaciona un canal IPC con los módulos internos del recorder', () => {
     );
     assert.ok(channel);
     assert.ok(graph.nodes.some(node => node.file === 'recorder/src/main.ts'));
-    assert.ok(graph.nodes.some(node => node.file.includes('recorderController.js')));
+    assert.ok(graph.nodes.some(node => node.file.startsWith('recorder/renderer/src/features/')));
     assert.ok(graph.edges.some(edge =>
         edge.to === channel.id && (edge.type === 'handles' || edge.type === 'invokes')
     ));

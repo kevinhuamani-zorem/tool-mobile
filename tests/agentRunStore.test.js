@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { AgentRunStore } = require('../dist/core/agentRunStore');
+const { AgentRunStore } = require('../dist/core/automation');
 
 test('agent-run registra éxito, cache y tiempos sin contenido sensible', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-run-'));

@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { CodeGraph } = require('../dist/core/codeGraph');
-const { FrameworkQueryService } = require('../dist/core/frameworkQueryService');
+const { CodeGraph } = require('../dist/core/indexing');
+const { FrameworkQueryService } = require('../dist/core/workspace');
 
 function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'framework-query-'));

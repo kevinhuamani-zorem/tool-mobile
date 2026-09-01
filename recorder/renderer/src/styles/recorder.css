@@ -1802,6 +1802,25 @@ body {
     resize: none;
 }
 .wizard-file-tabs { margin-bottom: 10px; }
+.qa-observations-panel {
+    margin: 0 0 14px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,162,0,.45);
+    border-radius: 10px;
+    background: rgba(255,162,0,.08);
+}
+.qa-observations-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+.qa-observations-heading > div { display: flex; flex-direction: column; gap: 4px; }
+.qa-observations-heading strong { color: #ffcd72; }
+.qa-observations-heading small { color: var(--text3); }
+.qa-observations-panel ul { margin: 12px 0 4px; padding-left: 20px; }
+.qa-observations-panel li { margin: 7px 0; color: var(--text2); }
+.qa-observations-panel li small { display: block; margin-top: 2px; color: var(--text3); }
 .code-review-workspace {
     grid-template-columns: minmax(210px, 26%) minmax(0, 1fr);
     height: clamp(420px, calc(100vh - 390px), 620px);

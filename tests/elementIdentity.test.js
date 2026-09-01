@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { elementIdentity, ElementIdentityIndex } = require('../dist/core/elementIdentity');
+const { elementIdentity, ElementIdentityIndex } = require('../dist/core/automation');
 
 // Los tres casos que el reviewer marco a mano en el PR de Tapp.
 test('reconoce el mismo elemento aunque cambie la estrategia', () => {

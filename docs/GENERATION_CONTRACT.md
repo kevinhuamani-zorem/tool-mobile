@@ -228,6 +228,19 @@ resolutora del framework sabe componer: el JSON almacena el valor y el getter
 declara la estrategia. La normalización nunca convierte una estrategia Android
 en una de iOS.
 
+La identidad para reutilizar un locator se determina exclusivamente con ese par:
+`TypeLocator` y valor normalizado del selector. El nombre lógico propuesto por
+el recording no participa en la comparación. Si el framework ya contiene el
+mismo par bajo otra clave, se reutilizan su ruta y su nombre lógico existente.
+Solo se crea una clave nueva cuando la estrategia o el valor normalizado difieren.
+
+Como corrección posterior, el QA puede autorizar explícitamente conservar una
+clave existente y reemplazar su selector. Esto no es reutilización automática:
+se representa con `decision: "replace-existing"`, `selectedCandidate` y
+`replacement` (`platform` + `sequence`). El recorder obtiene `TypeLocator` y
+valor únicamente de esa acción verificada, actualiza el getter y el bloque de la
+plataforma indicada, y conserva intacta la plataforma contraria.
+
 La traducción no es un recorte de prefijos. `TypeLocator` no tiene estrategia de
 resource-id, así que un `id=` capturado por el inspector se convierte:
 
@@ -294,7 +307,8 @@ valor, descripción y origen del locator.
 
 Al añadir una acción:
 
-1. amplía el tipo en `core/models.ts`;
+1. amplía el tipo en `core/automation/contracts/models.ts` (público vía
+   `core/automation`);
 2. implementa ejecución móvil y generación;
 3. define su representación Gherkin y método de Screen Object;
 4. añade UI y pruebas para parámetros/plataformas;
@@ -433,7 +447,8 @@ El generador cumple el estándar que aplica el reviewer de `fwk-mobile-test`:
 
 ### Contrato del Screen Object
 
-`core/screenObjectContract.ts` reúne las reglas mecánicas que el agente rompía y
+`core/automation/contracts/screenObjectContract.ts` (público vía
+`core/automation`) reúne las reglas mecánicas que el agente rompía y
 nadie comprobaba. Corre en dos sitios con una sola implementación: el validador
 al importar la propuesta, y `verify-package.js` dentro del sandbox — que carga
 `screen-object-contract.js`, copiado al paquete, para que el agente se

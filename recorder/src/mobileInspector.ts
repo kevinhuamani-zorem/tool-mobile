@@ -1,4 +1,4 @@
-import { AppiumDriverManager } from '../../core/appiumDriverManager';
+import { AppiumDriverManager } from '../../core/mobile-session';
 import { BrowserWindow } from 'electron';
 import { exec } from 'child_process';
 import * as os from 'os';

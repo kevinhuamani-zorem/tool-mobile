@@ -12,6 +12,18 @@ const controller = fs.readFileSync(
     path.join(root, 'recorder/renderer/src/controller/recorderController.js'),
     'utf8',
 );
+const review = fs.readFileSync(
+    path.join(root, 'recorder/renderer/src/features/review/reviewFeature.js'),
+    'utf8',
+);
+const generation = fs.readFileSync(
+    path.join(root, 'recorder/renderer/src/features/generation/generationFeature.js'),
+    'utf8',
+);
+const automationHandlers = fs.readFileSync(
+    path.join(root, 'recorder/src/ipc/automationHandlers.ts'),
+    'utf8',
+);
 
 test('wizard expone flujo de producto en 4 pasos y oculta agente del happy path', () => {
     assert.match(modal, /\['1', 'Evidencia'\]/);
@@ -51,46 +63,72 @@ test('revisión agrupa validación y acciones sin repetir el resultado', () => {
     assert.equal((modal.match(/id="lblGenerateResult"/g) || []).length, 1);
     assert.doesNotMatch(modal, /id="wizardGenerationResult"/);
     assert.doesNotMatch(controller, /wizardGenerationResult/);
+    assert.match(modal, /id="qaObservationsPanel"/);
+    assert.match(modal, /id="btnCopyQaReport"/);
+    assert.match(review, /function renderQaObservations\(/);
+    assert.match(review, /El locator conserva el texto real/);
 });
 
 test('controller corre pipeline automático con y sin resolución semántica', () => {
-    assert.match(controller, /const PRODUCT_STAGES = \[/);
-    assert.match(controller, /async function runAutomationPipeline\(\)/);
-    assert.match(controller, /if \(!prepare\.result\.responseAvailable\)/);
-    assert.match(controller, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
-    assert.match(controller, /else if \(launched\.fallbackSuggested\) \{/);
-    assert.doesNotMatch(controller, /mode: 'manual'/);
-    assert.doesNotMatch(controller, /Abrir terminal manual/);
-    assert.match(controller, /await api\.getAutomationQaDecisions\(\);/);
-    assert.match(controller, /btnConfirmQaDecision\?\.addEventListener\('click', async \(\) => \{/);
-    assert.match(controller, /await api\.resolveAutomationQaDecisions\(\{ decisions \}\);/);
-    assert.match(controller, /api\.onAutomationProgress\?\.\(progress => \{/);
-    assert.match(controller, /function updateAutomationProgress\(/);
-    assert.doesNotMatch(controller, /automationProgressTrack/);
-    assert.match(controller, /is-running/);
-    assert.match(controller, /is-complete/);
-    assert.match(controller, /function setCorrectionReimportVisible\(/);
-    assert.match(controller, /btnReimportAutomationCorrection\?\.addEventListener\('click'/);
-    assert.match(controller, /Reimportando la corrección del agente/);
-    assert.match(controller, /if \(automationWorkflow && invalidAutomationDraft\) await revalidateReviewedAutomation\(\);/);
-    assert.match(controller, /else if \(automationWorkflow\) await importAutomationResponse\(false\);/);
-    assert.match(controller, /const imported = await importAutomationResponse\(false\);/);
-    assert.equal((controller.match(/importAutomationResponse\(false\)/g) || []).length, 2);
-    assert.match(controller, /btnUsePreviousAutomation\?\.addEventListener\('click'/);
-    assert.match(controller, /showAutomationPreview\(invalidAutomationDraft, false, false\);/);
-    assert.match(controller, /api\.revalidateAutomationResponse\(reviewedContents\)/);
-    assert.match(controller, /btnGenerate\.disabled = true/);
-    assert.match(controller, /updateProductStage\('READY_FOR_REVIEW'/);
-    assert.match(controller, /setWizardPage\(4\);/);
-    assert.match(controller, /wizardPage = Math\.max\(1, Math\.min\(4, page\)\)/);
-    assert.match(controller, /await runAutomationPipeline\(\);/);
+    assert.match(review, /const PRODUCT_STAGES = \[/);
+    assert.match(review, /async function runAutomationPipeline\(\)/);
+    assert.match(review, /if \(!prepare\.result\.responseAvailable\)/);
+    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
+    assert.match(review, /else if \(launched\.fallbackSuggested\) \{/);
+    assert.doesNotMatch(review, /mode: 'manual'/);
+    assert.doesNotMatch(review, /Abrir terminal manual/);
+    assert.match(review, /await api\.getAutomationQaDecisions\(\);/);
+    assert.match(review, /on\(btnConfirmQaDecision, 'click', async \(\) => \{/);
+    assert.match(review, /await api\.resolveAutomationQaDecisions\(\{ decisions \}\);/);
+    assert.match(review, /api\.onAutomationProgress\?\.\(progress => \{/);
+    assert.match(review, /function updateAutomationProgress\(/);
+    assert.doesNotMatch(review, /automationProgressTrack/);
+    assert.match(review, /is-running/);
+    assert.match(review, /is-complete/);
+    assert.match(review, /function setCorrectionReimportVisible\(/);
+    assert.match(review, /on\(btnReimportAutomationCorrection, 'click', async \(\) => \{/);
+    assert.match(review, /Reimportando la corrección del agente/);
+    assert.match(generation, /if \(isAutomationWorkflow\(\) && deps\.hasInvalidAutomationDraft\(\)\) await revalidateReviewedAutomation\(\);/);
+    assert.match(generation, /else if \(isAutomationWorkflow\(\)\) await importAutomationResponse\(false\);/);
+    assert.match(review, /const imported = await importAutomationResponse\(false\);/);
+    assert.equal(
+        (generation.match(/importAutomationResponse\(false\)/g) || []).length +
+        (review.match(/importAutomationResponse\(false\)/g) || []).length,
+        2
+    );
+    assert.match(review, /on\(btnUsePreviousAutomation, 'click', \(\) => \{/);
+    assert.match(review, /generation\.showPreviewDocuments\(state\.invalidAutomationDraft, false, false\);/);
+    assert.match(review, /api\.revalidateAutomationResponse\(reviewedContents\)/);
+    assert.match(generation, /btnGenerate\.disabled = true/);
+    assert.match(review, /updateProductStage\('READY_FOR_REVIEW'/);
+    assert.match(review, /setWizardPage\(4\);/);
+    assert.match(review, /wizardPage = Math\.max\(1, Math\.min\(4, page\)\)/);
+    assert.match(review, /await runAutomationPipeline\(\);/);
+});
+
+test('reimportar y revalidar rematerializan gap-resolutions cuando cambió', () => {
+    assert.match(automationHandlers, /function rematerializeGapResolutions\(/);
+    assert.match(
+        automationHandlers,
+        /ipcMain\.handle\('import-automation-response',[\s\S]*?rematerializeGapResolutions\(state\.activeAutomationPackage\)/,
+    );
+    assert.match(
+        automationHandlers,
+        /ipcMain\.handle\('revalidate-automation-response',[\s\S]*?const rematerialized = rematerializeGapResolutions/,
+    );
+    assert.match(automationHandlers, /lastMaterializedGapResolutionsHash/);
+    assert.match(automationHandlers, /lastMaterializedAgentResponseHash/);
+    assert.match(automationHandlers, /Copilot modificó agent-response\.json directamente/);
+    assert.match(automationHandlers, /sha256File\(responseFile\)/);
+    assert.match(review, /Procesando gap-resolutions\.json, regenerando la propuesta/);
+    assert.match(review, /corrija gap-resolutions\.json/);
 });
 
 test('main usa Copilot visible y deja que el pipeline importe la respuesta validada', () => {
     const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
     assert.match(main, /new VisibleCopilotProvider\(copilotCliAdapter, automationAgentLauncher\)/);
     assert.doesNotMatch(main, /openExecutionMonitor\(activeAutomationPackage\)/);
-    assert.match(controller, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
-    assert.match(controller, /const imported = await importAutomationResponse\(true\);/);
-    assert.match(controller, /setWizardPage\(4\);/);
+    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
+    assert.match(review, /const imported = await importAutomationResponse\(true\);/);
+    assert.match(review, /setWizardPage\(4\);/);
 });

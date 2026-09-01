@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { deriveAutomationContextProjections } = require('../dist/core/automationContextProjections');
-const { GapQueryPolicy } = require('../dist/core/gapQueryPolicy');
-const { AgentRunStore } = require('../dist/core/agentRunStore');
-const { CodeGraph } = require('../dist/core/codeGraph');
-const { FrameworkQueryService } = require('../dist/core/frameworkQueryService');
+const { deriveAutomationContextProjections } = require('../dist/core/automation');
+const { GapQueryPolicy } = require('../dist/core/automation');
+const { AgentRunStore } = require('../dist/core/automation');
+const { CodeGraph } = require('../dist/core/indexing');
+const { FrameworkQueryService } = require('../dist/core/workspace');
 
 function scenario() {
     return {

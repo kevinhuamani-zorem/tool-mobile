@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { AgentOrchestrator } = require('../dist/core/agentOrchestrator');
-const { AgentRunStore } = require('../dist/core/agentRunStore');
-const { DEFAULT_AGENT_OPERATIONAL_BUDGETS } = require('../dist/core/automationContracts');
+const { AgentOrchestrator } = require('../dist/core/automation');
+const { AgentRunStore } = require('../dist/core/automation');
+const { DEFAULT_AGENT_OPERATIONAL_BUDGETS } = require('../dist/core/automation');
 
 // Estos casos ejercitan deliberadamente el adapter legacy. Producción usa el
 // modo determinista por defecto; el último caso de este archivo lo habilita de
@@ -928,6 +928,9 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
         assert.equal(result.invocations, 1);
         assert.equal(prompts.length, 1);
         assert.match(prompts[0], /PASS 2 \(SEMANTIC\)/);
+        assert.match(prompts[0], /"replace-existing"/);
+        assert.match(prompts[0], /nunca edites agent-response\.json/);
+        assert.match(prompts[0], /replacement:\{platform,sequence\}/);
         const response = JSON.parse(fs.readFileSync(path.join(dir, 'agent-response.json'), 'utf-8'));
         assert.equal(response.recordingId, 'rec-1');
         assert.equal(response.files.length, 4);

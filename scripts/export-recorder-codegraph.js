@@ -1,11 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { RecorderCodeGraph } = require('../dist/core/recorderCodeGraph');
+const { RecorderCodeGraph } = require('../dist/core/indexing');
 const {
     renderCodeGraphDot,
     renderCodeGraphMermaid
-} = require('../dist/core/codeGraphExporter');
-const { projectPaths } = require('../dist/core/projectPaths');
+} = require('../dist/core/indexing');
+const { projectPaths } = require('../dist/core/workspace');
 
 function argumentsOf(argv) {
     const result = {};

@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
-import { projectPaths } from '../../core/projectPaths';
+import { projectPaths } from '../../core/workspace';
 
 export const EMBEDDED_INSPECTOR_COMMIT = '63f544c5afca2d89244914c165cd14434d1cfdee';
 export const EMBEDDED_INSPECTOR_SCHEME = 'appium-recorder';

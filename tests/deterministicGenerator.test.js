@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { DeterministicGenerator } = require('../dist/core/deterministicGenerator');
-const { projectPaths } = require('../dist/core/projectPaths');
+const { DeterministicGenerator, mergeLocatorUpdate, mergeScreenUpdate } = require('../dist/core/generation');
+const { projectPaths } = require('../dist/core/workspace');
 
 function writeJson(file, value) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -99,9 +99,13 @@ test('deterministic generator conserva el step definido por el plan del caso', (
             '',
         ].join('\n'),
         screenPath: path.join(projectPaths.frameworkRoot, 'screenobjects/payment/sample.screen.ts'),
-        screenContent: 'class SampleScreen {}',
+        screenContent: [
+            'class SampleScreen {',
+            '    public get movementsButton() { return $("~Movimientos"); }',
+            '}',
+        ].join('\n'),
         locatorPath: path.join(projectPaths.frameworkRoot, 'resources/locators/payment/sample.locator.json'),
-        locatorContent: '{ "sampleAndroid": {}, "sampleIos": {} }',
+        locatorContent: '{ "sampleAndroid": { "movementsButton": "Movimientos" }, "sampleIos": { "movementsButton": "" } }',
         files: [],
     };
     const generator = new DeterministicGenerator({ preview: () => ({ ...preview }) });
@@ -112,4 +116,91 @@ test('deterministic generator conserva el step definido por el plan del caso', (
         steps.includes('When(/^el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro$/'),
         true,
     );
+});
+
+test('merge de Screen update conserva el baseline y agrega getters junto con métodos', () => {
+    const baseline = [
+        "import BaseScreen from '@screenobjects/commons/base.screen.ts';",
+        'class ExistingScreen extends BaseScreen {',
+        '    public async existingMethod(): Promise<void> {}',
+        '}',
+        'export default new ExistingScreen();',
+        '',
+    ].join('\n');
+    const generated = [
+        'class GeneratedScreen extends BaseScreen {',
+        '    public get newButton() { return $("~Elemento nuevo"); }',
+        '    public async useNewButton(): Promise<void> { await this.newButton.click(); }',
+        '}',
+        '',
+    ].join('\n');
+    const merged = mergeScreenUpdate(
+        baseline,
+        generated,
+        'screenobjects/payment/existing.screen.ts',
+    );
+    assert.match(merged, /public async existingMethod\(\)/);
+    assert.match(merged, /public get newButton\(\)/);
+    assert.match(merged, /public async useNewButton\(\)/);
+});
+
+test('reemplazo autorizado actualiza getter y conserva APIs existentes', () => {
+    const baseline = [
+        "import BaseScreen from '@screenobjects/commons/base.screen.ts';",
+        'class ExistingScreen extends BaseScreen {',
+        '    public get btntoday() {',
+        '        return LocatorProvider.getElement(TypeLocator.XPATH, LocatorMovements.movementsIos.btntoday, TypeLocator.XPATH, LocatorMovements.movementsAndroid.btntoday);',
+        '    }',
+        '    public async existingMethod(): Promise<void> {}',
+        '}',
+        'export default new ExistingScreen();',
+        '',
+    ].join('\n');
+    const generated = [
+        'class GeneratedScreen extends BaseScreen {',
+        '    public get btntoday() {',
+        '        return LocatorProvider.getElement(TypeLocator.XPATH, LocatorMovements.movementsIos.btntoday, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.btntoday);',
+        '    }',
+        '}',
+        '',
+    ].join('\n');
+    const merged = mergeScreenUpdate(
+        baseline,
+        generated,
+        'screenobjects/payment/movements.screen.ts',
+        new Set(['btntoday']),
+    );
+    assert.match(merged, /TypeLocator\.ANDROID, LocatorMovements\.movementsAndroid\.btntoday/);
+    assert.match(merged, /public async existingMethod\(\)/);
+    assert.equal((merged.match(/public get btntoday\(/g) || []).length, 1);
+});
+
+test('reemplazo autorizado modifica solo la plataforma grabada del locator', () => {
+    const plan = {
+        resolutions: [{
+            sequence: 6,
+            resolution: 'create',
+            locatorName: 'btntoday',
+            locatorReplacement: {
+                file: 'resources/locators/payment/movements.locator.json',
+                module: 'payment/movements',
+                name: 'btntoday',
+                platform: 'android',
+                sequence: 6,
+            },
+        }],
+    };
+    const merged = JSON.parse(mergeLocatorUpdate(
+        JSON.stringify({
+            movementsAndroid: { btntoday: 'old-android' },
+            movementsIos: { btntoday: 'existing-ios' },
+        }),
+        JSON.stringify({
+            movementsAndroid: { btntoday: 'new-verified-android' },
+            movementsIos: { btntoday: '' },
+        }),
+        plan,
+    ));
+    assert.equal(merged.movementsAndroid.btntoday, 'new-verified-android');
+    assert.equal(merged.movementsIos.btntoday, 'existing-ios');
 });

@@ -9,7 +9,7 @@ const {
     readUtf8File,
     utf8TextProblems,
     writeJsonUtf8,
-} = require('../dist/core/utf8Text');
+} = require('../dist/core/shared');
 
 test('JSON UTF-8 conserva tildes y normaliza Unicode a NFC sin BOM', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'utf8-json-'));

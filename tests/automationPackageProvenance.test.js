@@ -6,17 +6,17 @@ const path = require('node:path');
 const {
     createAutomationPackageProvenance,
     requireTrustedAutomationPackageSnapshot,
-} = require('../dist/core/automationPackageProvenance');
+} = require('../dist/core/automation');
 const {
     createAutomationApplicationReceipt,
     planAgainstApplicationReceipt,
     requireUnchangedAppliedFiles,
-} = require('../dist/core/automationApplicationReceipt');
-const { packageAutomationScenario } = require('../dist/core/automationScenarioPackage');
+} = require('../dist/core/automation');
+const { packageAutomationScenario } = require('../dist/core/automation');
 const {
     restoreUpdateBaselinesForCorrection,
     rollbackCorrectionBaselines,
-} = require('../dist/core/automationCorrectionBaseline');
+} = require('../dist/core/automation');
 
 function fixture() {
     const action = {

@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { DeterministicResolver } = require('../dist/core/deterministicResolver');
-const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
-const { frameworkContract } = require('../dist/core/frameworkContract');
-const { projectPaths } = require('../dist/core/projectPaths');
-const { locatorImportIdentifier } = require('../dist/core/screenObjectContract');
+const { DeterministicResolver } = require('../dist/core/automation');
+const { AutomationResponseValidator } = require('../dist/core/validation');
+const { frameworkContract } = require('../dist/core/workspace');
+const { projectPaths } = require('../dist/core/workspace');
+const { locatorImportIdentifier } = require('../dist/core/automation');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 

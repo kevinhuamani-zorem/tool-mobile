@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
     renderCodeGraphDot,
     renderCodeGraphMermaid
-} = require('../dist/core/codeGraphExporter');
+} = require('../dist/core/indexing');
 
 const graph = {
     nodes: [

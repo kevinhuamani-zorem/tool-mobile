@@ -48,7 +48,7 @@ generadores, validadores o plantillas.
    del JSX usados por `renderer/controller/recorderController.js` son parte del
    contrato. No los renombres ni elimines sin actualizar bindings y pruebas. No
    registres listeners duplicados al remontar componentes.
-3. **Las rutas se resuelven centralmente.** Usa `core/projectPaths.ts` y el
+3. **Las rutas se resuelven centralmente.** Usa `core/workspace` (`projectPaths`) y el
    `WorkspaceAdapter`; no derives la raíz con `cwd`, padres relativos o rutas
    absolutas nuevas.
 4. **El target es únicamente el framework padre.** El recorder debe vivir en

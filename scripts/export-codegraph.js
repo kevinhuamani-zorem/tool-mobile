@@ -1,11 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { CodeGraph } = require('../dist/core/codeGraph');
+const { CodeGraph } = require('../dist/core/indexing');
 const {
     renderCodeGraphDot,
     renderCodeGraphMermaid
-} = require('../dist/core/codeGraphExporter');
-const { projectPaths } = require('../dist/core/projectPaths');
+} = require('../dist/core/indexing');
+const { projectPaths } = require('../dist/core/workspace');
 
 function readArgs(argv) {
     const result = {};

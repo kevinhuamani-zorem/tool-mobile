@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
     frameworkContract, clearFrameworkContractCache, aliasImport, composeLocator,
-} = require('../dist/core/frameworkContract');
+} = require('../dist/core/workspace');
 
 function buildFramework(layout) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fwk-contract-'));

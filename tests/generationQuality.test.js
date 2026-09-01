@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
     calculateGenerationQuality
-} = require('../dist/core/generationQuality');
+} = require('../dist/core/generation');
 
 test('obtiene calidad 100 cuando todas las acciones están enlazadas', () => {
     const metrics = calculateGenerationQuality([

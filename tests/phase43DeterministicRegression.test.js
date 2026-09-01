@@ -4,8 +4,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 
-const { DeterministicGenerator } = require('../dist/core/deterministicGenerator.js');
-const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator.js');
+const { DeterministicGenerator } = require('../dist/core/generation');
+const { AutomationResponseValidator } = require('../dist/core/validation');
 const { canonicalResponse } = require('./helpers/phase43Canonical.js');
 
 const FIXTURE_ROOT = path.join(process.cwd(), 'tests/fixtures/phase43');

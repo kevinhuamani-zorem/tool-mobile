@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DeterministicResolver } = require('../dist/core/deterministicResolver');
-const { inferredStrategy } = require('../dist/core/locatorStrategy');
+const { DeterministicResolver } = require('../dist/core/automation');
+const { inferredStrategy } = require('../dist/core/indexing');
 
 const SCREEN = 'screenobjects/payment/muestre-nombre-yapero-yapear.screen.ts';
 const LOCATORS = 'resources/locators/payment/muestre-nombre-yapero-yapear.locator.json';
@@ -183,7 +183,11 @@ test('no marca comodín cuando el texto no lo lleva', () => {
     assert.equal(result.unresolvedContext.gaps.some(gap => gap.id.startsWith('gap-selector-wildcard')), false);
 });
 
-test('reutiliza un locator existente cuando coincide un backup verificado', () => {
+test('conserva el selector primary verificado y no reutiliza a partir de un backup', () => {
+    // Contrato vigente: un unico selector verificado por accion. El backup
+    // solo viaja como evidencia local (automationRecordingStore); el resolver
+    // nunca lo usa para decidir un reuse, aunque coincida con un locator
+    // existente del catalogo.
     const primary = verifiedCandidate('primary', '~Nuevo', { primary: true });
     const backup = verifiedCandidate('existing-backup', '~Yapear', {
         stability: 'stable',
@@ -195,11 +199,9 @@ test('reutiliza un locator existente cuando coincide un backup verificado', () =
         selectorCandidates: [primary, backup],
     }]));
     const resolution = result.plan.resolutions[0];
-    assert.equal(resolution.resolution, 'reuse');
-    assert.equal(resolution.locatorName, 'yapear');
-    assert.equal(resolution.matchedCandidateId, 'existing-backup');
-    assert.equal(resolution.matchedPrimaryCandidate, false);
-    assert.match(resolution.reason, /backup/);
+    assert.equal(resolution.resolution, 'create');
+    assert.equal(resolution.selector, '~Nuevo');
+    assert.equal(resolution.matchedCandidateId, undefined);
 });
 
 test('conserva el primary como selector de create cuando ningún candidato existe', () => {
@@ -242,7 +244,11 @@ test('completionTargets conserva file, bloque y key exactos del candidato reuse'
     }]);
 });
 
-test('ranking prefiere estabilidad y deja auditoría del candidato que causó reuse', () => {
+test('el reuse depende exclusivamente del selector primary, no de la estabilidad de un backup', () => {
+    // Antes del contrato de selector unico, un backup mas estable podia
+    // ganarle al primary en el ranking de reuse. Ahora el backup es solo
+    // evidencia local: el primary decide, sin importar la estabilidad de
+    // ningun candidato adicional.
     const provider = {
         getCatalog: () => ({
             ...emptyCatalog().getCatalog(),
@@ -260,11 +266,15 @@ test('ranking prefiere estabilidad y deja auditoría del candidato que causó re
             verifiedCandidate('stable', '~Stable', { stability: 'stable', priority: 3 }),
         ],
     }]));
-    assert.equal(result.plan.resolutions[0].locatorName, 'stableMatch');
-    assert.equal(result.plan.resolutions[0].matchedCandidateId, 'stable');
+    assert.equal(result.plan.resolutions[0].resolution, 'reuse');
+    assert.equal(result.plan.resolutions[0].locatorName, 'manualMatch');
+    assert.equal(result.plan.resolutions[0].matchedPrimaryCandidate, true);
 });
 
 test('abre un gap QA bloqueante ante matches materialmente ambiguos', () => {
+    // La ambiguedad ya no nace de comparar varios candidatos: con un unico
+    // selector verificado por accion, el gap aparece cuando ese selector
+    // coincide con mas de un locator existente del mismo rango.
     const provider = {
         getCatalog: () => ({
             ...emptyCatalog().getCatalog(),
@@ -275,12 +285,8 @@ test('abre un gap QA bloqueante ante matches materialmente ambiguos', () => {
         }),
     };
     const result = new DeterministicResolver(provider).resolve(scenario([{
-        ...action('VERIFICAR_EXISTE', 'resultado', '~Primary'),
+        ...action('VERIFICAR_EXISTE', 'resultado', '~Stable'),
         selectorVerified: true,
-        selectorCandidates: [
-            verifiedCandidate('primary', '~Primary', { primary: true }),
-            verifiedCandidate('stable', '~Stable', { stability: 'stable' }),
-        ],
     }]));
     const gap = result.unresolvedContext.gaps.find(item =>
         item.id === 'gap-locator-candidate-ambiguity-1'
@@ -288,7 +294,7 @@ test('abre un gap QA bloqueante ante matches materialmente ambiguos', () => {
     assert.equal(gap?.type, 'qa-decision');
     assert.equal(gap?.blocking, true);
     assert.equal(result.plan.resolutions[0].resolution, 'create');
-    assert.equal(result.plan.resolutions[0].selector, '~Primary');
+    assert.equal(result.plan.resolutions[0].selector, '~Stable');
 });
 
 test('avisa del método equivalente que ya existe en el módulo target', () => {
@@ -323,8 +329,9 @@ test('no reutiliza por parecido de nombre cuando el selector es otro', () => {
     assert.match(gap.requiredOutput, /mismo identificador y la misma estrategia/);
 });
 
-// El mismo valor con la misma estrategia si es el mismo selector.
-test('reutiliza cuando el identificador y la estrategia coinciden', () => {
+// El mismo valor normalizado con la misma estrategia es el mismo selector; se
+// adopta el nombre lógico que ya existe en el framework.
+test('reutiliza cuando TypeLocator y selector normalizado coinciden', () => {
     const result = new DeterministicResolver(catalogWithExistingModule()).resolve(scenario([
         action('CLICK', 'yapear', '~Yapear'),
         action('VERIFICAR_EXISTE', 'pantalla de yapeo', 'android=new UiSelector().text("Nuevo número")'),
@@ -332,9 +339,9 @@ test('reutiliza cuando el identificador y la estrategia coinciden', () => {
 
     assert.equal(result.plan.resolutions[0].resolution, 'reuse');
     assert.equal(result.plan.resolutions[0].locatorName, 'yapear');
-    assert.match(result.plan.resolutions[0].reason, /misma estrategia \(ID\)/);
+    assert.match(result.plan.resolutions[0].reason, /TypeLocator\/selector normalizado \(ID\)/);
     assert.equal(result.plan.resolutions[1].resolution, 'reuse');
-    assert.match(result.plan.resolutions[1].reason, /misma estrategia \(ANDROID\)/);
+    assert.match(result.plan.resolutions[1].reason, /TypeLocator\/selector normalizado \(ANDROID\)/);
 });
 
 // Mismo texto, otra estrategia: es otro selector y no se puede dar por bueno.

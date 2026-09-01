@@ -3,10 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+    validatorRuleCodesFromSource,
+    buildValidationRuleContractFromSource,
+} = require('../dist/core/validation');
+const {
     buildValidationRuleContractFromFile,
     defaultValidatorSourcePath,
-    validatorRuleCodesFromSource,
-} = require('../dist/core/validatorRuleCatalog');
+} = require('../dist/core/validation');
 
 test('el contrato declara todos los códigos que emite el validador', () => {
     const sourcePath = defaultValidatorSourcePath();
@@ -15,11 +18,12 @@ test('el contrato declara todos los códigos que emite el validador', () => {
     const contract = buildValidationRuleContractFromFile(sourcePath);
     const declared = contract.rules.map(rule => rule.code).sort();
     assert.deepEqual(declared, emitted);
+    assert.deepEqual(contract, buildValidationRuleContractFromSource(source));
 });
 
 test('automation package publica validation-contract.json', () => {
     const source = fs.readFileSync(
-        path.join(process.cwd(), 'core', 'automationPackageBuilder.ts'),
+        path.join(process.cwd(), 'core', 'automation', 'infrastructure', 'automationPackageBuilder.ts'),
         'utf8'
     );
     assert.match(source, /validation-contract\.json/);
@@ -27,7 +31,7 @@ test('automation package publica validation-contract.json', () => {
 
 test('el paquete informa al agente el alias semantico y la notacion de punto para locators', () => {
     const source = fs.readFileSync(
-        path.join(process.cwd(), 'core', 'automationPackageBuilder.ts'),
+        path.join(process.cwd(), 'core', 'automation', 'infrastructure', 'automationPackageBuilder.ts'),
         'utf8'
     );
     assert.match(source, /notation:\s*'dot-only'/);

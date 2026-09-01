@@ -5,17 +5,17 @@ const os = require('node:os');
 const path = require('node:path');
 const {
     AutomationPackageBuilder,
-} = require('../dist/core/automationPackageBuilder');
+} = require('../dist/core/automation');
 const {
     packageAutomationScenario,
-} = require('../dist/core/automationScenarioPackage');
+} = require('../dist/core/automation');
 const {
     createAutomationPackageProvenance,
-} = require('../dist/core/automationPackageProvenance');
+} = require('../dist/core/automation');
 const {
     locatorCandidatePackage,
     requireTrustedLocatorCandidatePackage,
-} = require('../dist/core/selectorCandidates');
+} = require('../dist/core/automation');
 
 function request() {
     return {
@@ -163,7 +163,7 @@ test('acepta la normalización determinista y las filas/Examples agregadas', () 
     assert.notEqual(trusted, packaged);
 });
 
-test('acepta recordings con y sin selectorCandidates usando archivos separados', async t => {
+test('el paquete agentic nunca publica selectorCandidates, con o sin candidatos en la grabación', async t => {
     for (const withCandidates of [false, true]) {
         await t.test(withCandidates ? 'con candidatos' : 'sin candidatos', () => {
             const original = recording(withCandidates);
@@ -181,7 +181,10 @@ test('acepta recordings con y sin selectorCandidates usando archivos separados',
             assert.doesNotThrow(() =>
                 requireTrustedLocatorCandidatePackage(original, candidates)
             );
-            assert.equal(candidates.actions.length, withCandidates ? 1 : 0);
+            // Contrato vigente: un unico selector verificado por acción.
+            // locator-candidates.json ya no publica candidatos, haya o no
+            // selectorCandidates en la grabación local.
+            assert.equal(candidates.actions.length, 0);
         });
     }
 });
@@ -236,19 +239,27 @@ test('preserva revisiones de refinement sin aceptar retrocesos', () => {
     );
 });
 
-test('locator-candidates.json conserva validación estricta e independiente', () => {
+test('locator-candidates.json siempre viaja vacío y conserva validación de identidad', () => {
+    // Contrato vigente: selectorCandidates fue retirado del paquete agentic
+    // (un único selector verificado por acción); locator-candidates.json ya
+    // no transporta candidatos, pero sigue validando que la identidad de la
+    // grabación (recordingId, platform, schemaVersion) no haya cambiado.
     const original = recording(true);
     const resolved = resolvedScenario(original);
     const packaged = packageAutomationScenario(resolved);
     const candidates = locatorCandidatePackage(original);
-    const tamperedCandidates = structuredClone(candidates);
-    tamperedCandidates.actions[0].candidates[0].selector = '~otro';
 
+    assert.deepEqual(candidates.actions, []);
     assert.doesNotThrow(() =>
         builderFor(resolved).requireTrustedScenarioPackage(original, packaged)
     );
+    assert.doesNotThrow(() =>
+        requireTrustedLocatorCandidatePackage(original, candidates)
+    );
+
+    const tamperedIdentity = { ...candidates, recordingId: 'otra-grabacion' };
     assert.throws(
-        () => requireTrustedLocatorCandidatePackage(original, tamperedCandidates),
+        () => requireTrustedLocatorCandidatePackage(original, tamperedIdentity),
         /locator-candidates\.json fue modificado/
     );
     assert.throws(

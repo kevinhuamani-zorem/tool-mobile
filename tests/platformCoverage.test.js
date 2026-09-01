@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { emptyOnRecordedPlatform } = require('../dist/core/automationResponseValidator');
+const { emptyOnRecordedPlatform } = require('../dist/core/validation');
 
 // El modulo real de la casuistica: iOS relleno, Android vacio.
 const TAPP_SUBHOME = {

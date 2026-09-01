@@ -8,7 +8,7 @@ const frameworkRoot = path.resolve(recorderRoot, '..', '..');
 
 function inspectWorkspace(extraEnvironment = {}) {
     const script = [
-        `const {getWorkspaceAdapter}=require('./dist/core/workspaceAdapter');`,
+        `const {getWorkspaceAdapter}=require('./dist/core/workspace');`,
         `const a=getWorkspaceAdapter(); a.initialize();`,
         `process.stdout.write(JSON.stringify(a.describe()));`
     ].join('');

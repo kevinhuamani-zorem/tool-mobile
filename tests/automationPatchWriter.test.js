@@ -7,7 +7,7 @@ const {
     AutomationPatchWriter,
     AdditivePatchError,
     symbolsOf,
-} = require('../dist/core/automationPatchWriter');
+} = require('../dist/core/automation');
 
 const LOCATORS = JSON.stringify({
     filtroAndroid: { mostrarMovimientos: 'new UiSelector().text("Mostrar")' },
@@ -209,7 +209,7 @@ const {
     screenAdditions,
     stepsAdditions,
     featureAdditions,
-} = require('../dist/core/automationPatchWriter');
+} = require('../dist/core/automation');
 
 test('deriva solo las claves de locator nuevas comparando contra el disco', () => {
     const proposed = JSON.stringify({
@@ -268,12 +268,12 @@ test('deriva el escenario nuevo con su tag y descarta el existente', () => {
     assert.equal(featureAdditions(FEATURE, FEATURE), undefined);
 });
 
-const { GeneratedFileRegistry } = require('../dist/core/generatedFileRegistry');
+const { GeneratedFileRegistry } = require('../dist/core/automation');
 
 test('register no adopta un archivo ajeno que solo se amplió', t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'avr-registry-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-    const { projectPaths } = require('../dist/core/projectPaths');
+    const { projectPaths } = require('../dist/core/workspace');
     const manifest = path.join(projectPaths.toolConfig, 'generated-files.json');
     const backup = fs.existsSync(manifest) ? fs.readFileSync(manifest, 'utf-8') : null;
     t.after(() => backup === null ? fs.rmSync(manifest, { force: true }) : fs.writeFileSync(manifest, backup));
@@ -304,7 +304,7 @@ test('register no adopta un archivo ajeno que solo se amplió', t => {
 });
 
 test('registerPatch deja traza sin reclamar el archivo', t => {
-    const { projectPaths } = require('../dist/core/projectPaths');
+    const { projectPaths } = require('../dist/core/workspace');
     const manifest = path.join(projectPaths.toolConfig, 'generated-files.json');
     const backup = fs.existsSync(manifest) ? fs.readFileSync(manifest, 'utf-8') : null;
     t.after(() => backup === null ? fs.rmSync(manifest, { force: true }) : fs.writeFileSync(manifest, backup));

@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { CodeGraph } = require('../dist/core/codeGraph');
-const { projectPaths } = require('../dist/core/projectPaths');
+const { CodeGraph } = require('../dist/core/indexing');
+const { projectPaths } = require('../dist/core/workspace');
 
 test('construye un subgrafo relevante y guarda el cache dentro del recorder', () => {
     const graph = new CodeGraph();

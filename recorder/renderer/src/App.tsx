@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RecorderLayout } from './RecorderLayout';
-import { initializeRecorder } from './controller/recorderController.js';
+import { initializeRecorder, disposeRecorder } from './controller/recorderController.js';
 import './styles/recorder.css';
 
 export function App() {
@@ -14,6 +14,7 @@ export function App() {
         });
         return () => {
             active = false;
+            disposeRecorder();
         };
     }, []);
 

@@ -35,21 +35,94 @@ permanecen en el proceso principal.
 ### Renderer
 
 - `renderer/components/`: estructura visual React.
-- `renderer/App.tsx`: montaje y ciclo de vida principal.
-- `renderer/controller/recorderController.js`: estado y comportamiento
-  imperativo heredado, bindings de DOM y coordinación con `window.api`.
+- `renderer/App.tsx`: montaje y ciclo de vida principal. Llama a
+  `initializeRecorder()` en el efecto de montaje y a `disposeRecorder()` en su
+  limpieza, para que un remount (por ejemplo React StrictMode en desarrollo)
+  no acumule listeners duplicados.
+- `renderer/controller/recorderController.js`: **composition root**. Construye
+  el estado compartido (`state`), instancia cada feature bajo
+  `renderer/features/<nombre>/` con sus dependencias explícitas, llama a
+  `mount()` una única vez por feature y expone `disposeRecorder()` para
+  desmontarlas. No registra `addEventListener` directamente ni concentra
+  lógica de negocio.
+- `renderer/features/`: una carpeta por feature, cada una con un único módulo
+  que exporta `create<Nombre>Feature(deps)` y devuelve `{ mount, unmount, ... }`:
+  - `configuration/`: catálogo del framework (ambiente/squad/feature scope),
+    configuración de sesión local y BrowserStack, subida de apps y
+    arranque/cierre de sesión.
+  - `recording/`: lista de steps grabados y ejecución de la acción actual
+    (construir y enviar el step a `api.executeStep`).
+  - `inspector/`: Hierarchy Viewer (modal XML local), lanzamiento del Appium
+    Inspector embebido y captura/verificación de selectores explícitos
+    (inspección por click e interacción manual).
+  - `platform-completion/`: cobertura de una grabación existente, cola de
+    asignación de locators y el onboarding de sesión (caso nuevo / completar
+    grabación / reprocesar-refinar).
+  - `generation/`: preview/generación determinista heredada (cuatro capas sin
+    agente) y el "code review workspace" compartido con la revisión de una
+    propuesta de automatización.
+  - `review/`: el wizard "Enlazar" (constructor de escenario Gherkin), el
+    pipeline de automatización con agente (progreso, decisiones de QA) y la
+    revisión/revalidación de una propuesta antes de aplicarla.
+  - `shared/domHelpers.js`: helpers de DOM genéricos (`disableBtn`,
+    `enableBtn`, `updateDeviceScreen`, `escapeHtml`, `setLabelState`) sin
+    estado propio, reutilizados por varias features en vez de duplicarlos.
 - `renderer/global.d.ts`: contrato TypeScript de la API expuesta.
 - `renderer/recorder.css`: layout, scroll y estados visuales.
 
-React es dueño del markup, pero el controlador todavía depende de IDs JSX.
-Esta convivencia debe reducirse gradualmente, componente por componente; no se
-debe hacer una segunda migración total ni duplicar listeners.
+React es dueño del markup, pero las features todavía dependen de IDs JSX (son
+parte del contrato: no se renombran ni eliminan sin actualizar bindings y
+pruebas). Cada feature registra sus propios listeners en `mount()` y los
+retira en `unmount()`; el estado que dos o más features necesitan leer o
+escribir vive en el objeto `state` que arma el composition root y se pasa por
+referencia — ninguna feature lo copia ni declara un singleton propio a nivel
+de módulo. Cuando una feature necesita invocar comportamiento de otra (por
+ejemplo, `platform-completion` abriendo el Appium Inspector que expone
+`inspector`), el composition root inyecta esa función como dependencia
+explícita; las referencias circulares entre features hermanas (inspector ↔
+platform-completion, generation ↔ review) se resuelven con una variable `let`
+asignada antes de que el callback se invoque, nunca con un import cruzado
+entre carpetas de feature. Leer el `.value`/`.textContent` de un elemento que
+otra feature declara está permitido (el DOM ya es el estado del formulario);
+lo que no se duplica ni comparte sin pasar por `state` es la lógica de negocio
+ni las variables mutables. Solo `features/shared/` puede importarse entre
+features; ninguna importa un archivo interno de otra ni de `core/`
+(`scripts/check-architecture.js` lo bloquea con el código
+`renderer-core-import`).
 
 ### Bridge y proceso principal
 
 - `recorder/src/preload.ts`: allowlist de funciones IPC.
-- `recorder/src/main.ts`: ventana, lifecycle, composición de servicios y
-  handlers IPC.
+- `recorder/src/main.ts`: composition root. Crea la ventana, resuelve el
+  ciclo de vida de la app, registra el protocolo del Inspector embebido,
+  construye los servicios/estado compartidos y delega el registro de cada
+  canal IPC a la familia correspondiente bajo `recorder/src/ipc/`. No declara
+  ningún `ipcMain.handle`/`ipcMain.on` propio.
+- `recorder/src/ipc/runtimeState.ts`: `RecorderRuntimeState`, el único estado
+  mutable compartido (sesión activa, plataforma, steps grabados, ventanas,
+  paquete/preview de automatización, candidatos pendientes del Inspector).
+  `main.ts` construye una única instancia y la inyecta por referencia en el
+  contexto de cada familia; ninguna familia crea ni duplica ese estado.
+- `recorder/src/ipc/recordingSync.ts`: sincroniza el recording activo con los
+  steps grabados; lo comparten `interactionHandlers` y `automationHandlers`.
+- `recorder/src/ipc/workspaceHandlers.ts`: catálogo del framework, catálogo de
+  squad, cobertura de escenarios existentes y asignación de valores de
+  locator.
+- `recorder/src/ipc/sessionHandlers.ts`: dispositivos, credenciales y
+  arranque/cierre de sesión local y BrowserStack. Dueño de `closeOwnedSession`.
+- `recorder/src/ipc/inspectorHandlers.ts`: apertura/focalización del Inspector
+  embebido, su handshake versión 3 y la revalidación del elemento usado.
+  Dueño de `closeEmbeddedInspectorResources`.
+- `recorder/src/ipc/interactionHandlers.ts`: screenshot, page source, tap,
+  swipe, verificación de selector y ejecución/edición de steps grabados.
+- `recorder/src/ipc/automationHandlers.ts`: el pipeline de automatización
+  completo — preparar paquete, resolver decisiones de QA, lanzar/importar la
+  respuesta del agente, validar, aplicar sobre el framework y promocionar
+  memoria.
+- `recorder/src/ipc/generationHandlers.ts`: generación heredada de las cuatro
+  capas sin pasar por el pipeline de automatización con agente, y el Gherkin
+  con steps enlazados. Sus dos handlers de escritura final permanecen detrás
+  de `RECORDER_ENABLE_GENERATION`.
 - `recorder/src/mobileInspector.ts`: jerarquía y selección visual.
 - `recorder/src/featureGenerator.ts`: apoyo a previsualización Gherkin.
 
@@ -68,6 +141,13 @@ confirmado explícitamente por el protocolo `appium-inspector:embedded` versión
 otras capacidades y conserva sandbox, CSP y orígenes distintos.
 
 ### Dominio (`core/`)
+
+> La tabla lista responsabilidades por nombre lógico; la ubicación física de
+> cada módulo (`core/<módulo>/<capa>/<archivo>.ts`) está en
+> [ADR-0001](adr/0001-modular-core-architecture.md). Las fachadas planas de
+> compatibilidad (`core/<nombre>.ts`) se retiraron: cada nombre de abajo se
+> importa desde la API pública de su módulo (`core/<módulo>` o
+> `core/<módulo>/contracts`), nunca desde una ruta plana.
 
 | Área | Módulos principales | Responsabilidad |
 |---|---|---|
@@ -96,7 +176,8 @@ fuente de verdad.
 La raíz se deriva de la ubicación instalada:
 `fwk-mobile-test/tools/visual-recorder`. No se lee `.env` ni un archivo de
 workspace para cambiar el target. Todas las rutas operativas nacen en
-`core/projectPaths.ts` y el adaptador valida el framework antes de abrir la UI.
+`core/workspace/infrastructure/projectPaths.ts` (público vía `core/workspace`)
+y el adaptador valida el framework antes de abrir la UI.
 
 ## Flujos principales
 
@@ -270,29 +351,41 @@ se valida determinísticamente; todavía no existe orquestador ni integración C
 
 Las familias públicas son:
 
-- catálogo/workspace: `scan-framework`, `get-workspace-info`,
-  `get-squad-catalog`;
-- impacto/cobertura: `analyze-step-impact`, `get-existing-scenarios`,
-  `get-scenario-coverage`, `assign-locator-value`;
-- sesión local y BrowserStack: devices, apps, credenciales y start/close;
-- interacción: screenshot, page source, element-at, tap, swipe, verify y execute;
-- Inspector embebido: abrir/focalizar y eventos acotados de conexión, error y
-  uso explícito del selector;
-- automatización: preparar paquete, lanzar agente, importar respuesta, generar
-  con token, preparar regeneración y consultar memoria;
-- generación heredada: preview Gherkin, preview de archivos y generación.
+- catálogo/workspace (`recorder/src/ipc/workspaceHandlers.ts`): `scan-framework`,
+  `get-workspace-info`, `get-squad-catalog`, `analyze-step-impact`,
+  `get-existing-scenarios`, `get-scenario-coverage`, `assign-locator-value`;
+- sesión local y BrowserStack (`recorder/src/ipc/sessionHandlers.ts`): devices,
+  apps, credenciales y start/close;
+- interacción (`recorder/src/ipc/interactionHandlers.ts`): screenshot, page
+  source, element-at, tap, swipe, verify y execute;
+- Inspector embebido (`recorder/src/ipc/inspectorHandlers.ts`): abrir/focalizar
+  y eventos acotados de conexión, error y uso explícito del selector;
+- automatización (`recorder/src/ipc/automationHandlers.ts`): preparar paquete,
+  lanzar agente, importar respuesta, generar con token, preparar regeneración
+  y consultar memoria;
+- generación heredada (`recorder/src/ipc/generationHandlers.ts`): preview
+  Gherkin, preview de archivos y generación.
 
-Al añadir un canal, actualiza en conjunto handler de `main.ts`, allowlist de
-`preload.ts`, `renderer/global.d.ts`, consumidor y pruebas. Valida todo payload
-en el proceso principal: TypeScript en el renderer no es una frontera de
-seguridad.
+Al añadir un canal, actualiza en conjunto el handler en el archivo de su
+familia bajo `recorder/src/ipc/`, allowlist de `preload.ts`,
+`renderer/global.d.ts`, consumidor y pruebas. `main.ts` solo construye
+servicios/estado y registra la familia; nunca declara el handler directamente.
+Valida todo payload en el proceso principal: TypeScript en el renderer no es
+una frontera de seguridad.
 
 ## Decisiones y deuda conocida
 
 - La mayor parte de la generación es determinista. La IA externa es opt-in y
   se limita a gaps explícitos; nunca recibe el repositorio completo.
-- `recorderController.js` sigue siendo grande e imperativo. Las extracciones
-  futuras deben mantener un único dueño por estado y evento.
+- El renderer ya está organizado por features (`renderer/features/<nombre>/`);
+  `recorderController.js` es un composition root delgado. Las features
+  `inspector`, `recording` y `platform-completion` siguen compartiendo el
+  panel de captura/verificación de selector (`txtSelector`, `txtVarName`, la
+  cola de asignación) a través del `state` común en vez de una separación
+  limpia por dueño único: esas tres piezas de UI son literalmente el mismo
+  panel en pantalla y separarlas del todo sería un rediseño de producto, no
+  una extracción mecánica. Documentado como deuda conocida, no como
+  aplazamiento silencioso.
 - `dist/` no se limpia automáticamente antes de `tsc`; nunca se usa para
   inferir la arquitectura vigente.
 - Los archivos de runtime son estado local, no fuente.

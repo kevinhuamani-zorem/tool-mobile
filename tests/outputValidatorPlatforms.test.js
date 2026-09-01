@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { OutputValidator } = require('../dist/core/outputValidator');
-const { projectPaths } = require('../dist/core/projectPaths');
+const { OutputValidator } = require('../dist/core/validation');
+const { projectPaths } = require('../dist/core/workspace');
 
 function preview(locatorContent) {
     const marker = `platform-${process.pid}-${Math.random().toString(16).slice(2)}`;

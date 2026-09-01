@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
     enforceAgentResponsePlatformTags,
-} = require('../dist/core/agentResponsePlatformTagEnforcer.js');
+} = require('../dist/core/automation');
 
 function sampleResponse() {
     return {

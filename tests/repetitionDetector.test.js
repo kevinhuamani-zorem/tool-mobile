@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { detectRepetition } = require('../dist/core/repetitionDetector');
+const { detectRepetition } = require('../dist/core/automation');
 
 const click = (selector, hint = '') => ({ action: 'CLICK', selector, contextHint: hint, value: '' });
 
@@ -100,7 +100,7 @@ test('no repite un valor: si el literal se repite no es una tabla de datos', () 
     ])), undefined);
 });
 
-const { DeterministicResolver } = require('../dist/core/deterministicResolver');
+const { DeterministicResolver } = require('../dist/core/automation');
 
 const emptyCatalog = {
     getCatalog: () => ({

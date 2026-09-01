@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { CopilotCliAdapter } = require('../dist/core/copilotCliAdapter');
+const { CopilotCliAdapter } = require('../dist/core/automation');
 
 function fakeChild() {
     const child = new EventEmitter();

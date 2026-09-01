@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseSimulators, runtimeVersion } = require('../dist/core/iosSimulators');
+const { parseSimulators, runtimeVersion } = require('../dist/core/mobile-session');
 
 // Salida real de `xcrun simctl list devices available --json`, recortada.
 const SALIDA = JSON.stringify({
@@ -71,35 +71,37 @@ test('un simulador apagado sigue siendo elegible', () => {
 
 // La sesión local dejó de asumir Android en toda la cadena.
 test('la cadena local resuelve la plataforma en vez de fijarla', () => {
-    const driver = fs.readFileSync(path.join(__dirname, '../core/appiumDriverManager.ts'), 'utf8');
+    const driver = fs.readFileSync(path.join(__dirname, '../core/mobile-session/infrastructure/appiumDriverManager.ts'), 'utf8');
     assert.match(driver, /platformName:\s*'iOS'/);
     assert.match(driver, /'appium:automationName':\s*'XCUITest'/);
     assert.match(driver, /config\.platform === 'ios'/);
 
-    const main = fs.readFileSync(path.join(__dirname, '../recorder/src/main.ts'), 'utf8');
-    const startSession = main.slice(main.indexOf("ipcMain.handle('start-session'"));
+    // start-session vive en ipc/sessionHandlers.ts (main.ts solo construye
+    // servicios/estado y registra la familia de handlers de sesión).
+    const sessionHandlers = fs.readFileSync(path.join(__dirname, '../recorder/src/ipc/sessionHandlers.ts'), 'utf8');
+    const startSession = sessionHandlers.slice(sessionHandlers.indexOf("ipcMain.handle('start-session'"));
     const cuerpo = startSession.slice(0, startSession.indexOf('ipcMain.handle', 10));
     assert.doesNotMatch(cuerpo, /recordingPlatform = 'android';/);
     assert.match(cuerpo, /config\.platform === 'ios' \? 'ios' : 'android'/);
-    assert.match(cuerpo, /new LocatorManager\(projectPaths\.locators, 'global', recordingPlatform\)/);
+    assert.match(cuerpo, /new LocatorManager\(projectPaths\.locators, 'global', state\.recordingPlatform\)/);
 });
 
 test('la configuración local permite seleccionar IPA por un IPC acotado', () => {
     const root = path.join(__dirname, '..');
-    const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
+    const sessionHandlers = fs.readFileSync(path.join(root, 'recorder/src/ipc/sessionHandlers.ts'), 'utf8');
     const preload = fs.readFileSync(path.join(root, 'recorder/src/preload.ts'), 'utf8');
     const component = fs.readFileSync(
         path.join(root, 'recorder/renderer/src/components/ConfigurationScreen.tsx'),
         'utf8'
     );
     const controller = fs.readFileSync(
-        path.join(root, 'recorder/renderer/src/controller/recorderController.js'),
+        path.join(root, 'recorder/renderer/src/features/configuration/configurationFeature.js'),
         'utf8'
     );
 
-    assert.match(main, /ipcMain\.handle\('select-local-app'/);
-    assert.match(main, /extensions: \['app', 'ipa'\]/);
-    assert.match(main, /new Set\(\['\.app', '\.ipa'\]\)/);
+    assert.match(sessionHandlers, /ipcMain\.handle\('select-local-app'/);
+    assert.match(sessionHandlers, /extensions: \['app', 'ipa'\]/);
+    assert.match(sessionHandlers, /new Set\(\['\.app', '\.ipa'\]\)/);
     assert.match(preload, /selectLocalApp:[\s\S]*select-local-app/);
     assert.match(component, /id="btnChooseLocalApp"/);
     assert.match(controller, /api\.selectLocalApp\(selectedLocalPlatform\(\)\)/);
@@ -108,9 +110,9 @@ test('la configuración local permite seleccionar IPA por un IPC acotado', () =>
 
 test('iOS local puede iniciar sin app ni bundleId para apertura manual', () => {
     const root = path.join(__dirname, '..');
-    const driver = fs.readFileSync(path.join(root, 'core/appiumDriverManager.ts'), 'utf8');
+    const driver = fs.readFileSync(path.join(root, 'core/mobile-session/infrastructure/appiumDriverManager.ts'), 'utf8');
     const controller = fs.readFileSync(
-        path.join(root, 'recorder/renderer/src/controller/recorderController.js'),
+        path.join(root, 'recorder/renderer/src/features/configuration/configurationFeature.js'),
         'utf8'
     );
     const iosValidation = controller.slice(

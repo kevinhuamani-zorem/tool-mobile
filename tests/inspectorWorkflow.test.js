@@ -8,10 +8,34 @@ const controller = fs.readFileSync(
     path.join(root, 'recorder/renderer/src/controller/recorderController.js'),
     'utf8',
 );
+const inspector = fs.readFileSync(
+    path.join(root, 'recorder/renderer/src/features/inspector/inspectorFeature.js'),
+    'utf8',
+);
+const recording = fs.readFileSync(
+    path.join(root, 'recorder/renderer/src/features/recording/recordingFeature.js'),
+    'utf8',
+);
+const platformCompletion = fs.readFileSync(
+    path.join(root, 'recorder/renderer/src/features/platform-completion/platformCompletionFeature.js'),
+    'utf8',
+);
 const preload = fs.readFileSync(path.join(root, 'recorder/src/preload.ts'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
+const inspectorHandlers = fs.readFileSync(
+    path.join(root, 'recorder/src/ipc/inspectorHandlers.ts'),
+    'utf8',
+);
+const interactionHandlers = fs.readFileSync(
+    path.join(root, 'recorder/src/ipc/interactionHandlers.ts'),
+    'utf8',
+);
+const automationHandlers = fs.readFileSync(
+    path.join(root, 'recorder/src/ipc/automationHandlers.ts'),
+    'utf8',
+);
 const scenarioPackage = fs.readFileSync(
-    path.join(root, 'core/automationScenarioPackage.ts'),
+    path.join(root, 'core/automation/domain/automationScenarioPackage.ts'),
     'utf8',
 );
 
@@ -24,14 +48,15 @@ function between(source, start, end) {
 }
 
 test('routes header and assignment launchers to Appium Inspector only', () => {
-    assert.match(controller, /btnXmlInspector\.addEventListener\('click', openAppiumInspector\)/);
-    assert.match(controller, /btnOpenAssignmentInspector\.addEventListener\('click', openAppiumInspector\)/);
-    assert.doesNotMatch(controller, /btnOpenAssignmentInspector[\s\S]{0,100}btnInspect\.click/);
+    assert.match(inspector, /on\(btnXmlInspector, 'click', openAppiumInspector\)/);
+    assert.match(platformCompletion, /on\(btnOpenAssignmentInspector, 'click', openAppiumInspector\)/);
+    assert.doesNotMatch(platformCompletion, /btnOpenAssignmentInspector[\s\S]{0,100}btnInspect\.click/);
+    assert.doesNotMatch(platformCompletion, /btnInspect\.click/);
 
     const launcher = between(
-        controller,
+        inspector,
         'async function openAppiumInspector()',
-        "btnXmlInspector.addEventListener('click', openAppiumInspector)",
+        "on(btnXmlInspector, 'click', openAppiumInspector)",
     );
     assert.match(launcher, /api\.openInspector\(\)/);
     assert.match(launcher, /openLegacyHierarchyInspector/);
@@ -40,9 +65,9 @@ test('routes header and assignment launchers to Appium Inspector only', () => {
 
 test('keeps the lower inspect button in recorder-local screenshot and XML mode', () => {
     const localInspector = between(
-        controller,
-        "btnInspect.addEventListener('click'",
-        "btnExecute.addEventListener('click'",
+        inspector,
+        "on(btnInspect, 'click'",
+        "on(btnCopy, 'click'",
     );
     assert.match(localInspector, /api\.getScreenshot\(\)/);
     assert.match(localInspector, /api\.getPageSource\(\)/);
@@ -53,66 +78,71 @@ test('exposes only explicit element-use transfer after recorder revalidation', (
     assert.match(preload, /onInspectorElementUsed/);
     assert.match(preload, /embedded-inspector-element-used/);
     assert.doesNotMatch(preload, /ElementSelected|element-selected/);
-    assert.match(controller, /api\.onInspectorElementUsed/);
-    assert.match(controller, /Selector y backups revalidados contra la sesión activa/);
-    assert.match(controller, /selectorCandidateToken/);
-    assert.match(controller, /clearInspectorCandidates/);
-    assert.doesNotMatch(controller, /onInspectorElementSelected/);
+    assert.match(inspector, /api\.onInspectorElementUsed/);
+    assert.match(inspector, /Selector y backups revalidados contra la sesión activa/);
+    assert.match(inspector, /selectorCandidateToken/);
+    assert.match(inspector, /clearInspectorCandidates/);
+    assert.doesNotMatch(inspector, /onInspectorElementSelected/);
 });
 
 test('revalidates explicit use before forwarding and hiding without centralized cleanup', () => {
     const transfer = between(
-        main,
+        inspectorHandlers,
         'elementUsed => {',
-        'error => mainWindow?.webContents.send',
+        'error => state.mainWindow?.webContents.send',
     );
-    assert.match(transfer, /validateEmbeddedInspectorElementUse\(elementUsed\)/);
+    assert.match(transfer, /validateEmbeddedInspectorElementUse\(state, elementUsed\)/);
     assert.doesNotMatch(transfer, /destroy|proxy\.stop|sessionOwnership\.close|recorderLifecycle\.cleanup/);
     const validation = between(
-        main,
+        inspectorHandlers,
         'async function validateEmbeddedInspectorElementUse(',
-        'const recorderLifecycle = new RecorderRuntimeLifecycle',
+        'export async function closeEmbeddedInspectorResources(',
     );
     assert.match(validation, /independentlyVerifySelectorCandidates/);
-    assert.match(validation, /generation !== inspectorValidationGeneration/);
+    assert.match(validation, /generation !== state\.inspectorValidationGeneration/);
     assert.match(validation, /webContents\.send\('embedded-inspector-element-used'/);
     assert.ok(validation.indexOf("webContents.send('embedded-inspector-element-used'") <
         validation.indexOf('returnToRecorderAfterElementUse'));
+    // main.ts es el composition root: arma la limpieza en el mismo orden
+    // (Inspector embebido primero, sesión propia después), pero cada tarea
+    // vive en la familia de handlers dueña de ese recurso.
     assert.match(main, /const recorderLifecycle = new RecorderRuntimeLifecycle\(\[[\s\S]*closeEmbeddedInspectorResources[\s\S]*closeOwnedSession/);
+    assert.match(main, /import \{ closeEmbeddedInspectorResources, registerInspectorHandlers \} from '\.\/ipc\/inspectorHandlers'/);
+    assert.match(main, /import \{ closeOwnedSession, registerSessionHandlers \} from '\.\/ipc\/sessionHandlers'/);
 });
 
 test('clears stale backups on edits or alternative selection and persists only the trusted token', () => {
     const inputHandler = between(
-        controller,
-        "txtSelector.addEventListener('input'",
-        "cmbAction.addEventListener('change'",
+        inspector,
+        "on(txtSelector, 'input'",
+        'ipcUnsubscribers.push(api.onInspectorConnected',
     );
     assert.match(inputHandler, /clearSelectorCandidateBackups\(\)/);
 
-    const chips = between(controller, 'function renderSelectorChips(', 'function buildCandidatesFromEl(');
+    const chips = between(inspector, 'function renderSelectorChips(', 'function getAttrVal(');
     assert.match(chips, /chip\.addEventListener\('click'[\s\S]*clearSelectorCandidateBackups\(\)/);
 
     const execute = between(
-        controller,
-        "btnExecute.addEventListener('click'",
-        "btnDelete.addEventListener('click'",
+        recording,
+        "on(btnExecute, 'click'",
+        "on(btnDelete, 'click'",
     );
-    assert.match(execute, /selectorVerified:\s*verifiedSelector === selector/);
+    assert.match(execute, /selectorVerified:\s*state\.verifiedSelector === selector/);
     assert.match(execute, /selectorCandidateToken/);
     assert.match(execute, /try\s*\{[\s\S]*api\.executeStep\(step\)[\s\S]*catch \(error\)[\s\S]*finally\s*\{[\s\S]*enableBtn\(btnExecute\)/);
     assert.match(execute, /catch \(error\) \{[\s\S]*setStatus\('✗ '/);
-    assert.match(main, /selectorCandidateToken === pendingInspectorCandidates\.token/);
-    assert.match(main, /selectorCandidates:\s*_untrustedCandidates/);
-    assert.match(main, /preparedStep\.selectorVerified === true[\s\S]*Boolean\(trustedCandidates\)/);
+    assert.match(interactionHandlers, /selectorCandidateToken === state\.pendingInspectorCandidates\.token/);
+    assert.match(interactionHandlers, /selectorCandidates:\s*_untrustedCandidates/);
+    assert.match(interactionHandlers, /preparedStep\.selectorVerified === true[\s\S]*Boolean\(trustedCandidates\)/);
     const executeHandler = between(
-        main,
+        interactionHandlers,
         "ipcMain.handle('execute-step'",
         "ipcMain.handle('delete-step'",
     );
     assert.ok(executeHandler.indexOf('prepareRecordedStep(') < executeHandler.indexOf('executor.execute('));
     assert.ok(executeHandler.indexOf('executor.execute(') < executeHandler.indexOf('recordedSteps.push('));
     assert.match(executeHandler, /catch \(error\) \{[\s\S]*recordedSteps\.pop\(\)/);
-    assert.match(main, /requireTrustedScenarioPackage/);
+    assert.match(automationHandlers, /requireTrustedScenarioPackage/);
     assert.match(
         scenarioPackage,
         /ya no corresponde a la grabación/
@@ -121,9 +151,9 @@ test('clears stale backups on edits or alternative selection and persists only t
 
 test('aplica completions externos aunque el plan no tenga capas update', () => {
     const additiveUpdates = between(
-        main,
+        automationHandlers,
         'function applyAdditiveUpdates(',
-        "ipcMain.handle('generate-automation-response'",
+        'async function importAutomationResponseFromPackage(',
     );
     assert.doesNotMatch(additiveUpdates, /if \(!updates\.size\) return/);
     assert.match(additiveUpdates, /for \(const \[file, completions\] of completionsByFile\)/);

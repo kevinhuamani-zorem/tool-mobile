@@ -11,25 +11,25 @@ const {
     agentBudgetViolations,
     isAgentFallbackAllowed,
     resolveRecorderGenerationMode,
-} = require('../dist/core/automationContracts');
+} = require('../dist/core/automation');
 const {
     emptyQueryRequests,
     emptyQueryResults,
     parseAgentContextQueryRequests,
     validateAgentContextQueryRequests,
     validateAgentContextQueryResults,
-} = require('../dist/core/agentQueryContracts');
+} = require('../dist/core/automation');
 const {
     canFallbackToManual,
     resolveAgentExecutionMode,
     resolvePackageArtifactPath,
     summarizeAgentProcessOutput,
     isValidAgentExecutionState,
-} = require('../dist/core/agentRuntimeGuards');
-const { AgentRunStore } = require('../dist/core/agentRunStore');
-const { deriveAutomationContextProjections } = require('../dist/core/automationContextProjections');
-const { GapQueryPolicy } = require('../dist/core/gapQueryPolicy');
-const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
+} = require('../dist/core/automation');
+const { AgentRunStore } = require('../dist/core/automation');
+const { deriveAutomationContextProjections } = require('../dist/core/automation');
+const { GapQueryPolicy } = require('../dist/core/automation');
+const { AutomationResponseValidator } = require('../dist/core/validation');
 
 test('la generación determinista es el modo por defecto y legacy requiere opt-in', () => {
     assert.equal(resolveRecorderGenerationMode(), 'deterministic');

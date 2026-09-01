@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { frameworkHelpersOf } = require('../dist/core/frameworkHelpers');
-const { helperMethodProblems, screenObjectProblems } = require('../dist/core/screenObjectContract');
-const { frameworkContract } = require('../dist/core/frameworkContract');
-const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
-const { projectPaths } = require('../dist/core/projectPaths');
+const { frameworkHelpersOf } = require('../dist/core/workspace');
+const { helperMethodProblems, screenObjectProblems } = require('../dist/core/automation');
+const { frameworkContract } = require('../dist/core/workspace');
+const { FwkMobileGenerator } = require('../dist/core/generation');
+const { projectPaths } = require('../dist/core/workspace');
 
 const HELPERS = frameworkHelpersOf(projectPaths.frameworkRoot).map(helper => ({
     property: helper.property,
@@ -94,7 +94,7 @@ test('el generador determinista solo llama a helpers que existen', () => {
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { frameworkHelpers } = require('../dist/core/frameworkHelpers');
+const { frameworkHelpers } = require('../dist/core/workspace');
 
 function helperFixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'helpers-fixture-'));

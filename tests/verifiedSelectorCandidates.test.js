@@ -3,7 +3,7 @@ const test = require('node:test');
 
 const {
     independentlyVerifySelectorCandidates,
-} = require('../dist/core/verifiedSelectorCandidates');
+} = require('../dist/core/automation');
 const {
     recorderSelectorFromInspector,
 } = require('../dist/recorder/src/embeddedInspectorProtocol');
@@ -11,7 +11,7 @@ const {
     attachLocatorCandidatePackage,
     locatorCandidatePackage,
     requireTrustedLocatorCandidatePackage,
-} = require('../dist/core/selectorCandidates');
+} = require('../dist/core/automation');
 
 function candidate(candidateId, strategy, selector, overrides = {}) {
     return {
@@ -163,7 +163,10 @@ test('validates all received candidates before applying the compact deterministi
     );
 });
 
-test('serializes candidates once and hydrates them while old scenarios stay compatible', () => {
+test('locator-candidates.json siempre viaja vacío y no reintroduce candidatos al escenario', () => {
+    // Contrato vigente: un único selector verificado por acción.
+    // locator-candidates.json ya no transporta ni reintroduce
+    // selectorCandidates; el escenario vuelve intacto.
     const scenario = {
         schemaVersion: 1,
         pipelineVersion: '1.0.0',
@@ -202,12 +205,14 @@ test('serializes candidates once and hydrates them while old scenarios stay comp
         }],
     };
     const packaged = locatorCandidatePackage(scenario);
+    assert.deepEqual(packaged.actions, []);
     const compactScenario = {
         ...scenario,
         actions: scenario.actions.map(({ selectorCandidates, ...action }) => action),
     };
-    const hydrated = attachLocatorCandidatePackage(compactScenario, packaged);
-    assert.equal(hydrated.actions[0].selectorCandidates[0].candidateId, 'primary');
+    const attached = attachLocatorCandidatePackage(compactScenario, packaged);
+    assert.equal(attached, compactScenario);
+    assert.equal(Object.hasOwn(attached.actions[0], 'selectorCandidates'), false);
     assert.equal(attachLocatorCandidatePackage(compactScenario, undefined), compactScenario);
 });
 
@@ -251,8 +256,11 @@ test('rejects a locator candidate package modified after recorder preparation', 
     };
     const packaged = locatorCandidatePackage(scenario);
     assert.deepEqual(requireTrustedLocatorCandidatePackage(scenario, packaged), packaged);
-    const tampered = structuredClone(packaged);
-    tampered.actions[0].candidates[0].locatorValue = '//*[@text="invented"]';
+    // Contrato vigente: locator-candidates.json siempre viaja con actions
+    // vacío, así que la manipulación detectable ahora es sobre la identidad
+    // de la grabación (recordingId/platform/schemaVersion), no sobre un
+    // candidato individual.
+    const tampered = { ...packaged, recordingId: 'otra-grabacion' };
     assert.throws(
         () => requireTrustedLocatorCandidatePackage(scenario, tampered),
         /fue modificado/,

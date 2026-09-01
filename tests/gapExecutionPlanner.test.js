@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { GapExecutionPlanner, partitionGapsById } = require('../dist/core/gapExecutionPlanner');
+const { GapExecutionPlanner, partitionGapsById } = require('../dist/core/automation');
 
 test('particiona una ejecución por gap id', () => {
     const ids = partitionGapsById([

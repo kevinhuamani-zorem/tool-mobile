@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
     spanishTokens, declaredIdentifiers, translateToEnglish,
-} = require('../dist/core/englishIdentifiers');
+} = require('../dist/core/shared');
 
 test('marca el espanol inequivoco y deja pasar el ingles', () => {
     assert.deepEqual(spanishTokens('showMovementsButton'), []);
@@ -74,7 +74,7 @@ test('extrae los identificadores de cada capa y nunca del Feature', () => {
 // `noHaySalesMessage`, un nombre a medias que ademas nadie marcaba como
 // espanol, asi que el agente lo renombraba por su cuenta y rompia el plan.
 test('la ausencia y la negacion se traducen', () => {
-    const { translateToEnglish } = require('../dist/core/englishIdentifiers');
+    const { translateToEnglish } = require('../dist/core/shared');
     const name = value => translateToEnglish(value).name;
     assert.equal(name('mensaje de no hay ventas'), 'noSalesMessage');
     assert.equal(name('lista vacia de movimientos'), 'emptyMovementsList');
@@ -88,7 +88,7 @@ test('la ausencia y la negacion se traducen', () => {
 // las 71 restantes tampoco se detectaban como espanol, asi que salian en los
 // identificadores y `gap-english-naming` nunca saltaba.
 test('el vocabulario corriente de QA se traduce', () => {
-    const { translateToEnglish } = require('../dist/core/englishIdentifiers');
+    const { translateToEnglish } = require('../dist/core/shared');
     const name = value => translateToEnglish(value).name;
     assert.equal(name('etiqueta del saldo disponible'), 'balanceAvailableLabel');
     assert.equal(name('mensaje de transferencia rechazada'), 'transferRejectedMessage');
@@ -99,7 +99,7 @@ test('el vocabulario corriente de QA se traduce', () => {
 // Red de seguridad: el diccionario siempre ira por detras del vocabulario real,
 // asi que una terminacion espanola marca sola aunque la palabra no este.
 test('las terminaciones espanolas se detectan sin diccionario', () => {
-    const { isSpanishIdentifier } = require('../dist/core/englishIdentifiers');
+    const { isSpanishIdentifier } = require('../dist/core/shared');
     for (const identifier of [
         'autenticacionButton', 'visibilidadLabel', 'desplazamientoField',
         'existenciaCheck', 'correctamenteMessage', 'porcentajeInput',

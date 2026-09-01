@@ -8,10 +8,11 @@ const {
     callArguments,
     SCREEN_OBJECT_CONTRACT_RULE_CODES,
     locatorImportIdentifier,
-} = require('../dist/core/screenObjectContract');
-const { frameworkContract } = require('../dist/core/frameworkContract');
-const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
-const { projectPaths } = require('../dist/core/projectPaths');
+} = require('../dist/core/automation');
+const { frameworkContract } = require('../dist/core/workspace');
+const { FwkMobileGenerator } = require('../dist/core/generation');
+const { projectPaths } = require('../dist/core/workspace');
+const { defaultValidatorSourcePath } = require('../dist/core/validation');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const RULES = {
@@ -225,7 +226,7 @@ test('nombra alias y singleton desde los nombres esperados del Screen Object', (
 
 test('el validador no debe hardcodear reglas de alias/clase/singleton fuera del contrato', () => {
     const validatorSource = fs.readFileSync(
-        path.join(process.cwd(), 'core', 'automationResponseValidator.ts'),
+        defaultValidatorSourcePath(),
         'utf8'
     );
     assert.ok(SCREEN_OBJECT_CONTRACT_RULE_CODES.includes('screen-alias'));

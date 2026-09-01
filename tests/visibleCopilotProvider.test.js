@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { VisibleCopilotProvider } = require('../dist/core/visibleCopilotProvider');
+const { VisibleCopilotProvider } = require('../dist/core/automation');
 
 function fixture() {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'visible-copilot-'));
@@ -107,6 +107,52 @@ test('respuesta parcial no dispara importación y respeta timeout', async () => 
     assert.equal(result.success, false);
     assert.equal(result.timedOut, true);
     assert.equal(result.errorCode, 'AGENT_TIMEOUT');
+});
+
+test('PASS 2 acepta extend-existing emitido desde el vocabulario del plan', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'visible-copilot-gap-'));
+    fs.writeFileSync(path.join(cwd, 'gap-resolutions.schema.json'), JSON.stringify({
+        type: 'object',
+        required: ['schemaVersion', 'recordingId', 'planId', 'resolutions'],
+        properties: {
+            schemaVersion: { const: '1.0' },
+            recordingId: { type: 'string' },
+            planId: { type: 'string' },
+            resolutions: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    required: ['gapId', 'decision'],
+                    properties: {
+                        gapId: { type: 'string' },
+                        decision: { enum: ['reuse', 'create', 'resolved', 'extend-existing'] },
+                    },
+                    additionalProperties: false,
+                },
+            },
+        },
+        additionalProperties: false,
+    }));
+    const provider = new VisibleCopilotProvider(delegate(), {
+        openInteractiveTerminalWithPrompt() {
+            setTimeout(() => fs.writeFileSync(path.join(cwd, 'gap-resolutions.json'), JSON.stringify({
+                schemaVersion: '1.0',
+                recordingId: 'rec-1',
+                planId: 'plan-1',
+                resolutions: [{ gapId: 'gap-artifacts', decision: 'extend-existing' }],
+            })), 20);
+        },
+    }, 'darwin', 5);
+    const result = await provider.execute({
+        cwd,
+        prompt: 'prompt',
+        timeoutMs: 500,
+        stopOnValidatedOutput: {
+            outputFile: './gap-resolutions.json',
+            schemaFile: './gap-resolutions.schema.json',
+        },
+    });
+    assert.equal(result.success, true);
 });
 
 test('fuera de macOS conserva el provider headless', async () => {

@@ -49,6 +49,7 @@ copia el resultado a `node_modules/.cache`.
 | `npm run typecheck` | Valida TypeScript de ambos procesos |
 | `npm test` | Compila main y ejecuta pruebas Node |
 | `npm run quality:metrics` | Calcula métricas y umbrales |
+| `npm run architecture:check` | Bloquea ciclos nuevos e imports que violan los módulos |
 | `npm run quality` | Puerta completa: tipos, tests, métricas y build |
 | `npm run codegraph:recorder -- --search X` | Consulta dependencias internas |
 | `npm run codegraph:export -- --squad X` | Exporta subgrafo del target |
@@ -146,17 +147,24 @@ nunca deben añadirse a archivos versionados.
 ### Cambio de UI
 
 1. Localiza componente e IDs relacionados con CodeGraph.
-2. Revisa los bindings del controlador.
+2. Identifica qué feature bajo `recorder/renderer/src/features/<nombre>/`
+   posee ese ID (ver el mapa en `docs/ARCHITECTURE.md`) y revisa sus
+   bindings; `recorderController.js` es solo el composition root que las
+   monta.
 3. Mantén scroll en el contenedor que posee la altura, con ancestros flex/grid
    usando `min-height: 0` cuando corresponda.
-4. Ejecuta typecheck y build del renderer; añade prueba de controlador si
-   cambia comportamiento.
+4. Ejecuta typecheck y build del renderer; añade o actualiza la prueba de la
+   feature afectada si cambia comportamiento.
 
 ### Cambio IPC
 
 Actualiza como una sola unidad:
 
-1. handler y validación en `main.ts`;
+1. handler y validación en el archivo de su familia bajo `recorder/src/ipc/`
+   (`workspaceHandlers.ts`, `sessionHandlers.ts`, `inspectorHandlers.ts`,
+   `interactionHandlers.ts`, `automationHandlers.ts` o
+   `generationHandlers.ts`; `main.ts` solo construye servicios/estado y
+   registra la familia, nunca declara el handler);
 2. exposición en `preload.ts`;
 3. tipo en `renderer/global.d.ts`;
 4. consumidor;

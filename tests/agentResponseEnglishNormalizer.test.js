@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
     normalizeAgentResponseEnglishIdentifiers,
-} = require('../dist/core/agentResponseEnglishNormalizer.js');
+} = require('../dist/core/automation');
 
 function sampleResponse() {
     return {

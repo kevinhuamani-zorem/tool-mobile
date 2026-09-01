@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { declareElement, declareElements } = require('../dist/core/elementDeclaration');
+const { declareElement, declareElements } = require('../dist/core/automation');
 
 function imports(entries) {
     return new Map(Object.entries(entries).map(([module, identifiers]) => [

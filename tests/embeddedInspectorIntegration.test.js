@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
-const { AppiumDriverManager } = require('../dist/core/appiumDriverManager');
+const { AppiumDriverManager } = require('../dist/core/mobile-session');
 const {
     EMBEDDED_INSPECTOR_COMMIT,
     EMBEDDED_INSPECTOR_HOST_ORIGIN,
