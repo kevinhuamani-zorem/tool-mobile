@@ -7,6 +7,7 @@ const {
     signatureHint,
     callArguments,
     SCREEN_OBJECT_CONTRACT_RULE_CODES,
+    locatorImportIdentifier,
 } = require('../dist/core/screenObjectContract');
 const { frameworkContract } = require('../dist/core/frameworkContract');
 const { FwkMobileGenerator } = require('../dist/core/fwkMobileGenerator');
@@ -58,6 +59,33 @@ test('el atributo vale con comillas simples o dobles', () => {
     assert.deepEqual(codes(
         `import L from '@locators/payment/x.locator.json' with { type: "json" };`
     ), []);
+});
+
+test('deriva el identificador semantico desde el archivo locator', () => {
+    assert.equal(locatorImportIdentifier('resources/locators/payment/movements.locator.json'), 'LocatorMovements');
+    assert.equal(
+        locatorImportIdentifier('@locators/payment/movements-cases-filter-container.locator.json'),
+        'LocatorMovementsCasesFilterContainer'
+    );
+});
+
+test('exige alias semantico y notacion de punto para el locator planificado', () => {
+    const expectedIdentifiers = { 'movements.locator.json': 'LocatorMovements' };
+    const incorrect = [
+        "import Locators from '@locators/payment/movements.locator.json' with { type: 'json' };",
+        'const value = Locators["movementsAndroid"].showMovements;',
+    ].join('\n');
+    assert.deepEqual(
+        screenObjectProblems(incorrect, { ...RULES, expectedIdentifiers }).map(problem => problem.code),
+        ['locator-import-identifier', 'locator-bracket-notation']
+    );
+
+    const correct = [
+        "import LocatorMovements from '@locators/payment/movements.locator.json' with { type: 'json' };",
+        'const android = LocatorMovements.movementsAndroid.showMovements;',
+        'const ios = LocatorMovements.movementsIos.showMovements;',
+    ].join('\n');
+    assert.deepEqual(screenObjectProblems(correct, { ...RULES, expectedIdentifiers }), []);
 });
 
 // 860 de 860 llamadas del framework tienen exactamente 4 argumentos.

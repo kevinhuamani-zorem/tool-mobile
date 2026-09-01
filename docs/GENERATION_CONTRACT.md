@@ -92,6 +92,14 @@ hash del baseline y debe ser aditivo: conserva definitions, methods y locators
 existentes. Si el archivo cambia después de preparar el plan, se bloquea la
 escritura y se debe preparar un paquete nuevo.
 
+`update` no significa que el agente deba inventar una API. El resolver puede
+seleccionar un Screen Object y su Locator JSON aunque todavía no exista un
+Steps que los conecte, siempre que CodeGraph demuestre la importación
+Screen → Locator y varios métodos cubran las intenciones del recording. El
+agente reutiliza primero métodos, getters y claves ya indexados; devuelve el
+baseline intacto cuando estos cubren el caso y agrega únicamente los símbolos
+realmente faltantes. Feature y Steps pueden seguir siendo `create`.
+
 El presupuesto operativo del plan vive en una sola fuente (`GenerationPlan.budgets`):
 `maxDurationMs`, `maxContextBytes`, `maxResponseBytes`, `maxAgentInvocations`,
 `maxTotalQueries`, `maxQueriesPerGap` y `maxRepairAttempts`.
@@ -170,6 +178,29 @@ Examples:
   generado invoca directamente `browser.`; un import sin uso bloquea la salida.
 
 ## Locators
+
+### Codificación de texto
+
+Todo el recorrido `recording → paquete → agente → preview → framework` usa
+UTF-8 estricto, Unicode NFC, saltos LF y archivos sin BOM. Las tildes, eñes y
+demás diacríticos de un selector verificado se conservan literalmente; no se
+transliteran ni se reinterpretan como Latin-1/Windows-1252. El paquete publica
+este contrato en `framework-api.json > textEncoding`.
+
+La salida se rechaza si contiene bytes UTF-8 inválidos, U+FFFD (`�`), mojibake
+probable como `BotÃ³n` o texto sin normalización NFC. El recorder puede
+normalizar de forma canónica NFC al persistir, pero nunca intenta reparar
+mojibake porque no existe una transformación inequívoca para datos antiguos.
+
+Ejemplo válido:
+
+```json
+{
+  "movementsAndroid": {
+    "filterLast30Days": "new UiSelector().text(\"Últimos 30 días\")"
+  }
+}
+```
 
 El mismo nombre lógico aparece en bloques de plataforma del módulo:
 
@@ -311,10 +342,23 @@ El paquete mínimo contiene `scenario.json`, `generation-plan.json`,
 `instructions.md`, schema y verificador. `reuse-context.json` limita el contexto
 a los cinco casos más cercanos; `collision-report.json` expone coincidencias
 exactas de steps y selectores sin entregar archivos completos del framework.
-Al importar, el recorder vuelve a resolver la copia autoritativa del recording y
-reconstruye con el mismo helper el `scenario.json` esperado; `platform` forma parte
-explícita del package para que una verificación Android nunca se pueda
-reinterpretar como iOS, ni al revés.
+Al importar, el recorder compara la copia autoritativa del recording con la
+procedencia del paquete; `platform` forma parte explícita de esa identidad para
+que una verificación Android nunca se pueda reinterpretar como iOS, ni al revés.
+
+Desde la procedencia v1, cada paquete incluye `package-provenance.json` con los
+hashes canónicos de la grabación fuente, `scenario.json` y
+`generation-plan.json`. Una corrección de Copilot se valida contra esa
+instantánea inmutable y no vuelve a resolver el escenario contra un framework
+que la primera aplicación ya modificó. Copilot solo puede modificar
+`agent-response.json`.
+
+Después de aplicar una propuesta, `application-receipt.json` registra el hash de
+la respuesta y el `afterHash` de cada ruta planificada. Una reimportación se
+permite únicamente si esos archivos continúan intactos. Para archivos
+compartidos con operación `update`, la corrección se recalcula desde la baseline
+original; si falta la baseline o hubo una edición externa, se bloquea sin
+sobrescribir el framework.
 El agente devuelve un solo `agent-response.json` con:
 
 - los mismos `recordingId` y `planId`;

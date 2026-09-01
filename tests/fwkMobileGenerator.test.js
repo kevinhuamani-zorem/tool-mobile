@@ -79,6 +79,12 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.ok(preview.screenContent.includes(`${CONTRACT.locatorFactorySymbol}.getElement(`),
         'el getter invoca la clase con el nombre que usa este framework');
     assert.match(preview.screenContent, /from '@locators\/payment\/movements\.locator\.json'/);
+    assert.match(preview.screenContent,
+        /import LocatorMovements from '@locators\/payment\/movements\.locator\.json'/);
+    assert.match(preview.screenContent, /LocatorMovements\.movementsAndroid\.btnMostrarMovimientos/);
+    assert.match(preview.screenContent, /LocatorMovements\.movementsIos\.btnMostrarMovimientos/);
+    assert.doesNotMatch(preview.screenContent, /LocatorMovements\s*\[/);
+    assert.doesNotMatch(preview.screenContent, /import Locators from/);
     // Patron documentado: el getter devuelve `$(locator)`, asi que `$` se
     // importa siempre; `expect` solo cuando una verificacion lo usa. Faltaba y
     // cualquier VERIFICAR_TEXTO generaba un Screen Object que no compilaba.
@@ -209,7 +215,7 @@ test('referencia el locator reutilizado en vez de copiarlo a su módulo', () => 
     // Un solo getter, no uno por cada origen.
     assert.equal((preview.screenContent.match(/public get shortcutTapp/g) || []).length, 1);
     // El locator propio sigue apuntando a su bloque.
-    assert.match(preview.screenContent, /Locators\["tappAccountsAndroid"\]\.tappScreen/);
+    assert.match(preview.screenContent, /LocatorTappAccounts\.tappAccountsAndroid\.tappScreen/);
 });
 
 test('sin reutilización el comportamiento no cambia', () => {

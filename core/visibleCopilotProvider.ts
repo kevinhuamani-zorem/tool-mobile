@@ -3,6 +3,7 @@ import path from 'path';
 import { AgentProvider, AgentProviderRunInput, AgentProviderRunResult } from './agentProvider';
 import { AutomationAgentLauncher } from './automationAgentLauncher';
 import { validateWithSchema } from './copilotCliAdapter';
+import { readJsonUtf8, readUtf8File } from './utf8Text';
 
 interface ActiveInteractiveRun {
     cancelled: boolean;
@@ -71,7 +72,7 @@ export class VisibleCopilotProvider implements AgentProvider {
 
         const startedAt = Date.now();
         const previousOutput = fs.existsSync(outputPath)
-            ? fs.readFileSync(outputPath, 'utf-8')
+            ? readUtf8File(outputPath)
             : null;
         const tracePath = input.traceFile ? path.resolve(input.cwd, input.traceFile) : null;
         const appendTrace = (event: string) => {
@@ -141,10 +142,10 @@ export class VisibleCopilotProvider implements AgentProvider {
                 }
                 if (!fs.existsSync(outputPath) || !fs.existsSync(schemaPath)) return;
                 try {
-                    const raw = fs.readFileSync(outputPath, 'utf-8');
+                    const raw = readUtf8File(outputPath);
                     if (raw === previousOutput) return;
-                    const output = JSON.parse(raw);
-                    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+                    const output = readJsonUtf8<unknown>(outputPath);
+                    const schema = readJsonUtf8<unknown>(schemaPath);
                     if (!validateWithSchema(output, schema)) return;
                     finish(result(true));
                 } catch {

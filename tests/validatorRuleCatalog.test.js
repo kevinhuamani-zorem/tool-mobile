@@ -25,6 +25,20 @@ test('automation package publica validation-contract.json', () => {
     assert.match(source, /validation-contract\.json/);
 });
 
+test('el paquete informa al agente el alias semantico y la notacion de punto para locators', () => {
+    const source = fs.readFileSync(
+        path.join(process.cwd(), 'core', 'automationPackageBuilder.ts'),
+        'utf8'
+    );
+    assert.match(source, /notation:\s*'dot-only'/);
+    assert.match(source, /LocatorMovements\.movementsAndroid\.showMovements/);
+    assert.match(source, /LocatorMovements\.movementsIos\.showMovements/);
+    assert.match(source, /locatorContract\.modules/);
+    assert.match(source, /charset:\s*'UTF-8'/);
+    assert.match(source, /unicodeNormalization:\s*'NFC'/);
+    assert.match(source, /preserveDiacritics:\s*true/);
+});
+
 test('el contrato publica requisitos positivos y ejemplo minimo por regla', () => {
     const contract = buildValidationRuleContractFromFile(defaultValidatorSourcePath());
     const withoutExample = contract.rules.filter(rule => !rule.minimalExample);

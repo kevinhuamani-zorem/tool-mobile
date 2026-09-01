@@ -27,7 +27,7 @@ import {
     ReusedLocator,
     scenarioRowMethodName,
 } from './fwkMobileGenerator';
-import { screenObjectNames, signatureHint } from './screenObjectContract';
+import { locatorImportIdentifier, screenObjectNames, signatureHint } from './screenObjectContract';
 import { frameworkHelpersOf } from './frameworkHelpers';
 import { ModuleDeclaration } from './elementDeclaration';
 import { FrameworkContract, frameworkContract } from './frameworkContract';
@@ -45,10 +45,15 @@ import { resolveAgentExecutionMode, resolvePackageArtifactPath } from './agentRu
 import { buildValidationRuleContractFromFile, defaultValidatorSourcePath } from './validatorRuleCatalog';
 import { scenarioEnglishVocabulary } from './agentResponseEnglishNormalizer';
 import { gapResolutionsSchema } from './gapResolutionContracts';
+import { readJsonUtf8, readUtf8File, writeJsonUtf8, writeUtf8FileAtomic } from './utf8Text';
+import {
+    AutomationPackageProvenance,
+    createAutomationPackageProvenance,
+    requireTrustedAutomationPackageSnapshot,
+} from './automationPackageProvenance';
 
 function writeJson(file: string, value: unknown): void {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+    writeJsonUtf8(file, value);
 }
 
 /**
@@ -283,6 +288,12 @@ function frameworkApiDocument(
         return '';
     };
     return {
+        textEncoding: {
+            charset: 'UTF-8',
+            unicodeNormalization: 'NFC',
+            bom: false,
+            preserveDiacritics: true,
+        },
         helpers: frameworkHelpersOf(projectPaths.frameworkRoot),
         screenObjects: plan.files
             .filter(file => file.layer === 'screen')
@@ -296,6 +307,22 @@ function frameworkApiDocument(
                 };
             }),
         locatorContract: {
+            modules: plan.files
+                .filter(file => file.layer === 'locators')
+                .map(file => ({
+                    path: file.path,
+                    importSource: `@locators/${file.path.replace(/^resources\/locators\//, '')}`,
+                    identifier: locatorImportIdentifier(file.path),
+                })),
+            accessPattern: {
+                notation: 'dot-only',
+                shape: '<LocatorIdentifier>.<moduleAndroid|moduleIos>.<locatorName>',
+                validExample: 'LocatorMovements.movementsAndroid.showMovements',
+                invalidExamples: [
+                    'Locators["movementsAndroid"].showMovements',
+                    'Locators.["showMovements"].locatorAndroid',
+                ],
+            },
             typeLocator: {
                 symbol: contract.typeLocatorSymbol,
                 import: contract.typeLocatorImport,
@@ -334,6 +361,10 @@ function frameworkApiDocument(
 function packageContractManifest(): Record<string, unknown> {
     return {
         schemaVersion: 1,
+        integrityFiles: [
+            'package-provenance.json',
+            'application-receipt.json',
+        ],
         contractFiles: [
             'agent-response.schema.json',
             'gap-resolutions.schema.json',
@@ -395,6 +426,7 @@ function instructions(result: ResolverResult): string {
         `Nota de modo: si RECORDER_GENERATION_MODE=deterministic, PASS 2 semántico escribe \`gap-resolutions.json\` y el recorder materializa \`agent-response.json\` de forma determinística.\n\n` +
         `Reglas:\n` +
         `- Prioriza exactitud y viabilidad del caso por encima de la rapidez.\n` +
+        `- Solo escribe query-requests.json, gap-resolutions.json o agent-response.json según la pasada. No modifiques scenario.json, generation-plan.json, package-provenance.json ni application-receipt.json.\n` +
         `- Empieza por hints.json, gaps.json, generation-plan.json y scenario.json. resolved-context.json y unresolved-context.json se conservan solo por compatibilidad.\n` +
         `- NO SEARCH WITHOUT GAP: no solicites contexto si no hay un gap abierto; usa únicamente sus allowedQueries y respeta maxQueries. Un gap blocked-qa no se entrega al agente.\n` +
         `- Consulta reuse-context.json o collision-report.json solo cuando la evidencia de un hint/gap apunte a ellos.\n` +
@@ -441,11 +473,14 @@ function instructions(result: ResolverResult): string {
         '- Cada completion debe coincidir exactamente con un `completionTargets` del plan; file, modulo, bloque, key, plataforma y secuencia son inmutables. El `screenMethod` trazado debe consumir ese getter importado. Una key homonima de otro archivo o bloque no autoriza el relleno.\n' +
         `- \`reuse-context.json\` trae \`elements\`: los locators que ya existen y que este caso toca, agrupados por modulo. Cada modulo dice su \`import\`, su \`identifier\` y sus \`groups\` (el bloque por plataforma); cada elemento su \`name\` y, por plataforma, \`type\`, \`value\` y la expresion \`reference\` lista para escribir. La clave del JSON es el \`name\`. Reutilizar significa importar ese modulo y usar \`reference\` en el getter; NUNCA copiar el \`value\` a un bloque nuevo. Reutilizar tambien implica adoptar el nombre existente. Si una plataforma trae \`status: "missing"\`, ese locator todavia no existe ahi: completalo en su archivo original en vez de duplicar el elemento. La lista es completa: si un elemento no esta, no existe en el squad ni en Home. Si un elemento trae \`usedBy\`, otros Screen Objects o Steps ya dependen de el: reutilizarlo esta bien, cambiar su valor los afecta.\n` +
         `- Si reuse-context.json contiene updateBaselines, abre únicamente su archivo reference dentro de baselines/, parte de ese contenido y añade solo lo faltante; no reemplaces ni borres APIs existentes.\n` +
+        `- Una capa con operation "update" NO obliga a crear APIs: primero reutiliza los métodos, getters y claves existentes enumerados en generation-plan.json/reuse-context.json. Si cubren la acción, conserva esa capa sin cambios; agrega únicamente el símbolo que realmente falte.\n` +
         `- Steps solo orquestan; Screen Object extiende ${contract.baseScreenClass}; un nombre lógico sirve para Android/iOS.\n` +
         `- El alias importado del Screen Object debe derivarse de su archivo (ej.: movements.screen.ts → movementsScreen); nunca uses generatedScreen, screen, page, screenObject u obj.\n` +
         `- Imports obligatorios del Screen Object, resueltos del framework de esta grabacion. Copia estas lineas LITERALES, con sus llaves y su extension — ${contract.locatorFactorySymbol} es export por defecto y ${contract.typeLocatorSymbol} es export NOMBRADO, invertirlo no compila: \`import ${contract.baseScreenClass} from '${contract.baseScreenImport}';\` , \`import ${contract.locatorFactorySymbol} from '${contract.locatorFactoryImport}';\` , \`import { ${contract.typeLocatorSymbol} } from '${contract.typeLocatorImport}';\`. No uses rutas relativas ni el nombre que recuerdes de otro repo (la clase se llama ${contract.locatorFactorySymbol}, no LocatorFactory).\n` +
         `- \`getElement\` tiene UNA firma y no admite variantes: \`${signatureHint({ typeLocatorSymbol: contract.typeLocatorSymbol, platformOrder: contract.locatorSignature.platformOrder })}\`. Son ${contract.locatorSignature.parameterCount} argumentos SIEMPRE. Cada valor debe referenciar una clave del locator JSON para esa plataforma; nunca uses literales vacios en la llamada. Si una plataforma aun no tiene selector, deja \`''\` en su clave del JSON y referencia esa clave en \`getElement\`. El ${contract.locatorSignature.platformOrder[0]} va primero, y el tipo va antes que el valor — nunca al reves.\n` +
         `- Todo import de un .locator.json se escribe con alias y con atributo de tipo: \`import <Identificador> from '@locators/<squad>/<modulo>.locator.json' with { type: 'json' };\`. Sin el atributo Node lanza al cargar el JSON y el caso no corre. Aplica igual a los modulos reutilizados: nunca rutas relativas.\n` +
+        `- REGLA DE ACCESO A LOCATORS: deriva el identificador del archivo (\`movements.locator.json\` → \`LocatorMovements\`) y usa exclusivamente notacion de punto: \`LocatorMovements.movementsAndroid.showMovements\` / \`LocatorMovements.movementsIos.showMovements\`. Estan prohibidos \`Locators["movementsAndroid"].showMovements\`, cualquier \`LocatorX["bloque"]\` y la forma invalida \`LocatorX.["locator"]\`. \`framework-api.json > locatorContract.modules\` entrega el identificador exacto; no lo adivines.\n` +
+        `- TEXTO Y LOCATORS: conserva literalmente tildes, eñes y caracteres Unicode del recording. Escribe \`agent-response.json\` como UTF-8 normalizado NFC, sin BOM. No elimines diacriticos ni conviertas \`ó\` en \`Ã³\`; \`framework-api.json > textEncoding\` contiene el contrato exacto.\n` +
         `- \`reuse-context.json\` trae, por cada modulo, \`importLine\` y, por cada elemento, \`getter\`: son el import y el getter COMPLETOS, ya escritos con la firma y el atributo correctos. Copialos literalmente en vez de componerlos.\n` +
         `- candidateId y completionTargets del plan forman una allowlist verificada e inmutable: no inventes targets ni variantes fuera de esa lista.\n` +
         `- \`framework-api.json\` contiene tres contratos: \`helpers\` (BaseScreen y sus metodos), \`locatorContract\` (TypeLocator, LocatorProvider, firma/orden de getElement y composicion por estrategia) y \`screenObjects\` (por cada Screen Object del plan: path, className, instanceName e importSource exactos). Usa SOLO esos datos y NO busques esos simbolos en el framework con shell ni lecturas fuera de este paquete. Ojo con el helper correcto — por ejemplo \`scrollDown\` esta en \`gestureHelper\`, no en \`uiHelper\`. Si el caso necesita algo que ningun helper cubre, escribelo como un metodo del propio Screen Object para que quede reutilizable; nunca inventes una llamada al helper.\n` +
@@ -482,6 +517,7 @@ function regenerationInstructions(
         `Solicitud del QA: ${refinement}\n\n` +
         `Reglas:\n` +
         `- Prioriza exactitud y viabilidad del caso por encima de la rapidez.\n` +
+        `- Solo escribe agent-response.json. No modifiques scenario.json, generation-plan.json, package-provenance.json ni application-receipt.json.\n` +
         `- Lee solo: baseline-response.json, generation-plan.json, scenario.json, reuse-context.json, collision-report.json y unresolved-context.json.\n` +
         `- Conserva exactamente recordingId=${scenario.recordingId}, planId=${plan.planId} y las cuatro rutas del plan.\n` +
         `- Parte del contenido de baseline-response.json; modifica únicamente lo necesario para el refinamiento.\n` +
@@ -496,6 +532,8 @@ function regenerationInstructions(
         `- Conserva una entrada actionTrace para cada secuencia; varias secuencias pueden compartir gherkinStep.\n` +
         `- Cada create conserva locatorName y screenMethod en actionTrace; el método trazado consume el getter correspondiente, sin selectores inline ni rutas alternativas.\n` +
         `- Mantén la firma de getElement con ambos lados (iOS/Android) y referencia claves del locator JSON en ambos argumentos de valor; nunca uses literales vacíos dentro de getElement.\n` +
+        `- Los locators usan identificador semantico y notacion de punto: \`movements.locator.json\` se importa como \`LocatorMovements\` y se accede con \`LocatorMovements.movementsAndroid.showMovements\` / \`LocatorMovements.movementsIos.showMovements\`. No uses \`Locators["bloque"]\` ni \`LocatorX.["locator"]\`.\n` +
+        `- Conserva tildes, eñes y demas Unicode del baseline/recording. Guarda \`agent-response.json\` en UTF-8 NFC sin BOM; no transliteres ni produzcas mojibake como \`Ã³\`.\n` +
         `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
         `- \`agent-response.json\` tiene forma CERRADA: la define agent-response.schema.json y no admite campos extra. En cada resolucion van \`gapId\`, \`decision\` y opcionalmente \`reason\`; en cada archivo solo \`layer\`, \`path\` y \`content\` — la operacion la fija el plan, no la repitas. Explica lo que quieras en \`reason\` o en \`assumptions\`, nunca en campos inventados.\n` +
         `- Si un gap de duplicado te ofrece locators existentes, adoptar uno de ESOS nombres esta permitido y el plan lo acepta: trazalo en actionTrace.locatorName. Adoptar cualquier otro nombre, o renombrar por tu cuenta un locator del plan, no.\n` +
@@ -511,7 +549,7 @@ function regenerationInstructions(
  */
 function writeVerifier(packageDirectory: string): void {
     const contract = frameworkContract(projectPaths.frameworkRoot);
-    fs.writeFileSync(path.join(packageDirectory, 'verify-package.js'), verifierSource(contract));
+    writeUtf8FileAtomic(path.join(packageDirectory, 'verify-package.js'), verifierSource(contract));
     fs.copyFileSync(
         path.join(__dirname, 'screenObjectContract.js'),
         path.join(packageDirectory, 'screen-object-contract.js')
@@ -553,6 +591,13 @@ const feature=(response.files||[]).find(x=>x.layer==='feature')?.content||'';
 const steps=(response.files||[]).find(x=>x.layer==='steps')?.content||'';
 const screen=(response.files||[]).find(x=>x.layer==='screen')?.content||'';
 const locator=(response.files||[]).find(x=>x.layer==='locators')?.content||'';
+const screenBaseline=(reuse.updateBaselines||[]).find(x=>x.layer==='screen');
+let inheritedScreen='';try{if(screenBaseline)inheritedScreen=fs.readFileSync(screenBaseline.reference,'utf8')}catch(e){}
+const screenSymbols=value=>[...String(value||'').matchAll(/(?:public|private|protected)\s+(?:async\s+)?(?:get\s+)?([A-Za-z_$][\w$]*)\s*\(/g)].map(x=>x[1]);
+const inheritedScreenSymbols=new Set(screenSymbols(inheritedScreen));
+const reusesScreenWithoutChanges=Boolean(screenBaseline)&&!screenSymbols(screen).some(name=>!inheritedScreenSymbols.has(name));
+const unicodeProblems=value=>{const text=String(value||'');const result=[];if(/\uFFFD/.test(text))result.push('contiene U+FFFD (carácter de reemplazo)');if(/(?:Ã[\u0080-\u00BF]|Â[\u0080-\u00BF])/.test(text))result.push('contiene mojibake probable (por ejemplo, ó convertida en Ã³)');if(text!==text.normalize('NFC'))result.push('no está normalizado como NFC');return result};
+for(const file of response.files||[]){for(const problem of unicodeProblems(file.content))errors.push('Codificación Unicode inválida en '+file.path+': '+problem+'. Conserva UTF-8 NFC sin BOM y los diacríticos del recording')}
 let ts;
 try{ts=require('typescript')}catch(e){ts=null}
 const reportTypeScriptSyntax=(filePath,content)=>{
@@ -611,10 +656,9 @@ if(defs.some((x,i)=>defs.indexOf(x)!==i))errors.push('Definición Gherkin duplic
 const methods=[...screen.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(x=>x[1]);
 if(methods.some((x,i)=>methods.indexOf(x)!==i))errors.push('Método Screen Object duplicado');
 const screenSources=[...screen.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
-const usesLocators=/Locators\s*[\[.]/.test(screen);
-for(const required of FRAMEWORK_CONTRACT.requiredScreenImports){if(!usesLocators&&required!==FRAMEWORK_CONTRACT.requiredScreenImports[0])continue;if(!screenSources.includes(required))errors.push('Falta el import del framework: '+required)}
-if(usesLocators){for(const [symbol,label] of [[FRAMEWORK_CONTRACT.locatorFactorySymbol,'resolutor de locators'],[FRAMEWORK_CONTRACT.typeLocatorSymbol,'enum de estrategias']]){if(!new RegExp('\\b'+symbol+'\\b').test(screen))errors.push('El Screen Object no usa el '+label+' del framework: se llama '+symbol)}}
-if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bloque locator con guiones');
+const usesLocators=/import\s+[A-Za-z_$][\w$]*\s+from\s+['"][^'"]+\.locator\.json['"]/.test(screen);
+if(!reusesScreenWithoutChanges){for(const required of FRAMEWORK_CONTRACT.requiredScreenImports){if(!usesLocators&&required!==FRAMEWORK_CONTRACT.requiredScreenImports[0])continue;if(!screenSources.includes(required))errors.push('Falta el import del framework: '+required)}
+if(usesLocators){for(const [symbol,label] of [[FRAMEWORK_CONTRACT.locatorFactorySymbol,'resolutor de locators'],[FRAMEWORK_CONTRACT.typeLocatorSymbol,'enum de estrategias']]){if(!new RegExp('\\b'+symbol+'\\b').test(screen))errors.push('El Screen Object no usa el '+label+' del framework: se llama '+symbol)}}}
 // Reglas mecanicas del Screen Object. Se cargan del modulo compartido que se
 // copia junto a este verificador: la misma implementacion que corre al importar
 // la propuesta, no una segunda copia que pueda divergir.
@@ -624,13 +668,13 @@ if(/Locators\.[A-Za-z_$][\w$]*-/.test(screen))errors.push('Acceso inválido a bl
 const recordedPlatform=scenario.platform;const completionTarget=c=>{const targets=((plan.resolutions||[]).find(r=>r.sequence===c.sequence)?.completionTargets||[]).filter(t=>t.file===c.file&&t.name===c.name&&t.platform===c.platform&&String(t.block).toLowerCase().endsWith(c.platform));return targets.length===1?targets[0]:undefined};const authorizedCompletions=(response.completions||[]).map(c=>({completion:c,target:completionTarget(c)}));const declaredCompletions=new Set(authorizedCompletions.filter(x=>x.target&&x.target.platform===recordedPlatform).map(x=>x.target.file+'#'+x.target.platform+'#'+x.target.block+'#'+x.target.name));
 for(const mod of (reuse.elements||[])){const block=(mod.groups||{})[recordedPlatform];const file=String(mod.import||'').replace(/^@locators\//,'resources/locators/');if(!block)continue;for(const el of (mod.elements||[])){const slot=(el.locators||{})[recordedPlatform];if(!slot||slot.status!=='missing')continue;const referenced=new RegExp('\\b'+mod.identifier+'\\s*\\.\\s*'+block+'\\s*\\.\\s*'+el.name+'\\b').test(screen);const identity=file+'#'+recordedPlatform+'#'+block+'#'+el.name;if(referenced&&!declaredCompletions.has(identity))errors.push('Cobertura de plataforma: '+mod.identifier+'.'+block+'.'+el.name+' no tiene valor en '+recordedPlatform+'. Rellenalo declarandolo en completions con la accion que lo capturo, o usa un locator del modulo de este caso.')}}
 for(const x of authorizedCompletions){const c=x.completion;if(!x.target)errors.push('Completion no autorizado: '+c.file+'#'+c.name+' ('+c.platform+') accion '+c.sequence);if(!(scenario.actions||[]).some(a=>a.sequence===c.sequence&&a.selector))errors.push('completions apunta a la accion '+c.sequence+', que no capturo ningun elemento')}
-try{const {screenObjectProblems}=require('./screen-object-contract.js');const expectedImports={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');expectedImports[spec.split('/').pop()]=spec}for(const mod of (reuse.elements||[])){if(mod&&mod.import)expectedImports[String(mod.import).split('/').pop()]=mod.import}const expectedScreen=(frameworkApi.screenObjects||[]).find(x=>x.path===screenPath)||{};for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,typeLocatorImport:FRAMEWORK_CONTRACT.typeLocatorImport,helpers:FRAMEWORK_CONTRACT.helpers,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports,stepsContent:steps,expectedNames:{className:expectedScreen.className,instanceName:expectedScreen.instanceName,importSource:expectedScreen.importSource,baseScreenClass:FRAMEWORK_CONTRACT.baseScreenClass}}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
+if(!reusesScreenWithoutChanges)try{const {screenObjectProblems,locatorImportIdentifier}=require('./screen-object-contract.js');const expectedImports={};const expectedIdentifiers={};const locPlan=(plan.files||[]).find(x=>x.layer==='locators');if(locPlan&&locPlan.path){const spec='@locators/'+String(locPlan.path).replace(/^resources\/locators\//,'');const file=spec.split('/').pop();expectedImports[file]=spec;expectedIdentifiers[file]=locatorImportIdentifier(locPlan.path)}for(const mod of (reuse.elements||[])){if(mod&&mod.import){const file=String(mod.import).split('/').pop();expectedImports[file]=mod.import;expectedIdentifiers[file]=mod.identifier||locatorImportIdentifier(mod.import)}}const expectedScreen=(frameworkApi.screenObjects||[]).find(x=>x.path===screenPath)||{};for(const problem of screenObjectProblems(screen,{typeLocatorSymbol:FRAMEWORK_CONTRACT.typeLocatorSymbol,typeLocatorImport:FRAMEWORK_CONTRACT.typeLocatorImport,helpers:FRAMEWORK_CONTRACT.helpers,platformOrder:FRAMEWORK_CONTRACT.locatorSignature.platformOrder,parameterCount:FRAMEWORK_CONTRACT.locatorSignature.parameterCount,expectedImports,expectedIdentifiers,stepsContent:steps,expectedNames:{className:expectedScreen.className,instanceName:expectedScreen.instanceName,importSource:expectedScreen.importSource,baseScreenClass:FRAMEWORK_CONTRACT.baseScreenClass}}))errors.push(problem.message)}catch(e){errors.push('No se pudo verificar el contrato del Screen Object: '+e.message)}
 const importSources=content=>[...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)].map(x=>x[1]);
-for(const [label,content] of [['Steps',steps],['ScreenObject',screen]]){const relative=importSources(content).filter(source=>source.startsWith('.'));if(relative.length)errors.push(label+' usa imports relativos: '+relative.join(', '))}
+for(const [label,content] of [['Steps',steps],['ScreenObject',screen]]){if(label==='ScreenObject'&&reusesScreenWithoutChanges)continue;const relative=importSources(content).filter(source=>source.startsWith('.'));if(relative.length)errors.push(label+' usa imports relativos: '+relative.join(', '))}
 const importsBrowser=/import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(screen);
 const usesBrowser=/\bbrowser\./.test(screen);
-if(importsBrowser&&!usesBrowser)errors.push('ScreenObject importa browser pero no lo utiliza');
-if(usesBrowser&&!importsBrowser)errors.push('ScreenObject utiliza browser sin importarlo desde @wdio/globals');
+if(!reusesScreenWithoutChanges&&importsBrowser&&!usesBrowser)errors.push('ScreenObject importa browser pero no lo utiliza');
+if(!reusesScreenWithoutChanges&&usesBrowser&&!importsBrowser)errors.push('ScreenObject utiliza browser sin importarlo desde @wdio/globals');
 if(warnings.length){console.warn(warnings.join('\n'))}
 if(errors.length){console.error(errors.join('\n'));process.exit(1)}console.log('PASS: contrato del paquete válido');
 `;
@@ -702,6 +746,34 @@ export class AutomationPackageBuilder {
     ): AutomationScenario {
         const started = process.hrtime.bigint();
         try {
+            const provenanceFile = packageDirectory
+                ? path.join(packageDirectory, 'package-provenance.json')
+                : '';
+            if (provenanceFile && fs.existsSync(provenanceFile)) {
+                const provenance = readJsonUtf8<AutomationPackageProvenance>(provenanceFile);
+                const plan = readJsonUtf8<GenerationPlan>(
+                    path.join(packageDirectory!, 'generation-plan.json')
+                );
+                return requireTrustedAutomationPackageSnapshot(
+                    recordingScenario,
+                    packagedScenario,
+                    plan,
+                    provenance,
+                );
+            }
+            if (packageDirectory) {
+                const statusFile = path.join(packageDirectory, 'status.json');
+                const status = fs.existsSync(statusFile)
+                    ? readJsonUtf8<Record<string, unknown>>(statusFile)
+                    : {};
+                if (status.state === 'generated') {
+                    throw new Error(
+                        'Esta automatización fue aplicada con una versión anterior que no generaba ' +
+                        'package-provenance.json. Reprocesa la grabación una sola vez; las siguientes ' +
+                        'correcciones podrán reimportarse sin volver a grabar.'
+                    );
+                }
+            }
             const resolved = this.resolver.resolve(recordingScenario);
             if (packageDirectory) {
                 const run = new AgentRunStore(packageDirectory);
@@ -726,7 +798,7 @@ export class AutomationPackageBuilder {
         if (!fs.existsSync(scenarioFile)) {
             throw new Error('La grabación no contiene scenario.json');
         }
-        const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf-8')) as AutomationScenario;
+        const scenario = readJsonUtf8<AutomationScenario>(scenarioFile);
         if (!scenario.actions.length) throw new Error('La grabación no contiene acciones para reprocesar');
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
         // prepare() siempre reinicia los artefactos de la corrida. La opcion
@@ -740,9 +812,7 @@ export class AutomationPackageBuilder {
         refinement: string
     ): AutomationPackageResult {
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
-        const read = <T>(name: string): T => JSON.parse(
-            fs.readFileSync(path.join(packageDirectory, name), 'utf-8')
-        ) as T;
+        const read = <T>(name: string): T => readJsonUtf8<T>(path.join(packageDirectory, name));
         const normalizedRefinement = refinement.trim() ||
             'Realizar una revisión general del caso y mejorar claridad, mantenibilidad y consistencia sin cambiar su comportamiento.';
         if (!fs.existsSync(path.join(packageDirectory, 'agent-response.json'))) {
@@ -771,7 +841,14 @@ export class AutomationPackageBuilder {
             ...previousPlan,
             planId: `plan-${crypto.randomUUID()}`,
             status: 'regeneration',
-            files: previousPlan.files.map(file => ({ ...file, operation: 'update' })),
+            files: previousPlan.files.map(file => {
+                const source = path.join(this.frameworkRoot, file.path);
+                return {
+                    ...file,
+                    operation: 'update',
+                    baseHash: crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
+                };
+            }),
             unresolvedGapIds: ['gap-regeneration-refinement'],
             budgets: normalizeAgentOperationalBudgets(previousPlan.budgets || DEFAULT_AGENT_OPERATIONAL_BUDGETS),
         };
@@ -821,6 +898,7 @@ export class AutomationPackageBuilder {
         fs.mkdirSync(historyDirectory, { recursive: true });
         for (const name of [
             'scenario.json', 'generation-plan.json',
+            'package-provenance.json', 'application-receipt.json',
             'agent-response.json', 'validation.json', 'status.json', 'agent-run.json',
             'hints.json', 'gaps.json',
             'query-requests.json', 'query-results.json',
@@ -834,11 +912,53 @@ export class AutomationPackageBuilder {
         // validacion/reparacion anterior.
         resetAutomationPackage(packageDirectory, true);
 
-        writeJson(
-            path.join(packageDirectory, 'scenario.json'),
-            packageAutomationScenario(revisedScenario)
-        );
+        const packagedScenario = packageAutomationScenario(revisedScenario);
+        writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario);
         writeJson(path.join(packageDirectory, 'generation-plan.json'), plan);
+        const recordingScenarioFile = path.resolve(packageDirectory, '..', '..', 'scenario.json');
+        const sourceRecording = fs.existsSync(recordingScenarioFile)
+            ? readJsonUtf8<AutomationScenario>(recordingScenarioFile)
+            : revisedScenario;
+        writeJson(
+            path.join(packageDirectory, 'package-provenance.json'),
+            createAutomationPackageProvenance(sourceRecording, packagedScenario, plan),
+        );
+        const baselinesDirectory = path.join(packageDirectory, 'baselines');
+        fs.mkdirSync(baselinesDirectory, { recursive: true });
+        const updateBaselines = plan.files.map(file => {
+            const source = path.join(this.frameworkRoot, file.path);
+            const reference = `baselines/${file.layer}-${path.basename(file.path)}`;
+            fs.copyFileSync(source, path.join(packageDirectory, reference));
+            const symbols = baselineSymbols(file.layer, readUtf8File(source));
+            return {
+                layer: file.layer,
+                path: file.path,
+                baseHash: file.baseHash,
+                reference,
+                bytes: fs.statSync(source).size,
+                preserve: {
+                    count: symbols.length,
+                    sample: symbols.slice(0, 12),
+                },
+            };
+        });
+        writeJson(path.join(packageDirectory, 'reuse-context.json'), {
+            schemaVersion: revisedScenario.schemaVersion,
+            recordingId: revisedScenario.recordingId,
+            decision: 'regeneration',
+            candidates: [],
+            elements: [],
+            updateBaselines,
+        });
+        writeJson(path.join(packageDirectory, 'collision-report.json'), {
+            schemaVersion: revisedScenario.schemaVersion,
+            recordingId: revisedScenario.recordingId,
+            exactStepDefinitions: [],
+            reservedStepExpressions: [],
+            selectorCollisions: [],
+            requiresReuse: false,
+            blocking: false,
+        });
         writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
@@ -864,7 +984,7 @@ export class AutomationPackageBuilder {
             path.join(packageDirectory, 'english-vocabulary.json'),
             scenarioEnglishVocabulary(revisedScenario)
         );
-        fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions);
+        writeUtf8FileAtomic(path.join(packageDirectory, 'instructions.md'), instructions);
         writeVerifier(packageDirectory);
         for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'repair-context.json', 'effective-generation-plan.json']) {
             const file = path.join(packageDirectory, stale);
@@ -950,11 +1070,13 @@ export class AutomationPackageBuilder {
         fs.mkdirSync(packageDirectory, { recursive: true });
         const memoryHit = this.memory.find(result.scenario.fingerprint);
         if (memoryHit) result.plan.status = 'memory-hit';
-        writeJson(
-            path.join(packageDirectory, 'scenario.json'),
-            packageAutomationScenario(result.scenario)
-        );
+        const packagedScenario = packageAutomationScenario(result.scenario);
+        writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario);
         writeJson(path.join(packageDirectory, 'generation-plan.json'), result.plan);
+        writeJson(
+            path.join(packageDirectory, 'package-provenance.json'),
+            createAutomationPackageProvenance(scenario, packagedScenario, result.plan),
+        );
         writeJson(path.join(packageDirectory, 'resolved-context.json'), result.resolvedContext);
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), result.unresolvedContext);
         const baselinesDirectory = path.join(packageDirectory, 'baselines');
@@ -1047,7 +1169,7 @@ export class AutomationPackageBuilder {
             path.join(packageDirectory, 'english-vocabulary.json'),
             scenarioEnglishVocabulary(result.scenario)
         );
-        fs.writeFileSync(path.join(packageDirectory, 'instructions.md'), instructions(result));
+        writeUtf8FileAtomic(path.join(packageDirectory, 'instructions.md'), instructions(result));
         writeVerifier(packageDirectory);
         for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'repair-context.json', 'effective-generation-plan.json']) {
             const file = path.join(packageDirectory, stale);

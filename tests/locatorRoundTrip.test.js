@@ -117,6 +117,26 @@ test('actions.json guarda el tipo y el valor del locator', () => {
     assert.equal(saved[3].locatorType, undefined);
 });
 
+test('actions.json conserva tildes del selector y las guarda como NFC', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recording-locator-unicode-'));
+    const store = new AutomationRecordingStore(root);
+    const context = { squad: 'payment', platform: 'android', environment: 'qa' };
+    store.start(context);
+    store.replaceActions([{
+        action: 'CLICK',
+        selector: 'android=new UiSelector().text("U\u0301ltimos 30 di\u0301as")',
+        variableName: 'filterLast30Days',
+    }], context);
+    const savedText = fs.readFileSync(
+        path.join(store.getActiveDirectory(), 'actions.json'),
+        'utf-8'
+    );
+    const saved = JSON.parse(savedText);
+    assert.equal(savedText, savedText.normalize('NFC'));
+    assert.equal(saved[0].locatorValue, 'new UiSelector().text("Últimos 30 días")');
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 const { RecordingPlatformUpdater } = require('../dist/core/recordingPlatformUpdater');
 
 // La segunda casuistica de "Completar una grabacion" escribe directo en el JSON

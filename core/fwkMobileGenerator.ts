@@ -9,6 +9,7 @@ import { screenObjectNames } from './semanticNaming';
 import { withGeneratedFileMetadata } from './generatedFileMetadata';
 import { featureScopeDirectory, normalizeFeatureScope } from './featureScope';
 import { detectRepetition } from './repetitionDetector';
+import { locatorImportIdentifier } from './screenObjectContract';
 
 export type TestPathType = 'Happy Path' | 'Unhappy Path';
 export type MobilePlatform = 'android' | 'ios';
@@ -589,6 +590,9 @@ export class FwkMobileGenerator {
         const locatorImport = locatorPath
             ? this.frameworkAlias(locatorPath, projectPaths.locators, '@locators')
             : undefined;
+        const locatorIdentifier = locatorPath
+            ? locatorImportIdentifier(locatorPath)
+            : undefined;
         const className = screenObjectNames(screenPath).className;
         // Los reutilizados quedan fuera del bloque propio: se referencian, no se crean.
         const locators = this.collectLocators(rows.flatMap(row => row.actions || []))
@@ -637,8 +641,8 @@ export class FwkMobileGenerator {
             if (dynamicParameter) {
                 return [
                     `    public ${name}(${dynamicParameter}: string) {`,
-                    `        const iosValue = Locators[${JSON.stringify(iosBlock)}].${name}.replace('{${dynamicParameter}}', ${dynamicParameter});`,
-                    `        const androidValue = Locators[${JSON.stringify(androidBlock)}].${name}.replace('{${dynamicParameter}}', ${dynamicParameter});`,
+                    `        const iosValue = ${locatorIdentifier}.${iosBlock}.${name}.replace('{${dynamicParameter}}', ${dynamicParameter});`,
+                    `        const androidValue = ${locatorIdentifier}.${androidBlock}.${name}.replace('{${dynamicParameter}}', ${dynamicParameter});`,
                     ...getterBody(
                         request.platform === 'ios' ? activeType : 'XPATH',
                         'iosValue',
@@ -652,9 +656,9 @@ export class FwkMobileGenerator {
                 `    public get ${name}() {`,
                 ...getterBody(
                     request.platform === 'ios' ? activeType : 'XPATH',
-                    `Locators[${JSON.stringify(iosBlock)}].${name}`,
+                    `${locatorIdentifier}.${iosBlock}.${name}`,
                     request.platform === 'android' ? activeType : 'XPATH',
-                    `Locators[${JSON.stringify(androidBlock)}].${name}`
+                    `${locatorIdentifier}.${androidBlock}.${name}`
                 ),
                 `    }`
             ].join('\n');
@@ -713,7 +717,7 @@ export class FwkMobileGenerator {
                 `import { ${contract.typeLocatorSymbol} } from '${enumsImport}';`,
             ] : []),
             ...(locators.length > 0 && locatorImport
-                ? [`import Locators from '${locatorImport}' with { type: 'json' };`]
+                ? [`import ${locatorIdentifier} from '${locatorImport}' with { type: 'json' };`]
                 : []),
             // Un import por cada modulo ajeno del que se reutiliza algo.
             ...[...new Map(reusedInScreen.map(external => [external.identifier, external])).values()]

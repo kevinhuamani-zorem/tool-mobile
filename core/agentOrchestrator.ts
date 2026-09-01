@@ -38,6 +38,7 @@ import { GapExecutionPlanner, partitionGapsById } from './gapExecutionPlanner';
 import { DeterministicQueryPlanner } from './deterministicQueryPlanner';
 import { DeterministicGenerator } from './deterministicGenerator';
 import { emptyGapResolutions, parseGapResolutions } from './gapResolutionContracts';
+import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from './utf8Text';
 
 interface QueryCounters {
     total: number;
@@ -80,11 +81,11 @@ export interface AgentOrchestratorResult {
 }
 
 function readJson<T>(file: string): T {
-    return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+    return readJsonUtf8<T>(file);
 }
 
 function writeJson(file: string, value: unknown): void {
-    fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+    writeJsonUtf8(file, value);
 }
 
 function normalizeDisplayPath(baseDirectory: string, candidate: string): string {
@@ -875,7 +876,7 @@ export class AgentOrchestrator {
 
         const requestFile = resolvePackageArtifactPath(packageDirectory, 'query-requests.json');
         const requestContent = fs.existsSync(requestFile)
-            ? fs.readFileSync(requestFile, 'utf-8')
+            ? readUtf8File(requestFile)
             : JSON.stringify({
                 schemaVersion: '1.0',
                 recordingId: plan.recordingId || gaps.recordingId || '',
@@ -1421,7 +1422,7 @@ export class AgentOrchestrator {
                 };
             }
             const parsed = parseGapResolutions(
-                fs.readFileSync(semanticOutput, 'utf-8'),
+                readUtf8File(semanticOutput),
                 budgets.maxTotalQueries
             );
             if (!parsed.valid || !parsed.value) {

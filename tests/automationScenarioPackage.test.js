@@ -1,11 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
     AutomationPackageBuilder,
 } = require('../dist/core/automationPackageBuilder');
 const {
     packageAutomationScenario,
 } = require('../dist/core/automationScenarioPackage');
+const {
+    createAutomationPackageProvenance,
+} = require('../dist/core/automationPackageProvenance');
 const {
     locatorCandidatePackage,
     requireTrustedLocatorCandidatePackage,
@@ -105,6 +111,40 @@ function builderFor(resolved) {
         resolve: () => ({ scenario: resolved }),
     });
 }
+
+test('con procedencia usa la instantánea y no reejecuta el resolver al reimportar', t => {
+    const original = recording();
+    const resolved = resolvedScenario(original);
+    const packaged = packageAutomationScenario(resolved);
+    const plan = {
+        schemaVersion: 1,
+        pipelineVersion: '1.0.0',
+        planId: 'plan-package-snapshot',
+        recordingId: original.recordingId,
+        fingerprint: original.fingerprint,
+        deterministicCoverage: 1,
+        status: 'needs-agent',
+        resolutions: [], files: [], unresolvedGapIds: [],
+        budgets: {
+            maxDurationMs: 300000, maxContextBytes: 20000, maxResponseBytes: 400000,
+            maxAgentInvocations: 2, maxTotalQueries: 24, maxQueriesPerGap: 6,
+            maxRepairAttempts: 1,
+        },
+    };
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trusted-package-'));
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    fs.writeFileSync(path.join(directory, 'generation-plan.json'), JSON.stringify(plan));
+    fs.writeFileSync(
+        path.join(directory, 'package-provenance.json'),
+        JSON.stringify(createAutomationPackageProvenance(original, packaged, plan)),
+    );
+    const builder = new AutomationPackageBuilder({
+        resolve: () => { throw new Error('el resolver no debe ejecutarse'); },
+    });
+
+    const trusted = builder.requireTrustedScenarioPackage(original, packaged, directory);
+    assert.equal(trusted.request.scenarioRows[1].text, 'se muestra la lista de movimientos');
+});
 
 test('acepta la normalización determinista y las filas/Examples agregadas', () => {
     const original = recording();

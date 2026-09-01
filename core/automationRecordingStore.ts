@@ -6,6 +6,14 @@ import { GenerationRequest, MobilePlatform } from './fwkMobileGenerator';
 import { RecordedStep, recordedStepContext } from './models';
 import { projectPaths } from './projectPaths';
 import { frameworkLocator, roundTrip } from './locatorStrategy';
+import {
+    readJsonUtf8,
+    readUtf8File,
+    normalizeJsonUnicode,
+    utf8TextProblems,
+    writeJsonUtf8,
+    writeUtf8FileAtomic,
+} from './utf8Text';
 
 interface RecordingContext {
     squad: string;
@@ -29,23 +37,16 @@ export interface EmptyRecordingCleanup {
 }
 
 function atomicText(file: string, content: string): void {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-    try {
-        fs.writeFileSync(temporary, content);
-        fs.renameSync(temporary, file);
-    } finally {
-        if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
-    }
+    writeUtf8FileAtomic(file, content);
 }
 
 function atomicJson(file: string, value: unknown): void {
-    atomicText(file, JSON.stringify(value, null, 2) + '\n');
+    writeJsonUtf8(file, value);
 }
 
 function readJson<T>(file: string): T | undefined {
     try {
-        return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+        return readJsonUtf8<T>(file);
     } catch {
         return undefined;
     }
@@ -104,6 +105,24 @@ export function prepareRecordedStep(
     platform: MobilePlatform,
     redactSensitiveValue = true,
 ): RecordedStep & { sequence: number } {
+    step = normalizeJsonUnicode(step);
+    for (const value of [
+        step.selector,
+        step.value,
+        step.contextHint,
+        step.elementIntent,
+        step.description,
+        step.variableName,
+    ]) {
+        if (typeof value !== 'string') continue;
+        const corrupted = utf8TextProblems(value).filter(problem => problem.code !== 'non-nfc');
+        if (corrupted.length) {
+            throw new Error(
+                `La acción ${sequence} contiene texto Unicode dañado (${corrupted[0].code}). `
+                + 'Vuelve a capturar el valor en UTF-8; el recorder no corrige mojibake automáticamente.'
+            );
+        }
+    }
     const sensitive = isSensitiveInput(step);
     const selectorVerified = step.selectorVerified === undefined
         ? Boolean(step.selector)
@@ -298,8 +317,8 @@ export class AutomationRecordingStore {
         };
         const actionsFile = path.join(this.activeDirectory, 'actions.json');
         const manifestFile = path.join(this.activeDirectory, 'manifest.json');
-        const previousActions = fs.existsSync(actionsFile) ? fs.readFileSync(actionsFile, 'utf-8') : undefined;
-        const previousManifest = fs.existsSync(manifestFile) ? fs.readFileSync(manifestFile, 'utf-8') : undefined;
+        const previousActions = fs.existsSync(actionsFile) ? readUtf8File(actionsFile) : undefined;
+        const previousManifest = fs.existsSync(manifestFile) ? readUtf8File(manifestFile) : undefined;
         try {
             atomicJson(actionsFile, normalized);
             atomicJson(manifestFile, nextManifest);

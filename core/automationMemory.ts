@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import {
     AutomationAgentResponse,
@@ -7,6 +6,7 @@ import {
     GenerationPlan,
 } from './automationContracts';
 import { projectPaths } from './projectPaths';
+import { readJsonUtf8, writeJsonUtf8 } from './utf8Text';
 
 interface MemoryEntry {
     fingerprint: string;
@@ -22,10 +22,7 @@ interface MemoryIndex {
 }
 
 function writeJsonAtomic(file: string, value: unknown): void {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const temporary = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n');
-    fs.renameSync(temporary, file);
+    writeJsonUtf8(file, value);
 }
 
 export class AutomationMemory {
@@ -35,7 +32,7 @@ export class AutomationMemory {
 
     private readIndex(): MemoryIndex {
         try {
-            return JSON.parse(fs.readFileSync(this.indexFile(), 'utf-8')) as MemoryIndex;
+            return readJsonUtf8<MemoryIndex>(this.indexFile());
         } catch {
             return { schemaVersion: 1, entries: [] };
         }
@@ -47,9 +44,9 @@ export class AutomationMemory {
             .sort((left, right) => right.version - left.version)[0];
         if (!entry) return null;
         try {
-            const response = JSON.parse(fs.readFileSync(
-                path.join(this.root, entry.directory, 'agent-response.json'), 'utf-8'
-            )) as AutomationAgentResponse;
+            const response = readJsonUtf8<AutomationAgentResponse>(
+                path.join(this.root, entry.directory, 'agent-response.json')
+            );
             return { entry, response };
         } catch {
             return null;

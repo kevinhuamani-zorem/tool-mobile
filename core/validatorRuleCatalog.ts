@@ -249,10 +249,35 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'When el usuario consulta todos sus movimientos',
     },
     'invalid-locator-access': {
-        requirement: 'Los bloques locator con guiones deben accederse con notacion valida del contrato (sin romper el path).',
+        requirement: 'Los locators deben usar identificador semantico y notacion de punto, nunca corchetes.',
         minimalExample:
             'screenobjects/payment/confirmacion-envio-email-movements.screen.ts\n' +
             'LocatorConfirmacionEnvioEmailMovements.confirmacionEnvioEmailMovementsAndroid.seeAllMovements',
+    },
+    'locator-bracket-notation': {
+        requirement: 'Todo acceso a un locator JSON debe usar <Alias>.<bloqueAndroid|bloqueIos>.<locator>; están prohibidos los corchetes.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'LocatorMovements.movementsAndroid.showMovements\n' +
+            'LocatorMovements.movementsIos.showMovements',
+    },
+    'locator-import-identifier': {
+        requirement: 'El identificador importado debe derivarse del archivo: movements.locator.json se importa como LocatorMovements.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            "import LocatorMovements from '@locators/payment/movements.locator.json' with { type: 'json' };",
+    },
+    'unicode-encoding': {
+        requirement: 'Los cuatro archivos deben conservar tildes, eñes y Unicode como UTF-8 válido, sin caracteres de reemplazo ni mojibake.',
+        minimalExample:
+            'resources/locators/payment/movements.locator.json\n' +
+            '"filterLast30Days": "new UiSelector().text(\\"Últimos 30 días\\")"',
+    },
+    'unicode-normalization': {
+        requirement: 'Todo texto generado debe usar normalización Unicode NFC sin BOM.',
+        minimalExample:
+            'resources/locators/payment/movements.locator.json\n' +
+            '"informationButton": "new UiSelector().text(\\"Más información\\")"',
     },
     'invented-selector': {
         requirement: 'Cada locator create debe usar el selector verificado del recording, sin inventar uno nuevo.',

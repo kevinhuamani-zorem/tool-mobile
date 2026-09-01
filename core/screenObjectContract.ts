@@ -19,7 +19,8 @@
 export interface ScreenObjectProblem {
     code: 'json-import-attribute' | 'locator-import-alias' | 'getElement-arity'
         | 'getElement-order' | 'type-locator-import' | 'helper-method'
-        | 'screen-alias' | 'screen-singleton-name' | 'screen-class-name';
+        | 'screen-alias' | 'screen-singleton-name' | 'screen-class-name'
+        | 'locator-import-identifier' | 'locator-bracket-notation';
     message: string;
 }
 
@@ -33,6 +34,8 @@ export const SCREEN_OBJECT_CONTRACT_RULE_CODES: ScreenObjectProblem['code'][] = 
     'screen-alias',
     'screen-singleton-name',
     'screen-class-name',
+    'locator-import-identifier',
+    'locator-bracket-notation',
 ];
 
 export interface ScreenObjectRules {
@@ -54,6 +57,8 @@ export interface ScreenObjectRules {
      * ya la trae escrita.
      */
     expectedImports?: Record<string, string>;
+    /** Identificador obligatorio por nombre de `.locator.json`. */
+    expectedIdentifiers?: Record<string, string>;
     /** Nombres esperados del Screen Object para esta ruta planificada. */
     expectedNames?: {
         className: string;
@@ -75,6 +80,23 @@ function pascalCase(value: string): string {
         .filter(Boolean)
         .map(segment => segment[0].toUpperCase() + segment.slice(1))
         .join('');
+}
+
+/**
+ * Alias semantico de un locator JSON.
+ *
+ * `movements.locator.json` -> `LocatorMovements`
+ * `movements-cases.locator.json` -> `LocatorMovementsCases`
+ */
+export function locatorImportIdentifier(moduleOrPath: string): string {
+    const normalized = String(moduleOrPath || '').replace(/\\/g, '/');
+    const fileName = normalized.split('/').pop() || normalized;
+    const moduleName = fileName
+        .replace(/\.locator\.json$/i, '')
+        .replace(/\.json$/i, '');
+    const baseName = pascalCase(moduleName);
+    if (!baseName) throw new Error(`No se pudo derivar el alias locator de ${moduleOrPath}`);
+    return `Locator${baseName}`;
 }
 
 export function screenObjectNames(moduleOrPath: string): {
@@ -290,6 +312,7 @@ export function screenObjectProblems(
 
     for (const entry of locatorImports(source)) {
         const expected = expectedSpecifier(entry.source, rules.expectedImports);
+        const expectedIdentifier = rules.expectedIdentifiers?.[fileNameOf(entry.source)];
         if (expected && entry.source !== expected) {
             problems.push({
                 code: 'locator-import-alias',
@@ -303,6 +326,22 @@ export function screenObjectProblems(
                 message: `El import de ${fileNameOf(entry.source)} no lleva el atributo de tipo y Node `
                     + 'lanza al cargarlo. Escribe exactamente: '
                     + `import ${entry.identifier} from '${expected || entry.source}' with { type: 'json' };`,
+            });
+        }
+        if (expectedIdentifier && entry.identifier !== expectedIdentifier) {
+            problems.push({
+                code: 'locator-import-identifier',
+                message: `El import de ${fileNameOf(entry.source)} usa el identificador "${entry.identifier}". `
+                    + `Escribe exactamente "${expectedIdentifier}" y accede con notacion de punto: `
+                    + `${expectedIdentifier}.<moduloAndroid|moduloIos>.<nombreLocator>.`,
+            });
+        }
+        const escapedIdentifier = entry.identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`\\b${escapedIdentifier}\\s*(?:\\.\\s*)?\\[`).test(source)) {
+            problems.push({
+                code: 'locator-bracket-notation',
+                message: `El locator ${entry.identifier} usa corchetes. Usa solamente notacion de punto: `
+                    + `${expectedIdentifier || entry.identifier}.<moduloAndroid|moduloIos>.<nombreLocator>.`,
             });
         }
     }
@@ -377,5 +416,6 @@ export const screenObjectContract = {
     getElementCalls,
     callArguments,
     screenObjectNames,
+    locatorImportIdentifier,
     SCREEN_OBJECT_CONTRACT_RULE_CODES,
 };

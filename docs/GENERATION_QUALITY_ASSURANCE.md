@@ -45,6 +45,9 @@ La puerta exige:
 - política `NO SEARCH WITHOUT GAP`, allowlist por gap, límite de consultas,
   deduplicación y rechazo de gaps resueltos o bloqueantes;
 - cero consultas al framework cuando el scenario queda completamente resuelto.
+- round-trip UTF-8/NFC de tildes y eñes desde recording hasta Locators, incluso
+  cuando el stream del agente divide un carácter multibyte entre chunks;
+- rechazo de bytes inválidos, U+FFFD y mojibake antes de importar o escribir.
 
 ## Control manual
 

@@ -14,9 +14,15 @@ import { OutputValidator } from './outputValidator';
 import { projectPaths } from './projectPaths';
 import { ReuseAnalyzer } from './reuseAnalyzer';
 import { selectorNormalization } from './deterministicResolver';
-import { screenObjectNames, screenObjectProblems, typeLocatorImportProblem } from './screenObjectContract';
+import {
+    locatorImportIdentifier,
+    screenObjectNames,
+    screenObjectProblems,
+    typeLocatorImportProblem,
+} from './screenObjectContract';
 import { frameworkHelpersOf } from './frameworkHelpers';
 import { recordedStepContext } from './models';
+import { utf8TextProblems } from './utf8Text';
 import { featureStepLines, missingExamples, rewrittenReusedSteps } from './gherkinContract';
 import { declaredIdentifiers, spanishTokens } from './englishIdentifiers';
 import { frameworkContract, FrameworkContract } from './frameworkContract';
@@ -833,6 +839,13 @@ export class AutomationResponseValidator {
                     file: file.path,
                 });
             }
+            for (const problem of utf8TextProblems(file.content)) {
+                errors.push({
+                    code: problem.code === 'non-nfc' ? 'unicode-normalization' : 'unicode-encoding',
+                    message: `${problem.message} Conserva UTF-8 NFC sin BOM y los diacríticos del recording.`,
+                    file: file.path,
+                });
+            }
         });
         for (const file of response.files.filter(candidate =>
             candidate.layer === 'steps' || candidate.layer === 'screen'
@@ -929,6 +942,22 @@ export class AutomationResponseValidator {
         }
 
         const planned = new Map(plan.files.map(file => [file.layer, file.path]));
+        const updateBaselines = new Map<string, string>();
+        for (const file of plan.files.filter(item => item.operation === 'update')) {
+            const absolute = path.join(projectPaths.frameworkRoot, file.path);
+            if (fs.existsSync(absolute)) updateBaselines.set(file.layer, fs.readFileSync(absolute, 'utf-8'));
+        }
+        const proposedScreen = response.files.find(file => file.layer === 'screen')?.content || '';
+        const baselineScreen = updateBaselines.get('screen');
+        const baselineScreenNames = new Set(declaredIdentifiers({ screen: baselineScreen || '' })
+            .map(symbol => symbol.name));
+        const screenAddsSymbols = Boolean(baselineScreen) && declaredIdentifiers({ screen: proposedScreen })
+            .some(symbol => !baselineScreenNames.has(symbol.name));
+        // Un Screen `update` puede ser una referencia pura: el agente usa APIs
+        // existentes y el patch writer no escribe nada. En ese caso no se
+        // obliga al agente a modernizar deuda legacy del archivo compartido;
+        // se valida la API indexada por el plan y las capas que sí se crean.
+        const reusesScreenWithoutChanges = Boolean(baselineScreen) && !screenAddsSymbols;
         const receivedLayers = new Set(response.files.map(file => file.layer));
         for (const [layer, expectedPath] of planned) {
             const file = response.files.find(candidate => candidate.layer === layer);
@@ -1192,6 +1221,12 @@ export class AutomationResponseValidator {
                 const completion = completionBySequence.get(resolution.sequence);
                 const adopted = adoptedBySequence.get(resolution.sequence);
                 const expectedGetter = adopted || completion?.name || resolution.locatorName!;
+                const reusesIndexedMethod = Boolean(
+                    adopted
+                    && resolution.existingMethod
+                    && trace?.screenMethod === resolution.existingMethod.name
+                    && resolution.existingMethod.locatorKeys.includes(adopted)
+                );
                 const usage = trace?.screenMethod
                     ? methodUsage.get(trace.screenMethod)
                     : undefined;
@@ -1218,7 +1253,7 @@ export class AutomationResponseValidator {
                         return types.size === 1 && types.has(primary.locatorType);
                     })()
                 );
-                if (!this.relaxedContract && (
+                if (!this.relaxedContract && !reusesIndexedMethod && (
                     !trace?.screenMethod
                     || !usage
                     || usage.hardcodedSelector
@@ -1318,6 +1353,7 @@ export class AutomationResponseValidator {
                                 : /(?:locator|JSON)/i.test(message)
                                     ? 'locators'
                                     : undefined;
+                    if (layer === 'screen' && reusesScreenWithoutChanges) return;
                     errors.push({
                         code: 'output',
                         message,
@@ -1487,7 +1523,7 @@ export class AutomationResponseValidator {
                 }
                 const screenPlan = plan.files.find(file => file.layer === 'screen');
                 const stepsPlan = plan.files.find(file => file.layer === 'steps');
-                if (screenPlan && stepsPlan) {
+                if (screenPlan && stepsPlan && !reusesScreenWithoutChanges) {
                     const expected = screenObjectNames(screenPlan.path);
                     const screenImports = [...(preview.stepContent || '').matchAll(
                         /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm
@@ -1560,8 +1596,11 @@ export class AutomationResponseValidator {
                     // cuatro argumentos en el orden de la firma. Misma
                     // implementacion que corre dentro del sandbox del agente.
                     const expectedImports: Record<string, string> = {};
+                    const expectedIdentifiers: Record<string, string> = {};
                     if (expectedLocatorSource) {
-                        expectedImports[expectedLocatorSource.split('/').pop()!] = expectedLocatorSource;
+                        const fileName = expectedLocatorSource.split('/').pop()!;
+                        expectedImports[fileName] = expectedLocatorSource;
+                        expectedIdentifiers[fileName] = locatorImportIdentifier(locatorPlan!.path);
                     }
                     for (const problem of screenObjectProblems(screenContent, {
                         typeLocatorSymbol: contract.typeLocatorSymbol,
@@ -1573,6 +1612,7 @@ export class AutomationResponseValidator {
                         platformOrder: contract.locatorSignature.platformOrder,
                         parameterCount: contract.locatorSignature.parameterCount,
                         expectedImports,
+                        expectedIdentifiers,
                         stepsContent: preview.stepContent || '',
                         expectedNames: {
                             className: expected.className,
@@ -1715,7 +1755,11 @@ export class AutomationResponseValidator {
                     }
                 }
                 const locatorFile = response.files.find(file => file.layer === 'locators');
-                for (const proposed of responseLocatorValues(locatorFile?.content || '')) {
+                const locatorBaseline = updateBaselines.get('locators');
+                const proposedLocators = locatorBaseline
+                    ? changedLocatorValues(locatorFile?.content || '', locatorBaseline)
+                    : responseLocatorValues(locatorFile?.content || '');
+                for (const proposed of proposedLocators) {
                     const aliases = selectorNormalization.selectorAliases(proposed.selector, scenario.platform);
                     const collision = catalog.locators.find(existing =>
                         existing.file !== locatorFile?.path && Boolean(existing.selector) &&

@@ -19,9 +19,10 @@ import {
 import { projectPaths } from './projectPaths';
 import { effectiveGenerationPlan } from './effectiveGenerationPlan';
 import { ReuseAnalyzer } from './reuseAnalyzer';
+import { readJsonUtf8, writeJsonUtf8 } from './utf8Text';
 
 function readJson<T>(file: string): T {
-    return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+    return readJsonUtf8<T>(file);
 }
 
 function relative(file: string): string {
@@ -184,10 +185,7 @@ export class DeterministicGenerator {
         const scenario = readJson<AutomationScenario>(path.join(packageDirectory, 'scenario.json'));
         const basePlan = readJson<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
         const plan = effectiveGenerationPlan(packageDirectory, basePlan, resolutions);
-        fs.writeFileSync(
-            path.join(packageDirectory, 'effective-generation-plan.json'),
-            JSON.stringify(plan, null, 2) + '\n',
-        );
+        writeJsonUtf8(path.join(packageDirectory, 'effective-generation-plan.json'), plan);
         const resolvedContext = fs.existsSync(path.join(packageDirectory, 'resolved-context.json'))
             ? readJson<ResolvedContext>(path.join(packageDirectory, 'resolved-context.json'))
             : undefined;

@@ -428,13 +428,37 @@ function selectorUsesFakeWildcard(selector = ''): boolean {
  * "compartir constancia por correo" pareciera "buscar yapero por numero".
  */
 function conceptSimilarity(left: string, right: string): number {
-    const meaningful = (value: string) =>
-        new Set(words(value).filter(word => !TECHNICAL_STOP_WORDS.has(word)));
-    const a = meaningful(left);
-    const b = meaningful(right);
-    if (!a.size || !b.size) return 0;
-    const common = [...a].filter(word => b.has(word)).length;
-    return common / Math.max(a.size, b.size);
+    const variants = (value: string) => [value, translateToEnglish(value).name]
+        .filter(Boolean)
+        .map(candidate => new Set([
+            ...words(candidate)
+                .filter(word => !TECHNICAL_STOP_WORDS.has(word))
+                .map(word => word.length >= 4 && word.endsWith('s') ? word.slice(0, -1) : word),
+            // `words` descarta numeros de un digito. En filtros 7/15/30/90
+            // ese numero es justamente lo que distingue una opcion de otra.
+            ...(candidate.match(/\d+/g) || []),
+        ]));
+    let best = 0;
+    // No se mezclan ambos idiomas en un unico conjunto: hacerlo infla el
+    // denominador y vuelve cero una coincidencia valida como
+    // `filtrar por solo hoy` -> `filterday`.
+    for (const a of variants(left)) {
+        for (const b of variants(right)) {
+            if (!a.size || !b.size) continue;
+            // El framework conserva identificadores legacy completamente en
+            // minusculas (`filterday`, `btntoday`, `btn7days`). TypeScript no
+            // permite separarlos por camelCase, pero sus conceptos siguen
+            // siendo observables por inclusion de tokens suficientemente
+            // largos. No se aplica a abreviaturas cortas para evitar ruido.
+            const common = [...a].filter(word => [...b].some(candidate =>
+                word === candidate
+                || (word.length >= 3 && candidate.length >= 3
+                    && (word.includes(candidate) || candidate.includes(word)))
+            )).length;
+            best = Math.max(best, common / Math.max(a.size, b.size));
+        }
+    }
+    return best;
 }
 
 function similarExistingMethods(
@@ -449,10 +473,21 @@ function similarExistingMethods(
             const byName = conceptSimilarity(resolution.intent, method.name);
             const byLocator = Math.max(0, ...(method.locatorKeys || [])
                 .map(key => conceptSimilarity(resolution.intent, key)));
+            const translatedIntent = [
+                ...words(translateToEnglish(resolution.intent).name),
+                ...(resolution.intent.match(/\d+/g) || []),
+            ];
+            const generic = new Set(['filter', 'movement', 'movements', 'button', 'btn', 'validate']);
+            const specific = translatedIntent.filter(token => !generic.has(token));
+            const specificLocatorHit = specific.some(token => (method.locatorKeys || [])
+                .some(key => key.toLowerCase().includes(token.toLowerCase())));
             // El bono solo aplica entre aserciones: que dos acciones cualesquiera
             // "no sean aserción" no dice nada sobre si hacen lo mismo.
             const bothAssert = assertion && /^(?:validar|verificar|valida|verifica)/i.test(method.name);
-            const score = Math.min(1, Math.max(byName, byLocator) + (bothAssert ? 0.15 : 0));
+            const score = Math.min(1,
+                Math.max(byName, byLocator)
+                + (bothAssert ? 0.15 : 0)
+                + (specificLocatorHit ? 0.2 : 0));
             return {
                 name: method.name,
                 signature: method.signature,
@@ -469,7 +504,7 @@ function similarExistingMethods(
  * Un metodo parecido NO habilita reutilizar: que el nombre se parezca no prueba
  * que su locator sirva para este caso. Solo se propone al QA para que decida.
  */
-const REVIEW_METHOD_THRESHOLD = 0.35;
+const REVIEW_METHOD_THRESHOLD = 0.3;
 
 function bestArtifactBundle(
     catalog: SquadReuseCatalog,
@@ -484,18 +519,79 @@ function bestArtifactBundle(
         scenario.acceptanceCriteria,
         ...resolutions.map(resolution => resolution.intent),
     ].join(' ');
-    const ranked = (catalog.artifactBundles || []).flatMap(bundle => {
+    const connectedBundles = catalog.artifactBundles || [];
+    // Un Screen Object puede existir antes de que algun Steps lo importe. Ese
+    // es exactamente el estado de payment/movements: el Screen ya conoce los
+    // filtros y sus locators, pero al no haber una arista Steps -> Screen el
+    // catalogo de casos conectados no lo exponia y el planner creaba otro
+    // modulo completo. Se derivan bundles parciales desde la relacion real
+    // Screen -> Locator que ya indexa ReuseAnalyzer/CodeGraph.
+    const standaloneBundles: ArtifactBundle[] = [];
+    const methodsByScreen = new Map<string, typeof catalog.screenMethods>();
+    for (const method of catalog.screenMethods || []) {
+        const methods = methodsByScreen.get(method.file) || [];
+        methods.push(method);
+        methodsByScreen.set(method.file, methods);
+    }
+    for (const [screen, methods] of methodsByScreen) {
+        const locatorFiles = [...new Set(methods.flatMap(method => method.locatorFiles || []))];
+        for (const locator of locatorFiles) {
+            standaloneBundles.push({
+                steps: '',
+                screens: [screen],
+                locators: [locator],
+                stepExpressions: [],
+                screenMethods: methods.map(method => method.signature),
+            });
+        }
+    }
+    const bundleKey = (bundle: ArtifactBundle) => [
+        bundle.steps,
+        ...bundle.screens,
+        ...bundle.locators,
+    ].join('|');
+    const seen = new Set<string>();
+    const bundles = [...connectedBundles, ...standaloneBundles].filter(bundle => {
+        const key = bundleKey(bundle);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    const ranked = bundles.flatMap(bundle => {
         if (bundle.screens.length !== 1 || bundle.locators.length !== 1) return [];
         const exactLocatorHits = bundle.locators.filter(file => reusedFiles.has(file)).length;
         const bundleContext = [bundle.steps, ...bundle.screens, ...bundle.locators,
             ...bundle.stepExpressions, ...bundle.screenMethods].join(' ');
         const semanticScore = similarity(semanticContext, bundleContext);
-        const score = Math.min(1, exactLocatorHits > 0 ? 0.85 + semanticScore * 0.15 : semanticScore);
+        const targetMethods = (catalog.screenMethods || [])
+            .filter(method => method.file === bundle.screens[0]);
+        const actionable = resolutions.filter(resolution => resolution.resolution !== 'builtin');
+        const intentScores = actionable.map(resolution => Math.max(0, ...targetMethods.flatMap(method => [
+            conceptSimilarity(resolution.intent, method.name),
+            ...(method.locatorKeys || []).map(key => conceptSimilarity(resolution.intent, key)),
+        ])));
+        const coveredIntents = intentScores.filter(score => score >= 0.25).length;
+        const intentCoverage = intentScores.length ? coveredIntents / intentScores.length : 0;
+        const averageIntentScore = intentScores.length
+            ? intentScores.reduce((sum, score) => sum + score, 0) / intentScores.length
+            : 0;
+        const standalone = !bundle.steps;
+        // Un bundle parcial necesita evidencia funcional repetida, no solo un
+        // basename parecido. Esto evita adoptar por accidente cualquier Screen
+        // que contenga una palabra comun como `button` o `screen`.
+        if (standalone && (coveredIntents < 2 || intentCoverage < 0.5)) return [];
+        const score = Math.min(1, exactLocatorHits > 0
+            ? 0.85 + semanticScore * 0.15
+            : standalone
+                ? intentCoverage * 0.55 + averageIntentScore * 0.3 + semanticScore * 0.15
+                : semanticScore);
         return [{
             bundle,
             score: Number(score.toFixed(3)),
             reason: exactLocatorHits > 0
                 ? 'El Screen Object existente ya consume un locator reutilizado por el recording.'
+                : standalone
+                    ? 'El Screen Object y su Locator JSON cubren las intenciones del recording aunque todavía no exista un Steps que los conecte.'
                 : 'Coincidencia semántica con métodos y archivos existentes del alcance.',
         }];
     }).sort((left, right) => right.score - left.score);
@@ -1048,7 +1144,7 @@ export class DeterministicResolver {
         const reuseTarget = reusableBundle ? {
             reason: reusableBundle.reason,
             score: reusableBundle.score,
-            steps: reusableBundle.bundle.steps,
+            ...(reusableBundle.bundle.steps ? { steps: reusableBundle.bundle.steps } : {}),
             screen: reusableBundle.bundle.screens[0],
             locators: reusableBundle.bundle.locators[0],
         } : undefined;
@@ -1120,6 +1216,45 @@ export class DeterministicResolver {
                 const [best] = similarExistingMethods(catalog, reuseTarget.screen, resolution);
                 if (!best || best.score < REVIEW_METHOD_THRESHOLD) continue;
                 resolution.existingMethod = best;
+                const methodLocators = catalog.locators.filter(locator =>
+                    best.locatorKeys.includes(locator.name)
+                    && (catalog.screenMethods || []).some(method =>
+                        method.file === best.file
+                        && method.name === best.name
+                        && method.locatorFiles.includes(locator.file)
+                    )
+                );
+                if (methodLocators.length) {
+                    const locatorScores = methodLocators.map(locator => ({
+                        locator,
+                        score: conceptSimilarity(resolution.intent, locator.name),
+                    }));
+                    const bestLocatorScore = Math.max(...locatorScores.map(item => item.score));
+                    const relevantLocators = bestLocatorScore > 0
+                        ? locatorScores
+                            .filter(item => item.score >= bestLocatorScore - 0.001)
+                            .map(item => item.locator)
+                        : methodLocators;
+                    // Una vez elegido un método existente, su propio grafo de
+                    // getters es la allowlist. Conservar aquí otro candidato
+                    // que comparte selector pero que el método no consume
+                    // produce una traza imposible: el agente puede adoptarlo,
+                    // pero tendría que reescribir el Screen para usarlo.
+                    const offered = new Map<
+                        string,
+                        NonNullable<ActionResolution['reuseCandidates']>[number]
+                    >();
+                    for (const locator of relevantLocators) {
+                        const candidate = {
+                            file: locator.file,
+                            module: locator.module,
+                            name: locator.name,
+                        };
+                        offered.set(`${candidate.module}#${candidate.name}`, candidate);
+                        duplicateCandidates.add(`${candidate.module}#${candidate.name}`);
+                    }
+                    resolution.reuseCandidates = [...offered.values()];
+                }
                 const gapId = `gap-duplicate-${resolution.sequence}`;
                 resolution.gapId = gapId;
                 gaps.push({

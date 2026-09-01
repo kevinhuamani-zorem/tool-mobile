@@ -20,6 +20,7 @@ const { frameworkContract } = require('../dist/core/frameworkContract');
 const { inferredStrategy } = require('../dist/core/locatorStrategy');
 const { projectPaths } = require('../dist/core/projectPaths');
 const { screenObjectNames } = require('../dist/core/semanticNaming');
+const { locatorImportIdentifier } = require('../dist/core/screenObjectContract');
 const { validatorRuleCodesFromSource } = require('../dist/core/validatorRuleCatalog');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
@@ -624,6 +625,216 @@ test('resolver filtra por featureScope y extiende artefactos relacionados sin du
     assert.equal(result.plan.reuseTarget.locators,
         'resources/locators/payment/filtro-movimientos.locator.json');
     assert.ok(result.plan.unresolvedGapIds.includes('gap-extend-existing-artifacts'));
+});
+
+test('resolver extiende Screen y Locators relacionados aunque todavía no exista un Steps que los importe', () => {
+    const screen = 'screenobjects/payment/movements.screen.ts';
+    const locators = 'resources/locators/payment/movements.locator.json';
+    const methods = [
+        ['showMovements', ['showmovements']],
+        ['ShowAll', ['seeall']],
+        ['filtermovement', ['btnfilter']],
+        ['filterday', ['btntoday', 'btn7days', 'btn15days', 'btn30days', 'btn90days']],
+        ['validateMovementsScreen', ['titleMovements']],
+    ].map(([name, locatorKeys]) => ({
+        name,
+        file: screen,
+        squad: 'payment',
+        locatorFiles: [locators, 'resources/locators/home/home.locator.json'],
+        signature: name === 'filterday' ? 'filterday(filtro_dia: string)' : `${name}()`,
+        locatorKeys,
+        className: 'movementScreen',
+    }));
+    const catalog = {
+        getCatalog: (squad, platform) => ({
+            squad, platform,
+            stepDefinitions: [], features: [], scenarios: [], artifactBundles: [],
+            screenMethods: methods,
+            locators: [],
+        }),
+    };
+    const recorded = scenario([
+        { action: 'CLICK', selector: 'android=new UiSelector().text("Mostrar movimientos")', selectorVerified: true, contextHint: 'boton de mostrar movimientos' },
+        { action: 'SCROLL_DOWN', selector: '', selectorVerified: false, contextHint: '' },
+        { action: 'CLICK', selector: '~Ver todos', selectorVerified: true, contextHint: 'boton de ver todos los movimientos' },
+        { action: 'CLICK', selector: '~Botón de filtrar', selectorVerified: true, contextHint: 'boton de filtro de movimientos' },
+        { action: 'CLICK', selector: 'android=new UiSelector().text("Solo hoy")', selectorVerified: true, contextHint: 'filtrar por solo hoy' },
+        { action: 'CLICK', selector: 'android=new UiSelector().text("Últimos 30 días")', selectorVerified: true, contextHint: 'filtrar por ultimos 30 dias' },
+        { action: 'VERIFICAR_EXISTE', selector: '//android.view.View', selectorVerified: true, contextHint: 'se valida el titulo del contenedor movimientos' },
+    ]);
+    recorded.objective = 'el usuario debe poder usar todos los filtros de movimientos disponibles';
+    recorded.acceptanceCriteria = 'se muestran los movimientos esperados';
+
+    const result = new DeterministicResolver(catalog).resolve(recorded);
+
+    assert.equal(result.plan.reuseTarget.screen, screen);
+    assert.equal(result.plan.reuseTarget.locators, locators);
+    assert.equal(result.plan.reuseTarget.steps, undefined);
+    assert.equal(result.plan.files.find(file => file.layer === 'feature').operation, 'create');
+    assert.equal(result.plan.files.find(file => file.layer === 'steps').operation, 'create');
+    assert.deepEqual(
+        result.plan.files.filter(file => ['screen', 'locators'].includes(file.layer))
+            .map(file => [file.layer, file.path, file.operation]),
+        [
+            ['screen', screen, 'update'],
+            ['locators', locators, 'update'],
+        ],
+    );
+    assert.ok(result.plan.unresolvedGapIds.includes('gap-extend-existing-artifacts'));
+    assert.equal(
+        result.plan.resolutions.find(item => item.sequence === 6).existingMethod.name,
+        'filterday',
+    );
+});
+
+test('validator acepta reutilizar un Screen y Locator update sin reescribir su deuda legacy', t => {
+    const screenPath = 'screenobjects/payment/movements.screen.ts';
+    const locatorPath = 'resources/locators/payment/movements.locator.json';
+    const screenContent = fs.readFileSync(path.join(projectPaths.frameworkRoot, screenPath), 'utf8');
+    const locatorContent = fs.readFileSync(path.join(projectPaths.frameworkRoot, locatorPath), 'utf8');
+    const recorded = scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'android=new UiSelector().text("Movimientos")',
+        selectorVerified: true,
+        contextHint: 'valida que se muestre la pantalla de movimientos',
+    }]);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+    const plan = {
+        ...resolved.plan,
+        unresolvedGapIds: [],
+        reuseTarget: {
+            screen: screenPath,
+            locators: locatorPath,
+            score: 1,
+            reason: 'Screen y locators existentes cubren la validación.',
+        },
+        files: resolved.plan.files.map(file => {
+            if (file.layer === 'screen') return { ...file, path: screenPath, operation: 'update' };
+            if (file.layer === 'locators') return { ...file, path: locatorPath, operation: 'update' };
+            return file;
+        }),
+        resolutions: resolved.plan.resolutions.map(resolution => ({
+            ...resolution,
+            locatorName: 'generatedMovementsTitle',
+            reuseCandidates: [{
+                file: locatorPath,
+                module: 'payment/movements',
+                name: 'titleMovements',
+            }],
+            existingMethod: {
+                name: 'validateMovementsScreen',
+                signature: 'validateMovementsScreen()',
+                file: screenPath,
+                locatorKeys: ['titleMovements'],
+                score: 1,
+            },
+        })),
+    };
+    const response = validResponse(plan);
+    response.files.find(file => file.layer === 'feature').content =
+        '@payment\nFeature: Consulta de movimientos\n\n@miflujo @android @ios\n' +
+        '  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Consulta de movimientos\n' +
+        '    Given el usuario <username> inicia sesión en Yape\n' +
+        '    Then se muestra la lista de movimientos\n\n' +
+        '    Examples:\n      | username   |\n      | Usuario QA |\n';
+    response.files.find(file => file.layer === 'steps').content =
+        "import { Then } from '@wdio/cucumber-framework';\n" +
+        "import movementScreen from '@screenobjects/payment/movements.screen.ts';\n" +
+        "Then(/^se muestra la lista de movimientos$/, async () => { " +
+        'await movementScreen.validateMovementsScreen(); });\n';
+    response.files.find(file => file.layer === 'screen').content = screenContent;
+    response.files.find(file => file.layer === 'locators').content = locatorContent;
+    response.actionTrace = [{
+        sequence: 1,
+        gherkinStep: 'Then se muestra la lista de movimientos',
+        screenMethod: 'validateMovementsScreen',
+        locatorName: 'titleMovements',
+    }];
+
+    const validation = new AutomationResponseValidator(undefined, {
+        getCatalog: (squad, platform) => ({
+            squad,
+            platform,
+            stepDefinitions: [],
+            features: [],
+            scenarios: [],
+            artifactBundles: [],
+            locators: [{
+                name: 'titleMovements',
+                selector: 'android=new UiSelector().text("Movimientos")',
+                androidSelector: 'android=new UiSelector().text("Movimientos")',
+                iosSelector: 'Movimientos',
+                file: locatorPath,
+                module: 'payment/movements',
+                squad: 'payment',
+                scope: 'squad',
+                platform: 'android',
+            }],
+            screenMethods: [{
+                name: 'validateMovementsScreen',
+                signature: 'validateMovementsScreen()',
+                file: screenPath,
+                squad: 'payment',
+                locatorFiles: [locatorPath],
+                locatorKeys: ['titleMovements'],
+                className: 'movementScreen',
+            }],
+        }),
+    }).validate(resolved.scenario, plan, response);
+
+    assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+    assert.equal(validation.qualityScore, 100);
+
+    // El verificador que viaja dentro del paquete debe aplicar la misma regla.
+    // De lo contrario Copilot obtiene PASS local y el recorder lo rechaza al
+    // importar, o viceversa.
+    const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'reuse-existing-screen-'));
+    t.after(() => fs.rmSync(packageRoot, { recursive: true, force: true }));
+    const packagedPlan = {
+        ...plan,
+        status: 'needs-agent',
+        unresolvedGapIds: ['gap-reuse-existing-screen'],
+    };
+    const packagedResult = {
+        ...resolved,
+        plan: packagedPlan,
+        unresolvedContext: {
+            ...resolved.unresolvedContext,
+            planId: packagedPlan.planId,
+            gaps: [{
+                id: 'gap-reuse-existing-screen',
+                type: 'framework-reuse',
+                description: 'Reutilizar las APIs existentes de movimientos.',
+                requiredOutput: 'Feature y Steps nuevos referenciando el Screen existente.',
+                blocking: false,
+                allowedQueries: [],
+                maxQueries: 0,
+                evidenceRequired: ['generation-plan'],
+            }],
+        },
+    };
+    const prepared = new AutomationPackageBuilder(
+        { resolve: () => packagedResult },
+        new AutomationMemory(path.join(packageRoot, 'memory')),
+    ).prepare(recorded, packageRoot);
+    const packagedResponse = {
+        ...response,
+        planId: packagedPlan.planId,
+        resolutions: [{
+            gapId: 'gap-reuse-existing-screen',
+            decision: 'reuse-existing',
+            reason: 'El Screen y Locator indexados ya cubren la acción.',
+        }],
+    };
+    fs.writeFileSync(
+        path.join(prepared.packageDirectory, 'agent-response.json'),
+        JSON.stringify(packagedResponse, null, 2),
+    );
+    assert.doesNotThrow(() => execFileSync(
+        process.execPath,
+        ['verify-package.js'],
+        { cwd: prepared.packageDirectory, stdio: 'pipe' },
+    ));
 });
 
 test('generador escribe el Feature en su alcance y conserva otras capas en el squad', () => {
@@ -1947,6 +2158,19 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     assert.equal(frameworkApi.locatorContract.constantsPrefixes.ANDROID_LOCATOR, 'android=');
     assert.equal(frameworkApi.locatorContract.constantsPrefixes.PREDICATE_STRING, '-ios predicate string:');
     assert.equal(frameworkApi.locatorContract.constantsPrefixes.CLASS_CHAIN, '-ios class chain:');
+    assert.equal(frameworkApi.locatorContract.accessPattern.notation, 'dot-only');
+    assert.equal(frameworkApi.locatorContract.modules.length, 1);
+    const locatorModule = frameworkApi.locatorContract.modules[0];
+    assert.equal(locatorModule.identifier, locatorImportIdentifier(locatorModule.path));
+    assert.equal(locatorModule.importSource,
+        `@locators/${locatorModule.path.replace(/^resources\/locators\//, '')}`);
+    assert.match(frameworkApi.locatorContract.accessPattern.validExample,
+        /LocatorMovements\.movementsAndroid\.showMovements/);
+    const agentInstructions = fs.readFileSync(
+        path.join(result.packageDirectory, 'instructions.md'), 'utf8'
+    );
+    assert.match(agentInstructions, /LocatorMovements\.movementsAndroid\.showMovements/);
+    assert.match(agentInstructions, /framework-api\.json > locatorContract\.modules/);
     assert.equal(frameworkApi.screenObjects[0].path.endsWith('.screen.ts'), true);
     assert.equal(typeof frameworkApi.screenObjects[0].className, 'string');
     assert.equal(typeof frameworkApi.screenObjects[0].instanceName, 'string');

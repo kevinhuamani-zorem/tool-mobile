@@ -135,9 +135,19 @@ generadores, validadores o plantillas.
   generador, `Author: Kevinarnold.zorem` y fecha ISO de creación. Locators usa
   `_metadata` porque JSON no admite comentarios; los indexadores deben ignorar
   ese bloque.
+- Recording, paquete, respuesta del agente y archivos generados usan UTF-8
+  estricto, normalización Unicode NFC y ningún BOM. Conserva literalmente
+  tildes, eñes y diacríticos de selectores verificados; U+FFFD y mojibake como
+  `BotÃ³n` bloquean la importación en vez de corregirse silenciosamente.
 - La búsqueda compartida conserva el orden squad → commons → home → global.
 - `create` es el fallback. Un Feature nuevo puede vivir en `featureScope`
   mientras las otras capas se actualizan de forma aditiva en rutas existentes.
+- La reutilización no depende de que ya exista la cadena completa
+  Feature → Steps → Screen → Locators. Si CodeGraph demuestra la relación
+  Screen → Locator y sus métodos cubren varias intenciones del recording, el
+  plan crea Feature/Steps y marca Screen/Locators como `update`. `update` puede
+  ser una referencia pura: conserva el baseline sin cambios cuando las APIs
+  existentes cubren todas las acciones y añade únicamente símbolos faltantes.
 - Los tags de plataforma reflejan cobertura completa: `@android` para Android
   y `@ios` solo cuando todos los locators requeridos de iOS estén disponibles.
 - Una propuesta solo debe cubrir la plataforma del recording. El bloque de la

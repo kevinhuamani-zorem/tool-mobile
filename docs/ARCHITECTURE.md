@@ -129,17 +129,27 @@ XML, screenshots, source, capabilities ni credenciales.
 1. El recorder persiste acciones ordenadas, la intención funcional escrita por
    el QA y selectores comprobados. El QA no asigna nombres técnicos de locator.
 2. El usuario define objetivo y aceptación; no redacta Gherkin manualmente.
-3. `ReuseAnalyzer` construye una vista compacta de escenarios, steps y locators
-   del squad, Home y commons. Normaliza los selectores al par
-   `(TypeLocator, valor)` que compone el framework (ver `locatorStrategy`).
+3. `ReuseAnalyzer` construye una vista compacta de escenarios, steps, Screen
+   Objects y locators del squad, Home y commons. Además de bundles conectados
+   por Feature → Steps → Screen → Locator, expone relaciones parciales
+   Screen → Locator indexadas por CodeGraph. Estas últimas solo se adoptan con
+   cobertura funcional suficiente para evitar falsos positivos. Los selectores
+   se normalizan al par `(TypeLocator, valor)` del framework (ver
+   `locatorStrategy`).
 4. `DeterministicResolver` decide reuse/create/builtin, detecta casos equivalentes
-   y fija las cuatro rutas.
+   y fija las cuatro rutas. Puede crear Feature/Steps y planificar Screen y
+   Locators existentes como `update`; si sus APIs cubren todo el recording,
+   esas dos capas se conservan sin cambios.
 5. Se escriben `generation-plan.json`, `reuse-context.json`,
    `collision-report.json`, contextos resuelto/no resuelto y contrato
    bajo `runtime/recordings/<id>/generation/automation`.
-   Al importar, `main` toma el `scenario.json` original del recording como
-   fuente autoritativa, reconstruye con el mismo resolver su normalización y
-   rechaza cambios respecto de ese escenario esperado.
+   `package-provenance.json` fija mediante hashes canónicos la grabación
+   original, el escenario empaquetado y el plan. Al importar, `main` compara
+   esas identidades sin volver a resolver contra el framework mutable; así una
+   primera aplicación no invalida una corrección posterior de Copilot.
+   `application-receipt.json` registra el hash posterior de cada ruta aplicada.
+   Una corrección solo puede reemplazar esos archivos si continúan intactos; los
+   patches sobre archivos compartidos se recalculan desde su baseline original.
    Preparar nuevamente una grabación reinicia antes todos los artefactos
    mutables de la corrida anterior —respuesta, plan efectivo, consultas,
    reparación, validación, logs y baselines—. Solo `history/` se conserva;

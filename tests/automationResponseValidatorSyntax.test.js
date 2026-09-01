@@ -5,6 +5,7 @@ const { DeterministicResolver } = require('../dist/core/deterministicResolver');
 const { AutomationResponseValidator } = require('../dist/core/automationResponseValidator');
 const { frameworkContract } = require('../dist/core/frameworkContract');
 const { projectPaths } = require('../dist/core/projectPaths');
+const { locatorImportIdentifier } = require('../dist/core/screenObjectContract');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 
@@ -77,10 +78,11 @@ function validResponse(plan) {
     const screenAlias = screenClass[0].toLowerCase() + screenClass.slice(1);
     const screenImport = '@screenobjects/' + screenPath.replace(/^screenobjects\//, '');
     const locatorImport = '@locators/' + locatorPath.replace(/^resources\/locators\//, '');
+    const locatorIdentifier = locatorImportIdentifier(locatorPath);
     const byLayer = {
         feature: 'Feature: Consulta de movimientos\n\n@miflujo @smoke_mobile @android\n  Scenario Outline: [TC-1][Happy Path][AUTO-FRONT] Consulta\n    Given el usuario <username> inicia sesión en Yape\n    Then se muestra la lista de movimientos\n\n    Examples:\n      | username   |\n      | Usuario QA |\n',
         steps: `import { Then } from '@wdio/cucumber-framework';\nimport ${screenAlias} from '${screenImport}';\nThen(/^se muestra la lista de movimientos$/, async () => { await ${screenAlias}.verifyMovementsList(); });\n`,
-        screen: `import ${CONTRACT.baseScreenClass} from '${CONTRACT.baseScreenImport}';\nimport ${CONTRACT.locatorFactorySymbol} from '${CONTRACT.locatorFactoryImport}';\nimport { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\nimport Locators from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends ${CONTRACT.baseScreenClass} { private get movementsList(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaMovimientosIos.movementsList, ${CONTRACT.typeLocatorSymbol}.XPATH, Locators.consultaMovimientosAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForElementDisplayedAndExpect(this.movementsList, 5000, 'ok'); } }\nexport default new ${screenClass}();\n`,
+        screen: `import ${CONTRACT.baseScreenClass} from '${CONTRACT.baseScreenImport}';\nimport ${CONTRACT.locatorFactorySymbol} from '${CONTRACT.locatorFactoryImport}';\nimport { ${CONTRACT.typeLocatorSymbol} } from '${CONTRACT.typeLocatorImport}';\nimport ${locatorIdentifier} from '${locatorImport}' with { type: 'json' };\nclass ${screenClass} extends ${CONTRACT.baseScreenClass} { private get movementsList(): string { return ${CONTRACT.locatorFactorySymbol}.getElement(${CONTRACT.typeLocatorSymbol}.XPATH, ${locatorIdentifier}.consultaMovimientosIos.movementsList, ${CONTRACT.typeLocatorSymbol}.XPATH, ${locatorIdentifier}.consultaMovimientosAndroid.movementsList); } public async verifyMovementsList(): Promise<void> { await this.uiHelper.waitForElementDisplayedAndExpect(this.movementsList, 5000, 'ok'); } }\nexport default new ${screenClass}();\n`,
         locators: JSON.stringify({
             consultaMovimientosAndroid: { movementsList: '//*[@resource-id="movimientos"]' },
             consultaMovimientosIos: { movementsList: '' },
@@ -122,4 +124,36 @@ test('validator marca sintaxis TypeScript inválida antes de aprobar', () => {
         .validate(resolved.scenario, resolved.plan, response);
     assert.equal(validation.valid, false);
     assert.equal(validation.errors.some(error => error.code === 'typescript-syntax'), true);
+});
+
+test('validator bloquea mojibake en un locator generado por el agente', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+    }]));
+    const response = validResponse(resolved.plan);
+    const locatorFile = response.files.find(file => file.layer === 'locators');
+    locatorFile.content = locatorFile.content.replace('movimientos', 'movimiÃ©ntos');
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.errors.some(error => error.code === 'unicode-encoding'), true);
+});
+
+test('validator exige normalización NFC en los archivos del agente', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+    }]));
+    const response = validResponse(resolved.plan);
+    const featureFile = response.files.find(file => file.layer === 'feature');
+    featureFile.content += '# di\u0301as\n';
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.errors.some(error => error.code === 'unicode-normalization'), true);
 });

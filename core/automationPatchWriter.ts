@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import ts from 'typescript';
 import { GENERATED_FILE_AUTHOR, GENERATED_FILE_GENERATOR } from './generatedFileMetadata';
+import { normalizeUnicodeText, writeUtf8FileAtomic } from './utf8Text';
 
 /**
  * Escritura aditiva sobre archivos existentes del framework.
@@ -99,9 +100,7 @@ function assertAdditive(layer: PatchOutcome['layer'], before: string, after: str
 }
 
 function atomicWrite(file: string, content: string): void {
-    const temporary = `${file}.avr-${process.pid}.tmp`;
-    fs.writeFileSync(temporary, content, 'utf-8');
-    fs.renameSync(temporary, file);
+    writeUtf8FileAtomic(file, content);
 }
 
 export class AutomationPatchWriter {
@@ -148,7 +147,7 @@ export class AutomationPatchWriter {
                 skipped.push(completion.name);
                 continue;
             }
-            parsed[block][completion.name] = completion.value;
+            parsed[block][completion.name] = normalizeUnicodeText(completion.value);
             added.push(completion.name);
         }
 
@@ -159,8 +158,8 @@ export class AutomationPatchWriter {
                 skipped.push(addition.name);
                 continue;
             }
-            parsed[android][addition.name] = addition.android;
-            parsed[ios][addition.name] = addition.ios;
+            parsed[android][addition.name] = normalizeUnicodeText(addition.android);
+            parsed[ios][addition.name] = normalizeUnicodeText(addition.ios);
             added.push(addition.name);
         }
         // Sin `_metadata`: que grabacion aporto cada clave queda en el ledger

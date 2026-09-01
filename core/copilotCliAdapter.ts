@@ -11,6 +11,7 @@ import {
     AgentProviderRunInput,
     AgentProviderRunResult,
 } from './agentProvider';
+import { readJsonUtf8 } from './utf8Text';
 
 type SpawnFn = typeof spawn;
 
@@ -178,8 +179,14 @@ export class CopilotCliAdapter implements AgentProvider {
             const child = this.runner(this.command, ['--version'], {
                 cwd: this.resolveCwd(process.cwd()),
                 stdio: ['ignore', 'pipe', 'pipe'],
+                env: {
+                    ...process.env,
+                    LANG: process.env.LANG || 'en_US.UTF-8',
+                    LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
+                },
             });
             let output = '';
+            child.stdout?.setEncoding?.('utf8');
             child.stdout?.on('data', chunk => { output += String(chunk || ''); });
             child.on('error', () => resolve(null));
             child.on('close', code => {
@@ -285,7 +292,17 @@ export class CopilotCliAdapter implements AgentProvider {
                 cwd: effectiveCwd,
                 stdio: ['ignore', 'pipe', 'pipe'],
                 detached: process.platform !== 'win32',
+                env: {
+                    ...process.env,
+                    LANG: process.env.LANG || 'en_US.UTF-8',
+                    LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
+                },
             });
+            // String(Buffer) por chunk corrompe una tilde si sus bytes UTF-8
+            // llegan partidos entre eventos. El decoder interno del stream
+            // conserva esos bytes hasta completar el carácter.
+            child.stdout?.setEncoding?.('utf8');
+            child.stderr?.setEncoding?.('utf8');
             appendTrace('start', `command=${this.command} timeoutMs=${timeoutMs}`);
             this.active = child;
             const stopOnValidatedOutput = input.stopOnValidatedOutput;
@@ -297,8 +314,8 @@ export class CopilotCliAdapter implements AgentProvider {
                     if (settled || timedOut) return;
                     if (!fs.existsSync(outputPath) || !fs.existsSync(schemaPath)) return;
                     try {
-                        const output = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
-                        const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+                        const output = readJsonUtf8<unknown>(outputPath);
+                        const schema = readJsonUtf8<unknown>(schemaPath);
                         if (!validateWithSchema(output, schema)) return;
                     } catch {
                         return;

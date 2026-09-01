@@ -111,6 +111,10 @@ Para una propuesta ya válida, **Revalidar** y **Reimportar corrección del
 agente** vuelven a leer `agent-response.json` y reemplazan el preview actual.
 Los cambios locales no aplicados del editor se descartan para que la corrección
 externa de Copilot sea visible y se valide exactamente como quedó en el paquete.
+La reimportación usa `package-provenance.json`; no recalcula el escenario contra
+los archivos que la primera aplicación acaba de crear. Si ya se aplicó una
+versión, `application-receipt.json` comprueba que las rutas destino no hayan sido
+editadas fuera del recorder antes de aceptar o volver a aplicar la corrección.
 
 Si Copilot no modifica una propuesta inválida, **Usar generación anterior**
 permite abrir sus cuatro capas en Revisión y editarlas. En ese modo

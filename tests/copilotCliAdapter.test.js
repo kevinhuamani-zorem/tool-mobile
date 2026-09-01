@@ -50,6 +50,23 @@ test('adapter devuelve éxito cuando el proceso termina en 0', async () => {
     assert.equal(capturedArgs.includes('auto'), true);
 });
 
+test('adapter conserva UTF-8 cuando Copilot parte una tilde entre chunks', async () => {
+    const expected = 'Últimos 30 días · Más información';
+    const bytes = Buffer.from(expected, 'utf8');
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        process.nextTick(() => {
+            for (const byte of bytes) child.stdout.write(Buffer.from([byte]));
+            child.emit('close', 0, null);
+        });
+        return child;
+    }, 'copilot', ['-p']);
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 1000 });
+    assert.equal(result.success, true);
+    assert.equal(result.stdout, expected);
+    assert.equal(result.stdout.includes('�'), false);
+});
+
 test('adapter respeta un modelo explícito en args sin inyectar auto', async () => {
     let capturedArgs = [];
     const adapter = new CopilotCliAdapter((_command, args, _options) => {

@@ -81,6 +81,22 @@ import {
 import {
     enforceAgentResponsePlatformTags,
 } from '../../core/agentResponsePlatformTagEnforcer';
+import {
+    normalizeJsonUnicode,
+    readJsonUtf8,
+    writeJsonUtf8,
+    writeUtf8FileAtomic,
+} from '../../core/utf8Text';
+import {
+    AutomationApplicationReceipt,
+    createAutomationApplicationReceipt,
+    planAgainstApplicationReceipt,
+    requireUnchangedAppliedFiles,
+} from '../../core/automationApplicationReceipt';
+import {
+    restoreUpdateBaselinesForCorrection,
+    rollbackCorrectionBaselines,
+} from '../../core/automationCorrectionBaseline';
 
 registerEmbeddedInspectorScheme();
 
@@ -626,12 +642,7 @@ ipcMain.handle('assign-locator-value', async (_, request: {
             ? document[blockName][name]
             : '';
         document[blockName][name] = selector;
-        const temporary = `${file}.recorder-${process.pid}.tmp`;
-        fs.writeFileSync(temporary, JSON.stringify(document, null, 4) + '\n', {
-            encoding: 'utf-8',
-            flag: 'wx'
-        });
-        fs.renameSync(temporary, file);
+        writeUtf8FileAtomic(file, JSON.stringify(normalizeJsonUnicode(document), null, 4) + '\n');
         generatedFileRegistry.registerUpdatedFile(file, activeSquad);
 
         return {
@@ -1657,17 +1668,13 @@ async function importAutomationResponseFromPackage(
     const runStore = new AgentRunStore(packageDirectory);
     runStore.markAgentFinished();
     runStore.markRepairFinished();
-    const read = <T>(name: string): T => JSON.parse(
-        fs.readFileSync(path.join(packageDirectory, name), 'utf-8')
-    ) as T;
+    const read = <T>(name: string): T => readJsonUtf8<T>(path.join(packageDirectory, name));
     const packagedScenario = read<PackagedAutomationScenario>('scenario.json');
     const recordingScenarioFile = path.resolve(packageDirectory, '..', '..', 'scenario.json');
     if (!fs.existsSync(recordingScenarioFile)) {
         throw new Error('No se encontró la grabación original para validar scenario.json');
     }
-    const recordingScenario = JSON.parse(
-        fs.readFileSync(recordingScenarioFile, 'utf-8')
-    ) as AutomationScenario;
+    const recordingScenario = readJsonUtf8<AutomationScenario>(recordingScenarioFile);
     const trustedPackagedScenario = automationPackageBuilder.requireTrustedScenarioPackage(
         recordingScenario,
         packagedScenario,
@@ -1675,9 +1682,25 @@ async function importAutomationResponseFromPackage(
     );
     const scenario = trustedPackagedScenario;
     const effectivePlanFile = path.join(packageDirectory, 'effective-generation-plan.json');
-    const plan = fs.existsSync(effectivePlanFile)
-        ? JSON.parse(fs.readFileSync(effectivePlanFile, 'utf-8')) as GenerationPlan
+    let plan = fs.existsSync(effectivePlanFile)
+        ? readJsonUtf8<GenerationPlan>(effectivePlanFile)
         : read<GenerationPlan>('generation-plan.json');
+    const receiptFile = path.join(packageDirectory, 'application-receipt.json');
+    const applicationReceipt = fs.existsSync(receiptFile)
+        ? readJsonUtf8<AutomationApplicationReceipt>(receiptFile)
+        : undefined;
+    if (applicationReceipt) {
+        requireUnchangedAppliedFiles(
+            projectPaths.frameworkRoot,
+            applicationReceipt,
+            scenario.recordingId,
+            plan.planId,
+        );
+        // Un update ya aplicado dejó de coincidir con el baseHash original del
+        // plan. Para una corrección legítima, su nueva base es exactamente el
+        // afterHash persistido y verificado en el recibo de aplicación.
+        plan = planAgainstApplicationReceipt(plan, applicationReceipt);
+    }
     const responsePath = path.join(packageDirectory, 'agent-response.json');
     if (!fs.existsSync(responsePath)) {
         throw new Error(
@@ -1686,7 +1709,7 @@ async function importAutomationResponseFromPackage(
         );
     }
     let response = withGeneratedResponseMetadata(
-        JSON.parse(fs.readFileSync(responsePath, 'utf-8')) as AutomationAgentResponse,
+        readJsonUtf8<AutomationAgentResponse>(responsePath),
         scenario.createdAt
     );
     if (options.reviewedContents) {
@@ -1700,15 +1723,13 @@ async function importAutomationResponseFromPackage(
             })),
         };
     }
+    response = normalizeJsonUnicode(response);
     const normalized = normalizeAgentResponseEnglishIdentifiers(response);
     response = withGeneratedResponseMetadata(normalized.response, scenario.createdAt);
     const tagged = enforceAgentResponsePlatformTags(response, scenario.platform);
     response = withGeneratedResponseMetadata(tagged.response, scenario.createdAt);
     runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
-    fs.writeFileSync(
-        path.join(packageDirectory, 'agent-response.json'),
-        JSON.stringify(response, null, 2) + '\n'
-    );
+    writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), response);
     const statusFile = path.join(packageDirectory, 'status.json');
     const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
     const repairAttempts = Number(status.repairAttempts || 0);
@@ -1733,10 +1754,7 @@ async function importAutomationResponseFromPackage(
         );
     }
     runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
-    fs.writeFileSync(
-        path.join(packageDirectory, 'validation.json'),
-        JSON.stringify(validation, null, 2) + '\n'
-    );
+    writeJsonUtf8(path.join(packageDirectory, 'validation.json'), validation);
     const draftPreview = Array.isArray(response.files) &&
         response.files.some(file =>
             file?.layer === 'feature' &&
@@ -1765,11 +1783,11 @@ async function importAutomationResponseFromPackage(
         }
         const existingAutomation = validation.errors.find(item => item.code === 'existing-automation');
         if (existingAutomation) {
-            fs.writeFileSync(statusFile, JSON.stringify({
+            writeJsonUtf8(statusFile, {
                 ...status,
                 state: 'existing-automation',
                 updatedAt: new Date().toISOString(),
-            }, null, 2) + '\n');
+            });
             runStore.mark('existing-automation', true);
             return {
                 success: false,
@@ -1782,13 +1800,13 @@ async function importAutomationResponseFromPackage(
         const isRepairSubmission = Boolean(previousInvalidHash);
         const changedByRepair = isRepairSubmission && previousInvalidHash !== responseHash;
         if (isRepairSubmission && !changedByRepair) {
-            fs.writeFileSync(statusFile, JSON.stringify({
+            writeJsonUtf8(statusFile, {
                 ...status,
                 state: 'repair-no-change',
                 lastInvalidResponseHash: responseHash,
                 unchangedRepairOutputs: Number(status.unchangedRepairOutputs || 0) + 1,
                 updatedAt: new Date().toISOString(),
-            }, null, 2) + '\n');
+            });
             runStore.setRepairAttempts(repairAttempts);
             runStore.mark('repair-output-unchanged', true);
             return {
@@ -1801,13 +1819,13 @@ async function importAutomationResponseFromPackage(
         }
         const effectiveRepairAttempts = repairAttempts + (changedByRepair ? 1 : 0);
         if (effectiveRepairAttempts >= plan.budgets.maxRepairAttempts && isRepairSubmission) {
-            fs.writeFileSync(statusFile, JSON.stringify({
+            writeJsonUtf8(statusFile, {
                 ...status,
                 state: 'repair-exhausted',
                 repairAttempts: effectiveRepairAttempts,
                 lastInvalidResponseHash: responseHash,
                 updatedAt: new Date().toISOString(),
-            }, null, 2) + '\n');
+            });
             runStore.setRepairAttempts(effectiveRepairAttempts);
             runStore.mark('repair-exhausted', true);
             return {
@@ -1817,18 +1835,18 @@ async function importAutomationResponseFromPackage(
                 ...draftPayload,
             };
         }
-        fs.writeFileSync(
+        writeJsonUtf8(
             path.join(packageDirectory, 'repair-context.json'),
-            JSON.stringify(validation.repairContext, null, 2) + '\n'
+            validation.repairContext,
         );
-        fs.writeFileSync(statusFile, JSON.stringify({
+        writeJsonUtf8(statusFile, {
             ...status,
             state: 'targeted-repair',
             repairAttempts: effectiveRepairAttempts,
             lastInvalidResponseHash: responseHash,
             unchangedRepairOutputs: 0,
             updatedAt: new Date().toISOString(),
-        }, null, 2) + '\n');
+        });
         runStore.setRepairAttempts(effectiveRepairAttempts);
         runStore.markRepairStarted();
         return {
@@ -1946,29 +1964,20 @@ ipcMain.handle('resolve-automation-qa-decisions', async (_, input: {
                 target.reason = `${target.reason} QA confirmó crear componente nuevo.`;
             }
         }
-        fs.writeFileSync(
-            path.join(activeAutomationPackage, 'generation-plan.json'),
-            JSON.stringify(plan, null, 2) + '\n',
-            'utf-8'
-        );
+        writeJsonUtf8(path.join(activeAutomationPackage, 'generation-plan.json'), plan);
         const finalResolutions = mergedResolutionsWithQa(plan, qaResolutions, activeAutomationPackage);
-        fs.writeFileSync(
+        writeJsonUtf8(
             path.join(activeAutomationPackage, 'gap-resolutions.json'),
-            JSON.stringify({
+            {
                 schemaVersion: AUTOMATION_GAP_RESOLUTIONS_SCHEMA_VERSION,
                 recordingId: plan.recordingId,
                 planId: plan.planId,
                 resolutions: finalResolutions,
-            }, null, 2) + '\n',
-            'utf-8'
+            },
         );
         const response = deterministicGenerator.generate(activeAutomationPackage, finalResolutions);
         emitAutomationProgress('GENERATING', 'Generando automatización', 4, 6);
-        fs.writeFileSync(
-            path.join(activeAutomationPackage, 'agent-response.json'),
-            JSON.stringify(response, null, 2) + '\n',
-            'utf-8'
-        );
+        writeJsonUtf8(path.join(activeAutomationPackage, 'agent-response.json'), response);
         const imported = await importAutomationResponseFromPackage(activeAutomationPackage);
         if (imported.success) emitAutomationProgress('READY_FOR_REVIEW', 'Listo para revisión', 6, 6);
         return {
@@ -2088,6 +2097,7 @@ ipcMain.handle('generate-automation-response', async (
     reviewedContents?: Record<string, string>
 ) => {
     let runStore: AgentRunStore | undefined;
+    let correctionBackups = new Map<string, string>();
     try {
         if (!automationPreview || automationPreview.token !== previewToken) {
             throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
@@ -2095,13 +2105,13 @@ ipcMain.handle('generate-automation-response', async (
         emitAutomationProgress('APPLYING', 'Aplicando automatización', 1, 2);
         const { scenario, plan } = automationPreview;
         runStore = new AgentRunStore(activeAutomationPackage);
-        const response: AutomationAgentResponse = {
+        const response: AutomationAgentResponse = normalizeJsonUnicode({
             ...automationPreview.response,
             files: automationPreview.response.files.map(file => ({
                 ...file,
                 content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content,
             })),
-        };
+        });
         const validatorStarted = process.hrtime.bigint();
         const validation = automationResponseValidator.validate(scenario, plan, response);
         runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
@@ -2111,6 +2121,21 @@ ipcMain.handle('generate-automation-response', async (
         const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
         if (managed.conflicts.length) {
             throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
+        }
+        const receiptFile = path.join(activeAutomationPackage, 'application-receipt.json');
+        if (fs.existsSync(receiptFile)) {
+            const receipt = readJsonUtf8<AutomationApplicationReceipt>(receiptFile);
+            requireUnchangedAppliedFiles(
+                projectPaths.frameworkRoot,
+                receipt,
+                scenario.recordingId,
+                plan.planId,
+            );
+            correctionBackups = restoreUpdateBaselinesForCorrection(
+                activeAutomationPackage,
+                projectPaths.frameworkRoot,
+                plan,
+            );
         }
         // Los `update` se amplían con un patch aditivo en vez de reescribirse: el
         // archivo puede ser ajeno y solo debe recibir los símbolos nuevos.
@@ -2137,24 +2162,35 @@ ipcMain.handle('generate-automation-response', async (
             );
         }
         const memoryEntry = automationMemory.promote(scenario, plan, response, validation);
-        fs.writeFileSync(path.join(activeAutomationPackage, 'agent-response.json'), JSON.stringify(response, null, 2) + '\n');
-        fs.writeFileSync(path.join(activeAutomationPackage, 'validation.json'), JSON.stringify(validation, null, 2) + '\n');
+        writeJsonUtf8(path.join(activeAutomationPackage, 'agent-response.json'), response);
+        writeJsonUtf8(path.join(activeAutomationPackage, 'validation.json'), validation);
+        const applicationReceipt = createAutomationApplicationReceipt(
+            projectPaths.frameworkRoot,
+            scenario,
+            plan,
+            response,
+        );
+        writeJsonUtf8(
+            path.join(activeAutomationPackage, 'application-receipt.json'),
+            applicationReceipt,
+        );
         const statusFile = path.join(activeAutomationPackage, 'status.json');
         let status: Record<string, any> = {};
-        try { status = JSON.parse(fs.readFileSync(statusFile, 'utf-8')); } catch { status = {}; }
-        fs.writeFileSync(statusFile, JSON.stringify({
+        try { status = readJsonUtf8<Record<string, any>>(statusFile); } catch { status = {}; }
+        writeJsonUtf8(statusFile, {
             ...status,
             recordingId: scenario.recordingId,
             planId: plan.planId,
             state: 'generated',
             generatedAt: new Date().toISOString(),
             memoryVersion: memoryEntry.version,
-        }, null, 2) + '\n');
+        });
         automationPreview = null;
         runStore.mark('generated', true);
         emitAutomationProgress('COMPLETED', 'Automatización aplicada correctamente', 2, 2);
         return { success: true, generated, validation, memoryVersion: memoryEntry.version, patched: patched.outcomes };
     } catch (e: any) {
+        if (correctionBackups.size) rollbackCorrectionBaselines(correctionBackups);
         emitAutomationProgress('FAILED', 'No pudimos aplicar la automatización', 0, 2, {
             error: e.message,
         });
