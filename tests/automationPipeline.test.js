@@ -2017,6 +2017,24 @@ test('validator rechaza Gherkin procedimental que narra acciones de interfaz', (
     assert.equal(validation.errors.some(error => error.code === 'imperative-gherkin'), true);
 });
 
+test('validator rechaza una pareja genérica de steps generada por cada filtro', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'CLICK', selector: 'id=movimientos', selectorVerified: true,
+        elementIntent: 'consultar movimientos'
+    }]));
+    const response = validResponse(resolved.plan);
+    response.files.find(file => file.layer === 'feature').content =
+        'Feature: Consulta de movimientos\n\n@miflujo @android\n' +
+        '  Scenario: [TC-10239][Happy Path][AUTO-FRONT] Consulta\n' +
+        '    Given el usuario Usuario QA inicia sesión en Yape\n' +
+        '    When el usuario consulta sus movimientos\n' +
+        '    Then se obtiene el resultado esperado de movimientos según filtros\n';
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.errors.some(error => error.code === 'generic-template-gherkin'), true);
+});
+
 test('validator rechaza copiar contextHint literalmente como Step', () => {
     const hint = 'se muestra la lista de movimientos';
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{

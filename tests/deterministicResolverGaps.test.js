@@ -651,6 +651,34 @@ test('una frase de dominio gana al objetivo del QA', () => {
     assert.equal(when.wording, 'domain');
 });
 
+test('consolida un ciclo de filtro y validación en una sola expectativa declarativa', () => {
+    const recorded = scenario([
+        action('CLICK', 'mostrar todos los movimientos', '~Mostrar movimientos'),
+        action('VERIFICAR_EXISTE', 'lista de movimientos', 'id=movements-list'),
+        action('CLICK', 'abrir filtro de movimientos', '~Filtrar'),
+        action('CLICK', 'filtrar movimientos por solo hoy', 'android=new UiSelector().text("Solo hoy")'),
+        action('VERIFICAR_EXISTE', 'resultado de movimientos filtrados', 'id=filtered-results'),
+        action('CLICK', 'abrir filtro de movimientos', '~Filtrar'),
+        action('CLICK', 'filtrar movimientos por ultimos 7 dias', 'android=new UiSelector().text("Últimos 7 días")'),
+        action('VERIFICAR_EXISTE', 'resultado de movimientos filtrados', 'id=filtered-results'),
+        action('CLICK', 'abrir filtro de movimientos', '~Filtrar'),
+        action('CLICK', 'filtrar movimientos por ultimos 30 dias', 'android=new UiSelector().text("Últimos 30 días")'),
+        action('VERIFICAR_EXISTE', 'resultado de movimientos filtrados', 'id=filtered-results'),
+    ]);
+    recorded.objective = 'el usuario consulta todos sus movimientos';
+    recorded.acceptanceCriteria = 'se muestran los movimientos correspondientes a cada filtro';
+
+    const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows;
+    const generated = rows.filter(row => row.status === 'missing');
+    const consolidated = generated.find(row => /cada filtro/i.test(row.text));
+
+    assert.ok(consolidated, 'el ciclo debe quedar expresado como una expectativa funcional');
+    assert.equal(consolidated.keyword, 'And');
+    assert.equal(consolidated.actions.length, 9, 'conserva la traza y el orden de todas las vueltas');
+    assert.equal(generated.length, 3, 'navegación, validación inicial y ciclo consolidado');
+    assert.doesNotMatch(rows.map(row => row.text).join(' '), /el usuario completa|resultado esperado de/);
+});
+
 // Un objetivo que narra la interfaz no es un step. Se descarta, y la fila queda
 // marcada `template` — la unica senal de que ese texto salio de maquina y hay
 // que reescribirlo.

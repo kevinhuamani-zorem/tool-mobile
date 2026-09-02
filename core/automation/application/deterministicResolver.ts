@@ -648,6 +648,88 @@ function attachRepetitionDataTable(
     return rows.map((row, index) => index === targetIndex ? { ...row, dataTable: table } : row);
 }
 
+/**
+ * Un filtro aplicado varias veces suele grabarse como
+ * `abrir filtro -> elegir opción -> verificar resultado`. Separar por el tipo
+ * de acción convertía cada vuelta en un When/Then distinto y terminaba
+ * publicando las plantillas genéricas del resolver. Las acciones siguen siendo
+ * la traza ejecutable, pero el Feature expresa una sola expectativa funcional.
+ *
+ * Solo se consolida cuando el detector encontró un ciclo real, el ciclo mezcla
+ * interacción y verificación, todas las filas afectadas pertenecen por completo
+ * al ciclo y ya existe un comportamiento previo. Así no se altera el orden de
+ * ejecución ni se fusionan flujos ambiguos.
+ */
+function consolidateRepeatedValidationCycle(
+    rows: NonNullable<GenerationRequest['scenarioRows']>,
+    repetition: NonNullable<ReturnType<typeof detectRepetition>>,
+    actions: RecordedStep[],
+    resolutions: ActionResolution[],
+    acceptanceCriteria: string,
+): NonNullable<GenerationRequest['scenarioRows']> | undefined {
+    const coveredSequences = new Set(repetition.sequences.flat());
+    // Recordings anteriores al versionado de trazas no persistían `sequence`
+    // en la acción. El resolver siempre ha considerado el orden del arreglo
+    // como la secuencia efectiva, por lo que se conserva esa compatibilidad.
+    const sequencedActions = actions.map((action, index) => ({
+        ...action,
+        sequence: Number.isFinite(Number(action.sequence)) ? Number(action.sequence) : index + 1,
+    }));
+    const cycleActions = sequencedActions.filter(action => coveredSequences.has(Number(action.sequence)));
+    if (!cycleActions.some(action => /^VERIFICAR_/.test(action.action))) return undefined;
+    if (!cycleActions.some(action => !/^VERIFICAR_/.test(action.action))) return undefined;
+
+    const affectedIndexes = rows.flatMap((row, index) => {
+        const sequences = (row.actions || []).map(action => Number(action.sequence));
+        if (!sequences.some(sequence => coveredSequences.has(sequence))) return [];
+        // Una fila parcialmente cubierta contiene otro comportamiento y no se
+        // puede mover sin cambiar su semántica.
+        if (!sequences.length || sequences.some(sequence => !coveredSequences.has(sequence))) return [];
+        return [index];
+    });
+    if (affectedIndexes.length < repetition.repetitions * 2) return undefined;
+
+    const firstIndex = Math.min(...affectedIndexes);
+    const affected = new Set(affectedIndexes);
+    const hasPreviousBehavior = rows.slice(0, firstIndex).some(row =>
+        (row.actions || []).some(action => !/^VERIFICAR_/.test(action.action))
+    );
+    if (!hasPreviousBehavior) return undefined;
+
+    const actionBySequence = new Map(affectedIndexes.flatMap(index =>
+        (rows[index].actions || []).map(action => [Number(action.sequence), action] as const)
+    ));
+    const orderedActions = sequencedActions
+        .filter(action => coveredSequences.has(Number(action.sequence)))
+        .map(action => actionBySequence.get(Number(action.sequence)) || action);
+    const intentBySequence = new Map(resolutions.map(resolution => [resolution.sequence, resolution.intent]));
+    const intents = orderedActions.map(action => intentBySequence.get(Number(action.sequence)) || recordedStepContext(action));
+    const domainText = domainAssertionText(intents);
+    const qaText = qaSentence(acceptanceCriteria);
+    const cycleContext = orderedActions.map(recordedStepContext).join(' ');
+    const parameter = /\bfiltr(?:o|ar|ado|ada|ados|adas)?\b/i.test(cycleContext)
+        ? 'filtro'
+        : repetition.parameter.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() || 'variante';
+    let text = domainText || qaText || 'se muestran los resultados esperados';
+    if (!words(text).includes(words(parameter)[0])) text += ` al aplicar cada ${parameter}`;
+
+    const hasPreviousAssertion = rows.slice(0, firstIndex).some(row =>
+        (row.actions || []).some(action => /^VERIFICAR_/.test(action.action))
+    );
+    const merged = {
+        keyword: (hasPreviousAssertion ? 'And' : 'Then') as 'And' | 'Then',
+        text,
+        status: 'missing' as const,
+        wording: (domainText ? 'domain' : qaText ? 'qa' : 'domain') as 'domain' | 'qa',
+        actions: orderedActions,
+    };
+
+    return rows.flatMap((row, index) => {
+        if (index === firstIndex) return [merged];
+        return affected.has(index) ? [] : [row];
+    });
+}
+
 export class DeterministicResolver {
     /**
      * `baselineSnapshot` no tiene default aquí: `application` no puede
@@ -1089,6 +1171,7 @@ export class DeterministicResolver {
             const parameterizedActions = chunk.entries.map(({ step, resolution }) => {
                 if (step.action !== 'ESCRIBIR') return {
                     ...step,
+                    sequence: resolution.sequence,
                     selector: resolution.selector || step.selector,
                     variableName: resolution.locatorName || step.variableName,
                     contextHint: recordedStepContext(step),
@@ -1099,6 +1182,7 @@ export class DeterministicResolver {
                     : (step.value || '');
                 return {
                     ...step,
+                    sequence: resolution.sequence,
                     value: `<${parameter}>`,
                     selector: resolution.selector || step.selector,
                     variableName: resolution.locatorName || step.variableName,
@@ -1150,9 +1234,17 @@ export class DeterministicResolver {
                 ) }
                 : row
         );
-        normalizedRequest.scenarioRows = repetition
-            ? attachRepetitionDataTable(uniqueScenarioRows, repetition)
-            : uniqueScenarioRows;
+        const consolidatedValidationRows = repetition
+            ? consolidateRepeatedValidationCycle(
+                uniqueScenarioRows,
+                repetition,
+                rawScenario.actions,
+                resolutions,
+                rawScenario.acceptanceCriteria,
+            )
+            : undefined;
+        normalizedRequest.scenarioRows = consolidatedValidationRows
+            || (repetition ? attachRepetitionDataTable(uniqueScenarioRows, repetition) : uniqueScenarioRows);
         normalizedRequest.examples = examples;
         const scenario: AutomationScenario = { ...rawScenario, request: normalizedRequest };
         const candidates = frameworkCandidates(catalog, scenario, resolutions);

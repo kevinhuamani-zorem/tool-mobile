@@ -233,6 +233,13 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
             'When el usuario consulta todos sus movimientos',
     },
+    'generic-template-gherkin': {
+        requirement: 'Los ciclos repetidos deben expresarse como un comportamiento y una expectativa observables, sin una pareja generica de steps por cada variante.',
+        minimalExample:
+            'features/yape-features/payment/filter-movements.feature\n' +
+            'When el usuario consulta sus movimientos\n' +
+            'Then se muestran los movimientos esperados al aplicar cada filtro',
+    },
     'invalid-locator-access': {
         requirement: 'Los locators deben usar identificador semantico y notacion de punto, nunca corchetes.',
         minimalExample:

@@ -623,6 +623,11 @@ const IMPERATIVE_GHERKIN_PATTERNS = [
     /\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b/,
 ];
 
+const GENERIC_TEMPLATE_GHERKIN_PATTERNS = [
+    /^el usuario completa\b/,
+    /^se obtiene el resultado esperado de\b/,
+];
+
 const TECHNICAL_ACTIONS = new Set([
     'SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'ESPERAR', 'SCREENSHOT',
 ]);
@@ -633,6 +638,17 @@ function imperativeGherkinSteps(content: string): string[] {
         if (!match) return [];
         const normalized = selectorNormalization.normalizeStepText(match[1]);
         return IMPERATIVE_GHERKIN_PATTERNS.some(pattern => pattern.test(normalized))
+            ? [match[1].trim()]
+            : [];
+    });
+}
+
+function genericTemplateGherkinSteps(content: string): string[] {
+    return content.split(/\r?\n/).flatMap(line => {
+        const match = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+        if (!match) return [];
+        const normalized = selectorNormalization.normalizeStepText(match[1]);
+        return GENERIC_TEMPLATE_GHERKIN_PATTERNS.some(pattern => pattern.test(normalized))
             ? [match[1].trim()]
             : [];
     });
@@ -1383,6 +1399,13 @@ export class AutomationResponseValidator {
                     errors.push({
                         code: 'imperative-gherkin',
                         message: `Gherkin técnico/imperativo: ${step}. Describe la intención de negocio y agrupa las acciones.`,
+                        file: response.files.find(file => file.layer === 'feature')?.path,
+                    });
+                }
+                for (const step of genericTemplateGherkinSteps(preview.featureContent)) {
+                    errors.push({
+                        code: 'generic-template-gherkin',
+                        message: `Gherkin genérico generado por plantilla: ${step}. Consolida el ciclo y describe un único comportamiento o resultado observable.`,
                         file: response.files.find(file => file.layer === 'feature')?.path,
                     });
                 }

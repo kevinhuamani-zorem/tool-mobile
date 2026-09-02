@@ -22,6 +22,8 @@ La puerta exige:
   esperas como pasos del escenario;
 - acciones técnicas consecutivas agrupadas en steps funcionales, manteniendo
   trazabilidad de todas las secuencias;
+- ciclos repetidos de interacción y validación expresados como una sola
+  expectativa funcional, sin plantillas genéricas por cada variante;
 - generación de las cuatro capas cuando el caso las necesita;
 - build completo de Electron y React;
 - reducción de contexto mínima para los grafos locales.

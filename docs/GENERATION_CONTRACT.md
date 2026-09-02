@@ -136,6 +136,10 @@ importación.
 - Agrupa acciones técnicas consecutivas que sirven al mismo objetivo en un
   solo step funcional. La trazabilidad conserva cada secuencia original y
   permite enlazarlas al mismo texto Gherkin.
+- Si un ciclo repite `abrir opción -> elegir variante -> verificar resultado`,
+  expresa todas las vueltas como una sola expectativa declarativa. No generes
+  una pareja genérica de comportamiento/resultado por cada variante. Por
+  ejemplo: `Then se muestran los movimientos esperados al aplicar cada filtro`.
 
 Ejemplo:
 

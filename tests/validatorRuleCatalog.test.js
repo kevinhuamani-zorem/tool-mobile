@@ -53,6 +53,7 @@ test('el contrato publica requisitos positivos y ejemplo minimo por regla', () =
     const critical = new Set([
         'assertion',
         'imperative-gherkin',
+        'generic-template-gherkin',
         'non-english-identifier',
         'platform-coverage',
         'missing-examples',

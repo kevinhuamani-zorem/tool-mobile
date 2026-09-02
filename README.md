@@ -267,6 +267,12 @@ Varias acciones técnicas consecutivas pueden mapearse a un único comportamient
 funcional. El Gherkin debe ser declarativo y no una transcripción imperativa de
 clicks, scrolls o esperas.
 
+Los ciclos repetidos que aplican una variante y comprueban su resultado también
+se consolidan. Un recorrido por varios filtros debe expresar una sola
+expectativa funcional —por ejemplo, `se muestran los movimientos esperados al
+aplicar cada filtro`— y conservar las acciones individuales únicamente como
+traza ejecutable.
+
 ## Generación y reutilización
 
 Las rutas soportadas en `fwk-mobile-test` son:
@@ -322,7 +328,9 @@ para no gastar tokens del agente en eso, y solo delega lo que no reconoce.
 **Acciones repetitivas.** Cuando detecta un ciclo que se repite variando un solo
 valor, el recorder lo propone al QA con las lecturas posibles —tabla de datos en
 un mismo escenario, `Scenario Outline` con varias filas, o encadenar las vueltas—
-y explica el costo de cada una. La decisión es del QA, el recorder no la toma.
+y explica el costo de cada una. Cuando el ciclo ya incluye una validación por
+vuelta, el Gherkin se consolida en una única expectativa declarativa; la traza
+interna mantiene el orden de todas las interacciones y verificaciones.
 
 **Escritura aditiva.** Los artefactos existentes se editan agregando, nunca
 reemplazando: los métodos, locators y definitions previos se conservan y lo nuevo
