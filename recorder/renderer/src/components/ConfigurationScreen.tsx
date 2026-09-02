@@ -177,6 +177,12 @@ export function ConfigurationScreen() {
           <label className="remember-config"><input id="chkRememberFramework" type="checkbox" defaultChecked />
             <span>Recordar esta configuración<small>Podrás cambiarla después desde Ajustes.</small></span>
           </label>
+          <label className="remember-config qa-roast-setting">
+            <input id="chkQaRoastMode" type="checkbox" />
+            <span>🧌 QA Roast Mode
+              <small>Cuando el diseño del caso falle, el recorder te lo dirá sin anestesia. El diagnóstico técnico siempre se conserva.</small>
+            </span>
+          </label>
           <div id="lblFrameworkStatus" className="device-info">Escaneando framework...</div>
           <button id="btnSaveFrameworkConfig" className="btn btn-green btn-full">Guardar y continuar</button>
         </div>

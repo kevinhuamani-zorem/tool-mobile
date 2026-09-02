@@ -171,6 +171,13 @@ Los valores secretos de los ambientes del framework (`config/envs/.env.*`)
 permanecen en el proceso principal. El renderer solo recibe el nombre de las
 variables y su estado de configuración. El recorder no utiliza un `.env` propio.
 
+Desde **Ajustes** también puede activarse **🧌 QA Roast Mode**. Cuando la
+revisión funcional rechaza una grabación, Copilot redacta un mensaje sarcástico
+desde los hallazgos reales del caso. No se selecciona desde un diccionario fijo.
+Es opcional, permanece desactivado por defecto y nunca oculta
+el diagnóstico técnico, las acciones afectadas ni la recomendación de
+corrección.
+
 ## Flujos de trabajo del QA
 
 ### Crear un caso nuevo

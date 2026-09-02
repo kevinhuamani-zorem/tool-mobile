@@ -155,9 +155,46 @@ test('un error propiedad del planner libera el flujo y muestra el borrador para 
 });
 
 test('una revisión funcional bloqueante explica el problema y devuelve al QA a la grabación', () => {
+    assert.match(modal, /id="automationAgentSummary"/);
+    assert.match(modal, /id="automationTestDesignContent"/);
+    assert.match(modal, /id="btnFixTestDesignReview"/);
     assert.match(review, /QA_TEST_DESIGN_REQUIRED/);
     assert.match(review, /showTestDesignReview/);
     assert.match(review, /La grabación no demuestra el resultado esperado/);
-    assert.match(review, /Volver y corregir la grabación/);
+    assert.match(modal, /Volver y corregir la grabación/);
     assert.match(review, /Agrega las validaciones funcionales indicadas/);
+    assert.match(review, /automationPipelineExecution\.style\.display = 'none'/);
+    assert.match(review, /automationPackageStatus\.style\.display = 'none'/);
+    assert.match(review, /on\(btnFixTestDesignReview, 'click'/);
+});
+
+test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {
+    const configurationScreen = fs.readFileSync(path.join(
+        root, 'recorder/renderer/src/components/ConfigurationScreen.tsx'
+    ), 'utf8');
+    const preferences = fs.readFileSync(path.join(
+        root, 'recorder/renderer/src/features/shared/recorderPreferences.js'
+    ), 'utf8');
+
+    assert.match(configurationScreen, /id="chkQaRoastMode"/);
+    assert.match(configurationScreen, /QA Roast Mode/);
+    assert.match(preferences, /getItem\(QA_ROAST_MODE_STORAGE_KEY\) === 'true'/);
+    assert.match(preferences, /removeItem\(QA_ROAST_MODE_STORAGE_KEY\)/);
+    assert.match(review, /isQaRoastModeEnabled\(\)/);
+    assert.match(review, /review\?\.roast/);
+    assert.match(review, /escapeHtml\(review\.roast\)/);
+    assert.match(review, /Copilot juzga tu caso/);
+    assert.doesNotMatch(review, /TEST_DESIGN_ROASTS/);
+    assert.match(review, /Diagnóstico técnico/);
+});
+
+test('el prompt exige un roast directo, concreto y no metafórico', () => {
+    const orchestrator = fs.readFileSync(path.join(
+        root, 'core/automation/infrastructure/agentOrchestrator.ts'
+    ), 'utf8');
+
+    assert.match(orchestrator, /Tocaste botones durante 15 pasos y no validaste el resultado/);
+    assert.match(orchestrator, /Confirmado: el botón existe\. Impactante descubrimiento/);
+    assert.match(orchestrator, /metáforas poéticas/);
+    assert.match(orchestrator, /Critica el caso, nunca a la persona/);
 });

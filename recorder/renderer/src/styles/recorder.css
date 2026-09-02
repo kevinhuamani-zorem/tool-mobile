@@ -2208,6 +2208,23 @@ body {
 .remember-config input { accent-color: #8a2fba; }
 .remember-config span { display: flex; flex-direction: column; gap: 3px; }
 .remember-config small { color: var(--text3); }
+.qa-roast-setting {
+    margin-top: -5px;
+    padding: 10px;
+    border: 1px solid #71402b;
+    border-radius: 7px;
+    background: rgba(111, 49, 24, .15);
+}
+.qa-roast-setting input { margin-top: 2px; }
+.qa-roast-message {
+    padding: 12px !important;
+    border: 1px solid #a85522 !important;
+    border-radius: 7px;
+    background: linear-gradient(135deg, rgba(120, 48, 20, .28), rgba(88, 31, 73, .22));
+    color: #ffd9b8;
+}
+.qa-roast-message strong { color: #ff9d57; }
+.qa-roast-message span { display: inline-block; margin-top: 5px; line-height: 1.45; }
 .wizard-case-config {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2233,8 +2250,62 @@ body {
 }
 .automation-agent-summary {
     max-width: 980px;
-    margin: 72px auto 28px;
+    margin: 42px auto 28px;
 }
+.automation-agent-summary-content { flex: 1; min-width: 0; }
+.automation-agent-summary.is-test-design-review {
+    align-items: flex-start;
+    max-width: 1100px;
+    margin-top: 28px;
+    padding: 24px;
+    border-color: rgba(228, 112, 55, .55);
+    background: linear-gradient(135deg, rgba(45, 28, 25, .96), rgba(26, 27, 42, .98));
+}
+.automation-agent-summary.is-test-design-review .generation-icon {
+    flex: 0 0 52px;
+    width: 52px;
+    height: 52px;
+    background: #9a4c24;
+    font-size: 25px;
+}
+.automation-test-design-content {
+    display: grid;
+    gap: 12px;
+    margin-top: 14px;
+}
+.automation-test-design-content .qa-roast-message {
+    display: grid;
+    gap: 5px;
+    padding: 15px 17px !important;
+}
+.automation-test-design-diagnosis {
+    display: grid;
+    gap: 4px;
+    padding: 13px 15px;
+    border-left: 3px solid #8d68bc;
+    border-radius: 6px;
+    background: rgba(25, 25, 40, .82);
+}
+.automation-test-design-diagnosis small { color: var(--text3); }
+.automation-test-design-issues {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.automation-test-design-issues li {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    padding: 13px 15px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: rgba(18, 18, 31, .8);
+}
+.automation-test-design-issues small { color: var(--text3); line-height: 1.4; }
+#btnFixTestDesignReview { justify-self: start; margin-top: 2px; }
 .automation-agent-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2354,6 +2425,10 @@ body {
     .automation-working-state.is-running .automation-spinner {
         animation: none;
     }
+}
+
+@media (max-width: 850px) {
+    .automation-test-design-issues { grid-template-columns: 1fr; }
 }
 
 /* Keep the progress feedback readable on narrow recorder windows. */

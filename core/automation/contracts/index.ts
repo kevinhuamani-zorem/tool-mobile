@@ -629,6 +629,8 @@ export interface TestDesignIssue {
 export interface TestDesignReview {
     status: 'pass' | 'qa-required';
     summary: string;
+    /** Roast breve generado por el agente a partir de los hallazgos reales. */
+    roast?: string;
     issues: TestDesignIssue[];
 }
 

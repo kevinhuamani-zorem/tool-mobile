@@ -9,6 +9,7 @@
 // feature); nunca copia ese estado.
 
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
+import { isQaRoastModeEnabled } from '../shared/recorderPreferences.js';
 
 const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
 
@@ -53,6 +54,16 @@ export function createReviewFeature(deps) {
     const txtAutomationObjective = document.getElementById('txtAutomationObjective');
     const txtAutomationAcceptance = document.getElementById('txtAutomationAcceptance');
     const automationAnalysisSummary = document.getElementById('automationAnalysisSummary');
+    const automationAgentSummary = document.getElementById('automationAgentSummary');
+    const automationAgentSummaryIcon = document.getElementById('automationAgentSummaryIcon');
+    const automationAgentSummaryTitle = document.getElementById('automationAgentSummaryTitle');
+    const automationAgentSummaryDescription = document.getElementById('automationAgentSummaryDescription');
+    const automationTestDesignContent = document.getElementById('automationTestDesignContent');
+    const automationTestDesignRoast = document.getElementById('automationTestDesignRoast');
+    const automationTestDesignDiagnosis = document.getElementById('automationTestDesignDiagnosis');
+    const automationTestDesignIssues = document.getElementById('automationTestDesignIssues');
+    const btnFixTestDesignReview = document.getElementById('btnFixTestDesignReview');
+    const automationPipelineExecution = document.getElementById('automationPipelineExecution');
     const btnRunAutomationPipeline = document.getElementById('btnRunAutomationPipeline');
     const automationPipelineStatus = document.getElementById('automationPipelineStatus');
     const automationPipelineSummary = document.getElementById('automationPipelineSummary');
@@ -81,7 +92,6 @@ export function createReviewFeature(deps) {
     let wizardPage = 1;
     let automationPipelineRunning = false;
     let pendingQaDecisionPrompts = [];
-    let pendingTestDesignReview = null;
     let qaObservations = [];
 
     // Estado del constructor de escenario
@@ -190,7 +200,6 @@ export function createReviewFeature(deps) {
 
     function showQaRequiredDecisions(items) {
         if (!automationQaRequired || !automationQaDecisionList) return;
-        pendingTestDesignReview = null;
         const title = automationQaRequired.querySelector('h3');
         if (title) title.textContent = 'Necesitamos confirmar una decisión';
         if (btnConfirmQaDecision) btnConfirmQaDecision.textContent = 'Confirmar y continuar';
@@ -222,30 +231,60 @@ export function createReviewFeature(deps) {
         automationQaRequired.style.display = '';
     }
 
+    function resetTestDesignReviewSummary() {
+        automationAgentSummary?.classList.remove('is-test-design-review');
+        if (automationAgentSummaryIcon) automationAgentSummaryIcon.textContent = '↗';
+        if (automationAgentSummaryTitle) {
+            automationAgentSummaryTitle.textContent = 'Generación automática deterministic-first';
+        }
+        if (automationAgentSummaryDescription) {
+            automationAgentSummaryDescription.textContent =
+                'Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.';
+            automationAgentSummaryDescription.style.display = '';
+        }
+        if (automationTestDesignContent) automationTestDesignContent.style.display = 'none';
+        if (automationTestDesignRoast) {
+            automationTestDesignRoast.style.display = 'none';
+            automationTestDesignRoast.textContent = '';
+        }
+        if (automationTestDesignDiagnosis) automationTestDesignDiagnosis.textContent = '';
+        if (automationTestDesignIssues) automationTestDesignIssues.innerHTML = '';
+        if (automationPipelineExecution) automationPipelineExecution.style.display = '';
+        if (automationPackageStatus) automationPackageStatus.style.display = '';
+    }
+
     function showTestDesignReview(review) {
-        if (!automationQaRequired || !automationQaDecisionList) return;
+        if (!automationAgentSummary || !automationTestDesignContent || !automationTestDesignIssues) return;
         pendingQaDecisionPrompts = [];
-        pendingTestDesignReview = review || null;
-        const title = automationQaRequired.querySelector('h3');
-        if (title) title.textContent = 'La grabación no demuestra el resultado esperado';
-        automationQaDecisionList.innerHTML = '';
-        const summary = document.createElement('li');
-        summary.innerHTML = `<strong>${escapeHtml(review?.summary || 'El caso necesita revisión funcional del QA.')}</strong>`;
-        automationQaDecisionList.appendChild(summary);
-        (review?.issues || []).forEach(issue => {
-            const item = document.createElement('li');
+        if (automationQaRequired) automationQaRequired.style.display = 'none';
+        automationAgentSummary.classList.add('is-test-design-review');
+        if (automationAgentSummaryIcon) automationAgentSummaryIcon.textContent = isQaRoastModeEnabled() ? '🧌' : '⚠';
+        if (automationAgentSummaryTitle) {
+            automationAgentSummaryTitle.textContent = 'La grabación no demuestra el resultado esperado';
+        }
+        if (automationAgentSummaryDescription) automationAgentSummaryDescription.style.display = 'none';
+        if (automationTestDesignRoast && isQaRoastModeEnabled() && review?.roast) {
+            automationTestDesignRoast.style.display = '';
+            automationTestDesignRoast.innerHTML =
+                `<strong>Copilot juzga tu caso</strong><span>${escapeHtml(review.roast)}</span>`;
+        } else if (automationTestDesignRoast) {
+            automationTestDesignRoast.style.display = 'none';
+        }
+        if (automationTestDesignDiagnosis) {
+            automationTestDesignDiagnosis.innerHTML = `<small>Diagnóstico técnico</small><strong>${escapeHtml(
+                review?.summary || 'El caso necesita revisión funcional del QA.'
+            )}</strong>`;
+        }
+        automationTestDesignIssues.innerHTML = (review?.issues || []).map(issue => {
             const sequences = Array.isArray(issue.actionSequences) && issue.actionSequences.length
                 ? `Acciones ${issue.actionSequences.join(', ')}. `
                 : '';
-            item.innerHTML = `<strong>${escapeHtml(issue.message || 'Hallazgo de diseño de prueba.')}</strong><br/>
-                <small>${escapeHtml(sequences + (issue.recommendation || 'Vuelve a grabar incluyendo una validación observable del resultado.'))}</small>`;
-            automationQaDecisionList.appendChild(item);
-        });
-        if (btnConfirmQaDecision) {
-            btnConfirmQaDecision.disabled = false;
-            btnConfirmQaDecision.textContent = 'Volver y corregir la grabación';
-        }
-        automationQaRequired.style.display = '';
+            return `<li><strong>${escapeHtml(issue.message || 'Hallazgo de diseño de prueba.')}</strong>
+                <small>${escapeHtml(sequences + (issue.recommendation || 'Vuelve a grabar incluyendo una validación observable del resultado.'))}</small></li>`;
+        }).join('');
+        automationTestDesignContent.style.display = '';
+        if (automationPipelineExecution) automationPipelineExecution.style.display = 'none';
+        if (automationPackageStatus) automationPackageStatus.style.display = 'none';
     }
 
     function collectQaDecisions() {
@@ -619,7 +658,7 @@ export function createReviewFeature(deps) {
             return;
         }
         automationPipelineRunning = true;
-        pendingTestDesignReview = null;
+        resetTestDesignReviewSummary();
         automationQaRequired && (automationQaRequired.style.display = 'none');
         setCorrectionReimportVisible(false);
         if (btnRunAutomationPipeline) disableBtn(btnRunAutomationPipeline, '⏳ Generando...');
@@ -791,6 +830,7 @@ export function createReviewFeature(deps) {
                 automationPackageStatus.className = 'generate-result';
             }
             if (automationQaRequired) automationQaRequired.style.display = 'none';
+            resetTestDesignReviewSummary();
             setCorrectionReimportVisible(false);
             updateProductStage(
                 'ANALYZING',
@@ -915,20 +955,18 @@ export function createReviewFeature(deps) {
             setWizardPage(4);
         });
 
+        on(btnFixTestDesignReview, 'click', () => {
+            resetTestDesignReviewSummary();
+            automationPipelineRunning = false;
+            updateProductStage(
+                'ANALYZING',
+                'Corrige la grabación antes de generar.',
+                'Agrega las validaciones funcionales indicadas y vuelve a iniciar el análisis.'
+            );
+            setWizardPage(1);
+        });
+
         on(btnConfirmQaDecision, 'click', async () => {
-            if (pendingTestDesignReview) {
-                automationQaRequired.style.display = 'none';
-                pendingTestDesignReview = null;
-                btnConfirmQaDecision.textContent = 'Confirmar y continuar';
-                automationPipelineRunning = false;
-                updateProductStage(
-                    'ANALYZING',
-                    'Corrige la grabación antes de generar.',
-                    'Agrega las validaciones funcionales indicadas y vuelve a iniciar el análisis.'
-                );
-                setWizardPage(1);
-                return;
-            }
             const decisions = collectQaDecisions();
             if (decisions.some(item => !item.optionId)) {
                 automationPackageStatus.textContent = '⚠ Completa todas las decisiones de QA para continuar.';

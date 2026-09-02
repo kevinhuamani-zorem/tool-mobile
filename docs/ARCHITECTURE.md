@@ -262,6 +262,9 @@ XML, screenshots, source, capabilities ni credenciales.
    o carece de una aserción posterior sobre el resultado de negocio, el pipeline
    termina en `QA_TEST_DESIGN_REQUIRED`, guarda `test-design-review.json` y
    devuelve al QA a la grabación sin crear `agent-response.json`.
+   En ese estado el agente también redacta `testDesignReview.roast` a partir de
+   sus propios hallazgos. El renderer solo lo presenta cuando la preferencia
+   **QA Roast Mode** está activa y siempre conserva el diagnóstico estructurado.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
    Los rellenos de plataforma solo aceptan la identidad determinista completa

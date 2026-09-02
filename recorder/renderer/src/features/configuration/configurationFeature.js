@@ -8,6 +8,7 @@
 // leen para esperar a que la sesión conecte).
 
 import { disableBtn, enableBtn } from '../shared/domHelpers.js';
+import { isQaRoastModeEnabled, setQaRoastModeEnabled } from '../shared/recorderPreferences.js';
 
 const FRAMEWORK_PREFERENCES_STORAGE_KEY = 'appiumVisualRecorder.frameworkPreferences.v1';
 
@@ -45,6 +46,7 @@ export function createConfigurationFeature(deps) {
     const btnChangeFrameworkInline = document.getElementById('btnChangeFrameworkInline');
     const btnSelectFrameworkRoot = document.getElementById('btnSelectFrameworkRoot');
     const chkRememberFramework = document.getElementById('chkRememberFramework');
+    const chkQaRoastMode = document.getElementById('chkQaRoastMode');
     const lblSavedEnvironment = document.getElementById('lblSavedEnvironment');
     const lblSavedSquad = document.getElementById('lblSavedSquad');
     const frameworkEnvironmentField = document.getElementById('frameworkEnvironmentField');
@@ -157,6 +159,7 @@ export function createConfigurationFeature(deps) {
     }
 
     function openFrameworkSetup() {
+        if (chkQaRoastMode) chkQaRoastMode.checked = isQaRoastModeEnabled();
         frameworkSetupModal.style.display = 'flex';
     }
 
@@ -536,6 +539,7 @@ export function createConfigurationFeature(deps) {
             } else {
                 localStorage.removeItem(FRAMEWORK_PREFERENCES_STORAGE_KEY);
             }
+            setQaRoastModeEnabled(Boolean(chkQaRoastMode?.checked));
             state.linkedScenarioData = null;
             state.activeScenarioCoverage = null;
             await Promise.all([loadSquadCatalog(state.sessionPlatform), loadExistingScenarios()]);

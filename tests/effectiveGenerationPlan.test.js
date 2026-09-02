@@ -341,6 +341,7 @@ test('gap-resolutions valida la revisión funcional y sus secuencias', () => {
         testDesignReview: {
             status: 'qa-required',
             summary: 'El caso selecciona un filtro sin observar el resultado.',
+            roast: 'Aplicaste el filtro y luego miraste hacia otro lado. El resultado quedó trabajando sin supervisión.',
             issues: [{
                 code: 'missing-business-assertion', severity: 'blocking',
                 message: 'No existe una aserción posterior sobre los movimientos filtrados.',
@@ -351,6 +352,21 @@ test('gap-resolutions valida la revisión funcional y sus secuencias', () => {
     }), 20);
     assert.equal(valid.valid, true);
     assert.equal(valid.value.testDesignReview.status, 'qa-required');
+    assert.match(valid.value.testDesignReview.roast, /Aplicaste el filtro/);
+
+    const missingRoast = parseGapResolutions(JSON.stringify({
+        schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
+        testDesignReview: {
+            status: 'qa-required', summary: 'El caso necesita una validación funcional.',
+            issues: [{
+                code: 'missing-test-oracle', severity: 'blocking',
+                message: 'Falta un resultado verificable.', actionSequences: [1],
+                recommendation: 'Define un resultado observable.',
+            }],
+        },
+    }), 20);
+    assert.equal(missingRoast.valid, false);
+    assert.equal(missingRoast.errors.some(error => error.code === 'test-design-review-roast'), true);
 
     const invalid = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],

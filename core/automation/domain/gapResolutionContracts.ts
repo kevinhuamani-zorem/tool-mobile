@@ -152,6 +152,12 @@ export function gapResolutionsSchema(maxResolutions: number): Record<string, unk
                 properties: {
                     status: { enum: ['pass', 'qa-required'] },
                     summary: { type: 'string', minLength: 8, maxLength: 500 },
+                    roast: {
+                        type: 'string',
+                        minLength: 20,
+                        maxLength: 280,
+                        description: 'Roast directo y claramente sarcástico basado en el fallo real: observación concreta, golpe breve y corrección. Sin metáforas vagas ni insultos personales.',
+                    },
                     issues: {
                         type: 'array',
                         maxItems: 8,
@@ -427,6 +433,9 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
             const summary = typeof review.summary === 'string'
                 ? review.summary.replace(/\s+/g, ' ').trim().slice(0, 500)
                 : '';
+            const roast = typeof review.roast === 'string'
+                ? review.roast.replace(/\s+/g, ' ').trim().slice(0, 280)
+                : '';
             const rawIssues = Array.isArray(review.issues) ? review.issues : undefined;
             if (!status) errors.push({
                 code: 'test-design-review-status',
@@ -488,8 +497,13 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
                 path: '$.testDesignReview',
                 message: 'qa-required necesita al menos un hallazgo blocking.',
             });
+            if (status === 'qa-required' && roast.length < 20) errors.push({
+                code: 'test-design-review-roast',
+                path: '$.testDesignReview.roast',
+                message: 'qa-required necesita un roast breve y coherente con los hallazgos reales.',
+            });
             if (status && summary.length >= 8 && rawIssues && issues.length === rawIssues.length) {
-                normalizedTestDesignReview = { status, summary, issues };
+                normalizedTestDesignReview = { status, summary, ...(roast ? { roast } : {}), issues };
             }
         }
     }

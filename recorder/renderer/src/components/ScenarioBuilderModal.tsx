@@ -100,36 +100,46 @@ export function ScenarioBuilderModal() {
               <div><span className="eyebrow">PASO 3</span><h3>Generando automatización</h3></div>
               <span className="wizard-help">El proceso usa estados reales del pipeline y avanza automáticamente.</span>
             </div>
-            <div className="generation-summary automation-agent-summary">
-              <span className="generation-icon">↗</span>
-              <div>
-                <h3>Generación automática deterministic-first</h3>
-                <p>Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.</p>
-              </div>
-            </div>
-            <div className="automation-agent-actions">
-              <button className="btn btn-blue" id="btnRunAutomationPipeline">Iniciar generación automática</button>
-            </div>
-            <div id="automationWorkingState" className="automation-working-state is-idle" aria-live="polite">
-              <div className="automation-working-heading">
-                <span className="automation-spinner" aria-hidden="true" />
-                <div className="automation-working-copy">
-                  <strong id="automationWorkingTitle">Listo para generar</strong>
-                  <span id="automationWorkingDetail">El progreso aparecerá aquí al iniciar.</span>
+            <div id="automationAgentSummary" className="generation-summary automation-agent-summary">
+              <span id="automationAgentSummaryIcon" className="generation-icon">↗</span>
+              <div className="automation-agent-summary-content">
+                <h3 id="automationAgentSummaryTitle">Generación automática deterministic-first</h3>
+                <p id="automationAgentSummaryDescription">Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.</p>
+                <div id="automationTestDesignContent" className="automation-test-design-content" style={{display: 'none'}}>
+                  <div id="automationTestDesignRoast" className="qa-roast-message" style={{display: 'none'}} />
+                  <div id="automationTestDesignDiagnosis" className="automation-test-design-diagnosis" />
+                  <ul id="automationTestDesignIssues" className="automation-test-design-issues" />
+                  <button className="btn btn-green" id="btnFixTestDesignReview">
+                    Volver y corregir la grabación
+                  </button>
                 </div>
               </div>
             </div>
-            <div id="automationPipelineStatus" className="generate-result">Listo para iniciar.</div>
-            <ul id="automationPipelineStages" className="steps-list wizard-action-list">
-              <li data-product-stage="ANALYZING">○ Analizando grabación</li>
-              <li data-product-stage="RESOLVING_CONTEXT">○ Buscando componentes reutilizables</li>
-              <li data-product-stage="RESOLVING_DECISIONS">○ Resolviendo decisiones pendientes</li>
-              <li data-product-stage="GENERATING">○ Generando automatización</li>
-              <li data-product-stage="VALIDATING">○ Validando resultado</li>
-              <li data-product-stage="READY_FOR_REVIEW">○ Listo para revisión</li>
-            </ul>
-            <div id="automationPipelineSummary" className="wizard-help" style={{marginTop: '8px'}}>
-              Inicia la generación para ver el progreso.
+            <div id="automationPipelineExecution">
+              <div className="automation-agent-actions">
+                <button className="btn btn-blue" id="btnRunAutomationPipeline">Iniciar generación automática</button>
+              </div>
+              <div id="automationWorkingState" className="automation-working-state is-idle" aria-live="polite">
+                <div className="automation-working-heading">
+                  <span className="automation-spinner" aria-hidden="true" />
+                  <div className="automation-working-copy">
+                    <strong id="automationWorkingTitle">Listo para generar</strong>
+                    <span id="automationWorkingDetail">El progreso aparecerá aquí al iniciar.</span>
+                  </div>
+                </div>
+              </div>
+              <div id="automationPipelineStatus" className="generate-result">Listo para iniciar.</div>
+              <ul id="automationPipelineStages" className="steps-list wizard-action-list">
+                <li data-product-stage="ANALYZING">○ Analizando grabación</li>
+                <li data-product-stage="RESOLVING_CONTEXT">○ Buscando componentes reutilizables</li>
+                <li data-product-stage="RESOLVING_DECISIONS">○ Resolviendo decisiones pendientes</li>
+                <li data-product-stage="GENERATING">○ Generando automatización</li>
+                <li data-product-stage="VALIDATING">○ Validando resultado</li>
+                <li data-product-stage="READY_FOR_REVIEW">○ Listo para revisión</li>
+              </ul>
+              <div id="automationPipelineSummary" className="wizard-help" style={{marginTop: '8px'}}>
+                Inicia la generación para ver el progreso.
+              </div>
             </div>
             <div id="automationQaRequired" className="generation-summary" style={{display: 'none', marginTop: '10px'}}>
               <span className="generation-icon">⚠</span>
