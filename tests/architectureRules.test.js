@@ -76,6 +76,18 @@ test('core/ solo contiene directorios de módulo, sin fachadas legadas planas', 
     ]);
 });
 
+test('el módulo core/coverage no queda excluido como reporte de cobertura', () => {
+    const root = path.resolve(__dirname, '..');
+    const source = path.join(root, 'core/coverage/index.ts');
+    assert.equal(fs.existsSync(source), true);
+    const ignored = spawnSync(
+        'git',
+        ['check-ignore', '--quiet', 'core/coverage/index.ts'],
+        { cwd: root },
+    );
+    assert.equal(ignored.status, 1, 'core/coverage debe poder versionarse');
+});
+
 test('validation expone contratos puros y también su infraestructura concreta', () => {
     const root = path.resolve(__dirname, '..');
     const publicApi = fs.readFileSync(path.join(root, 'core/validation/index.ts'), 'utf8');

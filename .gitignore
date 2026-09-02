@@ -8,7 +8,7 @@ dist/
 # Evidencia, memoria, caché y salidas locales
 runtime/**
 !runtime/.gitignore
-coverage/
+/coverage/
 test-results/
 
 # Logs y archivos del sistema/editor
