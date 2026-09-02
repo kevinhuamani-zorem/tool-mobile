@@ -30,7 +30,7 @@
   "license": "MIT",
   "build": {
     "appId": "com.kevinarnold.appium-visual-recorder",
-    "productName": "Appium Visual Recorder",
+    "productName": "Appium Recorder",
     "asar": false,
     "npmRebuild": false,
     "directories": {
@@ -63,7 +63,7 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "dmg": {
-      "title": "Appium Visual Recorder ${version}"
+      "title": "Appium Recorder ${version}"
     }
   },
   "devDependencies": {

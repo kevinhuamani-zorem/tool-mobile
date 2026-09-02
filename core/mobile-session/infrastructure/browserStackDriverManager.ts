@@ -49,7 +49,7 @@ export class BrowserStackDriverManager extends AppiumDriverManager {
             'bstack:options': {
                 userName:    bsConfig.username,
                 accessKey:   bsConfig.accessKey,
-                projectName: bsConfig.projectName || 'Appium Visual Recorder',
+                projectName: bsConfig.projectName || 'Appium Recorder',
                 buildName:   bsConfig.buildName   || 'recorder-' + new Date().toISOString().slice(0, 10),
                 sessionName: 'recording-' + Date.now(),
                 debug:       true,

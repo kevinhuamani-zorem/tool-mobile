@@ -1,4 +1,4 @@
-# AGENTS.md — Appium Visual Recorder
+# AGENTS.md — Appium Recorder
 
 Este archivo aplica a todo `tools/visual-recorder`. Su objetivo es que una IA o
 persona pueda modificar el recorder sin romper sus contratos de seguridad,
@@ -76,6 +76,11 @@ generadores, validadores o plantillas.
    Las consultas obedecen **NO SEARCH WITHOUT GAP**: pasan por
    `GapQueryPolicy`, deben estar autorizadas por el gap abierto y respetar su
    presupuesto; un gap bloqueante del QA nunca habilita búsquedas del agente.
+   En la misma pasada semántica, el agente realiza una revisión acotada de
+   diseño de prueba: contrasta objetivo y aceptación con las verificaciones
+   grabadas. Si solo se observa la existencia del control y no su efecto de
+   negocio, devuelve `testDesignReview.status: qa-required`; no se materializa
+   código hasta que el QA corrija la grabación.
 10. **IA opt-in y contexto mínimo.** Copilot solo se ejecuta por una
     decisión explícita del usuario. Reciben el paquete confinado bajo
     `runtime/recordings`, sin secretos, y no deben explorar el target ni leer

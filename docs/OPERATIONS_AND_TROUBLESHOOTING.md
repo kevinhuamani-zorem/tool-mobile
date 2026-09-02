@@ -24,7 +24,7 @@ npm run package:mac
 ```
 
 El resultado queda en
-`release/mac-arm64/Appium Visual Recorder.app`. Al abrirlo por primera vez,
+`release/mac-arm64/Appium Recorder.app`. Al abrirlo por primera vez,
 selecciona la raíz de `fwk-mobile-test`; la elección queda persistida para los
 siguientes arranques. También puede definirse `FWK_MOBILE_ROOT` al ejecutar el
 binario durante diagnóstico. El bundle inicia Appium 3 y sus drivers fijados;

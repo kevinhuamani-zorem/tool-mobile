@@ -4,7 +4,7 @@ import type {
 } from '../../automation/contracts';
 
 export const GENERATED_FILE_AUTHOR = 'Kevinarnold.zorem';
-export const GENERATED_FILE_GENERATOR = 'Appium Visual Recorder';
+export const GENERATED_FILE_GENERATOR = 'Appium Recorder';
 
 function validCreatedAt(value: string): string {
     const timestamp = Date.parse(value);
@@ -14,7 +14,7 @@ function validCreatedAt(value: string): string {
 function stripCommentMetadata(content: string, marker: '#' | '//'): string {
     const escaped = marker === '#' ? '#' : '\\/\\/';
     const metadata = new RegExp(
-        `^(?:${escaped} (?:Generado por Appium Visual Recorder|Author: [^\\n]+|Fecha de creación: [^\\n]+)\\r?\\n)+\\r?\\n?`
+        `^(?:${escaped} (?:Generado por Appium (?:Visual )?Recorder|Author: [^\\n]+|Fecha de creación: [^\\n]+)\\r?\\n)+\\r?\\n?`
     );
     return content.replace(metadata, '');
 }

@@ -42,7 +42,7 @@ export interface GenerationRequest {
          * Origen del texto: `domain`, `qa` o `template`. Solo `template` es
          * wording generado por máquina y puede requerir reescritura.
          */
-        wording?: 'domain' | 'qa' | 'template';
+        wording?: 'domain' | 'qa' | 'template' | 'agent';
         methodName?: string;
     }[];
 }

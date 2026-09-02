@@ -449,7 +449,7 @@ export function registerSessionHandlers(context: SessionHandlersContext): void {
                 appPackage:      config.appPackage      || '',
                 appActivity:     config.appActivity     || '',
                 bundleId:        config.bundleId        || '',
-                projectName:     config.projectName     || 'Appium Visual Recorder',
+                projectName:     config.projectName     || 'Appium Recorder',
             });
             return { success: true, screenshot };
         } catch (e: any) {

@@ -1,11 +1,27 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { FwkMobileGenerator } = require('../dist/core/generation');
+const { FwkMobileGenerator, withGeneratedFileMetadata } = require('../dist/core/generation');
 const { frameworkContract } = require('../dist/core/workspace');
 const { projectPaths } = require('../dist/core/workspace');
 
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const EXT = CONTRACT.importExtension;
+
+test('renombra metadata nueva y reemplaza el encabezado legado sin duplicarlo', () => {
+    const content = [
+        '# Generado por Appium Visual Recorder',
+        '# Author: Kevinarnold.zorem',
+        '# Fecha de creación: 2026-08-20T00:00:00.000Z',
+        '',
+        'Feature: Consulta',
+    ].join('\n');
+
+    const updated = withGeneratedFileMetadata('feature', content, '2026-09-02T00:00:00.000Z');
+
+    assert.match(updated, /^# Generado por Appium Recorder\n/);
+    assert.doesNotMatch(updated, /Appium Visual Recorder/);
+    assert.equal((updated.match(/# Author:/g) || []).length, 1);
+});
 
 test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => {
     const actions = [
@@ -55,7 +71,7 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
 
     assert.equal(preview.files.length, 4);
     assert.match(preview.featureContent, /\[TC-10239\]\[Happy Path\]\[AUTO-FRONT\]/);
-    assert.match(preview.featureContent, /^# Generado por Appium Visual Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
+    assert.match(preview.featureContent, /^# Generado por Appium Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
     // Tags segun el estandar: dominio sobre `Feature:`, funcionalidad + tier de
     // ejecucion en el Scenario. Sin tier el review bloquea el merge.
     assert.match(preview.featureContent, /^@payment\nFeature: /m);
@@ -65,7 +81,7 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.equal(Object.prototype.hasOwnProperty.call(locatorDocument, '_metadata'), false,
         'JSON no admite comentarios y `_metadata` es lo mismo con otro nombre');
     assert.deepEqual(Object.keys(locatorDocument), ['movementsAndroid', 'movementsIos']);
-    assert.match(preview.stepContent, /^\/\/ Generado por Appium Visual Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
+    assert.match(preview.stepContent, /^\/\/ Generado por Appium Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
     assert.match(preview.stepContent, /movementsScreen\.revisarMovimientos\(\)/);
     assert.match(preview.stepContent, /movementsScreen\.validarMovimiento\(movimiento\)/);
     assert.match(preview.stepContent, /import movementsScreen from/);
@@ -73,7 +89,7 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.doesNotMatch(preview.stepContent, /generatedScreen/);
     // Imports y símbolos salen del framework real, no de una constante del test.
     assert.ok(preview.screenContent.includes(`from '${CONTRACT.baseScreenImport}'`));
-    assert.match(preview.screenContent, /^\/\/ Generado por Appium Visual Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
+    assert.match(preview.screenContent, /^\/\/ Generado por Appium Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
     assert.ok(preview.screenContent.includes(`from '${CONTRACT.locatorFactoryImport}'`));
     assert.ok(preview.screenContent.includes(`from '${CONTRACT.typeLocatorImport}'`));
     assert.ok(preview.screenContent.includes(`${CONTRACT.locatorFactorySymbol}.getElement(`),

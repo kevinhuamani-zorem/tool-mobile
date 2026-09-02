@@ -775,7 +775,7 @@ export function createConfigurationFeature(deps) {
                 appPackage:      txtBsPackage  ? txtBsPackage.value.trim()  : '',
                 appActivity:     txtBsActivity ? txtBsActivity.value.trim() : '.MainActivity',
                 bundleId:        txtBsBundleId ? txtBsBundleId.value.trim() : '',
-                projectName:     'Appium Visual Recorder',
+                projectName:     'Appium Recorder',
             };
 
             try {

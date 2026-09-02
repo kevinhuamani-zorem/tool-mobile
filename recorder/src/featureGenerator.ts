@@ -26,7 +26,7 @@ export class FeatureGenerator {
     private buildContent(featureName: string, scenarioName: string, steps: RecordedStep[]): string {
         const date = new Date().toLocaleString('es-PE');
         return [
-            `# Generado por Appium Visual Recorder`,
+            `# Generado por Appium Recorder`,
             `# Fecha: ${date}`,
             `# locator-module: global`,
             `# Locators: ${this.locatorsPath}`,

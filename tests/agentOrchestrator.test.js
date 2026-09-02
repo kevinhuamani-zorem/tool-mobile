@@ -888,6 +888,7 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
                 keyword: 'When',
                 text: 'el usuario consulta movimientos',
                 status: 'missing',
+                wording: 'template',
                 actions: [{
                     sequence: 1,
                     action: 'CLICK',
@@ -917,6 +918,17 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
                 recordingId: 'rec-1',
                 planId: 'plan-1',
                 resolutions: [{ gapId: 'gap-screen', decision: 'create', reason: 'no hay candidato reutilizable autorizado' }],
+                testDesignReview: {
+                    status: 'pass',
+                    summary: 'El resultado esperado queda observado por la aserción funcional del escenario.',
+                    issues: [],
+                },
+                gherkinResolutions: [{
+                    keyword: 'When',
+                    text: 'el usuario consulta sus movimientos disponibles',
+                    actionSequences: [1],
+                    reason: 'Reemplaza la plantilla por intención de negocio.',
+                }],
             };
             writeJson(path.join(input.cwd, 'gap-resolutions.json'), candidate);
             assert.equal(input.stopOnValidatedOutput.acceptOutput(candidate), false);
@@ -955,6 +967,7 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
         assert.match(prompts[0], /nunca edites agent-response\.json/);
         assert.match(prompts[0], /replacement:\{platform,sequence\}/);
         assert.match(prompts[0], /validation-feedback\.json/);
+        assert.match(prompts[0], /gherkinResolutions/);
         assert.equal(validationCalls, 2);
         const feedback = JSON.parse(fs.readFileSync(path.join(dir, 'validation-feedback.json'), 'utf-8'));
         assert.equal(feedback.status, 'valid');
@@ -962,7 +975,213 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
         const response = JSON.parse(fs.readFileSync(path.join(dir, 'agent-response.json'), 'utf-8'));
         assert.equal(response.recordingId, 'rec-1');
         assert.equal(response.files.length, 4);
+        assert.equal(response.actionTrace[0].gherkinStep, 'When el usuario consulta sus movimientos disponibles');
         assert.ok(fs.existsSync(path.join(dir, 'query-requests.json')));
+    } finally {
+        if (previousMode === undefined) delete process.env.RECORDER_GENERATION_MODE;
+        else process.env.RECORDER_GENERATION_MODE = previousMode;
+    }
+});
+
+test('orchestrator termina y solicita regeneración cuando Pass 2 no puede corregir el Gherkin del plan', async () => {
+    const dir = packageFixture();
+    writeJson(path.join(dir, 'generation-plan.json'), {
+        schemaVersion: 1,
+        pipelineVersion: '1.0.0',
+        planId: 'plan-1',
+        recordingId: 'rec-1',
+        fingerprint: 'fp',
+        deterministicCoverage: 0.6,
+        status: 'needs-agent',
+        unresolvedGapIds: ['gap-screen'],
+        files: [
+            { layer: 'feature', path: 'features/yape-features/payment/sample.feature', operation: 'create' },
+            { layer: 'steps', path: 'features/yape-steps-definitions/payment/sample.steps.ts', operation: 'create' },
+            { layer: 'screen', path: 'screenobjects/payment/sample.screen.ts', operation: 'create' },
+            { layer: 'locators', path: 'resources/locators/payment/sample.locator.json', operation: 'create' },
+        ],
+        resolutions: [{
+            sequence: 1,
+            action: 'CLICK',
+            intent: 'abrir movimientos',
+            resolution: 'create',
+            locatorName: 'movementsButton',
+            confidence: 0.7,
+            gapId: 'gap-screen',
+            reason: 'falta contexto semántico',
+        }],
+        budgets: { ...DEFAULT_AGENT_OPERATIONAL_BUDGETS },
+    });
+    writeJson(path.join(dir, 'scenario.json'), {
+        schemaVersion: 1,
+        pipelineVersion: '1.0.0',
+        recordingId: 'rec-1',
+        revision: 1,
+        fingerprint: 'fp',
+        createdAt: new Date(0).toISOString(),
+        squad: 'payment',
+        platform: 'android',
+        environment: 'qa',
+        objective: 'Consultar movimientos',
+        acceptanceCriteria: 'Se muestra la lista de movimientos',
+        request: {
+            squad: 'payment', featureName: 'Flujo mobile', scenarioName: 'Escenario grabado',
+            fileName: 'sample', locatorModule: 'sample', caseId: 'TC-10239',
+            pathType: 'Happy Path', tag: 'sample', platform: 'android',
+            scenarioRows: [{
+                keyword: 'When', text: 'el usuario completa flujo mobile', status: 'missing',
+                actions: [{ sequence: 1, action: 'CLICK', selector: 'id=btn_movements', variableName: 'movementsButton' }],
+            }],
+        },
+        actions: [{ sequence: 1, action: 'CLICK', selector: 'id=btn_movements', variableName: 'movementsButton' }],
+    });
+    writeJson(path.join(dir, 'gap-resolutions.schema.json'), { type: 'object' });
+    let evaluated = 0;
+    const provider = {
+        name: 'fake',
+        getVersion: async () => '1.0.0',
+        cancel() {},
+        async execute(input) {
+            const candidate = {
+                schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1',
+                resolutions: [{ gapId: 'gap-screen', decision: 'create' }],
+                testDesignReview: {
+                    status: 'pass',
+                    summary: 'El escenario conserva una evidencia funcional suficiente para esta prueba.',
+                    issues: [],
+                },
+            };
+            writeJson(path.join(input.cwd, 'gap-resolutions.json'), candidate);
+            evaluated += 1;
+            assert.equal(input.stopOnValidatedOutput.acceptOutput(candidate), true,
+                'el provider debe cerrar sin esperar una edición imposible');
+            return { success: true, exitCode: null, stdout: '', stderr: '', durationMs: 1, timedOut: false, cancelled: false };
+        },
+    };
+    const previousMode = process.env.RECORDER_GENERATION_MODE;
+    process.env.RECORDER_GENERATION_MODE = 'deterministic';
+    try {
+        const result = await new AgentOrchestrator(
+            { execute: () => ({}) },
+            provider,
+            undefined,
+            undefined,
+            () => ({
+                valid: false,
+                errors: [{
+                    code: 'generic-template-gherkin',
+                    message: 'El Gherkin de plantilla debe consolidarse.',
+                    file: 'features/yape-features/payment/sample.feature',
+                }],
+            }),
+        ).run(dir, 'automatic');
+
+        assert.equal(evaluated, 1);
+        assert.equal(result.success, false);
+        assert.equal(result.errorCode, 'PLANNER_REGENERATION_REQUIRED');
+        const feedback = JSON.parse(fs.readFileSync(path.join(dir, 'validation-feedback.json'), 'utf-8'));
+        assert.equal(feedback.status, 'planner-regeneration-required');
+        assert.equal(feedback.nextAction, 'regenerate-package-or-review-draft');
+        const status = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf-8'));
+        assert.equal(status.state, 'failed');
+        assert.equal(status.errorCode, 'PLANNER_REGENERATION_REQUIRED');
+        const run = JSON.parse(fs.readFileSync(path.join(dir, 'agent-run.json'), 'utf-8'));
+        assert.equal(run.result, 'planner-regeneration-required');
+        assert.equal(run.timers?.agentStartedAtMs, undefined);
+        assert.ok(fs.existsSync(path.join(dir, 'agent-response.json')), 'el borrador materializado se conserva');
+    } finally {
+        if (previousMode === undefined) delete process.env.RECORDER_GENERATION_MODE;
+        else process.env.RECORDER_GENERATION_MODE = previousMode;
+    }
+});
+
+test('orchestrator detiene la generación cuando Copilot detecta que no se valida el efecto funcional', async () => {
+    const dir = packageFixture();
+    writeJson(path.join(dir, 'generation-plan.json'), {
+        schemaVersion: 1,
+        pipelineVersion: '1.0.0',
+        planId: 'plan-qa-review',
+        recordingId: 'rec-qa-review',
+        fingerprint: 'fp',
+        deterministicCoverage: 1,
+        status: 'resolved',
+        unresolvedGapIds: [],
+        files: [
+            { layer: 'feature', path: 'features/yape-features/payment/filters.feature', operation: 'create' },
+            { layer: 'steps', path: 'features/yape-steps-definitions/payment/filters.steps.ts', operation: 'create' },
+            { layer: 'screen', path: 'screenobjects/payment/filters.screen.ts', operation: 'create' },
+            { layer: 'locators', path: 'resources/locators/payment/filters.locator.json', operation: 'create' },
+        ],
+        resolutions: [],
+        budgets: { ...DEFAULT_AGENT_OPERATIONAL_BUDGETS },
+    });
+    writeJson(path.join(dir, 'scenario.json'), {
+        schemaVersion: 1,
+        pipelineVersion: '1.0.0',
+        recordingId: 'rec-qa-review',
+        revision: 1,
+        fingerprint: 'fp',
+        createdAt: new Date(0).toISOString(),
+        squad: 'payment',
+        platform: 'android',
+        environment: 'qa',
+        objective: 'Usar los filtros de movimientos',
+        acceptanceCriteria: 'Mostrar únicamente movimientos del periodo seleccionado',
+        request: {
+            squad: 'payment', featureName: 'Filtros', scenarioName: 'Filtrar movimientos',
+            fileName: 'filters', locatorModule: 'filters', caseId: 'TC-10239',
+            pathType: 'Happy Path', tag: 'filters', platform: 'android',
+            scenarioRows: [{
+                keyword: 'When', text: 'el usuario filtra sus movimientos', status: 'missing', wording: 'domain',
+                actions: [
+                    { sequence: 1, action: 'CLICK', selector: 'id=filter', variableName: 'filterButton' },
+                    { sequence: 2, action: 'VERIFICAR_EXISTE', selector: 'id=today', variableName: 'todayOption' },
+                    { sequence: 3, action: 'CLICK', selector: 'id=today', variableName: 'todayOption' },
+                ],
+            }],
+        },
+        actions: [
+            { sequence: 1, action: 'CLICK', selector: 'id=filter', contextHint: 'abrir filtros' },
+            { sequence: 2, action: 'VERIFICAR_EXISTE', selector: 'id=today', contextHint: 'validar opción solo hoy' },
+            { sequence: 3, action: 'CLICK', selector: 'id=today', contextHint: 'seleccionar solo hoy' },
+        ],
+    });
+    writeJson(path.join(dir, 'gap-resolutions.schema.json'), { type: 'object' });
+    const review = {
+        status: 'qa-required',
+        summary: 'Se selecciona el filtro Solo hoy, pero no se comprueba el resultado producido.',
+        issues: [{
+            code: 'missing-business-assertion',
+            severity: 'blocking',
+            message: 'La existencia de la opción no demuestra que los movimientos hayan sido filtrados.',
+            actionSequences: [2, 3],
+            recommendation: 'Vuelve a grabar y valida el rango o un movimiento esperado después de aplicar Solo hoy.',
+        }],
+    };
+    const provider = {
+        name: 'fake', getVersion: async () => '1.0.0', cancel() {},
+        async execute(input) {
+            const candidate = {
+                schemaVersion: '1.0', recordingId: 'rec-qa-review', planId: 'plan-qa-review',
+                resolutions: [], testDesignReview: review,
+            };
+            writeJson(path.join(input.cwd, 'gap-resolutions.json'), candidate);
+            assert.equal(input.stopOnValidatedOutput.acceptOutput(candidate), true);
+            return { success: true, exitCode: 0, stdout: '', stderr: '', durationMs: 1, timedOut: false, cancelled: false };
+        },
+    };
+    const previousMode = process.env.RECORDER_GENERATION_MODE;
+    process.env.RECORDER_GENERATION_MODE = 'deterministic';
+    try {
+        const result = await new AgentOrchestrator({ execute: () => ({}) }, provider).run(dir, 'automatic');
+        assert.equal(result.success, false);
+        assert.equal(result.errorCode, 'QA_TEST_DESIGN_REQUIRED');
+        assert.deepEqual(result.testDesignReview, review);
+        assert.equal(fs.existsSync(path.join(dir, 'agent-response.json')), false);
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'test-design-review.json'), 'utf-8')), review);
+        const feedback = JSON.parse(fs.readFileSync(path.join(dir, 'validation-feedback.json'), 'utf-8'));
+        assert.equal(feedback.status, 'qa-required');
+        assert.equal(feedback.testDesignReview.issues[0].code, 'missing-business-assertion');
     } finally {
         if (previousMode === undefined) delete process.env.RECORDER_GENERATION_MODE;
         else process.env.RECORDER_GENERATION_MODE = previousMode;

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import fs from 'fs';
 import http from 'http';
+import net from 'net';
 import path from 'path';
 import { projectPaths } from '../../workspace';
 import { resolveAndroidTooling } from './androidTooling';
@@ -40,9 +41,9 @@ export function buildBundledDriverManifest(toolRoot = projectPaths.toolRoot): Re
     return { drivers, plugins: {}, schemaRev: 4 };
 }
 
-function statusReady(): Promise<boolean> {
+function statusReady(port: number): Promise<boolean> {
     return new Promise(resolve => {
-        const request = http.get('http://127.0.0.1:4723/status', response => {
+        const request = http.get(`http://127.0.0.1:${port}/status`, response => {
             let body = '';
             response.setEncoding('utf8');
             response.on('data', chunk => { body += chunk; });
@@ -53,9 +54,27 @@ function statusReady(): Promise<boolean> {
     });
 }
 
+function availablePort(start: number): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+        const probe = net.createServer();
+        probe.unref();
+        probe.once('error', reject);
+        probe.listen({ host: '127.0.0.1', port: start }, () => {
+            const address = probe.address();
+            const port = typeof address === 'object' && address ? address.port : start;
+            probe.close(error => error ? reject(error) : resolve(port));
+        });
+    }).catch(error => {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EADDRINUSE') return availablePort(start + 1);
+        throw error;
+    });
+}
+
 export class EmbeddedAppiumServer {
     private process: ChildProcess | null = null;
     private owned = false;
+    private port = 4723;
 
     private prepareManifest(appiumHome: string): void {
         const manifest = path.join(appiumHome, 'node_modules', '.cache', 'appium', 'extensions.yaml');
@@ -64,10 +83,19 @@ export class EmbeddedAppiumServer {
         fs.writeFileSync(manifest, JSON.stringify(buildBundledDriverManifest(), null, 2), 'utf8');
     }
 
-    async start(): Promise<void> {
-        if (await statusReady()) {
-            console.log('[Appium] Reutilizando servidor existente en 4723');
-            return;
+    async start(): Promise<number> {
+        if (await statusReady(this.port)) {
+            // Un Appium dejado por una versión anterior puede conservar un
+            // extensions.yaml que apunte a un .app ya eliminado. No es posible
+            // recargar drivers en caliente: levantamos el runtime aislado del
+            // recorder en el siguiente puerto libre.
+            const occupiedPort = this.port;
+            this.port = await availablePort(occupiedPort + 1);
+            console.log(
+                `[Appium] Puerto ${occupiedPort} ocupado; usando runtime aislado en ${this.port}`,
+            );
+        } else {
+            this.port = await availablePort(this.port);
         }
 
         const appiumEntry = path.join(projectPaths.toolRoot, 'node_modules', 'appium', 'index.js');
@@ -80,7 +108,7 @@ export class EmbeddedAppiumServer {
         this.process = spawn(process.execPath, [
             appiumEntry,
             '--address', '127.0.0.1',
-            '--port', '4723',
+            '--port', String(this.port),
             '--log-level', 'error',
             '--relaxed-security',
         ], {
@@ -97,9 +125,9 @@ export class EmbeddedAppiumServer {
         this.process.stderr?.on('data', chunk => console.error(`[Appium] ${String(chunk).trimEnd()}`));
 
         for (let attempt = 0; attempt < 30; attempt += 1) {
-            if (await statusReady()) {
-                console.log('[Appium] Servidor integrado listo');
-                return;
+            if (await statusReady(this.port)) {
+                console.log(`[Appium] Servidor integrado listo en ${this.port}`);
+                return this.port;
             }
             if (this.process.exitCode !== null) break;
             await new Promise(resolve => setTimeout(resolve, 500));

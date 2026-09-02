@@ -6,7 +6,7 @@ export function ConfigurationScreen() {
         <header className="connection-header">
           <div className="connection-brand">
             <span className="logo">📱</span>
-            <div><h1>Appium Visual Recorder</h1><p>Graba flujos de pruebas visualmente</p></div>
+            <div><h1>Appium Recorder</h1><p>Graba flujos de pruebas visualmente</p></div>
           </div>
           <button id="btnChangeFramework" className="btn btn-dark">⚙️ Ajustes</button>
         </header>

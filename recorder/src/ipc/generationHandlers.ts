@@ -169,7 +169,7 @@ export function registerGenerationHandlers(context: GenerationHandlersContext): 
             const featurePath = `${featuresDir}/${fileName}.feature`;
             const date = new Date().toLocaleString('es-PE');
             const featureLines = [
-                `# Generado por Appium Visual Recorder`,
+                `# Generado por Appium Recorder`,
                 `# Fecha: ${date}`,
                 `# locator-module: global`,
                 `# Locators: ${path.join(projectPaths.locators, 'global.locator.json')}`,
@@ -220,7 +220,7 @@ export function registerGenerationHandlers(context: GenerationHandlersContext): 
             const allBlocks = [...existingBlocks, ...newBlocks];
 
             const tsContent = [
-                `// Generado por Appium Visual Recorder — ${date}`,
+                `// Generado por Appium Recorder — ${date}`,
                 `import { Given } from '@cucumber/cucumber';`,
                 `import { PageFactory } from '../pageFactory';`,
                 '',

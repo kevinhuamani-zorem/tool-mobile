@@ -13,6 +13,7 @@ import {
     GapResolution,
     GapResolutionFile,
     GenerationPlan,
+    TestDesignReview,
     DEFAULT_AGENT_OPERATIONAL_BUDGETS,
     DEFAULT_AGENT_EXECUTION_MODE,
     resolveRecorderGenerationMode,
@@ -51,6 +52,16 @@ interface AgentRunExecutionOverrides {
     budgetOverride?: Partial<AgentOperationalBudgets>;
 }
 
+const PLANNER_OWNED_VALIDATION_CODES = new Set([
+    'generic-template-gherkin',
+]);
+
+function requiresPlannerRegeneration(
+    errors: Array<{ code: string; message: string; file?: string }>,
+): boolean {
+    return errors.some(error => PLANNER_OWNED_VALIDATION_CODES.has(String(error.code || '')));
+}
+
 interface NestedGapExecutionArtifacts {
     gapId: string;
     attempted: boolean;
@@ -80,6 +91,7 @@ export interface AgentOrchestratorResult {
     errorCode?: string;
     error?: string;
     providerSummary?: ReturnType<typeof summarizeAgentProcessOutput>;
+    testDesignReview?: TestDesignReview;
 }
 
 export interface DeterministicResponseValidationResult {
@@ -227,7 +239,7 @@ function copyGapWorkspace(packageDirectory: string, gapId: string): string {
 }
 
 function clearAgentWritableOutputs(packageDirectory: string): void {
-    for (const name of ['query-requests.json', 'gap-resolutions.json', 'agent-response.json']) {
+    for (const name of ['query-requests.json', 'gap-resolutions.json', 'agent-response.json', 'test-design-review.json']) {
         const file = path.join(packageDirectory, name);
         if (fs.existsSync(file)) {
             fs.unlinkSync(file);
@@ -423,19 +435,26 @@ function deterministicGapResolutions(
 }
 
 function semanticPassPrompt(context: Record<string, unknown>): string {
-    const promptBase = 'PASS 2 (SEMANTIC): genera gap-resolutions.json para cerrar únicamente gaps semánticos abiertos.';
+    const promptBase = 'PASS 2 (SEMANTIC): genera gap-resolutions.json para cerrar gaps semánticos y redactar únicamente filas Gherkin template.';
     const instructions = [
         'No generes código ni archivos feature/steps/screen/locators.',
         'No cambies recordingId ni planId.',
         'Escribe solo gap-resolutions.json con schemaVersion "1.0".',
         'Cada resolución debe incluir gapId, decision y reason cuando aplique.',
+        'Si scenario.scenarioRows contiene wording "template", agrega gherkinResolutions. Cada elemento lleva keyword, text declarativo, actionSequences y reason.',
+        'Cubre exactamente una vez todas las secuencias de filas template. Puedes consolidar filas template contiguas en un solo step incluyendo todas sus actionSequences.',
+        'No reescribas filas domain, qa o reused. No inventes resultados no observados, no menciones clicks, botones, campos, scrolls ni selectores.',
+        'Incluye siempre testDesignReview con status, summary e issues. Evalúa diseño funcional, no sintaxis: contrasta objective y acceptanceCriteria con las acciones y verificaciones observadas.',
+        'Usa status "qa-required" si una variante seleccionada no tiene una aserción posterior de resultado de negocio, si solo se comprueba que existe el control, si el criterio de aceptación no queda observado o si falta un oráculo verificable. En ese estado incluye al menos un issue blocking.',
+        'Usa status "pass" solo cuando cada comportamiento del objetivo termina en una evidencia observable alineada con acceptanceCriteria. No asumas que verificar el botón u opción demuestra el efecto del filtro.',
+        'Los issue.code permitidos son missing-business-assertion, control-existence-only, acceptance-criteria-mismatch, missing-test-oracle, dependent-variants y ambiguous-objective. actionSequences solo puede referenciar acciones reales. Da al QA una recomendación concreta para volver a grabar.',
         'Decisiones canónicas permitidas: "reuse", "replace-existing", "create", "resolved", "qa-required" o "unresolved".',
         'Para gap-extend-existing-artifacts usa "resolved": las rutas update ya están fijadas por generation-plan.json.',
         'Si decision es "reuse", incluye selectedCandidate:{file,module,name} copiando exactamente un candidato del plan o de query-results.json; no uses aliases.',
         'Si el QA autoriza conservar una clave pero reemplazar su selector, usa "replace-existing" con selectedCandidate y replacement:{platform,sequence}; TypeLocator/selector salen del recording.',
         'En modo determinista nunca edites agent-response.json: el recorder lo regenera desde gap-resolutions.json.',
         'Después de escribir gap-resolutions.json, lee validation-feedback.json: el recorder materializa y valida la propuesta con el contrato oficial.',
-        'Si validation-feedback.json sigue en "awaiting-output", espera brevemente y vuelve a leerlo. Si tiene status "correction-required", corrige solo gap-resolutions.json y vuelve a leer el feedback; no des por terminada la tarea antes de status "valid" o "qa-required".',
+        'Si validation-feedback.json sigue en "awaiting-output", espera brevemente y vuelve a leerlo. Si tiene status "correction-required", corrige solo gap-resolutions.json y vuelve a leer el feedback. Los estados "valid", "qa-required" y "planner-regeneration-required" son terminales; el último indica que el recorder debe reconstruir el plan y no admite otra corrección semántica.',
         'selectedCandidate siempre identifica un locator autorizado; no coloques ahí métodos de Screen Object.',
         'Si falta contexto para cerrar un gap, usa decision "unresolved" y opcionalmente needs:[{query,args}].',
     ].join(' ');
@@ -1299,6 +1318,10 @@ export class AgentOrchestrator {
         const fullPlan = readJson<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
         const deterministicResolved = deterministicGapResolutions(openGaps);
         const semanticGaps = openGaps.filter(gap => !deterministicResolved.some(item => item.gapId === gap.id));
+        const templateRows = (scenario.request?.scenarioRows || [])
+            .filter((row: Record<string, unknown>) => row.wording === 'template');
+        const requiresSemanticWording = templateRows.length > 0;
+        const requiresTestDesignReview = true;
 
         const pass1Context = buildPassContext(packageDirectory, 'pass1');
         runStore.setPassContext('pass1', pass1Context.breakdown.totalBytes, pass1Context.breakdown);
@@ -1347,7 +1370,7 @@ export class AgentOrchestrator {
         writeJson(resolvePackageArtifactPath(packageDirectory, 'query-results.json'), queryResults);
 
         let semantic: GapResolutionFile | null = null;
-        if (semanticGaps.length > 0) {
+        if (semanticGaps.length > 0 || requiresSemanticWording || requiresTestDesignReview) {
             const version = await this.provider.getVersion();
             runStore.setAgentMetadata(this.provider.name, version || undefined);
             runStore.markAgentStarted();
@@ -1385,6 +1408,12 @@ export class AgentOrchestrator {
             const validationFeedbackFile = path.join(packageDirectory, 'validation-feedback.json');
             const repairContextFile = path.join(packageDirectory, 'repair-context.json');
             let invalidCandidates = 0;
+            const semanticTerminal: {
+                plannerFailure?: {
+                    errors: Array<{ code: string; message: string; file?: string }>;
+                    message: string;
+                };
+            } = {};
             if (fs.existsSync(repairContextFile)) fs.unlinkSync(repairContextFile);
             writeJson(validationFeedbackFile, {
                 schemaVersion: 1,
@@ -1411,12 +1440,57 @@ export class AgentOrchestrator {
                             })),
                         };
                     } else {
+                        const review = parsedCandidate.value.testDesignReview;
+                        const actionSequences = new Set<number>(
+                            (scenario.actions || []).map((action: Record<string, unknown>) => Number(action.sequence))
+                                .filter((sequence: number) => Number.isInteger(sequence) && sequence > 0),
+                        );
+                        const invalidReviewSequences = review?.issues.flatMap(issue => issue.actionSequences)
+                            .filter(sequence => !actionSequences.has(sequence)) || [];
+                        if (!review) {
+                            validation = {
+                                valid: false,
+                                errors: [{
+                                    code: 'test-design-review-missing',
+                                    message: 'Incluye testDesignReview para evaluar objetivo, criterio de aceptación, acciones y aserciones.',
+                                }],
+                            };
+                        } else if (invalidReviewSequences.length) {
+                            validation = {
+                                valid: false,
+                                errors: [{
+                                    code: 'test-design-review-sequence',
+                                    message: `testDesignReview referencia secuencias inexistentes: ${[...new Set(invalidReviewSequences)].join(', ')}.`,
+                                }],
+                            };
+                        } else if (review.status === 'qa-required') {
+                            writeJson(path.join(packageDirectory, 'test-design-review.json'), review);
+                            if (fs.existsSync(repairContextFile)) fs.unlinkSync(repairContextFile);
+                            writeJson(validationFeedbackFile, {
+                                schemaVersion: 1,
+                                status: 'qa-required',
+                                valid: false,
+                                qaRequired: true,
+                                automaticRepairAttempts: invalidCandidates,
+                                maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
+                                errors: review.issues.map(issue => ({
+                                    code: issue.code,
+                                    message: issue.message,
+                                })),
+                                testDesignReview: review,
+                            });
+                            return true;
+                        } else {
                         const resolutions = mergeGapResolutionsWithCoverage(
                             openGaps,
                             deterministicResolved,
                             parsedCandidate.value,
                         );
-                        const response = this.deterministicGenerator.generate(packageDirectory, resolutions);
+                        const response = this.deterministicGenerator.generate(
+                            packageDirectory,
+                            resolutions,
+                            parsedCandidate.value.gherkinResolutions || [],
+                        );
                         writeJson(
                             resolvePackageArtifactPath(packageDirectory, 'agent-response.json'),
                             sanitizeArtifactValue(response, packageDirectory),
@@ -1429,6 +1503,7 @@ export class AgentOrchestrator {
                                 invalidCandidates,
                             )
                             : { valid: true, errors: [] };
+                        }
                     }
                 } catch (error: any) {
                     validation = {
@@ -1459,6 +1534,27 @@ export class AgentOrchestrator {
                         errors: [],
                         warnings: (validation.warnings || []).slice(0, 20),
                     });
+                    return true;
+                }
+
+                if (requiresPlannerRegeneration(compactErrors) && !requiresSemanticWording) {
+                    const message =
+                        'El Gherkin del plan no puede corregirse mediante gap-resolutions.json. ' +
+                        'Regenera el paquete con el recording actual o revisa el borrador generado.';
+                    semanticTerminal.plannerFailure = { errors: compactErrors, message };
+                    if (fs.existsSync(repairContextFile)) fs.unlinkSync(repairContextFile);
+                    writeJson(validationFeedbackFile, {
+                        schemaVersion: 1,
+                        status: 'planner-regeneration-required',
+                        valid: false,
+                        qaRequired: true,
+                        automaticRepairAttempts: invalidCandidates,
+                        maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
+                        errors: compactErrors,
+                        nextAction: 'regenerate-package-or-review-draft',
+                    });
+                    // La salida es terminal para esta pasada: pedir otra edición
+                    // de gap-resolutions.json no puede modificar scenarioRows.
                     return true;
                 }
 
@@ -1503,6 +1599,29 @@ export class AgentOrchestrator {
             recordDeniedToolAttempts(runStore, pass2.deniedToolAttempts);
             runStore.setAgentExitCode(pass2.exitCode);
             if (typeof pass2.creditsCost === 'number') runStore.setCreditsCost(pass2.creditsCost);
+            const plannerRegenerationFailure = semanticTerminal.plannerFailure;
+            if (plannerRegenerationFailure) {
+                runStore.markAgentFinished();
+                runStore.setGapCounts(openGaps.length, 0, openGaps.length);
+                runStore.mark('planner-regeneration-required', true);
+                updateStatus(statusFile, {
+                    state: 'failed',
+                    agentExecutionMode: executionMode,
+                    errorCode: 'PLANNER_REGENERATION_REQUIRED',
+                    error: plannerRegenerationFailure.message,
+                    generationMode: 'deterministic',
+                });
+                return {
+                    success: false,
+                    mode: executionMode,
+                    state: 'failed',
+                    invocations: 1,
+                    queryCount: counters.total,
+                    fallback: false,
+                    errorCode: 'PLANNER_REGENERATION_REQUIRED',
+                    error: plannerRegenerationFailure.message,
+                };
+            }
             if (!pass2.success) {
                 runStore.markAgentFinished();
                 const code = pass2.errorCode || 'AGENT_NON_ZERO_EXIT';
@@ -1572,6 +1691,32 @@ export class AgentOrchestrator {
                 };
             }
             semantic = parsed.value;
+            if (semantic.testDesignReview) {
+                writeJson(path.join(packageDirectory, 'test-design-review.json'), semantic.testDesignReview);
+            }
+            if (semantic.testDesignReview?.status === 'qa-required') {
+                runStore.markAgentFinished();
+                runStore.setGapCounts(openGaps.length, 0, openGaps.length);
+                runStore.mark('qa-test-design-required', true);
+                updateStatus(statusFile, {
+                    state: 'failed',
+                    agentExecutionMode: executionMode,
+                    errorCode: 'QA_TEST_DESIGN_REQUIRED',
+                    error: semantic.testDesignReview.summary,
+                    generationMode: 'deterministic',
+                });
+                return {
+                    success: false,
+                    mode: executionMode,
+                    state: 'failed',
+                    invocations: 1,
+                    queryCount: counters.total,
+                    fallback: false,
+                    errorCode: 'QA_TEST_DESIGN_REQUIRED',
+                    error: semantic.testDesignReview.summary,
+                    testDesignReview: semantic.testDesignReview,
+                };
+            }
         } else {
             semantic = emptyGapResolutions(fullPlan.recordingId, fullPlan.planId);
         }
@@ -1582,8 +1727,15 @@ export class AgentOrchestrator {
             recordingId: fullPlan.recordingId,
             planId: fullPlan.planId,
             resolutions: finalResolutions,
+            ...(semantic?.gherkinResolutions?.length
+                ? { gherkinResolutions: semantic.gherkinResolutions }
+                : {}),
         } satisfies GapResolutionFile);
-        const response = this.deterministicGenerator.generate(packageDirectory, finalResolutions);
+        const response = this.deterministicGenerator.generate(
+            packageDirectory,
+            finalResolutions,
+            semantic?.gherkinResolutions || [],
+        );
         writeJson(
             resolvePackageArtifactPath(packageDirectory, 'agent-response.json'),
             sanitizeArtifactValue(response, packageDirectory),
@@ -1594,7 +1746,7 @@ export class AgentOrchestrator {
 
         const finalBudget = budgetError(agentBudgetViolations(budgets, {
             responseBytes: Buffer.byteLength(JSON.stringify(response), 'utf-8'),
-            agentInvocations: semanticGaps.length ? 1 : 0,
+            agentInvocations: semanticGaps.length || requiresSemanticWording || requiresTestDesignReview ? 1 : 0,
             totalQueries: counters.total,
             queriesPerGap: counters.perGap,
         }));
@@ -1611,7 +1763,7 @@ export class AgentOrchestrator {
                 success: false,
                 mode: executionMode,
                 state: 'failed',
-                invocations: semanticGaps.length ? 1 : 0,
+                invocations: semanticGaps.length || requiresSemanticWording || requiresTestDesignReview ? 1 : 0,
                 queryCount: counters.total,
                 fallback: false,
                 errorCode: finalBudget.code,

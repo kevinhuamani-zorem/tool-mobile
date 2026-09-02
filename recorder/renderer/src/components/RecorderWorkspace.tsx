@@ -5,7 +5,7 @@ export function RecorderWorkspace() {
     <header className="header">
       <div className="header-left">
         <span className="logo">📱</span>
-        <span className="title">Appium Visual Recorder</span>
+        <span className="title">Appium Recorder</span>
         <span id="lblDevice" className="device-badge">Sin dispositivo</span>
       </div>
       <div className="header-right">

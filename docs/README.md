@@ -1,6 +1,6 @@
 # Documentación técnica
 
-Índice para mantener y operar Appium Visual Recorder:
+Índice para mantener y operar Appium Recorder:
 
 - [Arquitectura](ARCHITECTURE.md): componentes, límites y flujos principales.
 - [Contrato de generación](GENERATION_CONTRACT.md): archivos, nombres,

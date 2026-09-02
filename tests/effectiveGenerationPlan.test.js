@@ -305,6 +305,68 @@ test('gap-resolutions exige candidato estructurado para reuse nuevo', () => {
     assert.equal(invalid.errors.some(error => error.code === 'reuse-candidate-required'), true);
 });
 
+test('gap-resolutions acepta wording Gherkin trazado y rechaza secuencias duplicadas', () => {
+    const valid = parseGapResolutions(JSON.stringify({
+        schemaVersion: '1.0',
+        recordingId: 'rec-1',
+        planId: 'plan-1',
+        resolutions: [],
+        gherkinResolutions: [{
+            keyword: 'And',
+            text: 'el usuario consulta sus movimientos mediante los filtros disponibles',
+            actionSequences: [4, 5, 6],
+            reason: 'Consolida el ciclo técnico.',
+        }],
+    }), 8);
+    assert.equal(valid.valid, true);
+    assert.deepEqual(valid.value.gherkinResolutions[0].actionSequences, [4, 5, 6]);
+
+    const invalid = parseGapResolutions(JSON.stringify({
+        schemaVersion: '1.0',
+        recordingId: 'rec-1',
+        planId: 'plan-1',
+        resolutions: [],
+        gherkinResolutions: [
+            { keyword: 'And', text: 'primer comportamiento', actionSequences: [4, 5] },
+            { keyword: 'Then', text: 'resultado observable', actionSequences: [5, 6] },
+        ],
+    }), 8);
+    assert.equal(invalid.valid, false);
+    assert.equal(invalid.errors.some(error => error.code === 'duplicate-gherkin-sequence'), true);
+});
+
+test('gap-resolutions valida la revisión funcional y sus secuencias', () => {
+    const valid = parseGapResolutions(JSON.stringify({
+        schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
+        testDesignReview: {
+            status: 'qa-required',
+            summary: 'El caso selecciona un filtro sin observar el resultado.',
+            issues: [{
+                code: 'missing-business-assertion', severity: 'blocking',
+                message: 'No existe una aserción posterior sobre los movimientos filtrados.',
+                actionSequences: [6],
+                recommendation: 'Agrega una validación del rango de fechas después del filtro.',
+            }],
+        },
+    }), 20);
+    assert.equal(valid.valid, true);
+    assert.equal(valid.value.testDesignReview.status, 'qa-required');
+
+    const invalid = parseGapResolutions(JSON.stringify({
+        schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
+        testDesignReview: {
+            status: 'pass', summary: 'La revisión contiene una contradicción.',
+            issues: [{
+                code: 'missing-test-oracle', severity: 'blocking',
+                message: 'Falta un resultado verificable.', actionSequences: [],
+                recommendation: 'Define un resultado observable.',
+            }],
+        },
+    }), 20);
+    assert.equal(invalid.valid, false);
+    assert.equal(invalid.errors.some(error => error.code === 'test-design-review-pass-blocking'), true);
+});
+
 test('gap-resolutions normaliza aliases copiados del plan', () => {
     const parsed = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0',

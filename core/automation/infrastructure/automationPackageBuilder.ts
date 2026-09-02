@@ -186,6 +186,13 @@ function responseFromExistingFiles(
     };
 }
 
+function requiresTestDesignReview(scenario: AutomationScenario): boolean {
+    const verificationActions = new Set(['VERIFICAR_TEXTO', 'VERIFICAR_EXISTE', 'VERIFICAR_NO_EXISTE']);
+    const businessInteractions = new Set(['CLICK', 'ESCRIBIR', 'LIMPIAR', 'PRESION_LARGA']);
+    return scenario.actions.some(action => verificationActions.has(action.action))
+        && scenario.actions.some(action => businessInteractions.has(action.action));
+}
+
 function responseSchema(): object {
     return {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -428,7 +435,7 @@ function instructions(result: ResolverResult): string {
         `Nota de modo: si RECORDER_GENERATION_MODE=deterministic, PASS 2 semántico escribe \`gap-resolutions.json\` y el recorder materializa \`agent-response.json\` de forma determinística.\n\n` +
         `Reglas:\n` +
         `- Prioriza exactitud y viabilidad del caso por encima de la rapidez.\n` +
-        `- En deterministic solo escribe query-requests.json o gap-resolutions.json. No edites agent-response.json ni los archivos inmutables del paquete.\n` +
+        `- En deterministic solo escribe query-requests.json o gap-resolutions.json. No edites agent-response.json ni los archivos inmutables del paquete. Si scenarioRows trae wording \"template\", resuélvelo dentro de gherkinResolutions en gap-resolutions.json. Incluye siempre testDesignReview: contrasta objetivo y aceptación con aserciones posteriores de resultado de negocio; verificar que existe el control no demuestra su efecto.\n` +
         `- Empieza por hints.json, gaps.json, generation-plan.json y scenario.json. resolved-context.json y unresolved-context.json se conservan solo por compatibilidad.\n` +
         `- NO SEARCH WITHOUT GAP: no solicites contexto si no hay un gap abierto; usa únicamente sus allowedQueries y respeta maxQueries. Un gap blocked-qa no se entrega al agente.\n` +
         `- Consulta reuse-context.json o collision-report.json solo cuando la evidencia de un hint/gap apunte a ellos.\n` +
@@ -456,7 +463,7 @@ function instructions(result: ResolverResult): string {
         `  - collision-report.json -> colisiones de steps/selectores que prohíben duplicar.\n` +
         `  - resolved-context.json/unresolved-context.json -> compatibilidad y diagnóstico puntual.\n` +
         `  - query-requests.json -> lo escribes tú en PASS 1 cumpliendo query-requests.schema.json.\n` +
-        `  - gap-resolutions.json -> (modo deterministic) lo escribes tú en PASS 2 semántico cumpliendo gap-resolutions.schema.json.\n` +
+        `  - gap-resolutions.json -> (modo deterministic) lo escribes tú en PASS 2 semántico cumpliendo gap-resolutions.schema.json; puede incluir gherkinResolutions trazadas por actionSequences y debe incluir testDesignReview.\n` +
         `  - agent-response.json -> (modo legacy) lo escribes tú en PASS 2 cumpliendo agent-response.schema.json.\n` +
         `- EJEMPLO COMPLETO de \`query-requests.json\` válido (PASS 1):\n\`\`\`json\n${JSON.stringify(queryRequestExample, null, 2)}\n\`\`\`\n` +
         `- \`query-results.json\` tiene forma exacta: \`{ "schemaVersion": "1.0", "results": [ { "requestId": "q-gap-duplicate-element-4-1", "gapId": "gap-duplicate-element-4", "status": "resolved", "data": { "items": [ { "type": "screenObject", "name": "MovementsScreen", "path": "screenobjects/payment/movements.screen.ts" } ] } } ] }\`.\n` +
@@ -992,7 +999,7 @@ export class AutomationPackageBuilder {
         );
         writeUtf8FileAtomic(path.join(packageDirectory, 'instructions.md'), instructions);
         writeVerifier(packageDirectory);
-        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'validation-feedback.json', 'repair-context.json', 'effective-generation-plan.json']) {
+        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'test-design-review.json', 'validation.json', 'validation-feedback.json', 'repair-context.json', 'effective-generation-plan.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
         }
@@ -1076,6 +1083,9 @@ export class AutomationPackageBuilder {
         fs.mkdirSync(packageDirectory, { recursive: true });
         const memoryHit = this.memory.find(result.scenario.fingerprint);
         if (memoryHit) result.plan.status = 'memory-hit';
+        const testDesignReviewRequired = !memoryHit
+            && !result.plan.existingCase
+            && requiresTestDesignReview(result.scenario);
         const packagedScenario = packageAutomationScenario(result.scenario);
         writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario);
         writeJson(path.join(packageDirectory, 'qa-observations.json'), analyzeScenarioUiTextQuality(result.scenario));
@@ -1178,7 +1188,7 @@ export class AutomationPackageBuilder {
         );
         writeUtf8FileAtomic(path.join(packageDirectory, 'instructions.md'), instructions(result));
         writeVerifier(packageDirectory);
-        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'validation-feedback.json', 'repair-context.json', 'effective-generation-plan.json']) {
+        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'test-design-review.json', 'validation.json', 'validation-feedback.json', 'repair-context.json', 'effective-generation-plan.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
         }
@@ -1194,7 +1204,7 @@ export class AutomationPackageBuilder {
             };
         } else if (result.plan.existingCase) {
             response = responseFromExistingFiles(result.scenario, result.plan);
-        } else if (!result.plan.unresolvedGapIds.length) {
+        } else if (!result.plan.unresolvedGapIds.length && !testDesignReviewRequired) {
             // El camino sin agente tambien tiene que reutilizar: hasta ahora
             // copiaba el valor a su propio modulo, o sea que el duplicado lo
             // producia el propio recorder y nadie estaba ahi para notarlo.
@@ -1252,6 +1262,7 @@ export class AutomationPackageBuilder {
             memoryVersion,
             agentRequired: !response,
             responseAvailable: Boolean(response),
+            testDesignReviewRequired,
             validation,
             contextBytes,
             contextWarning,

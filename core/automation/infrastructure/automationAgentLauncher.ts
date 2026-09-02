@@ -41,11 +41,11 @@ export class AutomationAgentLauncher {
         const repair = fs.existsSync(path.join(packageDirectory, 'repair-context.json'));
         const generationMode = resolveRecorderGenerationMode(process.env.RECORDER_GENERATION_MODE);
         if (generationMode === 'deterministic' && !repair) {
-            return 'Trabaja únicamente en esta carpeta. Lee instructions.md y gaps.json. Resuelve solo gaps semánticos y escribe gap-resolutions.json con herramientas nativas del CLI. Después de escribirlo, lee validation-feedback.json y corrige gap-resolutions.json si el recorder lo solicita. Termina solo cuando el feedback indique valid o qa-required. No uses comandos de shell ni explores fwk-mobile-test.';
+            return 'Trabaja únicamente en esta carpeta. Lee instructions.md, gaps.json y scenario.json. Evalúa también si objetivo y criterio de aceptación tienen aserciones funcionales observables en la grabación y escribe testDesignReview. Resuelve los gaps semánticos y reescribe solo las filas wording=template mediante gherkinResolutions. Escribe gap-resolutions.json con herramientas nativas del CLI. Después, lee validation-feedback.json y corrige el mismo archivo si el recorder lo solicita. Termina cuando el feedback indique valid, qa-required o planner-regeneration-required. No uses comandos de shell ni explores fwk-mobile-test.';
         }
         return repair
             ? generationMode === 'deterministic'
-                ? 'Lee repair-context.json y validation-feedback.json. Corrige únicamente gap-resolutions.json; el recorder regenerará agent-response.json al reimportar. No edites agent-response.json, no explores el repositorio y no uses comandos de shell.'
+                ? 'Lee repair-context.json y validation-feedback.json. Corrige únicamente gap-resolutions.json, incluidas sus gherkinResolutions cuando el error corresponda al Gherkin; el recorder regenerará agent-response.json al reimportar. No edites agent-response.json, no explores el repositorio y no uses comandos de shell.'
                 : 'Lee repair-context.json y corrige únicamente los archivos indicados. Prioriza exactitud y viabilidad del caso por encima de la rapidez. No explores el repositorio ni uses comandos de shell; escribe agent-response.json con herramientas nativas del CLI.'
             : 'Trabaja únicamente en esta carpeta. Lee instructions.md y solo los archivos mínimos que allí se enumeran. No leas resolved-context.json salvo diagnóstico explícito. Prioriza exactitud y viabilidad del caso por encima de la rapidez. Resuelve solo los gaps declarados y escribe agent-response.json con herramientas nativas del CLI. No uses comandos de shell y no explores fwk-mobile-test.';
     }
@@ -91,20 +91,34 @@ export class AutomationAgentLauncher {
             return this.openTerminal(provider, packageDirectory);
         }
         const command = process.env.RECORDER_COPILOT_CLI_COMMAND || 'copilot';
+        const promptFile = path.join(packageDirectory, 'agent-task.md');
+        // El contexto semántico puede contener comillas, saltos de línea y JSON.
+        // Nunca se incrusta en AppleScript ni en el comando de zsh. Copilot
+        // recibe un bootstrap corto y lee la tarea con su herramienta nativa.
+        fs.writeFileSync(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
         const args = [
-            '-i',
-            launch.prompt,
             '--model',
             process.env.RECORDER_COPILOT_MODEL || 'auto',
             '--allow-tool=write',
             '--deny-tool=bash',
             '--no-custom-instructions',
         ];
-        const shellCmd = [command, ...args].map(value => this.shellQuote(value)).join(' ');
+        const bootstrapPrompt = [
+            'Lee agent-task.md en esta carpeta.',
+            'Sigue todas sus instrucciones y ejecuta la tarea completa.',
+            'No reproduzcas su contenido; trabaja únicamente con los archivos autorizados allí.',
+        ].join(' ');
+        const shellCmd = [
+            this.shellQuote(command),
+            this.shellQuote('-i'),
+            this.shellQuote(bootstrapPrompt),
+            ...args.map(value => this.shellQuote(value)),
+        ].join(' ');
         const script = [
             `cd ${this.shellQuote(packageDirectory)}`,
             `echo ${this.shellQuote('[recorder] Copilot recibió el prompt del recorder. La revisión se abrirá al terminar.')}`,
             shellCmd,
+            `/bin/rm -f ${this.shellQuote(promptFile)}`,
         ].join('; ');
         const escaped = script.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const child = this.runner('osascript', [

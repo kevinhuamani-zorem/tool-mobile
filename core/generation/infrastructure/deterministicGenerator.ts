@@ -5,6 +5,7 @@ import {
     AutomationAgentResponse,
     AutomationScenario,
     GapResolution,
+    GherkinResolution,
     GenerationPlan,
     ResolvedContext,
     ModuleDeclaration,
@@ -104,17 +105,105 @@ function reusedLocators(
     return selected.map(item => item.declaration!);
 }
 
+function applyGherkinResolutions(
+    scenario: AutomationScenario,
+    resolutions: GherkinResolution[],
+): AutomationScenario {
+    const rows = scenario.request.scenarioRows || [];
+    const templateRows = rows
+        .map((row, index) => ({ row, index }))
+        .filter(item => item.row.wording === 'template' && item.row.status === 'missing');
+    if (!templateRows.length || !resolutions.length) return scenario;
+
+    const allowed = new Set(templateRows.flatMap(item =>
+        (item.row.actions || []).map(action => Number(action.sequence)).filter(Number.isInteger)
+    ));
+    const bySequence = new Map<number, number>();
+    resolutions.forEach((resolution, resolutionIndex) => {
+        resolution.actionSequences.forEach(sequence => {
+            if (!allowed.has(sequence)) {
+                throw new Error(
+                    `La resolución Gherkin intenta modificar la secuencia ${sequence}, ` +
+                    'que no pertenece a una fila wording=template.',
+                );
+            }
+            if (bySequence.has(sequence)) {
+                throw new Error(`La secuencia ${sequence} aparece en más de una resolución Gherkin.`);
+            }
+            bySequence.set(sequence, resolutionIndex);
+        });
+    });
+    const missing = [...allowed].filter(sequence => !bySequence.has(sequence));
+    if (missing.length) {
+        throw new Error(
+            `Faltan resoluciones Gherkin para las secuencias template: ${missing.join(', ')}.`,
+        );
+    }
+
+    const rowResolution = new Map<number, number>();
+    for (const { row, index } of templateRows) {
+        const sequences = (row.actions || []).map(action => Number(action.sequence)).filter(Number.isInteger);
+        const owners = new Set(sequences.map(sequence => bySequence.get(sequence)));
+        if (owners.size !== 1 || owners.has(undefined)) {
+            throw new Error(
+                `La fila Gherkin template asociada a ${sequences.join(', ')} no puede dividirse entre varias resoluciones.`,
+            );
+        }
+        rowResolution.set(index, [...owners][0]!);
+    }
+    resolutions.forEach((_resolution, resolutionIndex) => {
+        const indices = [...rowResolution.entries()]
+            .filter(([, owner]) => owner === resolutionIndex)
+            .map(([index]) => index);
+        if (!indices.length) throw new Error(`La resolución Gherkin ${resolutionIndex} no cubre ninguna fila template.`);
+        const min = Math.min(...indices);
+        const max = Math.max(...indices);
+        for (let index = min; index <= max; index += 1) {
+            if (rowResolution.get(index) !== resolutionIndex) {
+                throw new Error(
+                    `La resolución Gherkin ${resolutionIndex} intenta consolidar filas no contiguas.`,
+                );
+            }
+        }
+    });
+
+    const emitted = new Set<number>();
+    const rewritten = rows.flatMap((row, index) => {
+        const owner = rowResolution.get(index);
+        if (owner === undefined) return [row];
+        if (emitted.has(owner)) return [];
+        emitted.add(owner);
+        const resolution = resolutions[owner];
+        const actions = rows.flatMap((candidate, candidateIndex) =>
+            rowResolution.get(candidateIndex) === owner ? (candidate.actions || []) : []
+        );
+        return [{
+            keyword: resolution.keyword,
+            text: resolution.text,
+            status: 'missing' as const,
+            wording: 'agent' as const,
+            actions,
+        }];
+    });
+    return {
+        ...scenario,
+        request: { ...scenario.request, scenarioRows: rewritten },
+    };
+}
+
 function hydrateScenarioRows(
     scenario: AutomationScenario,
     plan: GenerationPlan,
+    gherkinResolutions: GherkinResolution[] = [],
 ): AutomationScenario['request'] {
+    const effectiveScenario = applyGherkinResolutions(scenario, gherkinResolutions);
     const byResolution = new Map(
         (plan.resolutions || [])
             .filter(item => Number.isInteger(item.sequence))
             .map(item => [item.sequence, item]),
     );
     const bySequence = new Map(
-        (scenario.actions || [])
+        (effectiveScenario.actions || [])
             .filter(action => Number.isInteger(action.sequence))
             .map(action => {
                 const resolution = byResolution.get(action.sequence);
@@ -125,7 +214,7 @@ function hydrateScenarioRows(
                 }];
             }),
     );
-    const rows = (scenario.request.scenarioRows || []).map(row => {
+    const rows = (effectiveScenario.request.scenarioRows || []).map(row => {
         const actions = (row.actions || [])
             .map(entry => bySequence.get(Number((entry as any)?.sequence)))
             .filter(Boolean);
@@ -135,8 +224,8 @@ function hydrateScenarioRows(
         };
     });
     return {
-        ...(scenario.request as any),
-        ...(scenario.request.scenarioRows ? { scenarioRows: rows as any } : {}),
+        ...(effectiveScenario.request as any),
+        ...(effectiveScenario.request.scenarioRows ? { scenarioRows: rows as any } : {}),
     } as AutomationScenario['request'];
 }
 
@@ -455,7 +544,11 @@ function responseFromPreview(
 export class DeterministicGenerator {
     constructor(private readonly generator = new FwkMobileGenerator()) {}
 
-    generate(packageDirectory: string, resolutions: GapResolution[]): AutomationAgentResponse {
+    generate(
+        packageDirectory: string,
+        resolutions: GapResolution[],
+        gherkinResolutions: GherkinResolution[] = [],
+    ): AutomationAgentResponse {
         const scenario = readJson<AutomationScenario>(path.join(packageDirectory, 'scenario.json'));
         const basePlan = readJson<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
         const plan = effectiveGenerationPlan(packageDirectory, basePlan, resolutions);
@@ -463,7 +556,8 @@ export class DeterministicGenerator {
         const resolvedContext = fs.existsSync(path.join(packageDirectory, 'resolved-context.json'))
             ? readJson<ResolvedContext>(path.join(packageDirectory, 'resolved-context.json'))
             : undefined;
-        const hydratedRequest = hydrateScenarioRows(scenario, plan);
+        const effectiveScenario = applyGherkinResolutions(scenario, gherkinResolutions);
+        const hydratedRequest = hydrateScenarioRows(scenario, plan, gherkinResolutions);
         const methodMappings = existingMethodMappings(plan);
         const generatedPreview = this.generator.preview(
             {
@@ -479,7 +573,7 @@ export class DeterministicGenerator {
             },
         );
         const preview = preserveUpdateBaselines(generatedPreview, plan);
-        assertCreateArtifacts(scenario, plan, preview);
-        return responseFromPreview(scenario, plan, preview, resolutions);
+        assertCreateArtifacts(effectiveScenario, plan, preview);
+        return responseFromPreview(effectiveScenario, plan, preview, resolutions);
     }
 }

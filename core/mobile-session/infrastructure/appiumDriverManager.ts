@@ -44,14 +44,18 @@ export class AppiumDriverManager {
     protected config: DeviceConfig | null = null;
     protected sessionState: AppiumSessionState = 'idle';
     protected sessionProvider: AppiumSessionProvider = 'local';
-    protected serverUrl = 'http://127.0.0.1:4723';
+    protected serverUrl: string;
+
+    constructor(protected readonly serverPort = 4723) {
+        this.serverUrl = `http://127.0.0.1:${serverPort}`;
+    }
 
     async startAppiumServer(): Promise<void> {
-        console.log('[AppiumDriverManager] Verificando servidor Appium en 4723...');
+        console.log(`[AppiumDriverManager] Verificando servidor Appium en ${this.serverPort}...`);
         return new Promise((resolve, reject) => {
             let attempts = 0;
             const check = () => {
-                exec('curl -s http://127.0.0.1:4723/status', (err, stdout) => {
+                exec(`curl -s http://127.0.0.1:${this.serverPort}/status`, (err, stdout) => {
                     if (!err && stdout.includes('ready')) {
                         console.log('[AppiumDriverManager] Servidor Appium listo');
                         resolve();
@@ -59,7 +63,7 @@ export class AppiumDriverManager {
                         attempts++;
                         setTimeout(check, 1000);
                     } else {
-                        reject(new Error('Appium no responde en puerto 4723. Reinicia el recorder.'));
+                        reject(new Error(`Appium no responde en puerto ${this.serverPort}. Reinicia el recorder.`));
                     }
                 });
             };
@@ -71,7 +75,7 @@ export class AppiumDriverManager {
         this.config = config;
         this.sessionState = 'connecting';
         this.sessionProvider = 'local';
-        this.serverUrl = 'http://127.0.0.1:4723';
+        this.serverUrl = `http://127.0.0.1:${this.serverPort}`;
         console.log('[AppiumDriverManager] Conectando:', config.deviceName, `(${config.platform || 'android'})`);
 
         const capabilities: any = config.platform === 'ios'
@@ -82,7 +86,7 @@ export class AppiumDriverManager {
             this.driver = await remote({
                 protocol:               'http',
                 hostname:               '127.0.0.1',
-                port:                   4723,
+                port:                   this.serverPort,
                 path:                   '/',
                 capabilities,
                 logLevel:               'error',

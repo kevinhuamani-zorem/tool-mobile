@@ -589,6 +589,47 @@ export interface GapResolutionFile {
     recordingId: string;
     planId: string;
     resolutions: GapResolution[];
+    /**
+     * Reescrituras semánticas limitadas a filas `wording: template`.
+     * Las secuencias son la identidad inmutable: permiten consolidar varias
+     * filas técnicas en un único step sin perder trazabilidad.
+     */
+    gherkinResolutions?: GherkinResolution[];
+    /**
+     * Revisión funcional acotada del recording. Copilot no valida la app ni
+     * inventa resultados: comprueba si las acciones observan el resultado de
+     * negocio declarado por objetivo y criterio de aceptación.
+     */
+    testDesignReview?: TestDesignReview;
+}
+
+export interface GherkinResolution {
+    keyword: 'When' | 'Then' | 'And' | 'But';
+    text: string;
+    actionSequences: number[];
+    reason?: string;
+}
+
+export type TestDesignIssueCode =
+    | 'missing-business-assertion'
+    | 'control-existence-only'
+    | 'acceptance-criteria-mismatch'
+    | 'missing-test-oracle'
+    | 'dependent-variants'
+    | 'ambiguous-objective';
+
+export interface TestDesignIssue {
+    code: TestDesignIssueCode;
+    severity: 'warning' | 'blocking';
+    message: string;
+    actionSequences: number[];
+    recommendation: string;
+}
+
+export interface TestDesignReview {
+    status: 'pass' | 'qa-required';
+    summary: string;
+    issues: TestDesignIssue[];
 }
 
 export interface AutomationAgentResponse {
@@ -636,6 +677,8 @@ export interface AutomationPackageResult {
     memoryVersion?: number;
     agentRequired: boolean;
     responseAvailable: boolean;
+    /** El paquete necesita la revisión funcional acotada de Copilot. */
+    testDesignReviewRequired?: boolean;
     validation?: AutomationValidation;
     /** Bytes del contexto mínimo y aviso si supera el objetivo (no bloquea). */
     contextBytes?: number;

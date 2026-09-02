@@ -145,3 +145,19 @@ test('main usa Copilot visible y deja que el pipeline importe la respuesta valid
     assert.match(review, /const imported = await importAutomationResponse\(true\);/);
     assert.match(review, /setWizardPage\(4\);/);
 });
+
+test('un error propiedad del planner libera el flujo y muestra el borrador para revalidar', () => {
+    assert.match(automationHandlers, /PLANNER_REGENERATION_REQUIRED/);
+    assert.match(automationHandlers, /trackRepair: false/);
+    assert.match(review, /code === 'PLANNER_REGENERATION_REQUIRED'/);
+    assert.match(review, /generation\.showPreviewDocuments\(launched\.draft, false, false\)/);
+    assert.match(review, /El plan necesita regenerarse o revisarse/);
+});
+
+test('una revisión funcional bloqueante explica el problema y devuelve al QA a la grabación', () => {
+    assert.match(review, /QA_TEST_DESIGN_REQUIRED/);
+    assert.match(review, /showTestDesignReview/);
+    assert.match(review, /La grabación no demuestra el resultado esperado/);
+    assert.match(review, /Volver y corregir la grabación/);
+    assert.match(review, /Agrega las validaciones funcionales indicadas/);
+});

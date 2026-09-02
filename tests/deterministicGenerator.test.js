@@ -12,7 +12,7 @@ function writeJson(file, value) {
     fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
 
-test('deterministic generator conserva el step definido por el plan del caso', () => {
+test('deterministic generator aplica wording híbrido sin perder trazabilidad', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deterministic-generator-'));
     writeJson(path.join(dir, 'scenario.json'), {
         schemaVersion: 1,
@@ -40,6 +40,7 @@ test('deterministic generator conserva el step definido por el plan del caso', (
                 keyword: 'When',
                 text: 'el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro',
                 status: 'missing',
+                wording: 'template',
                 actions: [{ sequence: 1 }],
             }],
         },
@@ -108,13 +109,34 @@ test('deterministic generator conserva el step definido por el plan del caso', (
         locatorContent: '{ "sampleAndroid": { "movementsButton": "Movimientos" }, "sampleIos": { "movementsButton": "" } }',
         files: [],
     };
-    const generator = new DeterministicGenerator({ preview: () => ({ ...preview }) });
-    const response = generator.generate(dir, []);
+    let capturedRequest;
+    const generator = new DeterministicGenerator({
+        preview: request => {
+            capturedRequest = request;
+            return { ...preview };
+        },
+    });
+    const response = generator.generate(dir, [], [{
+        keyword: 'When',
+        text: 'el usuario consulta sus movimientos mediante los filtros disponibles',
+        actionSequences: [1],
+        reason: 'Consolida la acción técnica en un comportamiento de dominio.',
+    }]);
     const steps = response.files.find(file => file.layer === 'steps').content;
 
     assert.equal(
         steps.includes('When(/^el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro$/'),
         true,
+    );
+    assert.equal(
+        capturedRequest.scenarioRows[0].text,
+        'el usuario consulta sus movimientos mediante los filtros disponibles',
+    );
+    assert.equal(capturedRequest.scenarioRows[0].wording, 'agent');
+    assert.deepEqual(capturedRequest.scenarioRows[0].actions.map(action => action.sequence), [1]);
+    assert.equal(
+        response.actionTrace[0].gherkinStep,
+        'When el usuario consulta sus movimientos mediante los filtros disponibles',
     );
 });
 

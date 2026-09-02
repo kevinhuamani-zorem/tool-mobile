@@ -2,7 +2,7 @@
 
 ## Propósito
 
-Appium Visual Recorder inspecciona y manipula una app móvil, registra acciones,
+Appium Recorder inspecciona y manipula una app móvil, registra acciones,
 construye Gherkin y genera automatización compatible con `fwk-mobile-test`.
 Funciona desde su propio clon durante desarrollo y como `.app` macOS, siempre
 enlazado a una raíz local válida de `fwk-mobile-test`.
@@ -256,6 +256,12 @@ XML, screenshots, source, capabilities ni credenciales.
    PASS 1 usa una proyección compacta para decidir consultas; PASS 2 usa otra
    proyección orientada a generar las cuatro capas. Cada pasada valida su
    contexto contra `maxContextBytes`.
+   PASS 2 incluye además `testDesignReview`, una revisión funcional estructurada
+   que no consume otra invocación. Contrasta objetivo, criterio de aceptación,
+   acciones y aserciones. Si una interacción solo verifica que existe el control
+   o carece de una aserción posterior sobre el resultado de negocio, el pipeline
+   termina en `QA_TEST_DESIGN_REQUIRED`, guarda `test-design-review.json` y
+   devuelve al QA a la grabación sin crear `agent-response.json`.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
    Los rellenos de plataforma solo aceptan la identidad determinista completa

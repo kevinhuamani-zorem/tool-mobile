@@ -1,6 +1,6 @@
-# Appium Visual Recorder
+# Appium Recorder
 
-Appium Visual Recorder es una herramienta visual acoplada a
+Appium Recorder es una herramienta visual acoplada a
 `fwk-mobile-test`. Permite que un QA navegue una aplicación Android o iOS,
 registre acciones, verifique selectores y entregue evidencia estructurada para
 generar o actualizar las cuatro capas de automatización del framework:
@@ -95,12 +95,12 @@ npm run package:mac
 ```
 
 `npm run package:mac` compila el recorder, valida el Inspector embebido, genera
-`Appium Visual Recorder.app` dentro de `release/mac-*` y abre Finder con la
+`Appium Recorder.app` dentro de `release/mac-*` y abre Finder con la
 aplicación seleccionada.
 
 En el primer arranque:
 
-1. Abre `Appium Visual Recorder.app`.
+1. Abre `Appium Recorder.app`.
 2. Selecciona la raíz local de `fwk-mobile-test`.
 3. Elige ambiente, squad y alcance de Features.
 4. Conecta el dispositivo o simulador y comienza la grabación.

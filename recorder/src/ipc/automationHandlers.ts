@@ -620,7 +620,20 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                 'gap-resolutions.json pertenece a otra grabación o a otra versión del plan.',
             );
         }
-        const response = deterministicGenerator.generate(packageDirectory, parsed.value.resolutions);
+        if (parsed.value.testDesignReview?.status === 'qa-required') {
+            writeJsonUtf8(
+                path.join(packageDirectory, 'test-design-review.json'),
+                parsed.value.testDesignReview,
+            );
+            throw new Error(
+                `La grabación necesita corrección funcional: ${parsed.value.testDesignReview.summary}`
+            );
+        }
+        const response = deterministicGenerator.generate(
+            packageDirectory,
+            parsed.value.resolutions,
+            parsed.value.gherkinResolutions || [],
+        );
         writeJsonUtf8(responseFile, response);
         writeJsonUtf8(statusFile, {
             ...status,
@@ -793,7 +806,56 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                             validation: imported.validation,
                             repairAvailable: imported.repairAvailable,
                             draft: imported.draft,
-                        }),
+                    }),
+                };
+            }
+            if (run.errorCode === 'PLANNER_REGENERATION_REQUIRED') {
+                const inspected = await importAutomationResponseFromPackage(
+                    state.activeAutomationPackage,
+                    { trackRepair: false },
+                );
+                emitAutomationProgress(
+                    'VALIDATING',
+                    'El plan necesita regenerarse o revisarse',
+                    4,
+                    6,
+                    {
+                        error: run.error,
+                        regenerationRequired: true,
+                    },
+                );
+                return {
+                    success: false,
+                    mode,
+                    automatic: true,
+                    run,
+                    errorCode: run.errorCode,
+                    error: run.error,
+                    failureKind: 'planner-regeneration-required',
+                    regenerationRequired: true,
+                    validation: inspected.validation,
+                    draft: inspected.draft,
+                    repairAvailable: false,
+                };
+            }
+            if (run.errorCode === 'QA_TEST_DESIGN_REQUIRED' && run.testDesignReview) {
+                emitAutomationProgress(
+                    'WAITING_FOR_QA',
+                    'La grabación necesita una validación funcional del QA',
+                    3,
+                    6,
+                    { error: run.testDesignReview.summary },
+                );
+                return {
+                    success: false,
+                    mode,
+                    automatic: true,
+                    run,
+                    errorCode: run.errorCode,
+                    error: run.error,
+                    failureKind: 'test-design-review',
+                    testDesignReview: run.testDesignReview,
+                    repairAvailable: false,
                 };
             }
             if (run.fallback) {

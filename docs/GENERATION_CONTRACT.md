@@ -108,7 +108,7 @@ En Fase 4.1, `maxContextBytes` se valida **por invocación**: PASS 1 y PASS 2
 usan contextos distintos y cada uno debe caber individualmente.
 
 Las cuatro capas llevan metadata de procedencia agregada por el recorder:
-`Generado por Appium Visual Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
+`Generado por Appium Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
 de creación. Feature usa comentarios `#`, Steps y Screen Object usan `//`, y
 Locators conserva JSON válido mediante un objeto raíz `_metadata`. Este objeto
 no forma parte del catálogo de locators.
@@ -384,6 +384,21 @@ El agente devuelve un solo `agent-response.json` con:
 - resolución de todos los gaps;
 - una traza por cada secuencia grabada;
 - contenido completo de Feature, Steps, Screen Object y Locators.
+
+Antes de materializar esa respuesta, la pasada semántica escribe también
+`testDesignReview` dentro de `gap-resolutions.json`. Su contrato es cerrado:
+
+- `status`: `pass` o `qa-required`;
+- `summary`: explicación breve para el QA;
+- hasta ocho `issues`, con código permitido, severidad, secuencias reales y una
+  recomendación concreta para volver a grabar.
+
+La revisión no certifica el funcionamiento de la app. Solo decide si la
+grabación contiene un oráculo observable alineado con objetivo y aceptación.
+Verificar que aparece un botón, opción o campo antes de usarlo no demuestra su
+efecto funcional. `qa-required` necesita al menos un hallazgo bloqueante y
+detiene la generación antes de producir `agent-response.json`; el detalle se
+persiste en `test-design-review.json` sin prompts, XML ni capturas.
 
 El nombre del Screen Object es parte del contrato. Se deriva del basename de la
 ruta planificada en kebab-case: `movements-view.screen.ts` corresponde a la

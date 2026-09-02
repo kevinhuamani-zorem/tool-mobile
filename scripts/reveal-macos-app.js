@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process');
 
 const recorderRoot = path.resolve(__dirname, '..');
 const releaseRoot = path.join(recorderRoot, 'release');
-const appName = 'Appium Visual Recorder.app';
+const appName = 'Appium Recorder.app';
 
 function findApplication() {
     if (!fs.existsSync(releaseRoot)) return undefined;

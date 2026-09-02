@@ -2281,7 +2281,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     ));
     assert.match(
         generatedResponse.files.find(file => file.layer === 'feature').content,
-        /^# Generado por Appium Visual Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación:/
+        /^# Generado por Appium Recorder\n# Author: Kevinarnold\.zorem\n# Fecha de creación:/
     );
     // El JSON de locators viaja limpio: sin `_metadata`, solo los bloques.
     const locatorDoc = JSON.parse(
@@ -2355,6 +2355,31 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         cwd: result.packageDirectory,
         stdio: 'pipe'
     }));
+});
+
+test('package builder exige revisión funcional del agente cuando hay interacción y aserción', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-test-design-review-'));
+    const builder = new AutomationPackageBuilder(
+        new DeterministicResolver(emptyCatalog),
+        new AutomationMemory(path.join(root, 'memory')),
+    );
+    const recorded = scenario([
+        {
+            action: 'CLICK', selector: 'id=filter', selectorVerified: true,
+            elementIntent: 'seleccionar filtro solo hoy',
+        },
+        {
+            action: 'VERIFICAR_EXISTE', selector: 'id=today', selectorVerified: true,
+            elementIntent: 'validar opción solo hoy',
+        },
+    ]);
+    recorded.objective = 'Filtrar los movimientos del día actual';
+    recorded.acceptanceCriteria = 'Mostrar únicamente movimientos del día actual';
+    const result = builder.prepare(recorded, root);
+    assert.equal(result.testDesignReviewRequired, true);
+    assert.equal(result.agentRequired, true);
+    assert.equal(result.responseAvailable, false);
+    assert.equal(fs.existsSync(path.join(result.packageDirectory, 'agent-response.json')), false);
 });
 
 test('package builder publica expresiones reservadas para evitar colisiones de step', () => {
@@ -2843,12 +2868,37 @@ test('launcher puede abrir terminal y ejecutar copilot con prompt automático', 
     const joined = call.args.join(' ');
     assert.match(joined, /Terminal/);
     assert.match(joined, /copilot/);
-    assert.match(joined, /instructions\.md/);
+    assert.match(joined, /agent-task\.md/);
+    assert.doesNotMatch(joined, /\/bin\/cat/);
+    assert.match(joined, /\/bin\/rm -f/);
     assert.match(joined, /'-i'/);
     assert.match(joined, /--deny-tool/);
     assert.match(joined, /--no-custom-instructions/);
     assert.doesNotMatch(joined, /--output-format json/);
+    assert.doesNotMatch(joined, /Lee instructions\.md/);
+    assert.equal(
+        fs.readFileSync(path.join(root, 'agent-task.md'), 'utf8'),
+        result.prompt,
+    );
+    assert.equal(fs.statSync(path.join(root, 'agent-task.md')).mode & 0o777, 0o600);
     assert.equal(result.packageDirectory, root);
+});
+
+test('launcher no incrusta JSON ni comillas del contexto en AppleScript', () => {
+    if (process.platform !== 'darwin') return;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-launcher-safe-prompt-'));
+    let call;
+    const launcher = new AutomationAgentLauncher((command, args, options) => {
+        call = { command, args, options };
+        return { unref() {} };
+    });
+    const prompt = `PASS 2: user's selector\nBEGIN_AGENT_CONTEXT_JSON\n{"text":"Útimos 7 días"}`;
+    launcher.openInteractiveTerminalWithPrompt('copilot', root, prompt);
+    const appleScript = call.args.join(' ');
+    assert.doesNotMatch(appleScript, /BEGIN_AGENT_CONTEXT_JSON/);
+    assert.doesNotMatch(appleScript, /user's selector/);
+    assert.match(appleScript, /Lee agent-task\.md/);
+    assert.equal(fs.readFileSync(path.join(root, 'agent-task.md'), 'utf8'), prompt);
 });
 
 test('launcher abre monitor legible de ejecución automática en macOS', () => {

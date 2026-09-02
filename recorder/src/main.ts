@@ -77,7 +77,7 @@ function createWindow(state: RecorderRuntimeState): void {
         height: 860,
         minWidth: 960,
         minHeight: 700,
-        title: 'Appium Visual Recorder',
+        title: 'Appium Recorder',
         backgroundColor: '#1E1E2E',
         webPreferences: {
             nodeIntegration: false,
@@ -112,8 +112,8 @@ app.whenReady().then(async () => {
     const workspaceAdapter = getWorkspaceAdapter();
     workspaceAdapter.initialize();
     const appiumServer = new EmbeddedAppiumServer();
-    await appiumServer.start();
-    const dm = new AppiumDriverManager();
+    const appiumPort = await appiumServer.start();
+    const dm = new AppiumDriverManager(appiumPort);
     const bsDm = new BrowserStackDriverManager();
     const reuseAnalyzer = new ReuseAnalyzer();
     const frameworkScanner = new FrameworkScanner(reuseAnalyzer);
@@ -220,7 +220,7 @@ app.whenReady().then(async () => {
 }).catch(error => {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[Main] No se pudo iniciar el recorder:', message);
-    dialog.showErrorBox('No se pudo iniciar Appium Visual Recorder', message);
+    dialog.showErrorBox('No se pudo iniciar Appium Recorder', message);
     app.exit(1);
 });
 

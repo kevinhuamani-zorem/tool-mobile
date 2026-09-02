@@ -17,9 +17,11 @@ test('the embedded server starts Appium with the runtime owned by visual-recorde
     assert.match(server, /appium-xcuitest-driver/);
     assert.match(server, /APPIUM_HOME: appiumHome/);
     assert.match(server, /'--address', '127\.0\.0\.1'/);
-    assert.match(server, /'--port', '4723'/);
+    assert.match(server, /'--port', String\(this\.port\)/);
+    assert.match(server, /using runtime aislado|usando runtime aislado/i);
     assert.match(main, /const appiumServer = new EmbeddedAppiumServer\(\)/);
-    assert.match(main, /await appiumServer\.start\(\)/);
+    assert.match(main, /const appiumPort = await appiumServer\.start\(\)/);
+    assert.match(main, /new AppiumDriverManager\(appiumPort\)/);
     assert.match(main, /\(\) => appiumServer\.stop\(\)/);
 });
 

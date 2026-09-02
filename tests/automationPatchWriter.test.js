@@ -123,7 +123,7 @@ test('inserta el getter tras el último getter y el método antes del cierre de 
     assert.ok(screen.indexOf('get mostrarMovimientos') < screen.indexOf('get btnDescargar'), 'el getter nuevo va después del existente');
     assert.ok(screen.indexOf('get btnDescargar') < screen.indexOf('elUsuarioConsulta'), 'los getters quedan antes de los métodos');
     assert.ok(screen.indexOf('elUsuarioConsulta') < screen.indexOf('elUsuarioDescarga'), 'el método nuevo va al final');
-    assert.match(screen, /\/\/ \[Appium Visual Recorder\] rec-abc123/);
+    assert.match(screen, /\/\/ \[Appium Recorder\] rec-abc123/);
     assert.match(screen, /export default new FiltroScreen\(\);/);
     assert.match(screen, /await this\.uiHelper\.waitForDisplayed\(this\.mostrarMovimientos\);/);
 });
@@ -168,7 +168,7 @@ test('agrega el escenario al final del Feature sin tocar los previos', t => {
     const feature = ctx.read('feature');
     assert.match(feature, /\[TC-1\]\[Happy Path\]\[AUTO-FRONT\] Consulta/);
     assert.match(feature, /\[TC-2\]\[Happy Path\]\[AUTO-FRONT\] Descarga/);
-    assert.match(feature, /# \[Appium Visual Recorder\] rec-abc123/);
+    assert.match(feature, /# \[Appium Recorder\] rec-abc123/);
     assert.ok(feature.indexOf('TC-1') < feature.indexOf('TC-2'));
 });
 
