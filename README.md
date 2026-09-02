@@ -10,9 +10,9 @@ generar o actualizar las cuatro capas de automatización del framework:
 3. Screen Object.
 4. Locators Android/iOS.
 
-El recorder no es un framework de ejecución independiente. Puede ejecutarse
-desde `fwk-mobile-test/tools/visual-recorder` o como aplicación macOS, pero
-siempre se enlaza a una raíz válida de `fwk-mobile-test` como fuente de
+El recorder no es un framework de ejecución independiente. Se ejecuta desde su
+propio clon durante desarrollo o como aplicación macOS, pero siempre se enlaza
+a una raíz válida de `fwk-mobile-test` como fuente de
 ambientes, squads, datos, aplicaciones, artefactos reutilizables y destino de
 generación.
 
@@ -54,6 +54,7 @@ Requisitos generales:
 - checkout local de `fwk-mobile-test`;
 - Node.js 24+ y npm 11+, alineados con `engines` de `fwk-mobile-test`;
 - Git con acceso SSH al repositorio privado del recorder;
+- GitHub Copilot CLI instalado y autenticado para la generación automática;
 - Appium 3, UiAutomator2 y XCUITest se instalan dentro del recorder con
   versiones fijadas; el framework padre no necesita declararlos para usar la
   herramienta.
@@ -70,107 +71,85 @@ Comprobaciones frecuentes:
 ```bash
 node --version
 npm --version
-./tools/visual-recorder/node_modules/.bin/appium --version
+./node_modules/.bin/appium --version
 adb devices
 ```
 
-## Instalación dentro de fwk-mobile-test
+## Inicio rápido: generar la aplicación macOS
 
-El repositorio es privado. Desde la raíz de `fwk-mobile-test`, ejecuta:
-
-```bash
-git clone --depth 1 --branch visual-recorder --single-branch \
-  git@github.com:kevinhuamani-zorem/tool-mobile.git tools/visual-recorder \
-  && ./tools/visual-recorder/install.sh
-```
-
-El instalador:
-
-- valida que la carpeta actual sea la raíz de `fwk-mobile-test`;
-- instala el checkout en `tools/visual-recorder`;
-- ejecuta `npm ci` con el lockfile del recorder para Appium, drivers, Electron,
-  renderer y WebdriverIO;
-- no modifica `package.json`, `package-lock.json` ni `.gitignore` del framework;
-- agrega la exclusión solo local `/tools/visual-recorder/` en
-  `.git/info/exclude` cuando el framework es un checkout Git;
-- rechaza actualizaciones si encuentra cambios locales sin guardar dentro del
-  recorder.
-
-Para instalar e iniciar en el mismo comando:
+Esta es la forma recomendada de probar la rama
+`feature/recorder-macos-app`. El recorder puede clonarse en cualquier carpeta;
+no tiene que vivir dentro de `fwk-mobile-test` porque la aplicación permite
+elegir el framework desde su interfaz.
 
 ```bash
-git clone --depth 1 --branch visual-recorder --single-branch \
-  git@github.com:kevinhuamani-zorem/tool-mobile.git tools/visual-recorder \
-  && ./tools/visual-recorder/install.sh --start
-```
+git clone --depth 1 \
+  --branch feature/recorder-macos-app \
+  --single-branch --recurse-submodules \
+  git@github.com:kevinhuamani-zorem/tool-mobile.git visual-recorder
 
-Si GitHub CLI está instalado y autenticado, también puede descargarse el
-instalador privado directamente:
-
-```bash
-gh auth login
-gh api -H 'Accept: application/vnd.github.raw+json' \
-  'repos/kevinhuamani-zorem/tool-mobile/contents/install.sh?ref=visual-recorder' \
-  | bash
-```
-
-`raw.githubusercontent.com` sin autenticación devuelve `404` para el
-repositorio privado.
-
-### Actualizar una instalación existente
-
-Desde la raíz de `fwk-mobile-test`:
-
-```bash
-./tools/visual-recorder/install.sh
-```
-
-La actualización usa `fast-forward`; no sobrescribe cambios locales del
-recorder.
-
-## Ejecución
-
-Desde la raíz del framework:
-
-```bash
-npm --prefix tools/visual-recorder run recorder
-```
-
-El comando inicia Appium, compila el proceso principal y el renderer React, y
-abre Electron. Si el puerto `4723` ya está ocupado, el recorder se detiene para
-no cerrar una sesión ajena. Appium y sus drivers se cargan siempre desde
-`tools/visual-recorder/node_modules`, aislados de los `overrides` del framework.
-No instales con `--ignore-scripts`, porque Electron necesita descargar su
-binario nativo durante `npm ci`.
-
-### Generar la aplicación macOS
-
-Desde `tools/visual-recorder`:
-
-```bash
+cd visual-recorder
 npm ci
 npm run inspector:build
 npm run package:mac
 ```
 
-Se genera `release/mac-arm64/Appium Visual Recorder.app` y Finder abre la
-carpeta seleccionando el archivo. El primer arranque
-solicita la raíz de `fwk-mobile-test` y la recuerda. El `.app` usa un runtime
-escribible externo: cuando se compila desde un clon, conserva
-`tools/visual-recorder/runtime` de ese clon para mostrar y continuar sus
-grabaciones. La ruta elegida de `fwk-mobile-test` es independiente y es el
-único destino de los Feature, Steps, Screen Objects y Locators aplicados.
-También inicia el Appium/UiAutomator2/XCUITest empaquetado, por lo que no
-modifica las dependencias npm del framework seleccionado. El artefacto de esta
-fase es para pruebas internas: todavía no está firmado ni notarizado.
+`npm run package:mac` compila el recorder, valida el Inspector embebido, genera
+`Appium Visual Recorder.app` dentro de `release/mac-*` y abre Finder con la
+aplicación seleccionada.
 
-Si la aplicación se copia y la ruta del clon deja de existir, usa como fallback
-`Application Support/appium-visual-recorder`. Para enlazar explícitamente otro
-clon puede iniciarse con `VISUAL_RECORDER_RUNTIME_ROOT=/ruta/visual-recorder`.
+En el primer arranque:
 
-La raíz puede cambiarse posteriormente desde **Ajustes → Cambiar proyecto**.
-El recorder valida la nueva carpeta, la guarda y se reinicia para reconstruir
-todos los índices sin mezclar información entre frameworks.
+1. Abre `Appium Visual Recorder.app`.
+2. Selecciona la raíz local de `fwk-mobile-test`.
+3. Elige ambiente, squad y alcance de Features.
+4. Conecta el dispositivo o simulador y comienza la grabación.
+
+La aplicación conserva la ruta seleccionada. Puede cambiarse posteriormente
+desde **Ajustes → Cambiar proyecto**. Los archivos finales se aplican al
+`fwk-mobile-test` elegido; grabaciones, paquetes del agente y cachés permanecen
+en el runtime escribible del recorder.
+
+El `.app` generado es local, sin firma ni notarización. En otra Mac puede ser
+necesario abrirlo la primera vez mediante clic derecho → **Abrir**. El build es
+específico de la arquitectura de la Mac que lo genera.
+
+Para generar además un DMG de pruebas internas:
+
+```bash
+npm run dmg:mac
+```
+
+El DMG queda en `release/`. Para publicar la aplicación fuera del equipo se
+requieren firma Developer ID, hardened runtime y notarización; todavía no son
+parte de esta rama.
+
+### Actualizar el clon y volver a generar el `.app`
+
+```bash
+git pull --ff-only origin feature/recorder-macos-app
+git submodule update --init --recursive
+npm ci
+npm run inspector:build
+npm run package:mac
+```
+
+`npm ci` es necesario cuando cambia el lockfile o se desea garantizar una
+instalación reproducible. No uses `--ignore-scripts`: Electron necesita su
+binario nativo para construir y abrir la aplicación.
+
+## Ejecución local para desarrollo
+
+Desde la raíz del clon del recorder:
+
+```bash
+npm run recorder
+```
+
+Este alias compila y abre Electron. El proceso principal inicia y detiene su
+propio Appium con UiAutomator2/XCUITest, igual que el `.app`; no requiere un
+script de shell ni un servidor Appium externo. En el primer inicio también
+solicita la raíz de `fwk-mobile-test`.
 
 ## Configuración inicial
 
@@ -360,11 +339,14 @@ El agente se usa únicamente cuando el preprocesador deja gaps semánticos o de
 estructura. El paquete se guarda dentro de:
 
 ```text
-tools/visual-recorder/runtime/recordings/<recording>/generation/automation/
+runtime/recordings/<recording>/generation/automation/
 ```
 
-La pantalla **Abrir Terminal del agente** abre una terminal en esa ruta y
-muestra el prompt inicial. No ejecuta automáticamente el agente.
+En el flujo normal, el recorder abre Copilot en una Terminal con el prompt
+acotado, espera el artefacto de respuesta, lo valida y lleva automáticamente el
+resultado válido a Revisión. La apertura manual, el prompt y la reimportación
+se conservan en **Opciones avanzadas / diagnóstico** para corregir una
+propuesta que no superó el contrato.
 
 El paquete contiene como máximo el contexto mínimo necesario:
 
@@ -444,7 +426,6 @@ El CodeGraph del framework indexa relaciones entre Features, Steps, Screen
 Objects, métodos y locators para reducir contexto y detectar reutilización.
 
 ```bash
-cd tools/visual-recorder
 npm run codegraph:export -- --squad payment --feature movimientos
 npm run codegraph:export -- --squad payment --search yapear --limit 60
 ```
@@ -463,7 +444,7 @@ npm run codegraph:recorder -- --ipc preview-fwk-files
 
 ## Desarrollo y calidad
 
-Comandos dentro de `tools/visual-recorder`:
+Comandos desde la raíz del recorder:
 
 ```bash
 npm ci
@@ -502,8 +483,6 @@ visual-recorder/
 ├── scripts/               Calidad y CodeGraph
 ├── tests/                 Contratos ejecutables
 ├── runtime/               Evidencia y caché local no versionada
-├── install.sh             Instalación acoplada al framework
-├── run.sh                 Arranque de Appium y Electron
 └── package.json
 ```
 
@@ -513,4 +492,4 @@ visual-recorder/
 - TypeScript y Vite.
 - Appium y WebdriverIO.
 - Cucumber/Gherkin compatible con `fwk-mobile-test`.
-- Node.js 20.19+ o 22.12+.
+- Node.js 24+ y npm 11+ para desarrollo y empaquetado reproducible.

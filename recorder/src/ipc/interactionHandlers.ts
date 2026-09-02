@@ -16,6 +16,24 @@ export interface InteractionHandlersContext {
     syncRecording: () => void;
 }
 
+/** Reordena sin perder evidencia del step y vuelve a hacer continua la secuencia. */
+export function reorderRecordedSteps(
+    steps: RecordedStep[],
+    fromIndex: number,
+    toIndex: number,
+): RecordedStep[] {
+    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) {
+        throw new Error('Las posiciones de las acciones deben ser enteras.');
+    }
+    if (fromIndex < 0 || fromIndex >= steps.length || toIndex < 0 || toIndex >= steps.length) {
+        throw new Error('La posición seleccionada está fuera del recording.');
+    }
+    const reordered = steps.map(step => ({ ...step }));
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    return reordered.map((step, index) => ({ ...step, sequence: index + 1 }));
+}
+
 export function registerInteractionHandlers(context: InteractionHandlersContext): void {
     const { state, syncRecording } = context;
 
@@ -210,6 +228,27 @@ export function registerInteractionHandlers(context: InteractionHandlersContext)
         if (index >= 0 && index < state.recordedSteps.length) state.recordedSteps.splice(index, 1);
         syncRecording();
         return { success: true, totalSteps: state.recordedSteps.length };
+    });
+
+    ipcMain.handle('move-step', async (_, fromIndex: number, toIndex: number) => {
+        const previous = state.recordedSteps;
+        try {
+            state.recordedSteps = reorderRecordedSteps(previous, fromIndex, toIndex);
+            syncRecording();
+            return {
+                success: true,
+                totalSteps: state.recordedSteps.length,
+                steps: state.recordedSteps,
+                selectedIndex: toIndex,
+            };
+        } catch (error) {
+            state.recordedSteps = previous;
+            return {
+                success: false,
+                totalSteps: state.recordedSteps.length,
+                error: error instanceof Error ? error.message : 'No se pudo cambiar la posición de la acción.',
+            };
+        }
     });
 
     ipcMain.handle('clear-steps', async () => {

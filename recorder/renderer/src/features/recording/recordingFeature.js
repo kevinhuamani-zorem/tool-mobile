@@ -40,10 +40,13 @@ export function createRecordingFeature(deps) {
     const txtFeature  = document.getElementById('txtFeature');
     const txtScenario = document.getElementById('txtScenario');
     const btnDelete   = document.getElementById('btnDeleteStep');
+    const btnMoveUp   = document.getElementById('btnMoveStepUp');
+    const btnMoveDown = document.getElementById('btnMoveStepDown');
     const btnClear    = document.getElementById('btnClearSteps');
     const lblVerify   = document.getElementById('lblVerifyResult');
 
     let selectedStepIndex = -1;
+    let renderedSteps = [];
 
     const bound = [];
     function on(target, type, handler, options) {
@@ -86,25 +89,65 @@ export function createRecordingFeature(deps) {
 
     function renderSteps(steps) {
         if (!lstSteps) return;
+        renderedSteps = Array.isArray(steps) ? steps : [];
+        if (selectedStepIndex >= renderedSteps.length) selectedStepIndex = -1;
         lstSteps.innerHTML = '';
-        if (!steps || steps.length === 0) {
+        if (renderedSteps.length === 0) {
             lstSteps.innerHTML = '<li class="step-empty">Sin steps grabados...</li>';
+            updateMoveButtons();
             updateFinalAction();
             return;
         }
-        steps.forEach((s, i) => {
+        renderedSteps.forEach((s, i) => {
             const li = document.createElement('li');
             li.textContent = (i + 1) + '. ' + stepSummary(s);
             li.dataset.index = i;
+            li.tabIndex = 0;
             if (i === selectedStepIndex) li.classList.add('selected');
             li.addEventListener('click', () => {
                 selectedStepIndex = i;
                 document.querySelectorAll('#lstSteps li').forEach(el => el.classList.remove('selected'));
                 li.classList.add('selected');
+                updateMoveButtons();
             });
             lstSteps.appendChild(li);
         });
+        updateMoveButtons();
         updateFinalAction();
+    }
+
+    function updateMoveButtons() {
+        if (btnMoveUp) btnMoveUp.disabled = selectedStepIndex <= 0;
+        if (btnMoveDown) {
+            btnMoveDown.disabled = selectedStepIndex < 0 || selectedStepIndex >= renderedSteps.length - 1;
+        }
+    }
+
+    async function refreshGherkinPreview() {
+        const pr = await api.previewGherkin(
+            txtFeature.value.trim() || 'Flujo mobile',
+            txtScenario.value.trim() || 'Escenario'
+        );
+        if (pr.success && txtGherkin) txtGherkin.value = pr.preview;
+    }
+
+    async function moveSelectedStep(offset) {
+        if (selectedStepIndex < 0) {
+            setStatus('⚠ Selecciona una acción para moverla', '#FF6600');
+            return;
+        }
+        const targetIndex = selectedStepIndex + offset;
+        if (targetIndex < 0 || targetIndex >= renderedSteps.length) return;
+        const result = await api.moveStep(selectedStepIndex, targetIndex);
+        if (!result.success) {
+            setStatus('✗ ' + (result.error || 'No se pudo mover la acción'), '#CC0000');
+            return;
+        }
+        selectedStepIndex = targetIndex;
+        invalidatePreview();
+        renderSteps(result.steps || (await api.getSteps()).steps);
+        await refreshGherkinPreview();
+        setStatus(`↕ Acción movida a la posición ${targetIndex + 1}`, '#00CC00');
     }
 
     function clearStepFields() {
@@ -182,11 +225,7 @@ export function createRecordingFeature(deps) {
                     clearStepFields();
                     const sr = await api.getSteps();
                     renderSteps(sr.steps);
-                    const pr = await api.previewGherkin(
-                        txtFeature.value.trim() || 'Flujo mobile',
-                        txtScenario.value.trim() || 'Escenario'
-                    );
-                    if (pr.success && txtGherkin) txtGherkin.value = pr.preview;
+                    await refreshGherkinPreview();
                 } else {
                     setStatus('✗ ' + (result.message || 'No se pudo ejecutar el step'), '#CC0000');
                 }
@@ -205,6 +244,14 @@ export function createRecordingFeature(deps) {
             const r = await api.getSteps();
             renderSteps(r.steps);
             setStatus('🗑️ Eliminado', '#FF6600');
+        });
+
+        on(btnMoveUp, 'click', async () => {
+            await moveSelectedStep(-1);
+        });
+
+        on(btnMoveDown, 'click', async () => {
+            await moveSelectedStep(1);
         });
 
         on(btnClear, 'click', async () => {

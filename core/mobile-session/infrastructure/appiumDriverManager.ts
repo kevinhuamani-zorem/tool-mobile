@@ -59,7 +59,7 @@ export class AppiumDriverManager {
                         attempts++;
                         setTimeout(check, 1000);
                     } else {
-                        reject(new Error('Appium no responde en puerto 4723. Ejecuta ./run.sh'));
+                        reject(new Error('Appium no responde en puerto 4723. Reinicia el recorder.'));
                     }
                 });
             };

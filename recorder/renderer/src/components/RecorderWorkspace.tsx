@@ -135,8 +135,10 @@ export function RecorderWorkspace() {
         <div className="steps-header">
           <span className="section-title">PASOS DEL ESCENARIO</span>
           <div className="steps-actions">
-            <button className="btn btn-red-sm" id="btnDeleteStep">🗑️</button>
-            <button className="btn btn-dark-sm" id="btnClearSteps">🧹</button>
+            <button className="btn btn-dark-sm" id="btnMoveStepUp" title="Subir acción" aria-label="Subir acción seleccionada" disabled>↑</button>
+            <button className="btn btn-dark-sm" id="btnMoveStepDown" title="Bajar acción" aria-label="Bajar acción seleccionada" disabled>↓</button>
+            <button className="btn btn-red-sm" id="btnDeleteStep" title="Eliminar acción" aria-label="Eliminar acción seleccionada">🗑️</button>
+            <button className="btn btn-dark-sm" id="btnClearSteps" title="Limpiar acciones" aria-label="Limpiar todas las acciones">🧹</button>
           </div>
         </div>
         <ul id="lstSteps" className="steps-list">

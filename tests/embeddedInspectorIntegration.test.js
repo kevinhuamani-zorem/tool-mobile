@@ -260,7 +260,10 @@ test('pins and builds the controlled fork without a committed bundle or plugin',
         path.join(toolRoot, 'scripts', 'build-embedded-inspector.js'),
         'utf8',
     );
-    const runScript = fs.readFileSync(path.join(toolRoot, 'run.sh'), 'utf8');
+    const appiumServer = fs.readFileSync(
+        path.join(toolRoot, 'core', 'mobile-session', 'infrastructure', 'embeddedAppiumServer.ts'),
+        'utf8',
+    );
 
     assert.match(gitmodules, /kevinhuamani-zorem\/appium-inspector\.git/);
     assert.match(gitmodules, /kevinhuamani-zorem-embedded-inspector-mode/);
@@ -268,6 +271,6 @@ test('pins and builds the controlled fork without a committed bundle or plugin',
     assert.match(buildScript, /npm', \['run', 'build:browser'\]/);
     assert.match(buildScript, /VITE_EMBEDDED_HOST_ORIGIN: hostOrigin/);
     assert.doesNotMatch(buildScript, /appium-inspector-plugin/);
-    assert.match(runScript, /--address 127\.0\.0\.1/);
-    assert.doesNotMatch(runScript, /--allow-cors/);
+    assert.match(appiumServer, /'--address', '127\.0\.0\.1'/);
+    assert.doesNotMatch(appiumServer, /--allow-cors/);
 });

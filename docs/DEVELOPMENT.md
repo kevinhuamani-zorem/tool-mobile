@@ -4,7 +4,7 @@
 
 - Node.js 24+ y npm 11+, siguiendo `engines` de `fwk-mobile-test`.
 - El runtime Appium 3, `@appium/base-driver` y los drivers
-  UiAutomator2/XCUITest pertenecen a `tools/visual-recorder`, están fijados por
+  UiAutomator2/XCUITest pertenecen al recorder, están fijados por
   su lockfile y no dependen del árbol npm del framework padre.
 - Android local: Java 17+, Android SDK/ADB y UiAutomator2.
 - BrowserStack o iOS local no requieren Java por sí mismos.
@@ -12,21 +12,18 @@
 Instalación:
 
 ```bash
-cd tools/visual-recorder
-npm install
+cd visual-recorder
+npm ci
 git submodule update --init --recursive vendor/appium-inspector
 npm run inspector:build
 ```
 
-En una instalación reproducible o después de actualizar usa únicamente
-`npm --prefix tools/visual-recorder ci` desde la raíz del framework. Este
-comando instala el runtime móvil y la interfaz sin modificar el proyecto padre.
-El instalador solo puede añadir una regla local a `.git/info/exclude`; nunca
-edita archivos versionados del framework.
+Después de actualizar usa `npm ci` desde la raíz del recorder. Este comando
+instala el runtime móvil y la interfaz sin modificar el framework elegido.
 
 No uses `--ignore-scripts`: Electron necesita su script de instalación para
 descargar el binario nativo de macOS. Si una instalación anterior lo omitió,
-puede repararse con `npm --prefix tools/visual-recorder rebuild electron`.
+puede repararse con `npm rebuild electron`.
 
 El fork controlado está fijado en
 `63f544c5afca2d89244914c165cd14434d1cfdee` de la rama
@@ -40,8 +37,7 @@ copia el resultado a `node_modules/.cache`.
 
 | Comando | Uso |
 |---|---|
-| `npm --prefix tools/visual-recorder run recorder` | Inicia Appium en 4723, compila y abre Electron desde la raíz del framework |
-| `./run.sh` | Equivalente cuando el directorio actual es `tools/visual-recorder` |
+| `npm run recorder` | Compila, abre Electron e inicia el Appium embebido |
 | `npm start` | Compila y abre Electron |
 | `npm run build` | Compila main y renderer |
 | `npm run package:mac` | Genera el `.app` sin firma y lo selecciona en Finder |
@@ -136,10 +132,10 @@ Los grafos y métricas se guardan en `runtime/` y no se versionan.
 
 ## Workspace y agente
 
-No existe configuración `.env` propia del recorder. La instalación fija la
-ubicación `fwk-mobile-test/tools/visual-recorder`; desde ella se resuelve
-automáticamente el framework padre. Copilot es el único proveedor presentado
-por el flujo de automatización.
+No existe configuración `.env` propia del recorder. En desarrollo se reutiliza
+el framework padre si el clon está dentro de `tools/visual-recorder`; en caso
+contrario se usa el workspace persistido o se solicita una raíz válida. Copilot
+es el único proveedor presentado por el flujo de automatización.
 
 Las credenciales BrowserStack se administran desde la pantalla de conexión y
 nunca deben añadirse a archivos versionados.

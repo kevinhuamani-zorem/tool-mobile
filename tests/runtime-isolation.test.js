@@ -5,16 +5,22 @@ const test = require('node:test');
 
 const toolRoot = path.resolve(__dirname, '..');
 
-test('run.sh starts and validates the Appium runtime owned by visual-recorder', () => {
-    const script = fs.readFileSync(path.join(toolRoot, 'run.sh'), 'utf8');
+test('the embedded server starts Appium with the runtime owned by visual-recorder', () => {
+    const server = fs.readFileSync(
+        path.join(toolRoot, 'core', 'mobile-session', 'infrastructure', 'embeddedAppiumServer.ts'),
+        'utf8',
+    );
+    const main = fs.readFileSync(path.join(toolRoot, 'recorder', 'src', 'main.ts'), 'utf8');
 
-    assert.match(script, /APPIUM_HOME_ROOT="\$\{SCRIPT_DIR\}"/);
-    assert.match(script, /RECORDER_APPIUM_BIN="\$\{SCRIPT_DIR\}\/node_modules\/\.bin\/appium"/);
-    assert.match(script, /fs\.existsSync\(electron\)/);
-    assert.match(script, /Ejecuta sin --ignore-scripts/);
-    assert.match(script, /typeof baseDriver\.AppiumIpc !== 'function'/);
-    assert.match(script, /appium-uiautomator2-driver/);
-    assert.match(script, /appium-xcuitest-driver/);
+    assert.match(server, /node_modules', 'appium', 'index\.js'/);
+    assert.match(server, /appium-uiautomator2-driver/);
+    assert.match(server, /appium-xcuitest-driver/);
+    assert.match(server, /APPIUM_HOME: appiumHome/);
+    assert.match(server, /'--address', '127\.0\.0\.1'/);
+    assert.match(server, /'--port', '4723'/);
+    assert.match(main, /const appiumServer = new EmbeddedAppiumServer\(\)/);
+    assert.match(main, /await appiumServer\.start\(\)/);
+    assert.match(main, /\(\) => appiumServer\.stop\(\)/);
 });
 
 test('the recorder pins an isolated and compatible Appium runtime', () => {

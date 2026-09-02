@@ -3,20 +3,21 @@
 ## Inicio rápido
 
 ```bash
-npm --prefix tools/visual-recorder run recorder
+npm run recorder
 ```
 
-Ejecuta el comando desde la raíz de `fwk-mobile-test`. El recorder resuelve el
-framework padre automáticamente y usa Copilot como agente. No requiere `.env`,
-`TARGET_PROJECT` ni selección de proveedor. La plataforma queda fija al crear
-la sesión.
+Ejecuta el comando desde la raíz del clon del recorder. En el primer inicio se
+selecciona una raíz local de `fwk-mobile-test`; no es necesario instalar el
+recorder dentro del framework. El proceso principal inicia Appium y usa Copilot
+como agente. No requiere `.env`, `TARGET_PROJECT` ni selección de proveedor. La
+plataforma queda fija al crear la sesión.
 
 ## Aplicación macOS
 
 Para construir un `.app` de pruebas en una Mac Apple Silicon:
 
 ```bash
-cd tools/visual-recorder
+cd visual-recorder
 npm ci
 npm run inspector:build
 npm run package:mac
@@ -40,9 +41,9 @@ notarización en una iteración posterior.
 Para usar el Inspector embebido en un checkout nuevo:
 
 ```bash
-git submodule update --init --recursive tools/visual-recorder/vendor/appium-inspector
-npm --prefix tools/visual-recorder run inspector:build
-RECORDER_INSPECTOR=embedded npm --prefix tools/visual-recorder run recorder
+git submodule update --init --recursive vendor/appium-inspector
+npm run inspector:build
+RECORDER_INSPECTOR=embedded npm run recorder
 ```
 
 `RECORDER_INSPECTOR=legacy` conserva el inspector visual previo. Sin variable,
@@ -90,26 +91,25 @@ El paquete JavaScript existe, pero falta `Electron.app`; normalmente se instaló
 con `--ignore-scripts`. Repara la instalación con:
 
 ```bash
-npm --prefix tools/visual-recorder rebuild electron
+npm rebuild electron
 ```
 
-Para una reinstalación reproducible usa `npm --prefix tools/visual-recorder ci`
-sin `--ignore-scripts`. `run.sh` comprueba tanto el wrapper como el binario antes
-de compilar o iniciar Appium.
+Para una reinstalación reproducible usa `npm ci` sin `--ignore-scripts`. El
+proceso principal comprueba el runtime antes de iniciar Appium.
 
 ### El puerto 4723 está ocupado
 
-`run.sh` se detiene para no matar una sesión desconocida. Localiza y cierra la
-instancia Appium que posee el puerto, o reutiliza conscientemente un servidor
-compatible. No automatices un borrado indiscriminado de procesos.
+El recorder reutiliza una instancia compatible que ya responda en el puerto.
+Si pertenece a otro runtime, ciérrala antes de iniciar una sesión. No
+automatices un borrado indiscriminado de procesos.
 
 ### Faltan assets del Inspector embebido
 
 Inicializa el submódulo y recompila la caché:
 
 ```bash
-git submodule update --init --recursive tools/visual-recorder/vendor/appium-inspector
-npm --prefix tools/visual-recorder run inspector:build
+git submodule update --init --recursive vendor/appium-inspector
+npm run inspector:build
 ```
 
 El recorder no habilita CORS global en Appium. Abre un proxy loopback efímero
@@ -118,22 +118,22 @@ activa. No se relaja la navegación, el sandbox ni el bridge de Electron.
 
 ### Appium falla con `AppiumIpc is not a constructor`
 
-Indica que el runtime aislado del recorder quedó incompleto o fue alterado.
-`run.sh` valida `AppiumIpc` antes de abrir la sesión y muestra las versiones
-detectadas. Restaura exactamente el lockfile de la herramienta; no cambies
-overrides ni dependencias del framework padre.
+Indica que el runtime aislado del recorder quedó incompleto o fue alterado. El
+servidor embebido carga Appium y sus drivers desde el recorder. Restaura
+exactamente el lockfile de la herramienta; no cambies sus versiones desde el
+framework seleccionado.
 
 Comprueba el árbol efectivo desde la raíz:
 
 ```bash
-npm --prefix tools/visual-recorder ls appium @appium/base-driver appium-uiautomator2-driver appium-xcuitest-driver
+npm ls appium @appium/base-driver appium-uiautomator2-driver appium-xcuitest-driver
 ```
 
 El árbol no debe reportar paquetes `invalid` y `@appium/base-driver` debe
 exponer `AppiumIpc`. Reinstala todo el runtime del recorder con:
 
 ```bash
-npm --prefix tools/visual-recorder ci
+npm ci
 ```
 
 ### `unknown mobile command` o HTTP 404
@@ -279,8 +279,8 @@ Requisitos en la Mac:
 
 ```bash
 xcrun simctl list devices available     # debe listar al menos un simulador
-./tools/visual-recorder/node_modules/.bin/appium driver install xcuitest
-./tools/visual-recorder/node_modules/.bin/appium driver list --installed
+./node_modules/.bin/appium driver install xcuitest
+./node_modules/.bin/appium driver list --installed
 ```
 
 `appium-xcuitest-driver` puede estar en el `node_modules` del recorder y aun así no estar

@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('api', {
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),
     deleteStep:          (idx: number)          => ipcRenderer.invoke('delete-step', idx),
+    moveStep:            (from: number, to: number) => ipcRenderer.invoke('move-step', from, to),
     clearSteps:          ()                     => ipcRenderer.invoke('clear-steps'),
     previewGherkin:      (f: string, s: string) => ipcRenderer.invoke('preview-gherkin', f, s),
     previewFwkFiles:     (request: any)          => ipcRenderer.invoke('preview-fwk-files', request),
