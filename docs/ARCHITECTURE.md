@@ -256,15 +256,17 @@ XML, screenshots, source, capabilities ni credenciales.
    PASS 1 usa una proyección compacta para decidir consultas; PASS 2 usa otra
    proyección orientada a generar las cuatro capas. Cada pasada valida su
    contexto contra `maxContextBytes`.
-   PASS 2 incluye además `testDesignReview`, una revisión funcional estructurada
-   que no consume otra invocación. Contrasta objetivo, criterio de aceptación,
+   PASS 2 incluye además `testDesignReview`, una revisión funcional estructurada.
+   Contrasta objetivo, criterio de aceptación,
    acciones y aserciones. Si una interacción solo verifica que existe el control
    o carece de una aserción posterior sobre el resultado de negocio, el pipeline
    termina en `QA_TEST_DESIGN_REQUIRED`, guarda `test-design-review.json` y
    devuelve al QA a la grabación sin crear `agent-response.json`.
-   En ese estado el agente también redacta `testDesignReview.roast` a partir de
-   sus propios hallazgos. El renderer solo lo presenta cuando la preferencia
-   **QA Roast Mode** está activa y siempre conserva el diagnóstico estructurado.
+   El roast no pertenece a PASS 2. Si la preferencia **QA Roast Mode** está
+   activa, `CopilotQaRoastGenerator` usa después el puerto
+   `QaRoastGenerationService` para abrir una sesión headless independiente con
+   contexto sanitizado. Su fallo es no bloqueante y el renderer siempre conserva
+   el diagnóstico estructurado.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
    Los rellenos de plataforma solo aceptan la identidad determinista completa

@@ -93,6 +93,12 @@ En macOS, Copilot se muestra en Terminal durante la pasada de generación con
 `copilot -i`; al escribir una salida nueva que cumple el schema, el recorder la
 importa y avanza a Revisión sin que el QA pulse un botón adicional.
 
+QA Roast Mode no altera esa pasada. Cuando `testDesignReview` termina en
+`qa-required` y la preferencia está activa, el renderer envía `qaRoastMode` por
+IPC y el proceso principal ejecuta una segunda llamada headless mediante el
+adapter controlado. Esta llamada solo puede crear `qa-roast-response.json`; si
+falla, el wizard presenta el diagnóstico técnico sin roast.
+
 El progreso de ese pipeline lo emite `main.ts` por IPC (`automation-progress`) y
 el renderer solo refleja los estados backend (`ANALYZING`, `RESOLVING_CONTEXT`,
 `RESOLVING_DECISIONS`, `WAITING_FOR_QA`, `GENERATING`, `VALIDATING`,

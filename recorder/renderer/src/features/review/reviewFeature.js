@@ -698,7 +698,10 @@ export function createReviewFeature(deps) {
                     ? 'Copilot contrastará el objetivo y el resultado esperado con las verificaciones grabadas.'
                     : 'Buscando resolución automática para las decisiones pendientes.'
             );
-            const launched = await api.launchAutomationAgent({ mode: 'automatic' });
+            const launched = await api.launchAutomationAgent({
+                mode: 'automatic',
+                qaRoastMode: isQaRoastModeEnabled()
+            });
             if (!launched.success) {
                 state.invalidAutomationDraft = launched.draft || null;
                 const code = String(launched.run?.errorCode || launched.errorCode || '');

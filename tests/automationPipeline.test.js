@@ -2947,7 +2947,10 @@ test('el flujo de automatización cruza renderer, preload y main por IPC explíc
     assert.match(rendererCombined, /prepareAutomationPackage/);
     assert.match(rendererCombined, /prepareAutomationRegeneration/);
     assert.match(rendererCombined, /generateAutomationResponse/);
-    assert.match(rendererCombined, /launchAutomationAgent\(\{ mode: 'automatic' \}\)/);
+    assert.match(
+        rendererCombined,
+        /launchAutomationAgent\(\{[\s\S]*mode: 'automatic',[\s\S]*qaRoastMode: isQaRoastModeEnabled\(\)[\s\S]*\}\)/,
+    );
     assert.match(rendererCombined, /importAutomationResponse\(true\)/);
     assert.match(rendererCombined, /updateAutomationProgress\(/);
     assert.match(rendererCombined, /on\(btnReimportAutomationCorrection, 'click'/);

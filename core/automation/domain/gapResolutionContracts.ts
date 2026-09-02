@@ -156,7 +156,7 @@ export function gapResolutionsSchema(maxResolutions: number): Record<string, unk
                         type: 'string',
                         minLength: 20,
                         maxLength: 280,
-                        description: 'Roast directo y claramente sarcástico basado en el fallo real: observación concreta, golpe breve y corrección. Sin metáforas vagas ni insultos personales.',
+                        description: 'Compatibilidad con respuestas anteriores. La presentación troll se genera fuera de la resolución semántica.',
                     },
                     issues: {
                         type: 'array',
@@ -496,11 +496,6 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
                 code: 'test-design-review-qa-without-blocker',
                 path: '$.testDesignReview',
                 message: 'qa-required necesita al menos un hallazgo blocking.',
-            });
-            if (status === 'qa-required' && roast.length < 20) errors.push({
-                code: 'test-design-review-roast',
-                path: '$.testDesignReview.roast',
-                message: 'qa-required necesita un roast breve y coherente con los hallazgos reales.',
             });
             if (status && summary.length >= 8 && rawIssues && issues.length === rawIssues.length) {
                 normalizedTestDesignReview = { status, summary, ...(roast ? { roast } : {}), issues };

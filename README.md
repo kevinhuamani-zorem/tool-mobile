@@ -172,8 +172,10 @@ permanecen en el proceso principal. El renderer solo recibe el nombre de las
 variables y su estado de configuración. El recorder no utiliza un `.env` propio.
 
 Desde **Ajustes** también puede activarse **🧌 QA Roast Mode**. Cuando la
-revisión funcional rechaza una grabación, Copilot redacta un mensaje sarcástico
-desde los hallazgos reales del caso. No se selecciona desde un diccionario fijo.
+revisión funcional rechaza una grabación, una segunda sesión headless y aislada
+de Copilot redacta un mensaje sarcástico desde los hallazgos reales del caso.
+El análisis técnico no genera ni valida el chiste, por lo que el modo troll nunca
+puede invalidar la resolución del caso. No se selecciona desde un diccionario fijo.
 Es opcional, permanece desactivado por defecto y nunca oculta
 el diagnóstico técnico, las acciones afectadas ni la recomendación de
 corrección.

@@ -16,6 +16,7 @@ export * from './domain/automationScenarioPackage';
 export * from './domain/deterministicQueryPlanner';
 export * from './domain/elementIdentity';
 export * from './domain/gapResolutionContracts';
+export * from './domain/qaRoastContracts';
 export * from './domain/uiTextQualityObservations';
 export * from './domain/verifiedSelectorCandidates';
 
@@ -33,9 +34,11 @@ export * from './infrastructure/automationPackageBuilder';
 export * from './infrastructure/automationPatchWriter';
 export * from './infrastructure/automationRecordingStore';
 export * from './infrastructure/copilotCliAdapter';
+export * from './infrastructure/copilotQaRoastGenerator';
 export * from './infrastructure/deterministicResolver';
 export * from './infrastructure/gapQueryPolicy';
 export * from './infrastructure/generatedFileRegistry';
 export * from './infrastructure/visibleCopilotProvider';
 
 export * from './ports/agentProvider';
+export * from './ports/qaRoastGenerationService';

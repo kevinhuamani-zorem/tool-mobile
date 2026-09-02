@@ -39,6 +39,8 @@ import {
     rollbackCorrectionBaselines,
     QaObservationsArtifact,
     analyzeScenarioUiTextQuality,
+    QaRoastGenerationService,
+    TestDesignReview,
 } from '../../../core/automation';
 import { RecordingCoverageAnalyzer } from '../../../core/coverage';
 import { AutomationResponseValidator } from '../../../core/validation';
@@ -176,6 +178,7 @@ export interface AutomationHandlersContext {
     automationPackageBuilder: AutomationPackageBuilder;
     automationAgentLauncher: AutomationAgentLauncher;
     agentOrchestrator: AgentOrchestrator;
+    qaRoastGenerator: QaRoastGenerationService;
     deterministicGenerator: DeterministicGenerator;
     automationResponseValidator: AutomationResponseValidator;
     automationMemory: AutomationMemory;
@@ -193,6 +196,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         automationPackageBuilder,
         automationAgentLauncher,
         agentOrchestrator,
+        qaRoastGenerator,
         deterministicGenerator,
         automationResponseValidator,
         automationMemory,
@@ -761,6 +765,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
     ipcMain.handle('launch-automation-agent', async (_, input?: {
         mode?: string;
         autorun?: boolean;
+        qaRoastMode?: boolean;
     }) => {
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
@@ -839,12 +844,46 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                 };
             }
             if (run.errorCode === 'QA_TEST_DESIGN_REQUIRED' && run.testDesignReview) {
+                const technicalReview: TestDesignReview = {
+                    status: run.testDesignReview.status,
+                    summary: run.testDesignReview.summary,
+                    issues: run.testDesignReview.issues,
+                };
+                let testDesignReview = technicalReview;
+                let roastGeneration;
+                if (input?.qaRoastMode) {
+                    emitAutomationProgress(
+                        'RESOLVING_DECISIONS',
+                        'Preparando el comentario del modo troll',
+                        3,
+                        6,
+                    );
+                    try {
+                        roastGeneration = await qaRoastGenerator.generate(
+                            state.activeAutomationPackage,
+                            technicalReview,
+                        );
+                    } catch (error: any) {
+                        roastGeneration = {
+                            success: false,
+                            attempts: 0,
+                            repairAttempts: 0,
+                            durationMs: 0,
+                            responseBytes: 0,
+                            result: 'provider-failed' as const,
+                            error: String(error?.message || error || 'No se pudo generar el roast.'),
+                        };
+                    }
+                    if (roastGeneration.success && roastGeneration.roast) {
+                        testDesignReview = { ...technicalReview, roast: roastGeneration.roast };
+                    }
+                }
                 emitAutomationProgress(
                     'WAITING_FOR_QA',
                     'La grabación necesita una validación funcional del QA',
                     3,
                     6,
-                    { error: run.testDesignReview.summary },
+                    { error: technicalReview.summary },
                 );
                 return {
                     success: false,
@@ -854,7 +893,8 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                     errorCode: run.errorCode,
                     error: run.error,
                     failureKind: 'test-design-review',
-                    testDesignReview: run.testDesignReview,
+                    testDesignReview,
+                    ...(roastGeneration ? { roastGeneration } : {}),
                     repairAvailable: false,
                 };
             }

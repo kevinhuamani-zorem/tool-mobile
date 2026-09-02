@@ -390,11 +390,6 @@ Antes de materializar esa respuesta, la pasada semántica escribe también
 
 - `status`: `pass` o `qa-required`;
 - `summary`: explicación breve para el QA;
-- `roast`: cuando el status es `qa-required`, un mensaje de máximo dos oraciones
-  y 20 a 280 caracteres redactado por el agente según los hallazgos reales. Debe
-  mencionar concretamente qué hizo el caso, rematar por qué no demuestra el
-  resultado y pedir la corrección. El tono es claramente troll, sin metáforas
-  vagas, insultos personales ni defectos inventados;
 - hasta ocho `issues`, con código permitido, severidad, secuencias reales y una
   recomendación concreta para volver a grabar.
 
@@ -404,8 +399,14 @@ Verificar que aparece un botón, opción o campo antes de usarlo no demuestra su
 efecto funcional. `qa-required` necesita al menos un hallazgo bloqueante y
 detiene la generación antes de producir `agent-response.json`; el detalle se
 persiste en `test-design-review.json` sin prompts, XML ni capturas.
-El renderer muestra `roast` únicamente cuando el QA activa **QA Roast Mode**;
-no usa un diccionario local ni reemplaza el diagnóstico técnico.
+Cuando el QA activa **QA Roast Mode**, el proceso principal inicia después una
+segunda sesión headless de Copilot. Esta recibe un `qa-roast-request.json`
+compacto con el diagnóstico, acciones relacionadas y ejemplos; escribe
+`qa-roast-response.json` bajo un schema independiente. Puede corregir una vez
+un tono inválido. Si falla o agota el tiempo, se descarta el roast y se conserva
+el diagnóstico técnico: la presentación nunca invalida `gap-resolutions.json`.
+La ejecución se audita en `qa-roast-run.json` sin guardar prompts, selectores,
+XML ni capturas.
 
 El nombre del Screen Object es parte del contrato. Se deriva del basename de la
 ruta planificada en kebab-case: `movements-view.screen.ts` corresponde a la

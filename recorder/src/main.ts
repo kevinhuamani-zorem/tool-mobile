@@ -27,6 +27,7 @@ import {
     CopilotCliAdapter,
     VisibleCopilotProvider,
     AgentOrchestrator,
+    CopilotQaRoastGenerator,
 } from '../../core/automation';
 import { RecordingCoverageAnalyzer, RecordingPlatformUpdater } from '../../core/coverage';
 import {
@@ -136,6 +137,7 @@ app.whenReady().then(async () => {
     const frameworkQueryService = new FrameworkQueryService(new CodeGraph());
     const copilotCliAdapter = new CopilotCliAdapter();
     const visibleCopilotProvider = new VisibleCopilotProvider(copilotCliAdapter, automationAgentLauncher);
+    const qaRoastGenerator = new CopilotQaRoastGenerator(copilotCliAdapter);
     const deterministicGenerator = new DeterministicGenerator();
     const agentOrchestrator = new AgentOrchestrator(
         frameworkQueryService,
@@ -189,6 +191,7 @@ app.whenReady().then(async () => {
         automationPackageBuilder,
         automationAgentLauncher,
         agentOrchestrator,
+        qaRoastGenerator,
         deterministicGenerator,
         automationResponseValidator,
         automationMemory,

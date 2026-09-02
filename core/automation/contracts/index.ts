@@ -629,9 +629,25 @@ export interface TestDesignIssue {
 export interface TestDesignReview {
     status: 'pass' | 'qa-required';
     summary: string;
-    /** Roast breve generado por el agente a partir de los hallazgos reales. */
+    /** Compatibilidad/presentación: no forma parte del diagnóstico semántico. */
     roast?: string;
     issues: TestDesignIssue[];
+}
+
+export interface QaRoastResponse {
+    schemaVersion: 1;
+    roast: string;
+}
+
+export interface QaRoastGenerationResult {
+    success: boolean;
+    roast?: string;
+    attempts: number;
+    repairAttempts: number;
+    durationMs: number;
+    responseBytes: number;
+    result: 'generated' | 'invalid-output' | 'provider-failed' | 'missing-output';
+    error?: string;
 }
 
 export interface AutomationAgentResponse {

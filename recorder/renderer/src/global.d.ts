@@ -33,7 +33,7 @@ declare global {
             ): () => void;
             getAutomationQaDecisions(): Promise<any>;
             resolveAutomationQaDecisions(input: any): Promise<any>;
-            launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean }): Promise<any>;
+            launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean }): Promise<any>;
             revalidateAutomationResponse(reviewedContents: Record<string, string>): Promise<any>;
         };
     }

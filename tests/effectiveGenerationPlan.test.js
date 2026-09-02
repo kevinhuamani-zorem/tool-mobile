@@ -335,13 +335,13 @@ test('gap-resolutions acepta wording Gherkin trazado y rechaza secuencias duplic
     assert.equal(invalid.errors.some(error => error.code === 'duplicate-gherkin-sequence'), true);
 });
 
-test('gap-resolutions valida la revisión funcional y sus secuencias', () => {
+test('gap-resolutions valida la revisión funcional sin acoplarla al roast', () => {
     const valid = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
         testDesignReview: {
             status: 'qa-required',
             summary: 'El caso selecciona un filtro sin observar el resultado.',
-            roast: 'Aplicaste el filtro y luego miraste hacia otro lado. El resultado quedó trabajando sin supervisión.',
+            roast: 'Tocaste tres filtros y solo validaste que sus opciones existen. Impactante descubrimiento. Ahora comprueba el contenido filtrado.',
             issues: [{
                 code: 'missing-business-assertion', severity: 'blocking',
                 message: 'No existe una aserción posterior sobre los movimientos filtrados.',
@@ -352,7 +352,7 @@ test('gap-resolutions valida la revisión funcional y sus secuencias', () => {
     }), 20);
     assert.equal(valid.valid, true);
     assert.equal(valid.value.testDesignReview.status, 'qa-required');
-    assert.match(valid.value.testDesignReview.roast, /Aplicaste el filtro/);
+    assert.match(valid.value.testDesignReview.roast, /Tocaste tres filtros/);
 
     const missingRoast = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
@@ -365,8 +365,21 @@ test('gap-resolutions valida la revisión funcional y sus secuencias', () => {
             }],
         },
     }), 20);
-    assert.equal(missingRoast.valid, false);
-    assert.equal(missingRoast.errors.some(error => error.code === 'test-design-review-roast'), true);
+    assert.equal(missingRoast.valid, true);
+
+    const blandRoast = parseGapResolutions(JSON.stringify({
+        schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
+        testDesignReview: {
+            status: 'qa-required', summary: 'El caso necesita una validación funcional.',
+            roast: 'Se recorrieron tres filtros y solo se comprobó que las opciones existen. Agrega una aserción del contenido filtrado.',
+            issues: [{
+                code: 'missing-test-oracle', severity: 'blocking',
+                message: 'Falta un resultado verificable.', actionSequences: [1],
+                recommendation: 'Define un resultado observable.',
+            }],
+        },
+    }), 20);
+    assert.equal(blandRoast.valid, true);
 
     const invalid = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],

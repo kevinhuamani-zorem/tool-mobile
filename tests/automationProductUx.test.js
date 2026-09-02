@@ -78,7 +78,7 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /const PRODUCT_STAGES = \[/);
     assert.match(review, /async function runAutomationPipeline\(\)/);
     assert.match(review, /if \(!prepare\.result\.responseAvailable\)/);
-    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
+    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{[\s\S]*?mode: 'automatic',[\s\S]*?qaRoastMode: isQaRoastModeEnabled\(\)/);
     assert.match(review, /else if \(launched\.fallbackSuggested\) \{/);
     assert.match(review, /api\.launchAutomationAgent\(\{ mode: 'manual', autorun: true \}\)/);
     assert.doesNotMatch(review, /Abrir terminal manual/);
@@ -141,7 +141,7 @@ test('main usa Copilot visible y deja que el pipeline importe la respuesta valid
     const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
     assert.match(main, /new VisibleCopilotProvider\(copilotCliAdapter, automationAgentLauncher\)/);
     assert.doesNotMatch(main, /openExecutionMonitor\(activeAutomationPackage\)/);
-    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
+    assert.match(review, /qaRoastMode: isQaRoastModeEnabled\(\)/);
     assert.match(review, /const imported = await importAutomationResponse\(true\);/);
     assert.match(review, /setWizardPage\(4\);/);
 });
@@ -188,13 +188,22 @@ test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {
     assert.match(review, /Diagnóstico técnico/);
 });
 
-test('el prompt exige un roast directo, concreto y no metafórico', () => {
+test('el roast se genera en otra sesión y nunca bloquea el diagnóstico semántico', () => {
     const orchestrator = fs.readFileSync(path.join(
         root, 'core/automation/infrastructure/agentOrchestrator.ts'
     ), 'utf8');
 
-    assert.match(orchestrator, /Tocaste botones durante 15 pasos y no validaste el resultado/);
-    assert.match(orchestrator, /Confirmado: el botón existe\. Impactante descubrimiento/);
-    assert.match(orchestrator, /metáforas poéticas/);
-    assert.match(orchestrator, /Critica el caso, nunca a la persona/);
+    assert.match(orchestrator, /No incluyas roast ni contenido humorístico/);
+
+    const contracts = fs.readFileSync(path.join(
+        root, 'core/automation/domain/qaRoastContracts.ts'
+    ), 'utf8');
+    assert.match(contracts, /SARCASTIC_PUNCHLINE/);
+    assert.match(contracts, /Critica el caso, nunca a la persona/);
+
+    const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
+    const handlers = fs.readFileSync(path.join(root, 'recorder/src/ipc/automationHandlers.ts'), 'utf8');
+    assert.match(main, /new CopilotQaRoastGenerator\(copilotCliAdapter\)/);
+    assert.match(handlers, /input\?\.qaRoastMode/);
+    assert.match(handlers, /qaRoastGenerator\.generate/);
 });

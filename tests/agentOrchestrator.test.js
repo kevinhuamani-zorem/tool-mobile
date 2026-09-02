@@ -1150,7 +1150,6 @@ test('orchestrator detiene la generación cuando Copilot detecta que no se valid
     const review = {
         status: 'qa-required',
         summary: 'Se selecciona el filtro Solo hoy, pero no se comprueba el resultado producido.',
-        roast: 'Elegiste Solo hoy y después validaste la existencia del menú. El filtro pudo tomarse el día libre y tu caso ni se enteró.',
         issues: [{
             code: 'missing-business-assertion',
             severity: 'blocking',
