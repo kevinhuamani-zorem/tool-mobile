@@ -88,6 +88,42 @@ test('PASS 2 abre Copilot interactivo y termina al validar una respuesta nueva',
     assert.equal(base.calls.length, 0);
 });
 
+test('PASS 2 mantiene Copilot abierto hasta que cambia una salida rechazada por el validador oficial', async () => {
+    const cwd = fixture();
+    const evaluated = [];
+    const provider = new VisibleCopilotProvider(delegate(), {
+        openInteractiveTerminalWithPrompt() {
+            setTimeout(() => {
+                fs.writeFileSync(path.join(cwd, 'response.json'), JSON.stringify({
+                    recordingId: 'first-invalid',
+                    files: [{ layer: 'feature' }],
+                }));
+            }, 15);
+            setTimeout(() => {
+                fs.writeFileSync(path.join(cwd, 'response.json'), JSON.stringify({
+                    recordingId: 'second-valid',
+                    files: [{ layer: 'feature' }],
+                }));
+            }, 120);
+        },
+    }, 'darwin', 5);
+    const result = await provider.execute({
+        cwd,
+        prompt: 'corrige hasta validar',
+        timeoutMs: 800,
+        stopOnValidatedOutput: {
+            outputFile: './response.json',
+            schemaFile: './response.schema.json',
+            acceptOutput(output) {
+                evaluated.push(output.recordingId);
+                return output.recordingId === 'second-valid';
+            },
+        },
+    });
+    assert.equal(result.success, true);
+    assert.deepEqual(evaluated, ['first-invalid', 'second-valid']);
+});
+
 test('respuesta parcial no dispara importación y respeta timeout', async () => {
     const cwd = fixture();
     const provider = new VisibleCopilotProvider(delegate(), {

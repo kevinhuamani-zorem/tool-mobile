@@ -992,7 +992,7 @@ export class AutomationPackageBuilder {
         );
         writeUtf8FileAtomic(path.join(packageDirectory, 'instructions.md'), instructions);
         writeVerifier(packageDirectory);
-        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'repair-context.json', 'effective-generation-plan.json']) {
+        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'validation-feedback.json', 'repair-context.json', 'effective-generation-plan.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
         }
@@ -1178,7 +1178,7 @@ export class AutomationPackageBuilder {
         );
         writeUtf8FileAtomic(path.join(packageDirectory, 'instructions.md'), instructions(result));
         writeVerifier(packageDirectory);
-        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'repair-context.json', 'effective-generation-plan.json']) {
+        for (const stale of ['agent-response.json', 'gap-resolutions.json', 'query-requests.json', 'validation.json', 'validation-feedback.json', 'repair-context.json', 'effective-generation-plan.json']) {
             const file = path.join(packageDirectory, stale);
             if (fs.existsSync(file)) fs.unlinkSync(file);
         }

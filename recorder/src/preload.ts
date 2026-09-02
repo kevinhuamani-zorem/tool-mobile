@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('api', {
     // ── Framework ────────────────────────────────────────────────────────────
     scanFramework:       ()                     => ipcRenderer.invoke('scan-framework'),
+    selectFrameworkRoot: ()                     => ipcRenderer.invoke('select-framework-root'),
     analyzeStepReuse:    (texts: string[], squad?: string) =>
         ipcRenderer.invoke('analyze-step-reuse', texts, squad),
     analyzeStepImpact:   (texts: string[], squad?: string) =>
@@ -92,7 +93,8 @@ contextBridge.exposeInMainWorld('api', {
     prepareAutomationRegeneration: (input: any) => ipcRenderer.invoke('prepare-automation-regeneration', input),
     launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean }) =>
         ipcRenderer.invoke('launch-automation-agent', input),
-    importAutomationResponse: () => ipcRenderer.invoke('import-automation-response'),
+    importAutomationResponse: (input?: { manualCorrection?: boolean }) =>
+        ipcRenderer.invoke('import-automation-response', input),
     revalidateAutomationResponse: (reviewedContents: Record<string, string>) =>
         ipcRenderer.invoke('revalidate-automation-response', reviewedContents),
     getAutomationQaDecisions: () => ipcRenderer.invoke('get-automation-qa-decisions'),

@@ -74,6 +74,7 @@ export class VisibleCopilotProvider implements AgentProvider {
         const previousOutput = fs.existsSync(outputPath)
             ? readUtf8File(outputPath)
             : null;
+        let lastEvaluatedOutput = previousOutput;
         const tracePath = input.traceFile ? path.resolve(input.cwd, input.traceFile) : null;
         const appendTrace = (event: string) => {
             if (!tracePath || !isInsideDirectory(tracePath, input.cwd)) return;
@@ -143,10 +144,16 @@ export class VisibleCopilotProvider implements AgentProvider {
                 if (!fs.existsSync(outputPath) || !fs.existsSync(schemaPath)) return;
                 try {
                     const raw = readUtf8File(outputPath);
-                    if (raw === previousOutput) return;
+                    if (raw === lastEvaluatedOutput) return;
                     const output = readJsonUtf8<unknown>(outputPath);
                     const schema = readJsonUtf8<unknown>(schemaPath);
                     if (!validateWithSchema(output, schema)) return;
+                    lastEvaluatedOutput = raw;
+                    if (input.stopOnValidatedOutput?.acceptOutput
+                        && !input.stopOnValidatedOutput.acceptOutput(output)) {
+                        appendTrace('output-rejected');
+                        return;
+                    }
                     finish(result(true));
                 } catch {
                     // Copilot puede estar escribiendo el archivo; se reintenta.

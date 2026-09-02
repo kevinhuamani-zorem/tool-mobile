@@ -10,5 +10,5 @@ export type AutomationAgent = 'copilot';
 export interface WorkspaceConfiguration {
     mode: RecorderMode;
     targetProject: string;
-    source: 'auto';
+    source: 'auto' | 'environment' | 'saved' | 'selected';
 }

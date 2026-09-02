@@ -41,10 +41,12 @@ export class AutomationAgentLauncher {
         const repair = fs.existsSync(path.join(packageDirectory, 'repair-context.json'));
         const generationMode = resolveRecorderGenerationMode(process.env.RECORDER_GENERATION_MODE);
         if (generationMode === 'deterministic' && !repair) {
-            return 'Trabaja únicamente en esta carpeta. Lee instructions.md y gaps.json. Resuelve solo gaps semánticos y escribe gap-resolutions.json con herramientas nativas del CLI. No uses comandos de shell ni explores fwk-mobile-test.';
+            return 'Trabaja únicamente en esta carpeta. Lee instructions.md y gaps.json. Resuelve solo gaps semánticos y escribe gap-resolutions.json con herramientas nativas del CLI. Después de escribirlo, lee validation-feedback.json y corrige gap-resolutions.json si el recorder lo solicita. Termina solo cuando el feedback indique valid o qa-required. No uses comandos de shell ni explores fwk-mobile-test.';
         }
         return repair
-            ? 'Lee repair-context.json y corrige únicamente los archivos indicados. Prioriza exactitud y viabilidad del caso por encima de la rapidez. No explores el repositorio ni uses comandos de shell; escribe agent-response.json con herramientas nativas del CLI.'
+            ? generationMode === 'deterministic'
+                ? 'Lee repair-context.json y validation-feedback.json. Corrige únicamente gap-resolutions.json; el recorder regenerará agent-response.json al reimportar. No edites agent-response.json, no explores el repositorio y no uses comandos de shell.'
+                : 'Lee repair-context.json y corrige únicamente los archivos indicados. Prioriza exactitud y viabilidad del caso por encima de la rapidez. No explores el repositorio ni uses comandos de shell; escribe agent-response.json con herramientas nativas del CLI.'
             : 'Trabaja únicamente en esta carpeta. Lee instructions.md y solo los archivos mínimos que allí se enumeran. No leas resolved-context.json salvo diagnóstico explícito. Prioriza exactitud y viabilidad del caso por encima de la rapidez. Resuelve solo los gaps declarados y escribe agent-response.json con herramientas nativas del CLI. No uses comandos de shell y no explores fwk-mobile-test.';
     }
 

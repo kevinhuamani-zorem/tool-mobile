@@ -11,6 +11,32 @@ framework padre automáticamente y usa Copilot como agente. No requiere `.env`,
 `TARGET_PROJECT` ni selección de proveedor. La plataforma queda fija al crear
 la sesión.
 
+## Aplicación macOS
+
+Para construir un `.app` de pruebas en una Mac Apple Silicon:
+
+```bash
+cd tools/visual-recorder
+npm ci
+npm run inspector:build
+npm run package:mac
+```
+
+El resultado queda en
+`release/mac-arm64/Appium Visual Recorder.app`. Al abrirlo por primera vez,
+selecciona la raíz de `fwk-mobile-test`; la elección queda persistida para los
+siguientes arranques. También puede definirse `FWK_MOBILE_ROOT` al ejecutar el
+binario durante diagnóstico. El bundle inicia Appium 3 y sus drivers fijados;
+no requiere levantar un servidor externo ni modificar dependencias del target.
+
+Para cambiar el framework guardado, abre **Ajustes**, pulsa **Cambiar proyecto**
+y selecciona otra raíz válida. La aplicación se reinicia automáticamente para
+crear scanners, cachés y generadores contra el nuevo proyecto.
+
+El build actual no está firmado ni notarizado. Para distribuirlo fuera del
+equipo de desarrollo se debe añadir Developer ID, hardened runtime y
+notarización en una iteración posterior.
+
 Para usar el Inspector embebido en un checkout nuevo:
 
 ```bash

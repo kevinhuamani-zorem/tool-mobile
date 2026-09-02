@@ -4,7 +4,8 @@
 
 Appium Visual Recorder inspecciona y manipula una app móvil, registra acciones,
 construye Gherkin y genera automatización compatible con `fwk-mobile-test`.
-Funciona exclusivamente embebido en `tools/visual-recorder` dentro del framework.
+Funciona embebido en `tools/visual-recorder` durante desarrollo y como `.app`
+macOS enlazado a una raíz local válida de `fwk-mobile-test`.
 
 ## Vista de componentes
 
@@ -173,11 +174,14 @@ fuente de verdad.
 
 ## Workspace
 
-La raíz se deriva de la ubicación instalada:
-`fwk-mobile-test/tools/visual-recorder`. No se lee `.env` ni un archivo de
-workspace para cambiar el target. Todas las rutas operativas nacen en
-`core/workspace/infrastructure/projectPaths.ts` (público vía `core/workspace`)
-y el adaptador valida el framework antes de abrir la UI.
+En desarrollo la raíz se deriva de la ubicación instalada
+`fwk-mobile-test/tools/visual-recorder`. En la aplicación empaquetada se usa,
+en orden, `FWK_MOBILE_ROOT`, el workspace persistido o un selector nativo de
+carpeta. Todas las alternativas pasan por la misma validación de estructura y
+por `core/workspace/infrastructure/projectPaths.ts`. Los servicios se construyen
+solo después de configurar esas rutas. El `.app` guarda recordings, cache,
+memoria y manifiesto Appium bajo `app.getPath('userData')`; únicamente los
+artefactos aprobados se escriben en el framework seleccionado.
 
 ## Flujos principales
 

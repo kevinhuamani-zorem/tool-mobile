@@ -325,6 +325,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         options: {
             reviewedContents?: Record<string, string>;
             trackRepair?: boolean;
+            manualCorrection?: boolean;
         } = {},
     ): Promise<Record<string, any>> {
         const runStore = new AgentRunStore(packageDirectory);
@@ -394,6 +395,11 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), response);
         const statusFile = path.join(packageDirectory, 'status.json');
         const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
+        if (options.manualCorrection) {
+            status.manualCorrectionAttempts = Number(status.manualCorrectionAttempts || 0) + 1;
+            status.state = 'manual-correction-validation';
+            status.updatedAt = new Date().toISOString();
+        }
         const deterministicMode = status.generationMode === 'deterministic'
             || fs.existsSync(path.join(packageDirectory, 'gap-resolutions.json'));
         const repairAttempts = Number(status.repairAttempts || 0);
@@ -839,11 +845,20 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         }
     });
 
-    ipcMain.handle('import-automation-response', async () => {
+    ipcMain.handle('import-automation-response', async (
+        _,
+        input?: { manualCorrection?: boolean },
+    ) => {
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
             rematerializeGapResolutions(state.activeAutomationPackage);
-            return await importAutomationResponseFromPackage(state.activeAutomationPackage);
+            const manualCorrection = input?.manualCorrection === true;
+            return await importAutomationResponseFromPackage(state.activeAutomationPackage, {
+                ...(manualCorrection ? {
+                    trackRepair: false,
+                    manualCorrection: true,
+                } : {}),
+            });
         } catch (e: any) {
             if (state.activeAutomationPackage) new AgentRunStore(state.activeAutomationPackage).mark('import-failed', true);
             return { success: false, error: e.message };

@@ -1,8 +1,9 @@
 import { remote, Browser } from 'webdriverio';
 import { DeviceConfig } from '../../automation/contracts';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import * as path from 'path';
 import { parseSimulators, SimulatorDevice } from '../domain/iosSimulators';
+import { resolveAndroidTooling } from './androidTooling';
 
 export type AppiumSessionState = 'idle' | 'connecting' | 'active' | 'closing';
 export type AppiumSessionProvider = 'local' | 'browserstack';
@@ -351,9 +352,15 @@ export class AppiumDriverManager {
     }
 
     static async getConnectedDevices(): Promise<Array<{udid: string, status: string}>> {
-        return new Promise((resolve) => {
-            exec('adb devices', (err, stdout) => {
-                if (err) { resolve([]); return; }
+        const tooling = resolveAndroidTooling();
+        return new Promise((resolve, reject) => {
+            execFile(tooling.adb, ['devices'], { env: tooling.environment }, (err, stdout, stderr) => {
+                if (err) {
+                    reject(new Error(
+                        `No se pudo ejecutar ADB (${tooling.adb}): ${String(stderr || err.message).trim()}`
+                    ));
+                    return;
+                }
                 const devices = stdout.split('\n').slice(1)
                     .filter(l => l.trim() && l.includes('\t'))
                     .map(l => {
@@ -367,19 +374,29 @@ export class AppiumDriverManager {
     }
 
     static async getDeviceInfo(udid: string): Promise<{model: string, version: string}> {
-        return new Promise((resolve) => {
-            exec(`adb -s ${udid} shell getprop ro.product.model`, (_, model) => {
-                exec(`adb -s ${udid} shell getprop ro.build.version.release`, (__, version) => {
-                    resolve({ model: model.trim(), version: version.trim() });
-                });
-            });
+        const tooling = resolveAndroidTooling();
+        const readProperty = (property: string) => new Promise<string>(resolve => {
+            execFile(
+                tooling.adb,
+                ['-s', udid, 'shell', 'getprop', property],
+                { env: tooling.environment },
+                (_error, stdout) => resolve(stdout.trim()),
+            );
         });
+        const [model, version] = await Promise.all([
+            readProperty('ro.product.model'),
+            readProperty('ro.build.version.release'),
+        ]);
+        return { model, version };
     }
 
     static async getForegroundApp(udid: string): Promise<{package: string, activity: string}> {
+        const tooling = resolveAndroidTooling();
         return new Promise((resolve) => {
-            exec(
-                `adb -s ${udid} shell dumpsys activity activities | grep mResumedActivity`,
+            execFile(
+                tooling.adb,
+                ['-s', udid, 'shell', 'dumpsys', 'activity', 'activities'],
+                { env: tooling.environment, maxBuffer: 8 * 1024 * 1024 },
                 (_, stdout) => {
                     const match = stdout.match(/([a-zA-Z0-9_.]+)\/([a-zA-Z0-9_.]+)/);
                     if (match) resolve({ package: match[1], activity: match[2] });

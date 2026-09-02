@@ -11,7 +11,7 @@ import {
     AgentProviderRunInput,
     AgentProviderRunResult,
 } from '../ports/agentProvider';
-import { readJsonUtf8 } from '../../shared';
+import { readJsonUtf8, readUtf8File } from '../../shared';
 
 type SpawnFn = typeof spawn;
 
@@ -310,13 +310,24 @@ export class CopilotCliAdapter implements AgentProvider {
                 const outputPath = path.resolve(effectiveCwd, stopOnValidatedOutput.outputFile);
                 const schemaPath = path.resolve(effectiveCwd, stopOnValidatedOutput.schemaFile);
                 const pollIntervalMs = Math.max(50, Number(stopOnValidatedOutput.pollIntervalMs || 250));
+                let lastEvaluatedOutput: string | null = fs.existsSync(outputPath)
+                    ? readUtf8File(outputPath)
+                    : null;
                 outputWatchTimer = setInterval(() => {
                     if (settled || timedOut) return;
                     if (!fs.existsSync(outputPath) || !fs.existsSync(schemaPath)) return;
                     try {
+                        const raw = readUtf8File(outputPath);
+                        if (raw === lastEvaluatedOutput) return;
                         const output = readJsonUtf8<unknown>(outputPath);
                         const schema = readJsonUtf8<unknown>(schemaPath);
                         if (!validateWithSchema(output, schema)) return;
+                        lastEvaluatedOutput = raw;
+                        if (stopOnValidatedOutput.acceptOutput
+                            && !stopOnValidatedOutput.acceptOutput(output)) {
+                            appendTrace('output-rejected', 'El recorder solicitó una corrección automática.');
+                            return;
+                        }
                     } catch {
                         return;
                     }

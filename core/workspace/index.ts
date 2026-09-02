@@ -8,6 +8,7 @@
  */
 export * from './contracts';
 export * from './infrastructure/projectPaths';
+export * from './infrastructure/runtimeRootResolver';
 export * from './infrastructure/workspaceAdapter';
 export * from './infrastructure/frameworkContract';
 export * from './infrastructure/frameworkHelpers';

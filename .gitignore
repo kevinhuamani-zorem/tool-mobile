@@ -1,6 +1,8 @@
 # Dependencias y compilación
 node_modules/
 dist/
+release/
+/build/runtime-origin.json
 
 # Defensa adicional: el recorder no usa este archivo, pero nunca debe versionarse.
 .env

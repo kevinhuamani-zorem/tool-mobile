@@ -10,3 +10,5 @@ export * from './infrastructure/appiumDriverManager';
 export * from './infrastructure/browserStackDriverManager';
 export * from './infrastructure/locatorManager';
 export * from './infrastructure/mobileStepExecutor';
+export * from './infrastructure/embeddedAppiumServer';
+export * from './infrastructure/androidTooling';

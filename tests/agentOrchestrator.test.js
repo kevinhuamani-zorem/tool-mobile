@@ -905,25 +905,48 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
     });
     writeJson(path.join(dir, 'gap-resolutions.schema.json'), { type: 'object' });
     const prompts = [];
+    let validationCalls = 0;
     const provider = {
         name: 'fake',
         getVersion: async () => '1.0.0',
         cancel() {},
         async execute(input) {
             prompts.push(input.prompt);
-            writeJson(path.join(input.cwd, 'gap-resolutions.json'), {
+            const candidate = {
                 schemaVersion: '1.0',
                 recordingId: 'rec-1',
                 planId: 'plan-1',
                 resolutions: [{ gapId: 'gap-screen', decision: 'create', reason: 'no hay candidato reutilizable autorizado' }],
-            });
+            };
+            writeJson(path.join(input.cwd, 'gap-resolutions.json'), candidate);
+            assert.equal(input.stopOnValidatedOutput.acceptOutput(candidate), false);
+            const corrected = {
+                ...candidate,
+                resolutions: [{ gapId: 'gap-screen', decision: 'create', reason: 'corregido con feedback oficial' }],
+            };
+            writeJson(path.join(input.cwd, 'gap-resolutions.json'), corrected);
+            assert.equal(input.stopOnValidatedOutput.acceptOutput(corrected), true);
             return { success: true, exitCode: 0, stdout: 'pass2', stderr: '', durationMs: 1, timedOut: false, cancelled: false };
         },
     };
     const previousMode = process.env.RECORDER_GENERATION_MODE;
     process.env.RECORDER_GENERATION_MODE = 'deterministic';
     try {
-        const result = await new AgentOrchestrator({ execute: () => ({}) }, provider).run(dir, 'automatic');
+        const result = await new AgentOrchestrator(
+            { execute: () => ({}) },
+            provider,
+            undefined,
+            undefined,
+            () => {
+                validationCalls += 1;
+                return validationCalls > 1
+                    ? { valid: true, errors: [] }
+                    : {
+                        valid: false,
+                        errors: [{ code: 'trace-screen-method', message: 'La acción debe usar un único getter.' }],
+                    };
+            },
+        ).run(dir, 'automatic');
         assert.equal(result.success, true);
         assert.equal(result.invocations, 1);
         assert.equal(prompts.length, 1);
@@ -931,6 +954,11 @@ test('orchestrator deterministic usa planner local y materializa agent-response 
         assert.match(prompts[0], /"replace-existing"/);
         assert.match(prompts[0], /nunca edites agent-response\.json/);
         assert.match(prompts[0], /replacement:\{platform,sequence\}/);
+        assert.match(prompts[0], /validation-feedback\.json/);
+        assert.equal(validationCalls, 2);
+        const feedback = JSON.parse(fs.readFileSync(path.join(dir, 'validation-feedback.json'), 'utf-8'));
+        assert.equal(feedback.status, 'valid');
+        assert.equal(feedback.automaticRepairAttempts, 1);
         const response = JSON.parse(fs.readFileSync(path.join(dir, 'agent-response.json'), 'utf-8'));
         assert.equal(response.recordingId, 'rec-1');
         assert.equal(response.files.length, 4);

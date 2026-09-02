@@ -74,7 +74,12 @@ export function registerSessionHandlers(context: SessionHandlersContext): void {
     const { state, dm, bsDm, automationRecordingStore, sessionOwnership, recorderLifecycle } = context;
 
     ipcMain.handle('get-devices', async () => {
-        const devices = await AppiumDriverManager.getConnectedDevices();
+        let devices;
+        try {
+            devices = await AppiumDriverManager.getConnectedDevices();
+        } catch (error: any) {
+            return { devices: [], error: error.message };
+        }
         const android = await Promise.all(devices.map(async d => {
             const info = await AppiumDriverManager.getDeviceInfo(d.udid);
             return { ...d, ...info, platform: 'android' as const };

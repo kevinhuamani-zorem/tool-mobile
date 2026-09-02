@@ -10,10 +10,11 @@ generar o actualizar las cuatro capas de automatización del framework:
 3. Screen Object.
 4. Locators Android/iOS.
 
-El recorder no es un framework de ejecución independiente. Funciona
-exclusivamente instalado en `fwk-mobile-test/tools/visual-recorder` y usa el
-framework padre como fuente de ambientes, squads, datos, aplicaciones,
-artefactos reutilizables y destino de generación.
+El recorder no es un framework de ejecución independiente. Puede ejecutarse
+desde `fwk-mobile-test/tools/visual-recorder` o como aplicación macOS, pero
+siempre se enlaza a una raíz válida de `fwk-mobile-test` como fuente de
+ambientes, squads, datos, aplicaciones, artefactos reutilizables y destino de
+generación.
 
 ## Flujo actual
 
@@ -141,6 +142,35 @@ no cerrar una sesión ajena. Appium y sus drivers se cargan siempre desde
 `tools/visual-recorder/node_modules`, aislados de los `overrides` del framework.
 No instales con `--ignore-scripts`, porque Electron necesita descargar su
 binario nativo durante `npm ci`.
+
+### Generar la aplicación macOS
+
+Desde `tools/visual-recorder`:
+
+```bash
+npm ci
+npm run inspector:build
+npm run package:mac
+```
+
+Se genera `release/mac-arm64/Appium Visual Recorder.app` y Finder abre la
+carpeta seleccionando el archivo. El primer arranque
+solicita la raíz de `fwk-mobile-test` y la recuerda. El `.app` usa un runtime
+escribible externo: cuando se compila desde un clon, conserva
+`tools/visual-recorder/runtime` de ese clon para mostrar y continuar sus
+grabaciones. La ruta elegida de `fwk-mobile-test` es independiente y es el
+único destino de los Feature, Steps, Screen Objects y Locators aplicados.
+También inicia el Appium/UiAutomator2/XCUITest empaquetado, por lo que no
+modifica las dependencias npm del framework seleccionado. El artefacto de esta
+fase es para pruebas internas: todavía no está firmado ni notarizado.
+
+Si la aplicación se copia y la ruta del clon deja de existir, usa como fallback
+`Application Support/appium-visual-recorder`. Para enlazar explícitamente otro
+clon puede iniciarse con `VISUAL_RECORDER_RUNTIME_ROOT=/ruta/visual-recorder`.
+
+La raíz puede cambiarse posteriormente desde **Ajustes → Cambiar proyecto**.
+El recorder valida la nueva carpeta, la guarda y se reinicia para reconstruir
+todos los índices sin mezclar información entre frameworks.
 
 ## Configuración inicial
 

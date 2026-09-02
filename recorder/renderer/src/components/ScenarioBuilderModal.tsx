@@ -144,14 +144,20 @@ export function ScenarioBuilderModal() {
             <div id="automationPackageStatus" className="generate-result" />
             <div id="automationCorrectionReimport" className="automation-correction-reimport" style={{display: 'none'}}>
               <div>
-                <strong>¿Copilot ya corrigió la propuesta?</strong>
+                <strong id="automationCorrectionTitle">El recorder detectó errores. ¿Deseas corregirlos con Copilot?</strong>
                 <small id="automationCorrectionHint">
-                  Cuando el agente indique que la validación pasó, vuelve a importar el archivo corregido.
+                  La propuesta no se aplicará hasta que supere la validación oficial.
                 </small>
               </div>
               <div className="automation-correction-actions">
                 <button className="btn btn-dark" id="btnUsePreviousAutomation" style={{display: 'none'}}>
                   Usar generación anterior
+                </button>
+                <button className="btn btn-dark" id="btnDeferAutomationCorrection">
+                  Dejar pendiente
+                </button>
+                <button className="btn btn-green" id="btnStartAutomationCorrection">
+                  Corregir con Copilot
                 </button>
                 <button className="btn btn-blue" id="btnReimportAutomationCorrection">
                   ↻ Reimportar corrección del agente

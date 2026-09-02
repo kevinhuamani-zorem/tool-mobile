@@ -51,10 +51,10 @@ generadores, validadores o plantillas.
 3. **Las rutas se resuelven centralmente.** Usa `core/workspace` (`projectPaths`) y el
    `WorkspaceAdapter`; no derives la raíz con `cwd`, padres relativos o rutas
    absolutas nuevas.
-4. **El target es únicamente el framework padre.** El recorder debe vivir en
-   `fwk-mobile-test/tools/visual-recorder`; no admite modo standalone, neutral
-   ni una raíz configurable. Nada se escribe fuera del framework validado o del
-   `runtime/` del recorder.
+4. **El target es siempre un fwk-mobile validado.** En desarrollo se resuelve
+   el framework padre de `tools/visual-recorder`; el `.app` permite seleccionar
+   y persistir otra raíz válida. Nada se genera fuera del framework seleccionado
+   y el runtime del `.app` vive en su directorio `userData` escribible.
 5. **Preview antes de escritura.** Generar requiere el token del preview exacto.
    Si cambian acciones, Gherkin, metadatos, rutas o contenido revisado, el token
    debe invalidarse.
@@ -92,8 +92,9 @@ generadores, validadores o plantillas.
     capabilities, selectores o sesión debe considerar Android/iOS y ambos tipos
     de conexión.
     En local, Appium/UiAutomator2/XCUITest pertenecen al recorder y están
-    fijados en su lockfile. Nunca uses ni modifiques las dependencias Appium del
-    framework padre para iniciar una sesión.
+    fijados en su lockfile. El `.app` inicia ese runtime empaquetado y registra
+    sus drivers en un `APPIUM_HOME` escribible. Nunca uses ni modifiques las
+    dependencias Appium del framework padre para iniciar una sesión.
 13. **La memoria no aprende de fallos.** Solo una propuesta generada, revisada
     y validada con score 100 puede promocionarse a `runtime/automation-memory`.
 14. **Regenerar conserva identidad y rutas.** Un refinamiento parte del último

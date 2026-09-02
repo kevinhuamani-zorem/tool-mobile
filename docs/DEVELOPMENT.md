@@ -44,6 +44,8 @@ copia el resultado a `node_modules/.cache`.
 | `./run.sh` | Equivalente cuando el directorio actual es `tools/visual-recorder` |
 | `npm start` | Compila y abre Electron |
 | `npm run build` | Compila main y renderer |
+| `npm run package:mac` | Genera el `.app` sin firma y lo selecciona en Finder |
+| `npm run dmg:mac` | Genera el instalador DMG sin firma para pruebas internas |
 | `npm run inspector:build` | Instala y compila el fork fijado en la caché local |
 | `npm run inspector:check` | Comprueba el commit y los assets embebidos |
 | `npm run typecheck` | Valida TypeScript de ambos procesos |

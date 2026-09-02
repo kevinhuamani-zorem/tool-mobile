@@ -1,11 +1,17 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 
 import path from 'path';
-import { AppiumDriverManager, BrowserStackDriverManager, LocatorManager } from '../../core/mobile-session';
+import {
+    AppiumDriverManager,
+    BrowserStackDriverManager,
+    EmbeddedAppiumServer,
+    LocatorManager,
+    applyAndroidToolEnvironment,
+} from '../../core/mobile-session';
 import { FeatureGenerator } from './featureGenerator';
 import { projectPaths, FrameworkScanner, FrameworkQueryService, getWorkspaceAdapter } from '../../core/workspace';
 import { FwkMobileGenerator, DeterministicGenerator } from '../../core/generation';
@@ -38,6 +44,7 @@ import { closeEmbeddedInspectorResources, registerInspectorHandlers } from './ip
 import { registerInteractionHandlers } from './ipc/interactionHandlers';
 import { registerAutomationHandlers } from './ipc/automationHandlers';
 import { registerGenerationHandlers } from './ipc/generationHandlers';
+import { bootstrapWorkspace } from './workspaceBootstrap';
 
 // ─── COMPOSICIÓN DE SERVICIOS ────────────────────────────────────────────────
 //
@@ -49,60 +56,14 @@ import { registerGenerationHandlers } from './ipc/generationHandlers';
 
 registerEmbeddedInspectorScheme();
 
-const workspaceAdapter = getWorkspaceAdapter();
-workspaceAdapter.initialize();
-
-const dm   = new AppiumDriverManager();
-const bsDm = new BrowserStackDriverManager();
-const reuseAnalyzer = new ReuseAnalyzer();
-const frameworkScanner = new FrameworkScanner(reuseAnalyzer);
-const fwkMobileGenerator = new FwkMobileGenerator();
-const outputValidator = new OutputValidator();
-const generatedFileRegistry = new GeneratedFileRegistry();
-const automationRecordingStore = new AutomationRecordingStore();
-const automationMemory = new AutomationMemory();
-const automationPatchWriter = new AutomationPatchWriter();
-const automationResponseValidator = new AutomationResponseValidator();
-const automationPackageBuilder = new AutomationPackageBuilder(
-    undefined,
-    automationMemory,
-    fwkMobileGenerator,
-    automationResponseValidator
-);
-const automationAgentLauncher = new AutomationAgentLauncher();
-const recordingCoverageAnalyzer = new RecordingCoverageAnalyzer();
-const recordingPlatformUpdater = new RecordingPlatformUpdater();
-const frameworkQueryService = new FrameworkQueryService(new CodeGraph());
-const copilotCliAdapter = new CopilotCliAdapter();
-const visibleCopilotProvider = new VisibleCopilotProvider(copilotCliAdapter, automationAgentLauncher);
-const agentOrchestrator = new AgentOrchestrator(frameworkQueryService, visibleCopilotProvider);
-const deterministicGenerator = new DeterministicGenerator();
-const embeddedInspectorProxy = new EmbeddedInspectorProxy();
-const sessionOwnership = new RecorderSessionOwnership();
-
-// Debe coincidir con cucumber.json para que los escenarios generados se ejecuten.
-const featureGen = new FeatureGenerator(
-    projectPaths.features,
-    path.join(projectPaths.locators, 'global.locator.json')
-);
-
-// Estado mutable compartido por todas las familias de handlers IPC. Antes de
-// esta fase eran variables de módulo de `main.ts`; ahora viven en una única
-// instancia inyectada por referencia (ver `recorder/src/ipc/runtimeState.ts`).
-const state = new RecorderRuntimeState(
-    dm,
-    new LocatorManager(projectPaths.locators, 'global', 'android'),
-);
-
-const syncRecording = createSyncRecording(state, automationRecordingStore);
-
-const recorderLifecycle = new RecorderRuntimeLifecycle([
-    () => closeEmbeddedInspectorResources(state, embeddedInspectorProxy),
-    () => closeOwnedSession(state, dm, automationRecordingStore, sessionOwnership),
-]);
+let activeRecorderLifecycle: RecorderRuntimeLifecycle | null = null;
 
 function quitAfterCleanup(): void {
-    recorderLifecycle.cleanup()
+    if (!activeRecorderLifecycle) {
+        app.quit();
+        return;
+    }
+    activeRecorderLifecycle.cleanup()
         .then(() => app.quit())
         .catch(error => {
             console.error('[Main] Error cerrando recursos del recorder:', error.message);
@@ -110,7 +71,7 @@ function quitAfterCleanup(): void {
         });
 }
 
-function createWindow(): void {
+function createWindow(state: RecorderRuntimeState): void {
     const window = new BrowserWindow({
         width: 1100,
         height: 860,
@@ -140,6 +101,110 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+    applyAndroidToolEnvironment();
+    const frameworkRoot = await bootstrapWorkspace();
+    if (!frameworkRoot) {
+        app.quit();
+        return;
+    }
+    console.log(`[Main] Workspace: ${frameworkRoot}`);
+
+    const workspaceAdapter = getWorkspaceAdapter();
+    workspaceAdapter.initialize();
+    const appiumServer = new EmbeddedAppiumServer();
+    await appiumServer.start();
+    const dm = new AppiumDriverManager();
+    const bsDm = new BrowserStackDriverManager();
+    const reuseAnalyzer = new ReuseAnalyzer();
+    const frameworkScanner = new FrameworkScanner(reuseAnalyzer);
+    const fwkMobileGenerator = new FwkMobileGenerator();
+    const outputValidator = new OutputValidator();
+    const generatedFileRegistry = new GeneratedFileRegistry();
+    const automationRecordingStore = new AutomationRecordingStore();
+    const automationMemory = new AutomationMemory();
+    const automationPatchWriter = new AutomationPatchWriter();
+    const automationResponseValidator = new AutomationResponseValidator();
+    const automationPackageBuilder = new AutomationPackageBuilder(
+        undefined,
+        automationMemory,
+        fwkMobileGenerator,
+        automationResponseValidator,
+    );
+    const automationAgentLauncher = new AutomationAgentLauncher();
+    const recordingCoverageAnalyzer = new RecordingCoverageAnalyzer();
+    const recordingPlatformUpdater = new RecordingPlatformUpdater();
+    const frameworkQueryService = new FrameworkQueryService(new CodeGraph());
+    const copilotCliAdapter = new CopilotCliAdapter();
+    const visibleCopilotProvider = new VisibleCopilotProvider(copilotCliAdapter, automationAgentLauncher);
+    const deterministicGenerator = new DeterministicGenerator();
+    const agentOrchestrator = new AgentOrchestrator(
+        frameworkQueryService,
+        visibleCopilotProvider,
+        undefined,
+        deterministicGenerator,
+        (scenario, plan, response, attempt) =>
+            automationResponseValidator.validate(scenario, plan, response, attempt),
+    );
+    const embeddedInspectorProxy = new EmbeddedInspectorProxy();
+    const sessionOwnership = new RecorderSessionOwnership();
+    const featureGen = new FeatureGenerator(
+        projectPaths.features,
+        path.join(projectPaths.locators, 'global.locator.json'),
+    );
+    const state = new RecorderRuntimeState(
+        dm,
+        new LocatorManager(projectPaths.locators, 'global', 'android'),
+    );
+    const syncRecording = createSyncRecording(state, automationRecordingStore);
+    const recorderLifecycle = new RecorderRuntimeLifecycle([
+        () => closeEmbeddedInspectorResources(state, embeddedInspectorProxy),
+        () => closeOwnedSession(state, dm, automationRecordingStore, sessionOwnership),
+        () => appiumServer.stop(),
+    ]);
+    activeRecorderLifecycle = recorderLifecycle;
+
+    registerWorkspaceHandlers({
+        state,
+        frameworkScanner,
+        reuseAnalyzer,
+        workspaceAdapter,
+        recordingCoverageAnalyzer,
+        recordingPlatformUpdater,
+        generatedFileRegistry,
+    });
+    registerSessionHandlers({
+        state,
+        dm,
+        bsDm,
+        automationRecordingStore,
+        sessionOwnership,
+        recorderLifecycle,
+    });
+    registerInspectorHandlers({ state, embeddedInspectorProxy });
+    registerInteractionHandlers({ state, syncRecording });
+    registerAutomationHandlers({
+        state,
+        automationRecordingStore,
+        recordingCoverageAnalyzer,
+        automationPackageBuilder,
+        automationAgentLauncher,
+        agentOrchestrator,
+        deterministicGenerator,
+        automationResponseValidator,
+        automationMemory,
+        automationPatchWriter,
+        generatedFileRegistry,
+        fwkMobileGenerator,
+        syncRecording,
+    });
+    registerGenerationHandlers({
+        state,
+        featureGen,
+        fwkMobileGenerator,
+        outputValidator,
+        generatedFileRegistry,
+    });
+
     if (embeddedInspectorAssetsAvailable()) {
         await registerEmbeddedInspectorProtocol();
     } else if (!process.env.RECORDER_INSPECTOR) {
@@ -150,63 +215,13 @@ app.whenReady().then(async () => {
         console.log(`[Main] Grabaciones vacías eliminadas: ${cleanup.removed.length}`);
     }
     console.log('[Main] Abriendo ventana...');
-    createWindow();
+    createWindow(state);
     console.log('[Main] Ventana lista');
+}).catch(error => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[Main] No se pudo iniciar el recorder:', message);
+    dialog.showErrorBox('No se pudo iniciar Appium Visual Recorder', message);
+    app.exit(1);
 });
 
 app.on('window-all-closed', quitAfterCleanup);
-
-// ─── REGISTRO DE HANDLERS IPC POR FAMILIA ────────────────────────────────────
-
-registerWorkspaceHandlers({
-    state,
-    frameworkScanner,
-    reuseAnalyzer,
-    workspaceAdapter,
-    recordingCoverageAnalyzer,
-    recordingPlatformUpdater,
-    generatedFileRegistry,
-});
-
-registerSessionHandlers({
-    state,
-    dm,
-    bsDm,
-    automationRecordingStore,
-    sessionOwnership,
-    recorderLifecycle,
-});
-
-registerInspectorHandlers({
-    state,
-    embeddedInspectorProxy,
-});
-
-registerInteractionHandlers({
-    state,
-    syncRecording,
-});
-
-registerAutomationHandlers({
-    state,
-    automationRecordingStore,
-    recordingCoverageAnalyzer,
-    automationPackageBuilder,
-    automationAgentLauncher,
-    agentOrchestrator,
-    deterministicGenerator,
-    automationResponseValidator,
-    automationMemory,
-    automationPatchWriter,
-    generatedFileRegistry,
-    fwkMobileGenerator,
-    syncRecording,
-});
-
-registerGenerationHandlers({
-    state,
-    featureGen,
-    fwkMobileGenerator,
-    outputValidator,
-    generatedFileRegistry,
-});

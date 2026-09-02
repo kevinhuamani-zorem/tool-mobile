@@ -43,6 +43,7 @@ export function createConfigurationFeature(deps) {
     const btnSaveFrameworkConfig = document.getElementById('btnSaveFrameworkConfig');
     const btnChangeFramework = document.getElementById('btnChangeFramework');
     const btnChangeFrameworkInline = document.getElementById('btnChangeFrameworkInline');
+    const btnSelectFrameworkRoot = document.getElementById('btnSelectFrameworkRoot');
     const chkRememberFramework = document.getElementById('chkRememberFramework');
     const lblSavedEnvironment = document.getElementById('lblSavedEnvironment');
     const lblSavedSquad = document.getElementById('lblSavedSquad');
@@ -134,6 +135,7 @@ export function createConfigurationFeature(deps) {
             const stored = JSON.parse(localStorage.getItem(FRAMEWORK_PREFERENCES_STORAGE_KEY) || 'null');
             return stored &&
                 stored.mode === state.activeWorkspace.mode &&
+                (!stored.workspaceRoot || stored.workspaceRoot === state.activeWorkspace.root) &&
                 typeof stored.environment === 'string' &&
                 typeof stored.squad === 'string'
                 ? stored
@@ -341,6 +343,12 @@ export function createConfigurationFeature(deps) {
         lblDeviceInfo.textContent = 'Buscando...';
         const result = await api.getDevices();
         cmbDevices.innerHTML = '';
+        if (result.error) {
+            cmbDevices.innerHTML = '<option value="">ADB no disponible</option>';
+            lblDeviceInfo.textContent = '✗ ' + result.error;
+            lblDeviceInfo.className = 'device-info err';
+            return;
+        }
         if (!result.devices || result.devices.length === 0) {
             cmbDevices.innerHTML = '<option value="">Sin dispositivos</option>';
             lblDeviceInfo.textContent = 'Conecta un dispositivo via USB';
@@ -519,6 +527,7 @@ export function createConfigurationFeature(deps) {
             if (chkRememberFramework.checked) {
                 localStorage.setItem(FRAMEWORK_PREFERENCES_STORAGE_KEY, JSON.stringify({
                     mode: state.activeWorkspace.mode,
+                    workspaceRoot: state.activeWorkspace.root,
                     environment: cmbFrameworkEnv.value,
                     squad: cmbFrameworkSquad.value,
                     featureScope: cmbFrameworkFeatureScope?.value || '',
@@ -539,6 +548,33 @@ export function createConfigurationFeature(deps) {
         };
         on(btnChangeFramework, 'click', showFrameworkSetup);
         on(btnChangeFrameworkInline, 'click', showFrameworkSetup);
+        on(btnSelectFrameworkRoot, 'click', async () => {
+            const previousStatus = lblFrameworkStatus.textContent;
+            const previousClass = lblFrameworkStatus.className;
+            disableBtn(btnSelectFrameworkRoot, 'Abriendo selector...');
+            lblFrameworkStatus.textContent = 'Selecciona la raíz de otro fwk-mobile-test.';
+            lblFrameworkStatus.className = 'device-info';
+
+            const result = await api.selectFrameworkRoot();
+            if (result?.canceled) {
+                enableBtn(btnSelectFrameworkRoot, '📂 Cambiar proyecto');
+                lblFrameworkStatus.textContent = previousStatus;
+                lblFrameworkStatus.className = previousClass;
+                return;
+            }
+            if (!result?.success) {
+                enableBtn(btnSelectFrameworkRoot, '📂 Cambiar proyecto');
+                lblFrameworkStatus.textContent = '✗ ' + (result?.error || 'No se pudo cambiar el proyecto');
+                lblFrameworkStatus.className = 'device-info err';
+                return;
+            }
+
+            localStorage.removeItem(FRAMEWORK_PREFERENCES_STORAGE_KEY);
+            if (lblDetectedProjectPath) lblDetectedProjectPath.textContent = result.frameworkRoot;
+            lblFrameworkStatus.textContent = '✓ Proyecto actualizado. Reiniciando el recorder...';
+            lblFrameworkStatus.className = 'device-info ok';
+            disableBtn(btnSelectFrameworkRoot, 'Reiniciando...');
+        });
 
         on(cmbFrameworkApp, 'change', () => {
             if (!cmbFrameworkApp.value) return;

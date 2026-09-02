@@ -6,6 +6,8 @@ import {
     AgentDomainErrorCode,
     AgentExecutionMode,
     AgentOperationalBudgets,
+    AutomationAgentResponse,
+    AutomationScenario,
     AutomationGapsProjection,
     AUTOMATION_GAP_RESOLUTIONS_SCHEMA_VERSION,
     GapResolution,
@@ -79,6 +81,19 @@ export interface AgentOrchestratorResult {
     error?: string;
     providerSummary?: ReturnType<typeof summarizeAgentProcessOutput>;
 }
+
+export interface DeterministicResponseValidationResult {
+    valid: boolean;
+    errors: Array<{ code: string; message: string; file?: string }>;
+    warnings?: string[];
+}
+
+export type DeterministicResponseValidator = (
+    scenario: AutomationScenario,
+    plan: GenerationPlan,
+    response: AutomationAgentResponse,
+    attempt: number,
+) => DeterministicResponseValidationResult;
 
 function readJson<T>(file: string): T {
     return readJsonUtf8<T>(file);
@@ -419,6 +434,8 @@ function semanticPassPrompt(context: Record<string, unknown>): string {
         'Si decision es "reuse", incluye selectedCandidate:{file,module,name} copiando exactamente un candidato del plan o de query-results.json; no uses aliases.',
         'Si el QA autoriza conservar una clave pero reemplazar su selector, usa "replace-existing" con selectedCandidate y replacement:{platform,sequence}; TypeLocator/selector salen del recording.',
         'En modo determinista nunca edites agent-response.json: el recorder lo regenera desde gap-resolutions.json.',
+        'Después de escribir gap-resolutions.json, lee validation-feedback.json: el recorder materializa y valida la propuesta con el contrato oficial.',
+        'Si validation-feedback.json sigue en "awaiting-output", espera brevemente y vuelve a leerlo. Si tiene status "correction-required", corrige solo gap-resolutions.json y vuelve a leer el feedback; no des por terminada la tarea antes de status "valid" o "qa-required".',
         'selectedCandidate siempre identifica un locator autorizado; no coloques ahí métodos de Screen Object.',
         'Si falta contexto para cerrar un gap, usa decision "unresolved" y opcionalmente needs:[{query,args}].',
     ].join(' ');
@@ -553,6 +570,7 @@ export class AgentOrchestrator {
         private readonly provider: AgentProvider,
         private readonly deterministicPlanner = new DeterministicQueryPlanner(),
         private readonly deterministicGenerator = new DeterministicGenerator(),
+        private readonly deterministicResponseValidator?: DeterministicResponseValidator,
     ) {}
 
     async run(
@@ -1364,6 +1382,109 @@ export class AgentOrchestrator {
             writeJson(resolvePackageArtifactPath(packageDirectory, 'query-requests.json'), plannedRequests);
             const semanticOutput = resolvePackageArtifactPath(packageDirectory, 'gap-resolutions.json');
             if (fs.existsSync(semanticOutput)) fs.unlinkSync(semanticOutput);
+            const validationFeedbackFile = path.join(packageDirectory, 'validation-feedback.json');
+            const repairContextFile = path.join(packageDirectory, 'repair-context.json');
+            let invalidCandidates = 0;
+            if (fs.existsSync(repairContextFile)) fs.unlinkSync(repairContextFile);
+            writeJson(validationFeedbackFile, {
+                schemaVersion: 1,
+                status: 'awaiting-output',
+                valid: false,
+                qaRequired: false,
+                automaticRepairAttempts: 0,
+                maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
+                errors: [],
+            });
+            const acceptSemanticOutput = (candidate: unknown): boolean => {
+                let validation: DeterministicResponseValidationResult;
+                try {
+                    const parsedCandidate = parseGapResolutions(
+                        JSON.stringify(candidate),
+                        budgets.maxTotalQueries,
+                    );
+                    if (!parsedCandidate.valid || !parsedCandidate.value) {
+                        validation = {
+                            valid: false,
+                            errors: parsedCandidate.errors.map(error => ({
+                                code: 'gap-resolution-schema',
+                                message: error.message,
+                            })),
+                        };
+                    } else {
+                        const resolutions = mergeGapResolutionsWithCoverage(
+                            openGaps,
+                            deterministicResolved,
+                            parsedCandidate.value,
+                        );
+                        const response = this.deterministicGenerator.generate(packageDirectory, resolutions);
+                        writeJson(
+                            resolvePackageArtifactPath(packageDirectory, 'agent-response.json'),
+                            sanitizeArtifactValue(response, packageDirectory),
+                        );
+                        validation = this.deterministicResponseValidator
+                            ? this.deterministicResponseValidator(
+                                scenario as AutomationScenario,
+                                fullPlan,
+                                response,
+                                invalidCandidates,
+                            )
+                            : { valid: true, errors: [] };
+                    }
+                } catch (error: any) {
+                    validation = {
+                        valid: false,
+                        errors: [{
+                            code: 'generation-materialization',
+                            message: error?.message || 'No se pudo materializar la propuesta.',
+                        }],
+                    };
+                }
+
+                const compactErrors = validation.errors.slice(0, 30).map(error => ({
+                    code: String(error.code || 'validation').slice(0, 120),
+                    message: sanitizeAbsolutePathsInText(String(error.message || ''), packageDirectory).slice(0, 1200),
+                    ...(error.file ? {
+                        file: sanitizeAbsolutePathsInText(String(error.file), packageDirectory).slice(0, 500),
+                    } : {}),
+                }));
+                if (validation.valid) {
+                    if (fs.existsSync(repairContextFile)) fs.unlinkSync(repairContextFile);
+                    writeJson(validationFeedbackFile, {
+                        schemaVersion: 1,
+                        status: 'valid',
+                        valid: true,
+                        qaRequired: false,
+                        automaticRepairAttempts: invalidCandidates,
+                        maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
+                        errors: [],
+                        warnings: (validation.warnings || []).slice(0, 20),
+                    });
+                    return true;
+                }
+
+                invalidCandidates += 1;
+                const automaticRepairAttempts = Math.min(invalidCandidates, budgets.maxRepairAttempts);
+                const qaRequired = invalidCandidates > budgets.maxRepairAttempts;
+                runStore.setRepairAttempts(automaticRepairAttempts);
+                writeJson(repairContextFile, {
+                    attempt: automaticRepairAttempts,
+                    errors: compactErrors,
+                    affectedFiles: [...new Set(compactErrors.map(error => error.file).filter(Boolean))],
+                    automatic: true,
+                    writableFile: 'gap-resolutions.json',
+                    forbiddenDirectEdits: ['agent-response.json'],
+                });
+                writeJson(validationFeedbackFile, {
+                    schemaVersion: 1,
+                    status: qaRequired ? 'qa-required' : 'correction-required',
+                    valid: false,
+                    qaRequired,
+                    automaticRepairAttempts,
+                    maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
+                    errors: compactErrors,
+                });
+                return qaRequired;
+            };
             const pass2 = await this.provider.execute({
                 cwd: packageDirectory,
                 prompt: semanticPrompt,
@@ -1373,6 +1494,7 @@ export class AgentOrchestrator {
                 stopOnValidatedOutput: {
                     outputFile: './gap-resolutions.json',
                     schemaFile: './gap-resolutions.schema.json',
+                    acceptOutput: acceptSemanticOutput,
                 },
             });
             runStore.addPassDuration('pass2', pass2.durationMs);

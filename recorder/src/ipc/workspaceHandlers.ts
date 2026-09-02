@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import { FrameworkScanner, getWorkspaceAdapter, projectPaths } from '../../../core/workspace';
 import { ReuseAnalyzer, indexDeclaredStrategies, roundTrip } from '../../../core/indexing';
 import { RecordingCoverageAnalyzer, RecordingPlatformUpdater } from '../../../core/coverage';
 import { GeneratedFileRegistry, MobilePlatform } from '../../../core/automation';
 import { normalizeJsonUnicode, writeUtf8FileAtomic } from '../../../core/shared';
 import { RecorderRuntimeState } from './runtimeState';
+import { selectAndSaveWorkspaceRoot } from '../workspaceBootstrap';
 
 /**
  * Dependencias del catálogo de workspace: consulta del framework, catálogo de
@@ -69,6 +70,19 @@ export function registerWorkspaceHandlers(context: WorkspaceHandlersContext): vo
     });
 
     ipcMain.handle('get-workspace-info', async () => workspaceAdapter.describe());
+
+    ipcMain.handle('select-framework-root', async () => {
+        const result = await selectAndSaveWorkspaceRoot();
+        if (result.success) {
+            // Da tiempo al renderer para limpiar preferencias del framework
+            // anterior y mostrar el estado antes del relanzamiento.
+            setTimeout(() => {
+                app.relaunch();
+                app.quit();
+            }, 700);
+        }
+        return result;
+    });
 
     ipcMain.handle('get-squad-catalog', async (_, squad?: string, platform?: MobilePlatform, featureScope?: string) => {
         try {

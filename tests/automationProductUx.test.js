@@ -44,6 +44,11 @@ test('generación automática muestra progreso visual y oculta controles técnic
     assert.match(modal, /id="automationCorrectionReimport"/);
     assert.match(modal, /id="btnReimportAutomationCorrection"/);
     assert.match(modal, /Reimportar corrección del agente/);
+    assert.match(modal, /id="btnStartAutomationCorrection"/);
+    assert.match(modal, /Corregir con Copilot/);
+    assert.match(modal, /id="btnDeferAutomationCorrection"/);
+    assert.match(modal, /Dejar pendiente/);
+    assert.match(modal, /El recorder detectó errores\. ¿Deseas corregirlos con Copilot\?/);
     assert.match(modal, /id="btnUsePreviousAutomation"/);
     assert.match(modal, /Usar generación anterior/);
     assert.match(modal, /data-product-stage="ANALYZING"/);
@@ -75,7 +80,7 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /if \(!prepare\.result\.responseAvailable\)/);
     assert.match(review, /const launched = await api\.launchAutomationAgent\(\{ mode: 'automatic' \}\);/);
     assert.match(review, /else if \(launched\.fallbackSuggested\) \{/);
-    assert.doesNotMatch(review, /mode: 'manual'/);
+    assert.match(review, /api\.launchAutomationAgent\(\{ mode: 'manual', autorun: true \}\)/);
     assert.doesNotMatch(review, /Abrir terminal manual/);
     assert.match(review, /await api\.getAutomationQaDecisions\(\);/);
     assert.match(review, /on\(btnConfirmQaDecision, 'click', async \(\) => \{/);
@@ -87,13 +92,15 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /is-complete/);
     assert.match(review, /function setCorrectionReimportVisible\(/);
     assert.match(review, /on\(btnReimportAutomationCorrection, 'click', async \(\) => \{/);
+    assert.match(review, /on\(btnStartAutomationCorrection, 'click', async \(\) => \{/);
+    assert.match(review, /on\(btnDeferAutomationCorrection, 'click', \(\) => \{/);
     assert.match(review, /Reimportando la corrección del agente/);
     assert.match(generation, /if \(isAutomationWorkflow\(\) && deps\.hasInvalidAutomationDraft\(\)\) await revalidateReviewedAutomation\(\);/);
     assert.match(generation, /else if \(isAutomationWorkflow\(\)\) await importAutomationResponse\(false\);/);
-    assert.match(review, /const imported = await importAutomationResponse\(false\);/);
+    assert.match(review, /const imported = await importAutomationResponse\(false, true\);/);
     assert.equal(
         (generation.match(/importAutomationResponse\(false\)/g) || []).length +
-        (review.match(/importAutomationResponse\(false\)/g) || []).length,
+        (review.match(/importAutomationResponse\(false, true\)/g) || []).length,
         2
     );
     assert.match(review, /on\(btnUsePreviousAutomation, 'click', \(\) => \{/);
@@ -122,6 +129,12 @@ test('reimportar y revalidar rematerializan gap-resolutions cuando cambió', () 
     assert.match(automationHandlers, /sha256File\(responseFile\)/);
     assert.match(review, /Procesando gap-resolutions\.json, regenerando la propuesta/);
     assert.match(review, /corrija gap-resolutions\.json/);
+    assert.match(review, /correcciones manuales no tienen límite/);
+    assert.match(
+        automationHandlers,
+        /manualCorrection[\s\S]*?trackRepair: false[\s\S]*?manualCorrection: true/,
+    );
+    assert.match(automationHandlers, /status\.manualCorrectionAttempts/);
 });
 
 test('main usa Copilot visible y deja que el pipeline importe la respuesta validada', () => {

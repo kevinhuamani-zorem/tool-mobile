@@ -151,7 +151,7 @@ export function ConfigurationScreen() {
 
       <div id="frameworkSetupModal" className="framework-setup-modal" style={{display: 'none'}}>
         <div className="framework-setup-card">
-          <span className="setup-once-pill">SOLO LA PRIMERA VEZ</span>
+          <span className="setup-once-pill">AJUSTES DEL PROYECTO</span>
           <div className="setup-icon">📁</div>
           <h2>Configura tu proyecto</h2>
           <p>Selecciona el contexto que usarás para grabar tus pruebas.</p>
@@ -170,6 +170,9 @@ export function ConfigurationScreen() {
             <small id="lblDetectedProjectTitle">Proyecto detectado</small>
             <strong id="lblDetectedProject">📁 fwk-mobile-test</strong>
             <span id="lblDetectedProjectPath" />
+            <button id="btnSelectFrameworkRoot" type="button" className="btn btn-dark btn-full detected-project-change">
+              📂 Cambiar proyecto
+            </button>
           </div>
           <label className="remember-config"><input id="chkRememberFramework" type="checkbox" defaultChecked />
             <span>Recordar esta configuración<small>Podrás cambiarla después desde Ajustes.</small></span>

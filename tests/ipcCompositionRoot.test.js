@@ -109,7 +109,7 @@ test('ningún módulo de ipc/ importa de vuelta a main.ts (sin ciclos)', () => {
     }
 });
 
-test('los 47 canales IPC existentes se reparten sin duplicarse entre las familias', () => {
+test('los 48 canales IPC existentes se reparten sin duplicarse entre las familias', () => {
     const seen = new Map();
     let total = 0;
     for (const family of HANDLER_FAMILIES) {
@@ -122,7 +122,7 @@ test('los 47 canales IPC existentes se reparten sin duplicarse entre las familia
             seen.set(channel, family);
         }
     }
-    assert.equal(total, 47);
+    assert.equal(total, 48);
     assert.equal(allIpcChannels(main).length, 0);
 
     // Contrato de familias tal como las describe docs/ARCHITECTURE.md: cada
@@ -131,7 +131,8 @@ test('los 47 canales IPC existentes se reparten sin duplicarse entre las familia
     const expectedByFamily = {
         workspaceHandlers: [
             'scan-framework', 'analyze-step-reuse', 'analyze-step-impact', 'get-workspace-info',
-            'get-squad-catalog', 'get-existing-scenarios', 'get-scenario-coverage', 'assign-locator-value',
+            'select-framework-root', 'get-squad-catalog', 'get-existing-scenarios',
+            'get-scenario-coverage', 'assign-locator-value',
         ],
         sessionHandlers: [
             'get-devices', 'select-local-app', 'get-foreground-app', 'start-session',

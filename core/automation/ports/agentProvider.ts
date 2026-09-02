@@ -10,6 +10,13 @@ export interface AgentProviderRunInput {
         outputFile: string;
         schemaFile: string;
         pollIntervalMs?: number;
+        /**
+         * Permite al recorder validar el artefacto materializado con su contrato
+         * oficial antes de cerrar la sesión del agente. `true` significa que la
+         * salida puede aceptarse (válida o derivada a QA); `false` mantiene el
+         * watcher activo hasta que el agente escriba una versión distinta.
+         */
+        acceptOutput?: (output: unknown) => boolean;
     };
 }
 

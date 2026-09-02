@@ -61,7 +61,10 @@ export function createReviewFeature(deps) {
     const automationWorkingTitle = document.getElementById('automationWorkingTitle');
     const automationWorkingDetail = document.getElementById('automationWorkingDetail');
     const automationCorrectionReimport = document.getElementById('automationCorrectionReimport');
+    const automationCorrectionTitle = document.getElementById('automationCorrectionTitle');
     const automationCorrectionHint = document.getElementById('automationCorrectionHint');
+    const btnStartAutomationCorrection = document.getElementById('btnStartAutomationCorrection');
+    const btnDeferAutomationCorrection = document.getElementById('btnDeferAutomationCorrection');
     const btnReimportAutomationCorrection = document.getElementById('btnReimportAutomationCorrection');
     const btnUsePreviousAutomation = document.getElementById('btnUsePreviousAutomation');
     const automationQaRequired = document.getElementById('automationQaRequired');
@@ -169,7 +172,7 @@ export function createReviewFeature(deps) {
         });
     }
 
-    function setCorrectionReimportVisible(visible, hint = '') {
+    function setCorrectionReimportVisible(visible, hint = '', title = '') {
         if (!automationCorrectionReimport) return;
         automationCorrectionReimport.style.display = visible ? 'flex' : 'none';
         if (btnUsePreviousAutomation) {
@@ -177,6 +180,10 @@ export function createReviewFeature(deps) {
         }
         if (visible && automationCorrectionHint && hint) {
             automationCorrectionHint.textContent = hint;
+        }
+        if (visible && automationCorrectionTitle) {
+            automationCorrectionTitle.textContent = title ||
+                'El recorder detectó errores. ¿Deseas corregirlos con Copilot?';
         }
     }
 
@@ -529,15 +536,17 @@ export function createReviewFeature(deps) {
         }
     }
 
-    async function importAutomationResponse(preserveReviewed = false) {
-        const result = await api.importAutomationResponse();
+    async function importAutomationResponse(preserveReviewed = false, manualCorrection = false) {
+        const result = await api.importAutomationResponse({ manualCorrection });
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || null;
             automationPackageStatus.textContent = '✗ ' + (result.error || 'Respuesta inválida');
             automationPackageStatus.className = 'generate-result err';
             setCorrectionReimportVisible(
                 true,
-                'Pide al agente que corrija gap-resolutions.json; el recorder regenerará agent-response.json al reimportar.'
+                manualCorrection
+                    ? 'Puedes continuar corrigiendo gap-resolutions.json y reimportar todas las veces necesarias.'
+                    : 'Pide al agente que corrija gap-resolutions.json; el recorder regenerará agent-response.json al reimportar.'
             );
             return result;
         }
@@ -780,12 +789,13 @@ export function createReviewFeature(deps) {
                 'Reimportando la corrección del agente...',
                 'Procesando gap-resolutions.json, regenerando la propuesta y validando los cambios.'
             );
-            const imported = await importAutomationResponse(false);
+            const imported = await importAutomationResponse(false, true);
             if (!imported.success) {
                 updateProductStage(
                     'VALIDATING',
                     'La corrección todavía no es válida.',
-                    imported.error || 'Pide al agente que continúe corrigiendo la propuesta.',
+                    (imported.error || 'Pide al agente que continúe corrigiendo la propuesta.') +
+                        ' Puedes seguir modificando y reimportar; las correcciones manuales no tienen límite.',
                     true
                 );
                 enableBtn(btnReimportAutomationCorrection);
@@ -797,6 +807,45 @@ export function createReviewFeature(deps) {
             enableBtn(btnReimportAutomationCorrection);
             automationPipelineRunning = false;
             setWizardPage(4);
+        });
+
+        on(btnStartAutomationCorrection, 'click', async () => {
+            if (automationPipelineRunning) return;
+            automationPipelineRunning = true;
+            disableBtn(btnStartAutomationCorrection, '⏳ Abriendo Copilot...');
+            const launched = await api.launchAutomationAgent({ mode: 'manual', autorun: true });
+            if (!launched.success) {
+                updateProductStage(
+                    'FAILED',
+                    'No pudimos abrir Copilot.',
+                    launched.error || 'Puedes dejar la corrección pendiente e intentarlo más tarde.',
+                    true
+                );
+                enableBtn(btnStartAutomationCorrection);
+                automationPipelineRunning = false;
+                return;
+            }
+            if (automationCorrectionHint) {
+                automationCorrectionHint.textContent =
+                    'Copilot recibió los errores detectados. Cuando termine, usa “Reimportar corrección del agente”.';
+            }
+            updateProductStage(
+                'RESOLVING_DECISIONS',
+                'Copilot está corrigiendo la propuesta.',
+                'El recorder no aplicará cambios hasta que vuelvas a importar y la validación sea correcta.'
+            );
+            enableBtn(btnStartAutomationCorrection);
+            automationPipelineRunning = false;
+        });
+
+        on(btnDeferAutomationCorrection, 'click', () => {
+            setCorrectionReimportVisible(false);
+            updateProductStage(
+                'FAILED',
+                'Corrección pendiente.',
+                'La grabación y la propuesta se conservaron para continuar después.',
+                true
+            );
         });
 
         on(btnUsePreviousAutomation, 'click', () => {

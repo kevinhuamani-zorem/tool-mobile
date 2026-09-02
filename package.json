@@ -11,7 +11,10 @@
     "build:renderer": "vite build",
     "inspector:build": "node scripts/build-embedded-inspector.js",
     "inspector:check": "node scripts/build-embedded-inspector.js --check",
+    "runtime-origin:write": "node scripts/write-runtime-origin.js",
     "start": "npm run build && electron .",
+    "package:mac": "npm run build && npm run inspector:check && npm run runtime-origin:write && electron-builder --mac dir --publish never && node scripts/reveal-macos-app.js",
+    "dmg:mac": "npm run build && npm run inspector:check && npm run runtime-origin:write && electron-builder --mac dmg --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json",
     "test": "npm run build:main && node --test tests/*.test.js",
     "architecture:check": "node scripts/check-architecture.js",
@@ -25,12 +28,51 @@
   },
   "author": "Kevin Huamani",
   "license": "MIT",
+  "build": {
+    "appId": "com.kevinarnold.appium-visual-recorder",
+    "productName": "Appium Visual Recorder",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/.cache/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build/runtime-origin.json",
+        "to": "runtime-origin.json"
+      },
+      {
+        "from": "node_modules/.cache/appium-inspector/63f544c5afca2d89244914c165cd14434d1cfdee",
+        "to": "app/node_modules/.cache/appium-inspector/63f544c5afca2d89244914c165cd14434d1cfdee"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dir",
+        "dmg"
+      ],
+      "identity": null,
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "Appium Visual Recorder ${version}"
+    }
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
-    "electron": "^28.0.0",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
     "vite": "^8.1.5"
   },
   "dependencies": {
