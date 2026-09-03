@@ -26,7 +26,7 @@ descargar el binario nativo de macOS. Si una instalación anterior lo omitió,
 puede repararse con `npm rebuild electron`.
 
 El fork controlado está fijado en
-`c495991c37c28d166a2bd825554759978dd7ad72` de la rama
+`eda9016ca23fb8b6f021063f560ba6724eae3716` de la rama
 `feature/manual-locator-adoption`. No se usa
 `appium-inspector-plugin`, una instalación global ni un bundle opaco
 versionado. `inspector:build` ejecuta `npm ci` y `npm run build:browser` dentro

@@ -5,7 +5,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { projectPaths } from '../../core/workspace';
 
-export const EMBEDDED_INSPECTOR_COMMIT = 'c495991c37c28d166a2bd825554759978dd7ad72';
+export const EMBEDDED_INSPECTOR_COMMIT = 'eda9016ca23fb8b6f021063f560ba6724eae3716';
 export const EMBEDDED_INSPECTOR_SCHEME = 'appium-recorder';
 export const EMBEDDED_INSPECTOR_HOST_ORIGIN = `${EMBEDDED_INSPECTOR_SCHEME}://host`;
 export const EMBEDDED_INSPECTOR_ORIGIN = `${EMBEDDED_INSPECTOR_SCHEME}://inspector`;

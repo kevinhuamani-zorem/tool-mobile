@@ -48,8 +48,8 @@
         "to": "runtime-origin.json"
       },
       {
-        "from": "node_modules/.cache/appium-inspector/c495991c37c28d166a2bd825554759978dd7ad72",
-        "to": "app/node_modules/.cache/appium-inspector/c495991c37c28d166a2bd825554759978dd7ad72"
+        "from": "node_modules/.cache/appium-inspector/eda9016ca23fb8b6f021063f560ba6724eae3716",
+        "to": "app/node_modules/.cache/appium-inspector/eda9016ca23fb8b6f021063f560ba6724eae3716"
       }
     ],
     "mac": {
