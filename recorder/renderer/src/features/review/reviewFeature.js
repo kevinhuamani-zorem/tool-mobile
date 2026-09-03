@@ -58,11 +58,11 @@ export function createReviewFeature(deps) {
     const automationAgentSummaryIcon = document.getElementById('automationAgentSummaryIcon');
     const automationAgentSummaryTitle = document.getElementById('automationAgentSummaryTitle');
     const automationAgentSummaryDescription = document.getElementById('automationAgentSummaryDescription');
-    const automationTestDesignContent = document.getElementById('automationTestDesignContent');
-    const automationTestDesignRoast = document.getElementById('automationTestDesignRoast');
-    const automationTestDesignDiagnosis = document.getElementById('automationTestDesignDiagnosis');
-    const automationTestDesignIssues = document.getElementById('automationTestDesignIssues');
-    const btnFixTestDesignReview = document.getElementById('btnFixTestDesignReview');
+    const testDesignSuggestionsPanel = document.getElementById('testDesignSuggestionsPanel');
+    const testDesignSuggestionSummary = document.getElementById('testDesignSuggestionSummary');
+    const testDesignSuggestionRoast = document.getElementById('testDesignSuggestionRoast');
+    const testDesignSuggestionIssues = document.getElementById('testDesignSuggestionIssues');
+    const btnImproveTestDesign = document.getElementById('btnImproveTestDesign');
     const automationPipelineExecution = document.getElementById('automationPipelineExecution');
     const btnRunAutomationPipeline = document.getElementById('btnRunAutomationPipeline');
     const automationPipelineStatus = document.getElementById('automationPipelineStatus');
@@ -133,6 +133,34 @@ export function createReviewFeature(deps) {
             `${escapeHtml(String(observation.actionSequence))}. El locator conserva el texto real.</small></li>`
         ).join('');
         if (qaReportCopyStatus) qaReportCopyStatus.textContent = '';
+    }
+
+    function renderTestDesignSuggestions(review = null) {
+        const visible = review?.status === 'suggestion' && Array.isArray(review.issues) && review.issues.length > 0;
+        if (!testDesignSuggestionsPanel || !testDesignSuggestionIssues) return;
+        testDesignSuggestionsPanel.style.display = visible ? 'block' : 'none';
+        if (!visible) {
+            testDesignSuggestionIssues.innerHTML = '';
+            if (testDesignSuggestionSummary) testDesignSuggestionSummary.textContent = '';
+            if (testDesignSuggestionRoast) testDesignSuggestionRoast.style.display = 'none';
+            return;
+        }
+        if (testDesignSuggestionSummary) {
+            testDesignSuggestionSummary.textContent = review.summary || 'Copilot encontró oportunidades de mejora.';
+        }
+        if (testDesignSuggestionRoast && isQaRoastModeEnabled() && review.roast) {
+            testDesignSuggestionRoast.style.display = '';
+            testDesignSuggestionRoast.textContent = review.roast;
+        } else if (testDesignSuggestionRoast) {
+            testDesignSuggestionRoast.style.display = 'none';
+        }
+        testDesignSuggestionIssues.innerHTML = review.issues.map(issue => {
+            const sequences = Array.isArray(issue.actionSequences) && issue.actionSequences.length
+                ? `Acciones ${issue.actionSequences.join(', ')}. `
+                : '';
+            return `<li><strong>${escapeHtml(issue.message || 'Sugerencia de diseño.')}</strong>` +
+                `<small>${escapeHtml(sequences + (issue.recommendation || 'Revisa si conviene mejorar la evidencia del caso.'))}</small></li>`;
+        }).join('');
     }
 
     function updateAutomationProgress(normalizedStage, summary, detail, error) {
@@ -232,7 +260,6 @@ export function createReviewFeature(deps) {
     }
 
     function resetTestDesignReviewSummary() {
-        automationAgentSummary?.classList.remove('is-test-design-review');
         if (automationAgentSummaryIcon) automationAgentSummaryIcon.textContent = '↗';
         if (automationAgentSummaryTitle) {
             automationAgentSummaryTitle.textContent = 'Generación automática deterministic-first';
@@ -242,49 +269,8 @@ export function createReviewFeature(deps) {
                 'Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.';
             automationAgentSummaryDescription.style.display = '';
         }
-        if (automationTestDesignContent) automationTestDesignContent.style.display = 'none';
-        if (automationTestDesignRoast) {
-            automationTestDesignRoast.style.display = 'none';
-            automationTestDesignRoast.textContent = '';
-        }
-        if (automationTestDesignDiagnosis) automationTestDesignDiagnosis.textContent = '';
-        if (automationTestDesignIssues) automationTestDesignIssues.innerHTML = '';
         if (automationPipelineExecution) automationPipelineExecution.style.display = '';
         if (automationPackageStatus) automationPackageStatus.style.display = '';
-    }
-
-    function showTestDesignReview(review) {
-        if (!automationAgentSummary || !automationTestDesignContent || !automationTestDesignIssues) return;
-        pendingQaDecisionPrompts = [];
-        if (automationQaRequired) automationQaRequired.style.display = 'none';
-        automationAgentSummary.classList.add('is-test-design-review');
-        if (automationAgentSummaryIcon) automationAgentSummaryIcon.textContent = isQaRoastModeEnabled() ? '🧌' : '⚠';
-        if (automationAgentSummaryTitle) {
-            automationAgentSummaryTitle.textContent = 'La grabación no demuestra el resultado esperado';
-        }
-        if (automationAgentSummaryDescription) automationAgentSummaryDescription.style.display = 'none';
-        if (automationTestDesignRoast && isQaRoastModeEnabled() && review?.roast) {
-            automationTestDesignRoast.style.display = '';
-            automationTestDesignRoast.innerHTML =
-                `<strong>Copilot juzga tu caso</strong><span>${escapeHtml(review.roast)}</span>`;
-        } else if (automationTestDesignRoast) {
-            automationTestDesignRoast.style.display = 'none';
-        }
-        if (automationTestDesignDiagnosis) {
-            automationTestDesignDiagnosis.innerHTML = `<small>Diagnóstico técnico</small><strong>${escapeHtml(
-                review?.summary || 'El caso necesita revisión funcional del QA.'
-            )}</strong>`;
-        }
-        automationTestDesignIssues.innerHTML = (review?.issues || []).map(issue => {
-            const sequences = Array.isArray(issue.actionSequences) && issue.actionSequences.length
-                ? `Acciones ${issue.actionSequences.join(', ')}. `
-                : '';
-            return `<li><strong>${escapeHtml(issue.message || 'Hallazgo de diseño de prueba.')}</strong>
-                <small>${escapeHtml(sequences + (issue.recommendation || 'Vuelve a grabar incluyendo una validación observable del resultado.'))}</small></li>`;
-        }).join('');
-        automationTestDesignContent.style.display = '';
-        if (automationPipelineExecution) automationPipelineExecution.style.display = 'none';
-        if (automationPackageStatus) automationPackageStatus.style.display = 'none';
     }
 
     function collectQaDecisions() {
@@ -705,15 +691,7 @@ export function createReviewFeature(deps) {
             if (!launched.success) {
                 state.invalidAutomationDraft = launched.draft || null;
                 const code = String(launched.run?.errorCode || launched.errorCode || '');
-                if (code === 'QA_TEST_DESIGN_REQUIRED' && launched.testDesignReview) {
-                    showTestDesignReview(launched.testDesignReview);
-                    updateProductStage(
-                        'WAITING_FOR_QA',
-                        'La grabación necesita corrección funcional.',
-                        launched.testDesignReview.summary || 'Agrega aserciones que demuestren el resultado esperado.',
-                        true
-                    );
-                } else if (code === 'PLANNER_REGENERATION_REQUIRED') {
+                if (code === 'PLANNER_REGENERATION_REQUIRED') {
                     if (launched.draft) {
                         generation.showPreviewDocuments(launched.draft, false, false);
                         setWizardPage(4);
@@ -781,6 +759,7 @@ export function createReviewFeature(deps) {
                 automationPipelineRunning = false;
                 return;
             }
+            renderTestDesignSuggestions(launched.testDesignReview || null);
         }
 
         updateProductStage('GENERATING', 'Generando automatización...', 'Materializando las cuatro capas del caso.');
@@ -808,7 +787,7 @@ export function createReviewFeature(deps) {
             if (!progress || !progress.stage) return;
             const detail = progress.error
                 ? progress.error
-                : (progress.total ? `${progress.completed}/${progress.total}` : '');
+                : (progress.detail || (progress.total ? `${progress.completed}/${progress.total}` : ''));
             updateProductStage(
                 progress.stage,
                 progress.message || 'Actualizando progreso...',
@@ -827,6 +806,7 @@ export function createReviewFeature(deps) {
             state.automationWorkflow = false;
             state.invalidAutomationDraft = null;
             renderQaObservations([]);
+            renderTestDesignSuggestions(null);
             generation.invalidatePreview();
             if (automationPackageStatus) {
                 automationPackageStatus.textContent = '';
@@ -958,15 +938,13 @@ export function createReviewFeature(deps) {
             setWizardPage(4);
         });
 
-        on(btnFixTestDesignReview, 'click', () => {
-            resetTestDesignReviewSummary();
-            automationPipelineRunning = false;
+        on(btnImproveTestDesign, 'click', () => {
+            setWizardPage(1);
             updateProductStage(
                 'ANALYZING',
-                'Corrige la grabación antes de generar.',
-                'Agrega las validaciones funcionales indicadas y vuelve a iniciar el análisis.'
+                'Puedes mejorar la grabación o continuar con la propuesta actual.',
+                'Las sugerencias de Copilot son informativas y no invalidan la automatización.'
             );
-            setWizardPage(1);
         });
 
         on(btnConfirmQaDecision, 'click', async () => {

@@ -85,17 +85,19 @@ export class CopilotQaRoastGenerator implements QaRoastGenerationService {
                 if (fs.existsSync(responseFile)) fs.unlinkSync(responseFile);
                 writeJsonUtf8(requestFile, {
                     schemaVersion: 1,
-                    task: 'Redacta únicamente el mensaje troll de presentación a partir del diagnóstico técnico. No reevalúes el caso.',
+                    task: 'Redacta únicamente un roast corto, grosero y genuinamente gracioso a partir del diagnóstico técnico. No reevalúes el caso.',
                     review: diagnosticOnly(review),
                     actionFacts,
                     style: {
                         sentences: '2-3',
                         maxCharacters: 280,
-                        structure: ['acción concreta del QA', 'remate sarcástico evidente', 'orden de corrección'],
-                        safety: ['critica el caso, no a la persona', 'no inventes fallos', 'sin insultos ni jerga técnica'],
+                        intensity: 'alta: debe sonar a roast, no a retroalimentación corporativa amable',
+                        structure: ['acción concreta del QA en segunda persona', 'grosería dirigida al caso o resultado', 'remate sarcástico evidente', 'orden de corrección'],
+                        safety: ['critica con dureza el caso, la grabación o el resultado; nunca la identidad o capacidad de la persona', 'no inventes fallos', 'sin amenazas, discriminación ni jerga técnica'],
                         examples: [
-                            'Tocaste botones durante 15 pasos y no validaste el resultado. Esto no es testing, es un tour guiado por la app. Ahora comprueba el resultado real.',
-                            'Confirmado: el botón existe. Impactante descubrimiento. Ahora valida que realmente funcione.',
+                            'Tocaste botones durante 15 pasos y no validaste una mierda del resultado. Esto no es testing, es turismo de botones con evidencia. Vuelve y comprueba qué cambió.',
+                            'Confirmaste que el botón existe y te fuiste tan tranquilo. Tremendo carajo de descubrimiento: la interfaz tiene botones. Ahora presiónalo y valida que funcione.',
+                            'Grabaste clic tras clic y el resultado quedó de adorno. Joder, hasta un tutorial de YouTube comprueba más cosas. Vuelve y agrega una validación observable.',
                         ],
                     },
                     ...(validationErrors.length ? { previousValidationErrors: validationErrors } : {}),

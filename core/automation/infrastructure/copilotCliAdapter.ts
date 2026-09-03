@@ -321,11 +321,18 @@ export class CopilotCliAdapter implements AgentProvider {
                         if (raw === lastEvaluatedOutput) return;
                         const output = readJsonUtf8<unknown>(outputPath);
                         const schema = readJsonUtf8<unknown>(schemaPath);
-                        if (!validateWithSchema(output, schema)) return;
                         lastEvaluatedOutput = raw;
-                        if (stopOnValidatedOutput.acceptOutput
-                            && !stopOnValidatedOutput.acceptOutput(output)) {
-                            appendTrace('output-rejected', 'El recorder solicitó una corrección automática.');
+                        const schemaValid = validateWithSchema(output, schema);
+                        if (stopOnValidatedOutput.acceptOutput) {
+                            if (!stopOnValidatedOutput.acceptOutput(output)) {
+                                appendTrace(
+                                    schemaValid ? 'output-rejected' : 'schema-rejected',
+                                    'El recorder solicitó una corrección automática.',
+                                );
+                                return;
+                            }
+                        } else if (!schemaValid) {
+                            appendTrace('schema-rejected', 'La salida no cumple el schema esperado.');
                             return;
                         }
                     } catch {

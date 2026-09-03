@@ -26,8 +26,8 @@ descargar el binario nativo de macOS. Si una instalación anterior lo omitió,
 puede repararse con `npm rebuild electron`.
 
 El fork controlado está fijado en
-`63f544c5afca2d89244914c165cd14434d1cfdee` de la rama
-`kevinhuamani-zorem-embedded-inspector-mode`. No se usa
+`c495991c37c28d166a2bd825554759978dd7ad72` de la rama
+`feature/manual-locator-adoption`. No se usa
 `appium-inspector-plugin`, una instalación global ni un bundle opaco
 versionado. `inspector:build` ejecuta `npm ci` y `npm run build:browser` dentro
 del submódulo, compila `VITE_EMBEDDED_HOST_ORIGIN=appium-recorder://host` y
@@ -92,6 +92,11 @@ resolución semántica si aplica, generación determinística, validación y rev
 En macOS, Copilot se muestra en Terminal durante la pasada de generación con
 `copilot -i`; al escribir una salida nueva que cumple el schema, el recorder la
 importa y avanza a Revisión sin que el QA pulse un botón adicional.
+Si Copilot solicita autorización para leer o escribir el paquete, la espera del
+usuario no se considera un error inmediato y el wizard lo indica. Cada versión
+JSON completa se entrega también al validador oficial aunque incumpla el schema:
+este publica `validation-feedback.json` y mantiene la sesión abierta hasta que
+Copilot escriba una corrección o se alcance el límite de reparación.
 
 QA Roast Mode no altera esa pasada. Cuando `testDesignReview` termina en
 `qa-required` y la preferencia está activa, el renderer envía `qaRoastMode` por

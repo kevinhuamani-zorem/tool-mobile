@@ -1095,7 +1095,7 @@ test('orchestrator termina y solicita regeneración cuando Pass 2 no puede corre
     }
 });
 
-test('orchestrator detiene la generación cuando Copilot detecta que no se valida el efecto funcional', async () => {
+test('orchestrator conserva como sugerencia la revisión funcional y continúa generando', async () => {
     const dir = packageFixture();
     writeJson(path.join(dir, 'generation-plan.json'), {
         schemaVersion: 1,
@@ -1141,9 +1141,9 @@ test('orchestrator detiene la generación cuando Copilot detecta que no se valid
             }],
         },
         actions: [
-            { sequence: 1, action: 'CLICK', selector: 'id=filter', contextHint: 'abrir filtros' },
-            { sequence: 2, action: 'VERIFICAR_EXISTE', selector: 'id=today', contextHint: 'validar opción solo hoy' },
-            { sequence: 3, action: 'CLICK', selector: 'id=today', contextHint: 'seleccionar solo hoy' },
+            { sequence: 1, action: 'CLICK', selector: 'id=filter', variableName: 'filterButton', contextHint: 'abrir filtros' },
+            { sequence: 2, action: 'VERIFICAR_EXISTE', selector: 'id=today', variableName: 'todayOption', contextHint: 'validar opción solo hoy' },
+            { sequence: 3, action: 'CLICK', selector: 'id=today', variableName: 'todayOption', contextHint: 'seleccionar solo hoy' },
         ],
     });
     writeJson(path.join(dir, 'gap-resolutions.schema.json'), { type: 'object' });
@@ -1174,13 +1174,14 @@ test('orchestrator detiene la generación cuando Copilot detecta que no se valid
     process.env.RECORDER_GENERATION_MODE = 'deterministic';
     try {
         const result = await new AgentOrchestrator({ execute: () => ({}) }, provider).run(dir, 'automatic');
-        assert.equal(result.success, false);
-        assert.equal(result.errorCode, 'QA_TEST_DESIGN_REQUIRED');
-        assert.deepEqual(result.testDesignReview, review);
-        assert.equal(fs.existsSync(path.join(dir, 'agent-response.json')), false);
-        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'test-design-review.json'), 'utf-8')), review);
+        assert.equal(result.success, true);
+        assert.equal(result.errorCode, undefined);
+        assert.equal(result.testDesignReview.status, 'suggestion');
+        assert.equal(fs.existsSync(path.join(dir, 'agent-response.json')), true);
+        assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'test-design-review.json'), 'utf-8')).status, 'suggestion');
         const feedback = JSON.parse(fs.readFileSync(path.join(dir, 'validation-feedback.json'), 'utf-8'));
-        assert.equal(feedback.status, 'qa-required');
+        assert.equal(feedback.status, 'valid');
+        assert.equal(feedback.valid, true);
         assert.equal(feedback.testDesignReview.issues[0].code, 'missing-business-assertion');
     } finally {
         if (previousMode === undefined) delete process.env.RECORDER_GENERATION_MODE;

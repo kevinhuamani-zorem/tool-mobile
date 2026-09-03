@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('api', {
         message: string;
         completed: number;
         total: number;
+        detail?: string;
         error?: string;
     }) => void) => {
         const wrapped = (_event: Electron.IpcRendererEvent, payload: {
@@ -76,6 +77,7 @@ contextBridge.exposeInMainWorld('api', {
             message: string;
             completed: number;
             total: number;
+            detail?: string;
             error?: string;
         }) => listener(payload);
         ipcRenderer.on('automation-progress', wrapped);

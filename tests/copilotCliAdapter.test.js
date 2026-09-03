@@ -120,6 +120,44 @@ test('adapter termina PASS 2 cuando aparece salida validada por schema', async (
     }
 });
 
+test('adapter entrega una salida con schema inválido al validador oficial antes de esperar la corrección', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-invalid-output-feedback-'));
+    fs.writeFileSync(path.join(root, 'response.schema.json'), JSON.stringify({
+        type: 'object',
+        required: ['ok'],
+        properties: { ok: { const: true } },
+        additionalProperties: false,
+    }));
+    const evaluated = [];
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => fakeChild(), 'copilot', ['-p']);
+    setTimeout(() => {
+        fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ wrong: true }));
+    }, 30);
+    setTimeout(() => {
+        fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: true }));
+    }, 100);
+    try {
+        const result = await adapter.execute({
+            cwd: root,
+            prompt: 'corrige el contrato',
+            timeoutMs: 2_000,
+            stopOnValidatedOutput: {
+                outputFile: './response.json',
+                schemaFile: './response.schema.json',
+                pollIntervalMs: 10,
+                acceptOutput(output) {
+                    evaluated.push(output);
+                    return output.ok === true;
+                },
+            },
+        });
+        assert.equal(result.success, true);
+        assert.deepEqual(evaluated, [{ wrong: true }, { ok: true }]);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('adapter corta por timeout aunque el hijo ignore SIGTERM', async () => {
     const script = 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);';
     const adapter = new CopilotCliAdapter(

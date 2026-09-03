@@ -147,11 +147,15 @@ export class VisibleCopilotProvider implements AgentProvider {
                     if (raw === lastEvaluatedOutput) return;
                     const output = readJsonUtf8<unknown>(outputPath);
                     const schema = readJsonUtf8<unknown>(schemaPath);
-                    if (!validateWithSchema(output, schema)) return;
                     lastEvaluatedOutput = raw;
-                    if (input.stopOnValidatedOutput?.acceptOutput
-                        && !input.stopOnValidatedOutput.acceptOutput(output)) {
-                        appendTrace('output-rejected');
+                    const schemaValid = validateWithSchema(output, schema);
+                    if (input.stopOnValidatedOutput?.acceptOutput) {
+                        if (!input.stopOnValidatedOutput.acceptOutput(output)) {
+                            appendTrace(schemaValid ? 'output-rejected' : 'schema-rejected');
+                            return;
+                        }
+                    } else if (!schemaValid) {
+                        appendTrace('schema-rejected');
                         return;
                     }
                     finish(result(true));

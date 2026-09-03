@@ -624,13 +624,10 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                 'gap-resolutions.json pertenece a otra grabación o a otra versión del plan.',
             );
         }
-        if (parsed.value.testDesignReview?.status === 'qa-required') {
+        if (parsed.value.testDesignReview) {
             writeJsonUtf8(
                 path.join(packageDirectory, 'test-design-review.json'),
                 parsed.value.testDesignReview,
-            );
-            throw new Error(
-                `La grabación necesita corrección funcional: ${parsed.value.testDesignReview.summary}`
             );
         }
         const response = deterministicGenerator.generate(
@@ -769,7 +766,15 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
     }) => {
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
-            emitAutomationProgress('RESOLVING_DECISIONS', 'Resolviendo decisiones pendientes', 3, 6);
+            emitAutomationProgress(
+                'RESOLVING_DECISIONS',
+                'Resolviendo decisiones pendientes',
+                3,
+                6,
+                {
+                    detail: 'Copilot está trabajando. Si solicita permiso para leer o escribir el paquete, autorízalo en su ventana.',
+                },
+            );
             const mode: AgentExecutionMode = resolveAgentExecutionMode(
                 input?.mode || process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE
             );
@@ -793,6 +798,39 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
             }
             const run = await agentOrchestrator.run(state.activeAutomationPackage, mode);
             if (run.success) {
+                let testDesignReview = run.testDesignReview;
+                let roastGeneration;
+                if (testDesignReview?.status === 'suggestion' && input?.qaRoastMode) {
+                    emitAutomationProgress(
+                        'RESOLVING_DECISIONS',
+                        'Preparando una sugerencia para QA',
+                        3,
+                        6,
+                    );
+                    try {
+                        roastGeneration = await qaRoastGenerator.generate(
+                            state.activeAutomationPackage,
+                            testDesignReview,
+                        );
+                        if (roastGeneration.success && roastGeneration.roast) {
+                            testDesignReview = { ...testDesignReview, roast: roastGeneration.roast };
+                            writeJsonUtf8(
+                                path.join(state.activeAutomationPackage, 'test-design-review.json'),
+                                testDesignReview,
+                            );
+                        }
+                    } catch (error: any) {
+                        roastGeneration = {
+                            success: false,
+                            attempts: 0,
+                            repairAttempts: 0,
+                            durationMs: 0,
+                            responseBytes: 0,
+                            result: 'provider-failed' as const,
+                            error: String(error?.message || error || 'No se pudo generar el roast.'),
+                        };
+                    }
+                }
                 emitAutomationProgress('GENERATING', 'Generando automatización', 4, 6);
                 const imported = await importAutomationResponseFromPackage(state.activeAutomationPackage);
                 if (imported.success) {
@@ -803,6 +841,8 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                     mode,
                     automatic: true,
                     run,
+                    ...(testDesignReview ? { testDesignReview } : {}),
+                    ...(roastGeneration ? { roastGeneration } : {}),
                     ...(imported.success
                         ? { imported }
                         : {
@@ -840,61 +880,6 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                     regenerationRequired: true,
                     validation: inspected.validation,
                     draft: inspected.draft,
-                    repairAvailable: false,
-                };
-            }
-            if (run.errorCode === 'QA_TEST_DESIGN_REQUIRED' && run.testDesignReview) {
-                const technicalReview: TestDesignReview = {
-                    status: run.testDesignReview.status,
-                    summary: run.testDesignReview.summary,
-                    issues: run.testDesignReview.issues,
-                };
-                let testDesignReview = technicalReview;
-                let roastGeneration;
-                if (input?.qaRoastMode) {
-                    emitAutomationProgress(
-                        'RESOLVING_DECISIONS',
-                        'Preparando el comentario del modo troll',
-                        3,
-                        6,
-                    );
-                    try {
-                        roastGeneration = await qaRoastGenerator.generate(
-                            state.activeAutomationPackage,
-                            technicalReview,
-                        );
-                    } catch (error: any) {
-                        roastGeneration = {
-                            success: false,
-                            attempts: 0,
-                            repairAttempts: 0,
-                            durationMs: 0,
-                            responseBytes: 0,
-                            result: 'provider-failed' as const,
-                            error: String(error?.message || error || 'No se pudo generar el roast.'),
-                        };
-                    }
-                    if (roastGeneration.success && roastGeneration.roast) {
-                        testDesignReview = { ...technicalReview, roast: roastGeneration.roast };
-                    }
-                }
-                emitAutomationProgress(
-                    'WAITING_FOR_QA',
-                    'La grabación necesita una validación funcional del QA',
-                    3,
-                    6,
-                    { error: technicalReview.summary },
-                );
-                return {
-                    success: false,
-                    mode,
-                    automatic: true,
-                    run,
-                    errorCode: run.errorCode,
-                    error: run.error,
-                    failureKind: 'test-design-review',
-                    testDesignReview,
-                    ...(roastGeneration ? { roastGeneration } : {}),
                     repairAvailable: false,
                 };
             }

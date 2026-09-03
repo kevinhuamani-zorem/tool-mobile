@@ -105,14 +105,6 @@ export function ScenarioBuilderModal() {
               <div className="automation-agent-summary-content">
                 <h3 id="automationAgentSummaryTitle">Generación automática deterministic-first</h3>
                 <p id="automationAgentSummaryDescription">Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.</p>
-                <div id="automationTestDesignContent" className="automation-test-design-content" style={{display: 'none'}}>
-                  <div id="automationTestDesignRoast" className="qa-roast-message" style={{display: 'none'}} />
-                  <div id="automationTestDesignDiagnosis" className="automation-test-design-diagnosis" />
-                  <ul id="automationTestDesignIssues" className="automation-test-design-issues" />
-                  <button className="btn btn-green" id="btnFixTestDesignReview">
-                    Volver y corregir la grabación
-                  </button>
-                </div>
               </div>
             </div>
             <div id="automationPipelineExecution">
@@ -184,6 +176,20 @@ export function ScenarioBuilderModal() {
               <div><span className="eyebrow">PASO 4</span><h3>Revisa y aplica la automatización</h3></div>
             </div>
             <p className="wizard-help">Los nombres propuestos, el TC y el contenido final se editan directamente en los archivos del preview.</p>
+            <section id="testDesignSuggestionsPanel" className="qa-observations-panel" style={{display: 'none'}}>
+              <div className="qa-observations-heading">
+                <div>
+                  <strong>💡 Sugerencias de diseño del caso</strong>
+                  <small>Son recomendaciones de Copilot. No bloquean la generación ni la aplicación de la automatización.</small>
+                </div>
+                <button type="button" className="btn btn-dark" id="btnImproveTestDesign">
+                  Volver y mejorar la grabación
+                </button>
+              </div>
+              <div id="testDesignSuggestionSummary" className="wizard-help" />
+              <div id="testDesignSuggestionRoast" className="qa-roast-message" style={{display: 'none'}} />
+              <ul id="testDesignSuggestionIssues" />
+            </section>
             <section id="qaObservationsPanel" className="qa-observations-panel" style={{display: 'none'}}>
               <div className="qa-observations-heading">
                 <div>

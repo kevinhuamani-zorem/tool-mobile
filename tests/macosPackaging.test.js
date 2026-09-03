@@ -64,7 +64,7 @@ test('packaging config produces a mac app with the isolated mobile runtime', () 
     assert.equal(packageJson.build.mac.identity, null);
     assert.ok(Number(packageJson.devDependencies.electron.match(/\d+/)[0]) >= 37);
     assert.ok(packageJson.build.extraResources.some(resource =>
-        resource.to.includes('appium-inspector/63f544c5afca2d89244914c165cd14434d1cfdee')));
+        resource.to.includes('appium-inspector/c495991c37c28d166a2bd825554759978dd7ad72')));
     assert.ok(packageJson.build.extraResources.some(resource => resource.to === 'runtime-origin.json'));
 });
 

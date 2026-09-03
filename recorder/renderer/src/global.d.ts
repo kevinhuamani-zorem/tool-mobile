@@ -28,6 +28,7 @@ declare global {
                     message: string;
                     completed: number;
                     total: number;
+                    detail?: string;
                     error?: string;
                 }) => void,
             ): () => void;

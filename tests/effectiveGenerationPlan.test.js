@@ -351,7 +351,7 @@ test('gap-resolutions valida la revisión funcional sin acoplarla al roast', () 
         },
     }), 20);
     assert.equal(valid.valid, true);
-    assert.equal(valid.value.testDesignReview.status, 'qa-required');
+    assert.equal(valid.value.testDesignReview.status, 'suggestion');
     assert.match(valid.value.testDesignReview.roast, /Tocaste tres filtros/);
 
     const missingRoast = parseGapResolutions(JSON.stringify({
@@ -392,8 +392,8 @@ test('gap-resolutions valida la revisión funcional sin acoplarla al roast', () 
             }],
         },
     }), 20);
-    assert.equal(invalid.valid, false);
-    assert.equal(invalid.errors.some(error => error.code === 'test-design-review-pass-blocking'), true);
+    assert.equal(invalid.valid, true);
+    assert.equal(invalid.value.testDesignReview, undefined);
 });
 
 test('gap-resolutions normaliza aliases copiados del plan', () => {

@@ -445,9 +445,9 @@ function semanticPassPrompt(context: Record<string, unknown>): string {
         'Cubre exactamente una vez todas las secuencias de filas template. Puedes consolidar filas template contiguas en un solo step incluyendo todas sus actionSequences.',
         'No reescribas filas domain, qa o reused. No inventes resultados no observados, no menciones clicks, botones, campos, scrolls ni selectores.',
         'Incluye siempre testDesignReview con status, summary e issues. Evalúa diseño funcional, no sintaxis: contrasta objective y acceptanceCriteria con las acciones y verificaciones observadas.',
-        'Usa status "qa-required" si una variante seleccionada no tiene una aserción posterior de resultado de negocio, si solo se comprueba que existe el control, si el criterio de aceptación no queda observado o si falta un oráculo verificable. En ese estado incluye al menos un issue blocking.',
+        'Usa status "suggestion" si observas oportunidades de mejorar el diseño. Son recomendaciones no bloqueantes: no exijas una aserción tras cada interacción, acepta una validación consolidada al final y no inventes requisitos fuera de acceptanceCriteria.',
         'No incluyas roast ni contenido humorístico: esta pasada produce únicamente el diagnóstico funcional. La presentación opcional se genera después en una sesión aislada.',
-        'Usa status "pass" solo cuando cada comportamiento del objetivo termina en una evidencia observable alineada con acceptanceCriteria. No asumas que verificar el botón u opción demuestra el efecto del filtro.',
+        'Usa status "pass" cuando no tengas recomendaciones útiles. No decidas si se permite generar: el recorder solo bloquea por errores técnicos.',
         'Los issue.code permitidos son missing-business-assertion, control-existence-only, acceptance-criteria-mismatch, missing-test-oracle, dependent-variants y ambiguous-objective. actionSequences solo puede referenciar acciones reales. Da al QA una recomendación concreta para volver a grabar.',
         'Decisiones canónicas permitidas: "reuse", "replace-existing", "create", "resolved", "qa-required" o "unresolved".',
         'Para gap-extend-existing-artifacts usa "resolved": las rutas update ya están fijadas por generation-plan.json.',
@@ -455,7 +455,7 @@ function semanticPassPrompt(context: Record<string, unknown>): string {
         'Si el QA autoriza conservar una clave pero reemplazar su selector, usa "replace-existing" con selectedCandidate y replacement:{platform,sequence}; TypeLocator/selector salen del recording.',
         'En modo determinista nunca edites agent-response.json: el recorder lo regenera desde gap-resolutions.json.',
         'Después de escribir gap-resolutions.json, lee validation-feedback.json: el recorder materializa y valida la propuesta con el contrato oficial.',
-        'Si validation-feedback.json sigue en "awaiting-output", espera brevemente y vuelve a leerlo. Si tiene status "correction-required", corrige solo gap-resolutions.json y vuelve a leer el feedback. Los estados "valid", "qa-required" y "planner-regeneration-required" son terminales; el último indica que el recorder debe reconstruir el plan y no admite otra corrección semántica.',
+        'Si validation-feedback.json sigue en "awaiting-output", espera brevemente y vuelve a leerlo. Si tiene status "correction-required", corrige solo gap-resolutions.json y vuelve a leer el feedback. Los estados "valid" y "planner-regeneration-required" son terminales; el último indica que el recorder debe reconstruir el plan y no admite otra corrección semántica.',
         'selectedCandidate siempre identifica un locator autorizado; no coloques ahí métodos de Screen Object.',
         'Si falta contexto para cerrar un gap, usa decision "unresolved" y opcionalmente needs:[{query,args}].',
     ].join(' ');
@@ -1427,6 +1427,7 @@ export class AgentOrchestrator {
             });
             const acceptSemanticOutput = (candidate: unknown): boolean => {
                 let validation: DeterministicResponseValidationResult;
+                let acceptedReview: TestDesignReview | undefined;
                 try {
                     const parsedCandidate = parseGapResolutions(
                         JSON.stringify(candidate),
@@ -1448,40 +1449,10 @@ export class AgentOrchestrator {
                         );
                         const invalidReviewSequences = review?.issues.flatMap(issue => issue.actionSequences)
                             .filter(sequence => !actionSequences.has(sequence)) || [];
-                        if (!review) {
-                            validation = {
-                                valid: false,
-                                errors: [{
-                                    code: 'test-design-review-missing',
-                                    message: 'Incluye testDesignReview para evaluar objetivo, criterio de aceptación, acciones y aserciones.',
-                                }],
-                            };
-                        } else if (invalidReviewSequences.length) {
-                            validation = {
-                                valid: false,
-                                errors: [{
-                                    code: 'test-design-review-sequence',
-                                    message: `testDesignReview referencia secuencias inexistentes: ${[...new Set(invalidReviewSequences)].join(', ')}.`,
-                                }],
-                            };
-                        } else if (review.status === 'qa-required') {
+                        if (review && !invalidReviewSequences.length) {
+                            acceptedReview = review;
                             writeJson(path.join(packageDirectory, 'test-design-review.json'), review);
-                            if (fs.existsSync(repairContextFile)) fs.unlinkSync(repairContextFile);
-                            writeJson(validationFeedbackFile, {
-                                schemaVersion: 1,
-                                status: 'qa-required',
-                                valid: false,
-                                qaRequired: true,
-                                automaticRepairAttempts: invalidCandidates,
-                                maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
-                                errors: review.issues.map(issue => ({
-                                    code: issue.code,
-                                    message: issue.message,
-                                })),
-                                testDesignReview: review,
-                            });
-                            return true;
-                        } else {
+                        }
                         const resolutions = mergeGapResolutionsWithCoverage(
                             openGaps,
                             deterministicResolved,
@@ -1504,7 +1475,6 @@ export class AgentOrchestrator {
                                 invalidCandidates,
                             )
                             : { valid: true, errors: [] };
-                        }
                     }
                 } catch (error: any) {
                     validation = {
@@ -1534,6 +1504,7 @@ export class AgentOrchestrator {
                         maxAutomaticRepairAttempts: budgets.maxRepairAttempts,
                         errors: [],
                         warnings: (validation.warnings || []).slice(0, 20),
+                        ...(acceptedReview ? { testDesignReview: acceptedReview } : {}),
                     });
                     return true;
                 }
@@ -1693,30 +1664,21 @@ export class AgentOrchestrator {
             }
             semantic = parsed.value;
             if (semantic.testDesignReview) {
-                writeJson(path.join(packageDirectory, 'test-design-review.json'), semantic.testDesignReview);
-            }
-            if (semantic.testDesignReview?.status === 'qa-required') {
-                runStore.markAgentFinished();
-                runStore.setGapCounts(openGaps.length, 0, openGaps.length);
-                runStore.mark('qa-test-design-required', true);
-                updateStatus(statusFile, {
-                    state: 'failed',
-                    agentExecutionMode: executionMode,
-                    errorCode: 'QA_TEST_DESIGN_REQUIRED',
-                    error: semantic.testDesignReview.summary,
-                    generationMode: 'deterministic',
-                });
-                return {
-                    success: false,
-                    mode: executionMode,
-                    state: 'failed',
-                    invocations: 1,
-                    queryCount: counters.total,
-                    fallback: false,
-                    errorCode: 'QA_TEST_DESIGN_REQUIRED',
-                    error: semantic.testDesignReview.summary,
-                    testDesignReview: semantic.testDesignReview,
+                const validSequences = new Set<number>(
+                    (scenario.actions || []).map((action: Record<string, unknown>) => Number(action.sequence))
+                        .filter((sequence: number) => Number.isInteger(sequence) && sequence > 0),
+                );
+                semantic.testDesignReview = {
+                    ...semantic.testDesignReview,
+                    issues: semantic.testDesignReview.issues.map(issue => ({
+                        ...issue,
+                        actionSequences: issue.actionSequences.filter(sequence => validSequences.has(sequence)),
+                    })),
                 };
+                writeJson(path.join(packageDirectory, 'test-design-review.json'), semantic.testDesignReview);
+                if (semantic.testDesignReview.status === 'suggestion') {
+                    runStore.mark('test-design-suggestions', true);
+                }
             }
         } else {
             semantic = emptyGapResolutions(fullPlan.recordingId, fullPlan.planId);
@@ -1730,6 +1692,9 @@ export class AgentOrchestrator {
             resolutions: finalResolutions,
             ...(semantic?.gherkinResolutions?.length
                 ? { gherkinResolutions: semantic.gherkinResolutions }
+                : {}),
+            ...(semantic?.testDesignReview
+                ? { testDesignReview: semantic.testDesignReview }
                 : {}),
         } satisfies GapResolutionFile);
         const response = this.deterministicGenerator.generate(
@@ -1771,20 +1736,23 @@ export class AgentOrchestrator {
                 error: finalBudget.message,
             };
         }
-        runStore.mark('agent-completed');
+        const completedWithSuggestions = semantic?.testDesignReview?.status === 'suggestion';
+        runStore.mark(completedWithSuggestions ? 'completed-with-suggestions' : 'agent-completed');
         updateStatus(statusFile, {
             state: 'completed',
             agentExecutionMode: executionMode,
             generationMode: 'deterministic',
+            ...(completedWithSuggestions ? { testDesignSuggestions: true } : {}),
             ...(openGaps.length > 1 ? { strategy: multiGapStrategy } : {}),
         });
         return {
             success: true,
             mode: mode === 'automatic' ? 'automatic' : 'manual',
             state: 'completed',
-            invocations: semanticGaps.length ? 1 : 0,
+            invocations: semanticGaps.length || requiresSemanticWording || requiresTestDesignReview ? 1 : 0,
             queryCount: counters.total,
             fallback: false,
+            ...(semantic?.testDesignReview ? { testDesignReview: semantic.testDesignReview } : {}),
         };
     }
 }

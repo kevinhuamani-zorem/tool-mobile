@@ -58,6 +58,8 @@ test('generación automática muestra progreso visual y oculta controles técnic
     assert.doesNotMatch(modal, /id="btnPrepareAutomation"/);
     assert.doesNotMatch(modal, /id="btnLaunchAutomation"/);
     assert.doesNotMatch(modal, /id="btnImportAutomation"/);
+    assert.match(automationHandlers, /Si solicita permiso para leer o escribir el paquete, autorízalo/);
+    assert.match(review, /progress\.detail/);
 });
 
 test('revisión agrupa validación y acciones sin repetir el resultado', () => {
@@ -154,18 +156,17 @@ test('un error propiedad del planner libera el flujo y muestra el borrador para 
     assert.match(review, /El plan necesita regenerarse o revisarse/);
 });
 
-test('una revisión funcional bloqueante explica el problema y devuelve al QA a la grabación', () => {
-    assert.match(modal, /id="automationAgentSummary"/);
-    assert.match(modal, /id="automationTestDesignContent"/);
-    assert.match(modal, /id="btnFixTestDesignReview"/);
-    assert.match(review, /QA_TEST_DESIGN_REQUIRED/);
-    assert.match(review, /showTestDesignReview/);
-    assert.match(review, /La grabación no demuestra el resultado esperado/);
-    assert.match(modal, /Volver y corregir la grabación/);
-    assert.match(review, /Agrega las validaciones funcionales indicadas/);
-    assert.match(review, /automationPipelineExecution\.style\.display = 'none'/);
-    assert.match(review, /automationPackageStatus\.style\.display = 'none'/);
-    assert.match(review, /on\(btnFixTestDesignReview, 'click'/);
+test('una revisión funcional se muestra como sugerencia y no bloquea la automatización', () => {
+    assert.match(modal, /id="testDesignSuggestionsPanel"/);
+    assert.match(modal, /Son recomendaciones de Copilot\. No bloquean/);
+    assert.match(modal, /id="btnImproveTestDesign"/);
+    assert.doesNotMatch(review, /QA_TEST_DESIGN_REQUIRED/);
+    assert.match(review, /renderTestDesignSuggestions\(launched\.testDesignReview \|\| null\)/);
+    assert.match(review, /review\?\.status === 'suggestion'/);
+    assert.match(modal, /Volver y mejorar la grabación/);
+    assert.match(review, /Las sugerencias de Copilot son informativas y no invalidan la automatización/);
+    assert.match(review, /const imported = await importAutomationResponse\(true\)/);
+    assert.match(review, /setWizardPage\(4\)/);
 });
 
 test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {
@@ -181,11 +182,10 @@ test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {
     assert.match(preferences, /getItem\(QA_ROAST_MODE_STORAGE_KEY\) === 'true'/);
     assert.match(preferences, /removeItem\(QA_ROAST_MODE_STORAGE_KEY\)/);
     assert.match(review, /isQaRoastModeEnabled\(\)/);
-    assert.match(review, /review\?\.roast/);
-    assert.match(review, /escapeHtml\(review\.roast\)/);
-    assert.match(review, /Copilot juzga tu caso/);
+    assert.match(review, /review\.roast/);
+    assert.match(review, /testDesignSuggestionRoast\.textContent = review\.roast/);
     assert.doesNotMatch(review, /TEST_DESIGN_ROASTS/);
-    assert.match(review, /Diagnóstico técnico/);
+    assert.match(modal, /Sugerencias de diseño del caso/);
 });
 
 test('el roast se genera en otra sesión y nunca bloquea el diagnóstico semántico', () => {

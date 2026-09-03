@@ -150,7 +150,7 @@ export function gapResolutionsSchema(maxResolutions: number): Record<string, unk
                 type: 'object',
                 required: ['status', 'summary', 'issues'],
                 properties: {
-                    status: { enum: ['pass', 'qa-required'] },
+                    status: { enum: ['pass', 'suggestion', 'qa-required'] },
                     summary: { type: 'string', minLength: 8, maxLength: 500 },
                     roast: {
                         type: 'string',
@@ -419,6 +419,9 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
     }
     let normalizedTestDesignReview: TestDesignReview | undefined;
     if (record.testDesignReview !== undefined) {
+        // La revisión funcional es consultiva. Una respuesta defectuosa aquí no
+        // debe invalidar resoluciones, Gherkin ni archivos técnicamente válidos.
+        const reviewErrorStart = errors.length;
         const review = asRecord(record.testDesignReview);
         if (!review) {
             errors.push({
@@ -427,8 +430,10 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
                 message: 'testDesignReview debe ser un objeto.',
             });
         } else {
-            const status = review.status === 'pass' || review.status === 'qa-required'
-                ? review.status
+            const status = review.status === 'qa-required'
+                ? 'suggestion'
+                : review.status === 'pass' || review.status === 'suggestion'
+                    ? review.status
                 : undefined;
             const summary = typeof review.summary === 'string'
                 ? review.summary.replace(/\s+/g, ' ').trim().slice(0, 500)
@@ -440,7 +445,7 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
             if (!status) errors.push({
                 code: 'test-design-review-status',
                 path: '$.testDesignReview.status',
-                message: 'status debe ser pass o qa-required.',
+                message: 'status debe ser pass o suggestion.',
             });
             if (summary.length < 8) errors.push({
                 code: 'test-design-review-summary',
@@ -492,14 +497,18 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
                 path: '$.testDesignReview',
                 message: 'Una revisión pass no puede contener hallazgos blocking.',
             });
-            if (status === 'qa-required' && !issues.some(issue => issue.severity === 'blocking')) errors.push({
-                code: 'test-design-review-qa-without-blocker',
+            if (status === 'suggestion' && !issues.length) errors.push({
+                code: 'test-design-review-suggestion-without-issues',
                 path: '$.testDesignReview',
-                message: 'qa-required necesita al menos un hallazgo blocking.',
+                message: 'suggestion necesita al menos un hallazgo.',
             });
             if (status && summary.length >= 8 && rawIssues && issues.length === rawIssues.length) {
                 normalizedTestDesignReview = { status, summary, ...(roast ? { roast } : {}), issues };
             }
+        }
+        if (errors.length > reviewErrorStart) {
+            errors.splice(reviewErrorStart);
+            normalizedTestDesignReview = undefined;
         }
     }
     if (errors.length) return { valid: false, errors };

@@ -41,7 +41,7 @@ export class AutomationAgentLauncher {
         const repair = fs.existsSync(path.join(packageDirectory, 'repair-context.json'));
         const generationMode = resolveRecorderGenerationMode(process.env.RECORDER_GENERATION_MODE);
         if (generationMode === 'deterministic' && !repair) {
-            return 'Trabaja únicamente en esta carpeta. Lee instructions.md, gaps.json y scenario.json. Evalúa también si objetivo y criterio de aceptación tienen aserciones funcionales observables en la grabación y escribe testDesignReview sin roast ni humor. Resuelve los gaps semánticos y reescribe solo las filas wording=template mediante gherkinResolutions. Escribe gap-resolutions.json con herramientas nativas del CLI. Después, lee validation-feedback.json y corrige el mismo archivo si el recorder lo solicita. Termina cuando el feedback indique valid, qa-required o planner-regeneration-required. No uses comandos de shell ni explores fwk-mobile-test.';
+            return 'Trabaja únicamente en esta carpeta. Lee instructions.md, gaps.json y scenario.json. Evalúa objetivo y criterio de aceptación y escribe testDesignReview como sugerencia no bloqueante, sin roast ni humor; acepta validaciones consolidadas y no inventes requisitos. Resuelve los gaps semánticos y reescribe solo las filas wording=template mediante gherkinResolutions. Escribe gap-resolutions.json con herramientas nativas del CLI. Después, lee validation-feedback.json y corrige el mismo archivo si el recorder lo solicita. Termina cuando el feedback indique valid o planner-regeneration-required. No uses comandos de shell ni explores fwk-mobile-test.';
         }
         return repair
             ? generationMode === 'deterministic'

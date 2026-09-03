@@ -11,6 +11,7 @@ const SARCASTIC_PUNCHLINE = /\b(esto no es|impactante|felicidades|enhorabuena|sp
 const CORRECTION = /\b(ahora|vuelve|agrega|a[nñ]ade|valida|comprueba|graba|corrige|demuestra)\b/i;
 const DRY_LANGUAGE = /\b(se recorrieron|se comprob[oó]|se verific[oó]|resultado de negocio|criterio de aceptaci[oó]n|or[aá]culo|aserc[ií]on)\b/i;
 const PERSONAL_ATTACK = /\b(in[uú]til|idiota|est[uú]pido|tonto|incompetente|imb[eé]cil)\b/i;
+const STRONG_LANGUAGE = /\b(mierda|carajo|joder|co[jñ]o|maldito|pu[tñ]etero|porquer[ií]a|desmadre)\b/i;
 
 export const QA_ROAST_RESPONSE_SCHEMA = {
     type: 'object',
@@ -34,6 +35,7 @@ export function validateQaRoastResponse(document: unknown): QaRoastValidationRes
     if (record.schemaVersion !== 1) errors.push('schemaVersion debe ser 1.');
     if (roast.length < 40 || roast.length > 280) errors.push('El roast debe tener entre 40 y 280 caracteres.');
     if (!DIRECT_ACTION.test(roast)) errors.push('Habla directamente al QA y menciona una acción concreta que realizó.');
+    if (!STRONG_LANGUAGE.test(roast)) errors.push('Incluye una grosería dirigida al caso o al resultado; no escribas feedback corporativo amable.');
     if (!SARCASTIC_PUNCHLINE.test(roast)) errors.push('Incluye un remate sarcástico evidente, no otro diagnóstico técnico.');
     if (!CORRECTION.test(roast)) errors.push('Termina con una orden concreta para corregir la grabación.');
     if (DRY_LANGUAGE.test(roast)) errors.push('Evita voz pasiva y jerga técnica.');

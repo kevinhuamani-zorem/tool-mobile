@@ -627,7 +627,8 @@ export interface TestDesignIssue {
 }
 
 export interface TestDesignReview {
-    status: 'pass' | 'qa-required';
+    /** `qa-required` de artefactos anteriores se normaliza como `suggestion`. */
+    status: 'pass' | 'suggestion';
     summary: string;
     /** Compatibilidad/presentación: no forma parte del diagnóstico semántico. */
     roast?: string;

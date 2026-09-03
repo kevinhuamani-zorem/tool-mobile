@@ -62,7 +62,7 @@ test('genera el roast en una sesión headless separada y sin selectores', async 
             assert.equal(JSON.stringify(request).includes('999999999'), false);
             fs.writeFileSync(path.join(root, 'qa-roast-response.json'), JSON.stringify({
                 schemaVersion: 1,
-                roast: 'Seleccionaste Solo hoy y solo validaste que la opción existe. Impactante descubrimiento. Ahora comprueba los movimientos filtrados.',
+                roast: 'Seleccionaste Solo hoy y no validaste una mierda del resultado. Impactante descubrimiento. Ahora comprueba los movimientos filtrados.',
             }));
             return successfulRun();
         },
@@ -70,7 +70,7 @@ test('genera el roast en una sesión headless separada y sin selectores', async 
     const result = await new CopilotQaRoastGenerator(provider, 1000).generate(root, review());
     assert.equal(result.success, true);
     assert.equal(result.attempts, 1);
-    assert.match(result.roast, /Impactante descubrimiento/);
+    assert.match(result.roast, /una mierda del resultado/);
     assert.equal(prompt.includes('Se selecciona Solo hoy'), false);
     assert.match(prompt, /qa-roast-request\.json/);
     const run = JSON.parse(fs.readFileSync(path.join(root, 'qa-roast-run.json'), 'utf8'));
@@ -90,7 +90,7 @@ test('reintenta una vez cuando Copilot responde con tono técnico', async () => 
                 schemaVersion: 1,
                 roast: invocations === 1
                     ? 'Se recorrieron tres filtros y se comprobó que existen. Agrega una aserción.'
-                    : 'Tocaste tres filtros y solo comprobaste que existen. Esto no es testing, es un tour guiado. Ahora valida el resultado.',
+                    : 'Tocaste tres filtros y no validaste una mierda del resultado. Esto no es testing, es un tour guiado. Ahora valida el resultado.',
             }));
             return successfulRun();
         },

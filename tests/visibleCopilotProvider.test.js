@@ -124,6 +124,43 @@ test('PASS 2 mantiene Copilot abierto hasta que cambia una salida rechazada por 
     assert.deepEqual(evaluated, ['first-invalid', 'second-valid']);
 });
 
+test('PASS 2 entrega al validador oficial una salida con schema inválido para solicitar corrección', async () => {
+    const cwd = fixture();
+    const evaluated = [];
+    const provider = new VisibleCopilotProvider(delegate(), {
+        openInteractiveTerminalWithPrompt() {
+            setTimeout(() => {
+                fs.writeFileSync(path.join(cwd, 'response.json'), JSON.stringify({
+                    description: 'propiedades incorrectas',
+                }));
+            }, 15);
+            setTimeout(() => {
+                fs.writeFileSync(path.join(cwd, 'response.json'), JSON.stringify({
+                    recordingId: 'corrected',
+                    files: [{ layer: 'feature' }],
+                }));
+            }, 100);
+        },
+    }, 'darwin', 5);
+    const result = await provider.execute({
+        cwd,
+        prompt: 'corrige el contrato',
+        timeoutMs: 800,
+        stopOnValidatedOutput: {
+            outputFile: './response.json',
+            schemaFile: './response.schema.json',
+            acceptOutput(output) {
+                evaluated.push(output);
+                return output.recordingId === 'corrected';
+            },
+        },
+    });
+    assert.equal(result.success, true);
+    assert.equal(evaluated.length, 2);
+    assert.equal(evaluated[0].description, 'propiedades incorrectas');
+    assert.equal(evaluated[1].recordingId, 'corrected');
+});
+
 test('respuesta parcial no dispara importación y respeta timeout', async () => {
     const cwd = fixture();
     const provider = new VisibleCopilotProvider(delegate(), {
