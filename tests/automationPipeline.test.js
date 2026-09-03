@@ -2868,17 +2868,24 @@ test('launcher puede abrir terminal y ejecutar copilot con prompt automático', 
     assert.equal(Array.isArray(call.args), true);
     const joined = call.args.join(' ');
     assert.match(joined, /Terminal/);
-    assert.match(joined, /copilot/);
-    assert.match(joined, /agent-task\.md/);
+    assert.match(joined, /\.recorder-copilot-/);
     assert.doesNotMatch(joined, /\/bin\/cat/);
-    assert.match(joined, /\/bin\/rm -f/);
-    assert.match(joined, /'-i'/);
-    assert.match(joined, /--allow-tool=shell\(node\)/);
-    assert.match(joined, /--allow-tool=shell\(python3\)/);
-    assert.doesNotMatch(joined, /--deny-tool=bash/);
-    assert.match(joined, /--no-custom-instructions/);
-    assert.doesNotMatch(joined, /--output-format json/);
-    assert.doesNotMatch(joined, /Lee instructions\.md/);
+    assert.doesNotMatch(joined, /--allow-tool|--session-id|Lee agent-task\.md/);
+    const launchScript = fs.readdirSync(root)
+        .find(name => name.startsWith('.recorder-copilot-') && name.endsWith('.sh'));
+    assert.ok(launchScript);
+    const launchContent = fs.readFileSync(path.join(root, launchScript), 'utf8');
+    assert.match(launchContent, /copilot/);
+    assert.match(launchContent, /agent-task\.md/);
+    assert.match(launchContent, /\/bin\/rm -f/);
+    assert.match(launchContent, /'-i'/);
+    assert.match(launchContent, /--allow-tool=shell\(node\)/);
+    assert.match(launchContent, /--allow-tool=shell\(python3\)/);
+    assert.doesNotMatch(launchContent, /--deny-tool=bash/);
+    assert.match(launchContent, /--no-custom-instructions/);
+    assert.doesNotMatch(launchContent, /--output-format json/);
+    assert.doesNotMatch(launchContent, /Lee instructions\.md/);
+    assert.equal(fs.statSync(path.join(root, launchScript)).mode & 0o777, 0o700);
     assert.equal(
         fs.readFileSync(path.join(root, 'agent-task.md'), 'utf8'),
         result.prompt,
@@ -2900,7 +2907,11 @@ test('launcher no incrusta JSON ni comillas del contexto en AppleScript', () => 
     const appleScript = call.args.join(' ');
     assert.doesNotMatch(appleScript, /BEGIN_AGENT_CONTEXT_JSON/);
     assert.doesNotMatch(appleScript, /user's selector/);
-    assert.match(appleScript, /Lee agent-task\.md/);
+    assert.doesNotMatch(appleScript, /Lee agent-task\.md/);
+    const launchScript = fs.readdirSync(root)
+        .find(name => name.startsWith('.recorder-copilot-') && name.endsWith('.sh'));
+    assert.ok(launchScript);
+    assert.match(fs.readFileSync(path.join(root, launchScript), 'utf8'), /Lee agent-task\.md/);
     assert.equal(fs.readFileSync(path.join(root, 'agent-task.md'), 'utf8'), prompt);
 });
 

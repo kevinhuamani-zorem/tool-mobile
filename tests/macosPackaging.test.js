@@ -54,11 +54,14 @@ test('packaging config produces a mac app with the isolated mobile runtime', () 
     const packageJson = JSON.parse(fs.readFileSync(path.join(recorderRoot, 'package.json'), 'utf8'));
     assert.match(packageJson.scripts['package:mac'], /electron-builder --mac dir/);
     assert.match(packageJson.scripts['package:mac'], /runtime-origin:write/);
+    assert.match(packageJson.scripts['package:mac'], /package:clean:mac/);
     assert.match(packageJson.scripts['package:mac'], /node scripts\/reveal-macos-app\.js/);
     assert.equal(fs.existsSync(path.join(recorderRoot, 'scripts', 'reveal-macos-app.js')), true);
     assert.equal(fs.existsSync(path.join(recorderRoot, 'scripts', 'write-runtime-origin.js')), true);
     assert.equal(fs.existsSync(path.join(recorderRoot, 'build', 'icon.png')), true);
     assert.match(packageJson.scripts['dmg:mac'], /electron-builder --mac dmg/);
+    assert.match(packageJson.scripts['dmg:mac'], /package:clean:mac/);
+    assert.equal(fs.existsSync(path.join(recorderRoot, 'scripts', 'prepare-macos-output.js')), true);
     assert.equal(packageJson.build.mac.icon, 'build/icon.png');
     assert.equal(packageJson.build.asar, false);
     assert.equal(packageJson.build.mac.identity, null);

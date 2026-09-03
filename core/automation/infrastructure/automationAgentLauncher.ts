@@ -121,13 +121,19 @@ export class AutomationAgentLauncher {
             this.shellQuote(bootstrapPrompt),
             ...args.map(value => this.shellQuote(value)),
         ].join(' ');
+        const launchScript = path.join(packageDirectory, `.recorder-copilot-${sessionId}.sh`);
         const script = [
+            '#!/bin/zsh',
+            'set -u',
             `cd ${this.shellQuote(packageDirectory)}`,
+            `cleanup() { /bin/rm -f ${this.shellQuote(promptFile)} ${this.shellQuote(launchScript)}; }`,
+            'trap cleanup EXIT INT TERM',
             `echo ${this.shellQuote('[recorder] Copilot recibió el prompt del recorder. La revisión se abrirá al terminar.')}`,
             shellCmd,
-            `/bin/rm -f ${this.shellQuote(promptFile)}`,
-        ].join('; ');
-        const escaped = script.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        ].join('\n') + '\n';
+        fs.writeFileSync(launchScript, script, { encoding: 'utf8', mode: 0o700 });
+        const terminalCommand = `${this.shellQuote('/bin/zsh')} ${this.shellQuote(launchScript)}`;
+        const escaped = terminalCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const child = this.runner('osascript', [
             '-e',
             `tell application "Terminal" to do script "${escaped}"`,
