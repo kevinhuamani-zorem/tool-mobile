@@ -97,7 +97,7 @@ contextBridge.exposeInMainWorld('api', {
     getAutomationModelUsage: () => ipcRenderer.invoke('get-automation-model-usage'),
     launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean; model?: string }) =>
         ipcRenderer.invoke('launch-automation-agent', input),
-    importAutomationResponse: (input?: { manualCorrection?: boolean }) =>
+    importAutomationResponse: (input?: { manualCorrection?: boolean; reviewOnly?: boolean }) =>
         ipcRenderer.invoke('import-automation-response', input),
     revalidateAutomationResponse: (reviewedContents: Record<string, string>) =>
         ipcRenderer.invoke('revalidate-automation-response', reviewedContents),

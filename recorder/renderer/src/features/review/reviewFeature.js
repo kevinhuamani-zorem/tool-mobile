@@ -231,13 +231,13 @@ export function createReviewFeature(deps) {
     function showQaRequiredDecisions(items) {
         if (!automationQaRequired || !automationQaDecisionList) return;
         const title = automationQaRequired.querySelector('h3');
-        if (title) title.textContent = 'Necesitamos confirmar una decisión';
-        if (btnConfirmQaDecision) btnConfirmQaDecision.textContent = 'Confirmar y continuar';
+        if (title) title.textContent = 'Sugerencias para completar la propuesta';
+        if (btnConfirmQaDecision) btnConfirmQaDecision.textContent = 'Usar esta sugerencia';
         pendingQaDecisionPrompts = Array.isArray(items) ? items : [];
         automationQaDecisionList.innerHTML = '';
         if (!pendingQaDecisionPrompts.length) {
             automationQaDecisionList.innerHTML =
-                '<li class="step-empty">No se recibieron opciones automáticas; revisa la grabación y vuelve a analizar.</li>';
+                '<li class="step-empty">No se recibieron opciones automáticas. Puedes continuar trabajando sobre el borrador.</li>';
         } else {
             pendingQaDecisionPrompts.forEach(item => {
                 const option = document.createElement('li');
@@ -264,14 +264,14 @@ export function createReviewFeature(deps) {
     function resetTestDesignReviewSummary() {
         if (automationAgentSummaryIcon) automationAgentSummaryIcon.textContent = '↗';
         if (automationAgentSummaryTitle) {
-            automationAgentSummaryTitle.textContent = 'Generación automática deterministic-first';
+            automationAgentSummaryTitle.textContent = 'Propuesta generada por el agente';
         }
         if (automationAgentSummaryDescription) {
             automationAgentSummaryDescription.textContent =
-                'Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.';
+                'Revisa los archivos y corrige manualmente o con Copilot lo que consideres necesario.';
             automationAgentSummaryDescription.style.display = '';
         }
-        if (automationPipelineExecution) automationPipelineExecution.style.display = '';
+        if (automationPipelineExecution) automationPipelineExecution.style.display = 'none';
         if (automationPackageStatus) automationPackageStatus.style.display = '';
     }
 
@@ -298,7 +298,7 @@ export function createReviewFeature(deps) {
     }
 
     function setWizardPage(page) {
-        wizardPage = Math.max(1, Math.min(4, page));
+        wizardPage = Math.max(1, Math.min(3, page));
         wizardPages.forEach(element => {
             element.classList.toggle('active', Number(element.dataset.wizardPage) === wizardPage);
         });
@@ -312,10 +312,9 @@ export function createReviewFeature(deps) {
         const labels = [
             'Revisa la evidencia grabada',
             'Analiza el caso a generar',
-            'Generación automática en progreso',
-            'Revisa y aplica cambios'
+            'Revisa, corrige y aplica cambios'
         ];
-        enlazarHint.textContent = `Paso ${wizardPage} de 4 · ${labels[wizardPage - 1]}`;
+        enlazarHint.textContent = `Paso ${wizardPage} de 3 · ${labels[wizardPage - 1]}`;
         if (btnWizardNext) {
             btnWizardNext.textContent = wizardPage === 1
                 ? 'Analizar grabación →'
@@ -595,19 +594,25 @@ export function createReviewFeature(deps) {
     }
 
     async function importAutomationResponse(preserveReviewed = false, manualCorrection = false) {
-        const result = await api.importAutomationResponse({ manualCorrection });
+        const result = await api.importAutomationResponse({ manualCorrection, reviewOnly: true });
         await copilotModel.refresh();
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || null;
-            automationPackageStatus.textContent = '✗ ' + (result.error || 'Respuesta inválida');
+            state.automationWorkflow = true;
+            if (result.draft) {
+                generation.showPreviewDocuments(result.draft, preserveReviewed, false);
+            }
+            automationPackageStatus.textContent = '⚠ Borrador importado con observaciones: ' +
+                (result.error || 'requiere revisión manual');
             automationPackageStatus.className = 'generate-result err';
             setCorrectionReimportVisible(
                 true,
                 manualCorrection
-                    ? 'Puedes continuar corrigiendo gap-resolutions.json y reimportar todas las veces necesarias.'
-                    : 'Pide al agente que corrija gap-resolutions.json; el recorder regenerará agent-response.json al reimportar.'
+                    ? 'La corrección fue importada como borrador. Puedes seguir editando y reimportar todas las veces necesarias.'
+                    : 'La propuesta está disponible para revisión. Edítala aquí o pide al agente que corrija gap-resolutions.json y vuelve a importar.'
             );
-            return result;
+            setWizardPage(3);
+            return { ...result, reviewAvailable: Boolean(result.draft) };
         }
         state.invalidAutomationDraft = null;
         setCorrectionReimportVisible(false);
@@ -616,7 +621,8 @@ export function createReviewFeature(deps) {
         generation.showPreviewDocuments(result, preserveReviewed);
         automationPackageStatus.textContent = '✓ Automatización validada y lista para revisión';
         automationPackageStatus.className = 'generate-result ok';
-        return result;
+        setWizardPage(3);
+        return { ...result, reviewAvailable: true };
     }
 
     async function revalidateReviewedAutomation() {
@@ -655,6 +661,7 @@ export function createReviewFeature(deps) {
         copilotModel.reset();
         try {
         resetTestDesignReviewSummary();
+        if (automationPipelineExecution) automationPipelineExecution.style.display = '';
         automationQaRequired && (automationQaRequired.style.display = 'none');
         setCorrectionReimportVisible(false);
         if (btnRunAutomationPipeline) disableBtn(btnRunAutomationPipeline, '⏳ Generando...');
@@ -706,7 +713,7 @@ export function createReviewFeature(deps) {
                 if (code === 'PLANNER_REGENERATION_REQUIRED') {
                     if (launched.draft) {
                         generation.showPreviewDocuments(launched.draft, false, false);
-                        setWizardPage(4);
+                        setWizardPage(3);
                     }
                     setCorrectionReimportVisible(
                         true,
@@ -725,15 +732,15 @@ export function createReviewFeature(deps) {
                         showQaRequiredDecisions(qa.decisions || []);
                     } else {
                         showQaRequiredDecisions([{
-                            title: 'Se requiere intervención de QA',
-                            description: qa?.error || 'Existe una decisión bloqueante que no se puede resolver automáticamente.',
+                            title: 'Sugerencia para QA',
+                            description: qa?.error || 'Existe una decisión que el agente no pudo resolver automáticamente.',
                             options: [],
                         }]);
                     }
                     updateProductStage(
                         'WAITING_FOR_QA',
-                        'Necesitamos confirmar una decisión.',
-                        'Revisa las opciones y vuelve a intentar la generación.',
+                        'El agente dejó una decisión pendiente.',
+                        'Puedes usar una sugerencia o continuar trabajando sobre cualquier borrador disponible.',
                         true
                     );
                 } else if (launched.fallbackSuggested) {
@@ -767,6 +774,16 @@ export function createReviewFeature(deps) {
                 }
                 automationPackageStatus.textContent = `✗ ${launched.error || 'No se pudo continuar con la generación automática.'}`;
                 automationPackageStatus.className = 'generate-result err';
+                if (!launched.draft) {
+                    const recovered = await importAutomationResponse(true, true);
+                    if (!recovered.reviewAvailable) setWizardPage(3);
+                } else {
+                    setCorrectionReimportVisible(
+                        true,
+                        'El borrador está disponible. Puedes editarlo o pedir una corrección al agente y reimportarla.'
+                    );
+                    setWizardPage(3);
+                }
                 if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
                 automationPipelineRunning = false;
                 return;
@@ -783,13 +800,14 @@ export function createReviewFeature(deps) {
                 imported.error || 'Valida los detalles e inténtalo de nuevo.',
                 true
             );
+            if (!imported.reviewAvailable) setWizardPage(3);
             if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
             automationPipelineRunning = false;
             return;
         }
         updateProductStage('VALIDATING', 'Validando resultado...', 'La validación contractual finalizó correctamente.');
         updateProductStage('READY_FOR_REVIEW', 'Automatización generada.', 'Revisa los cambios antes de aplicarlos.');
-        setWizardPage(4);
+        setWizardPage(3);
         if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
         automationPipelineRunning = false;
         } catch (error) {
@@ -896,10 +914,10 @@ export function createReviewFeature(deps) {
             if (!imported.success) {
                 updateProductStage(
                     'VALIDATING',
-                    'La corrección todavía no es válida.',
+                    'Corrección importada con observaciones.',
                     (imported.error || 'Pide al agente que continúe corrigiendo la propuesta.') +
-                        ' Puedes seguir modificando y reimportar; las correcciones manuales no tienen límite.',
-                    true
+                        ' El borrador sigue disponible para editar y reimportar.',
+                    false
                 );
                 enableBtn(btnReimportAutomationCorrection);
                 automationPipelineRunning = false;
@@ -909,7 +927,7 @@ export function createReviewFeature(deps) {
             updateProductStage('READY_FOR_REVIEW', 'Automatización corregida.', 'Revisa los cambios antes de aplicarlos.');
             enableBtn(btnReimportAutomationCorrection);
             automationPipelineRunning = false;
-            setWizardPage(4);
+            setWizardPage(3);
         });
 
         on(btnStartAutomationCorrection, 'click', async () => {
@@ -963,7 +981,7 @@ export function createReviewFeature(deps) {
             if (!state.invalidAutomationDraft) return;
             state.automationWorkflow = true;
             generation.showPreviewDocuments(state.invalidAutomationDraft, false, false);
-            setWizardPage(4);
+            setWizardPage(3);
         });
 
         on(btnImproveTestDesign, 'click', () => {
@@ -1007,7 +1025,7 @@ export function createReviewFeature(deps) {
                 state.automationWorkflow = true;
                 generation.showPreviewDocuments(result.imported, true);
                 updateProductStage('READY_FOR_REVIEW', 'Automatización generada.', 'Revisa los cambios antes de aplicarlos.');
-                setWizardPage(4);
+                setWizardPage(3);
                 return;
             }
             updateProductStage(
@@ -1033,7 +1051,6 @@ export function createReviewFeature(deps) {
                     enlazarHint.textContent = '⚠ Completa el objetivo y el resultado esperado.';
                     return;
                 }
-                setWizardPage(3);
                 await runAutomationPipeline();
                 return;
             }
@@ -1138,7 +1155,7 @@ export function createReviewFeature(deps) {
             if (txtGherkin) txtGherkin.value = gherkinLines.join('\n');
 
             setStatus(`✓ ${stepTexts.length} steps nuevos validados sin impacto`, '#00CC00');
-            setWizardPage(4);
+            setWizardPage(3);
             generation.setGenerate(
                 'Revisa los nombres sugeridos, completa el TC y presiona Actualizar preview.',
                 ''

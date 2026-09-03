@@ -25,19 +25,20 @@ const automationHandlers = fs.readFileSync(
     'utf8',
 );
 
-test('wizard expone flujo de producto en 4 pasos y oculta agente del happy path', () => {
+test('wizard expone evidencia, análisis y revisión sin un paso bloqueante de generación', () => {
     assert.match(modal, /\['1', 'Evidencia'\]/);
     assert.match(modal, /\['2', 'Análisis'\]/);
-    assert.match(modal, /\['3', 'Generación'\]/);
-    assert.match(modal, /\['4', 'Revisión'\]/);
+    assert.match(modal, /\['3', 'Revisión'\]/);
+    assert.doesNotMatch(modal, /\['3', 'Generación'\]/);
+    assert.doesNotMatch(modal, /\['4', 'Revisión'\]/);
     assert.doesNotMatch(modal, /\['3', 'Agente'\]/);
     assert.doesNotMatch(modal, /PASO 5/);
-    assert.match(modal, /Paso 1 de 4/);
+    assert.match(modal, /Paso 1 de 3/);
 });
 
 test('generación automática muestra progreso visual y oculta controles técnicos', () => {
     assert.match(modal, /id="btnRunAutomationPipeline"/);
-    assert.match(modal, /Iniciar generación automática/);
+    assert.match(modal, /Generar borrador/);
     assert.match(modal, /id="automationWorkingState"/);
     assert.doesNotMatch(modal, /role="progressbar"/);
     assert.doesNotMatch(modal, /id="automationProgressTrack"/);
@@ -51,9 +52,7 @@ test('generación automática muestra progreso visual y oculta controles técnic
     assert.match(modal, /El recorder detectó errores\. ¿Deseas corregirlos con Copilot\?/);
     assert.match(modal, /id="btnUsePreviousAutomation"/);
     assert.match(modal, /Usar generación anterior/);
-    assert.match(modal, /data-product-stage="ANALYZING"/);
-    assert.match(modal, /data-product-stage="VALIDATING"/);
-    assert.match(modal, /data-product-stage="READY_FOR_REVIEW"/);
+    assert.doesNotMatch(modal, /id="automationPipelineStages"/);
     assert.doesNotMatch(modal, /Opciones avanzadas \/ diagnóstico/);
     assert.doesNotMatch(modal, /id="btnPrepareAutomation"/);
     assert.doesNotMatch(modal, /id="btnLaunchAutomation"/);
@@ -110,8 +109,10 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /api\.revalidateAutomationResponse\(reviewedContents\)/);
     assert.match(generation, /btnGenerate\.disabled = true/);
     assert.match(review, /updateProductStage\('READY_FOR_REVIEW'/);
-    assert.match(review, /setWizardPage\(4\);/);
-    assert.match(review, /wizardPage = Math\.max\(1, Math\.min\(4, page\)\)/);
+    assert.doesNotMatch(review, /setWizardPage\(4\);/);
+    assert.match(review, /wizardPage = Math\.max\(1, Math\.min\(3, page\)\)/);
+    assert.match(review, /reviewOnly: true/);
+    assert.match(review, /reviewAvailable: Boolean\(result\.draft\)/);
     assert.match(review, /await runAutomationPipeline\(\);/);
 });
 
@@ -131,7 +132,9 @@ test('reimportar y revalidar rematerializan gap-resolutions cuando cambió', () 
     assert.match(automationHandlers, /sha256File\(responseFile\)/);
     assert.match(review, /Procesando gap-resolutions\.json, regenerando la propuesta/);
     assert.match(review, /corrija gap-resolutions\.json/);
-    assert.match(review, /correcciones manuales no tienen límite/);
+    assert.match(review, /borrador sigue disponible para editar y reimportar/);
+    assert.match(automationHandlers, /const reviewOnly = input\?\.reviewOnly !== false/);
+    assert.match(automationHandlers, /reviewOnly \|\| manualCorrection/);
     assert.match(
         automationHandlers,
         /manualCorrection[\s\S]*?trackRepair: false[\s\S]*?manualCorrection: true/,
@@ -145,7 +148,7 @@ test('main usa Copilot visible y deja que el pipeline importe la respuesta valid
     assert.doesNotMatch(main, /openExecutionMonitor\(activeAutomationPackage\)/);
     assert.match(review, /qaRoastMode: isQaRoastModeEnabled\(\)/);
     assert.match(review, /const imported = await importAutomationResponse\(true\);/);
-    assert.match(review, /setWizardPage\(4\);/);
+    assert.match(review, /setWizardPage\(3\);/);
 });
 
 test('un error propiedad del planner libera el flujo y muestra el borrador para revalidar', () => {
@@ -153,6 +156,7 @@ test('un error propiedad del planner libera el flujo y muestra el borrador para 
     assert.match(automationHandlers, /trackRepair: false/);
     assert.match(review, /code === 'PLANNER_REGENERATION_REQUIRED'/);
     assert.match(review, /generation\.showPreviewDocuments\(launched\.draft, false, false\)/);
+    assert.match(review, /const recovered = await importAutomationResponse\(true, true\)/);
     assert.match(review, /El plan necesita regenerarse o revisarse/);
 });
 
@@ -166,7 +170,7 @@ test('una revisión funcional se muestra como sugerencia y no bloquea la automat
     assert.match(modal, /Volver y mejorar la grabación/);
     assert.match(review, /Las sugerencias de Copilot son informativas y no invalidan la automatización/);
     assert.match(review, /const imported = await importAutomationResponse\(true\)/);
-    assert.match(review, /setWizardPage\(4\)/);
+    assert.match(review, /setWizardPage\(3\)/);
 });
 
 test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {

@@ -52,6 +52,8 @@ export function createGenerationFeature(deps) {
     const btnCopyCodePath = document.getElementById('btnCopyCodePath');
     const btnResetCode = document.getElementById('btnResetCode');
     const lblGenerationFileCount = document.getElementById('lblGenerationFileCount');
+    const reviewValidationIcon = document.getElementById('reviewValidationIcon');
+    const reviewValidationTitle = document.getElementById('reviewValidationTitle');
 
     const GENERATED_FILES_STORAGE_KEY = 'appiumVisualRecorder.generatedFiles.v1';
 
@@ -336,13 +338,17 @@ export function createGenerationFeature(deps) {
         showPreviewDocument(0);
         if (valid) {
             enableBtn(btnGenerate);
+            if (reviewValidationIcon) reviewValidationIcon.textContent = '✓';
+            if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación correcta';
             lblGenerationFileCount.textContent = `${state.previewDocuments.length} archivo(s) validados al 100%.`;
             setGenerate(`✓ Propuesta válida · ${state.previewDocuments.length} capas · lista para revisión`, 'ok');
         } else {
             btnGenerate.disabled = true;
+            if (reviewValidationIcon) reviewValidationIcon.textContent = '⚠';
+            if (reviewValidationTitle) reviewValidationTitle.textContent = 'Borrador con observaciones';
             lblGenerationFileCount.textContent =
-                `${state.previewDocuments.length} archivo(s) recuperados · edítalos y pulsa Revalidar.`;
-            setGenerate('✗ La propuesta anterior debe revalidarse antes de aplicar.', 'err');
+                `${state.previewDocuments.length} archivo(s) importados con observaciones · puedes editarlos o reimportarlos.`;
+            setGenerate('⚠ Borrador disponible para revisión. Revalida únicamente cuando quieras aplicarlo.', 'err');
         }
     }
 

@@ -15,8 +15,7 @@ export function ScenarioBuilderModal() {
           {[
             ['1', 'Evidencia'],
             ['2', 'Análisis'],
-            ['3', 'Generación'],
-            ['4', 'Revisión']
+            ['3', 'Revisión']
           ].map(([number, label], index) => (
             <button type="button" className={`wizard-step${index === 0 ? ' active' : ''}`}
                     data-wizard-target={index + 1} key={number}>
@@ -104,6 +103,20 @@ export function ScenarioBuilderModal() {
                 <p>Completa el objetivo y el resultado esperado para iniciar el análisis.</p>
               </div>
             </div>
+            <div id="automationPipelineExecution" className="automation-background-status" style={{display: 'none'}}>
+              <button className="btn btn-blue" id="btnRunAutomationPipeline" style={{display: 'none'}}>Generar borrador</button>
+              <div id="automationWorkingState" className="automation-working-state is-idle" aria-live="polite">
+                <div className="automation-working-heading">
+                  <span className="automation-spinner" aria-hidden="true" />
+                  <div className="automation-working-copy">
+                    <strong id="automationWorkingTitle">Preparando la propuesta</strong>
+                    <span id="automationWorkingDetail">El agente trabajará en segundo plano.</span>
+                  </div>
+                </div>
+              </div>
+              <div id="automationPipelineStatus" className="generate-result" />
+              <div id="automationPipelineSummary" className="wizard-help" />
+            </div>
             <div id="wizardGherkinHost" style={{display: 'none'}}>
               <div id="scenarioRows" className="scenario-rows wizard-gherkin-rows">
                 <div className="scenario-empty-hint" />
@@ -113,41 +126,15 @@ export function ScenarioBuilderModal() {
 
           <section className="wizard-page" data-wizard-page="3">
             <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 3</span><h3>Generando automatización</h3></div>
-              <span className="wizard-help">El proceso usa estados reales del pipeline y avanza automáticamente.</span>
+              <div><span className="eyebrow">PASO 3</span><h3>Revisa y trabaja sobre la propuesta</h3></div>
+              <span className="wizard-help">El borrador siempre se puede revisar, editar y reimportar; las observaciones no bloquean esta pantalla.</span>
             </div>
             <div id="automationAgentSummary" className="generation-summary automation-agent-summary">
               <span id="automationAgentSummaryIcon" className="generation-icon">↗</span>
               <div className="automation-agent-summary-content">
-                <h3 id="automationAgentSummaryTitle">Generación automática deterministic-first</h3>
-                <p id="automationAgentSummaryDescription">Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.</p>
+                <h3 id="automationAgentSummaryTitle">Propuesta generada por el agente</h3>
+                <p id="automationAgentSummaryDescription">Revisa los archivos y corrige manualmente o con Copilot lo que consideres necesario.</p>
                 <p className="copilot-model-usage-inline" data-copilot-model-usage>El modelo usado aparecerá al terminar la generación.</p>
-              </div>
-            </div>
-            <div id="automationPipelineExecution">
-              <div className="automation-agent-actions">
-                <button className="btn btn-blue" id="btnRunAutomationPipeline">Iniciar generación automática</button>
-              </div>
-              <div id="automationWorkingState" className="automation-working-state is-idle" aria-live="polite">
-                <div className="automation-working-heading">
-                  <span className="automation-spinner" aria-hidden="true" />
-                  <div className="automation-working-copy">
-                    <strong id="automationWorkingTitle">Listo para generar</strong>
-                    <span id="automationWorkingDetail">El progreso aparecerá aquí al iniciar.</span>
-                  </div>
-                </div>
-              </div>
-              <div id="automationPipelineStatus" className="generate-result">Listo para iniciar.</div>
-              <ul id="automationPipelineStages" className="steps-list wizard-action-list">
-                <li data-product-stage="ANALYZING">○ Analizando grabación</li>
-                <li data-product-stage="RESOLVING_CONTEXT">○ Buscando componentes reutilizables</li>
-                <li data-product-stage="RESOLVING_DECISIONS">○ Resolviendo decisiones pendientes</li>
-                <li data-product-stage="GENERATING">○ Generando automatización</li>
-                <li data-product-stage="VALIDATING">○ Validando resultado</li>
-                <li data-product-stage="READY_FOR_REVIEW">○ Listo para revisión</li>
-              </ul>
-              <div id="automationPipelineSummary" className="wizard-help" style={{marginTop: '8px'}}>
-                Inicia la generación para ver el progreso.
               </div>
             </div>
             <div id="automationQaRequired" className="generation-summary" style={{display: 'none', marginTop: '10px'}}>
@@ -165,7 +152,7 @@ export function ScenarioBuilderModal() {
               <div>
                 <strong id="automationCorrectionTitle">El recorder detectó errores. ¿Deseas corregirlos con Copilot?</strong>
                 <small id="automationCorrectionHint">
-                  La propuesta no se aplicará hasta que supere la validación oficial.
+                  Puedes editar el borrador, corregirlo con Copilot y reimportarlo cuantas veces necesites.
                 </small>
               </div>
               <div className="automation-correction-actions">
@@ -185,12 +172,6 @@ export function ScenarioBuilderModal() {
             </div>
             <div className="wizard-link-layout" style={{display: 'none'}}>
               <ul id="wizardLinkActions" /><div id="wizardLinkRows" />
-            </div>
-          </section>
-
-          <section className="wizard-page" data-wizard-page="4">
-            <div className="wizard-page-heading">
-              <div><span className="eyebrow">PASO 4</span><h3>Revisa y aplica la automatización</h3></div>
             </div>
             <p className="wizard-help">Los nombres propuestos, el TC y el contenido final se editan directamente en los archivos del preview.</p>
             <section id="testDesignSuggestionsPanel" className="qa-observations-panel" style={{display: 'none'}}>
@@ -246,9 +227,9 @@ export function ScenarioBuilderModal() {
             </div>
             <div className="review-approval-panel">
               <div className="review-validation-status">
-                <span className="review-validation-icon">✓</span>
+                <span className="review-validation-icon" id="reviewValidationIcon">✓</span>
                 <div>
-                  <h3>Validación correcta</h3>
+                  <h3 id="reviewValidationTitle">Propuesta lista para revisar</h3>
                   <p id="lblGenerationFileCount">Se escribirán únicamente los archivos mostrados en la revisión.</p>
                 </div>
               </div>
@@ -262,7 +243,7 @@ export function ScenarioBuilderModal() {
         </main>
 
         <footer className="workflow-wizard-footer">
-          <span className="enlazar-hint" id="enlazarHint">Paso 1 de 4 · Revisa las acciones</span>
+          <span className="enlazar-hint" id="enlazarHint">Paso 1 de 3 · Revisa las acciones</span>
           <div>
             <button className="btn btn-dark" id="btnWizardBack" disabled>← Atrás</button>
             <button className="btn btn-green" id="btnWizardNext">Continuar →</button>

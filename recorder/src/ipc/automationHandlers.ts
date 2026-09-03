@@ -968,16 +968,19 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
 
     ipcMain.handle('import-automation-response', async (
         _,
-        input?: { manualCorrection?: boolean },
+        input?: { manualCorrection?: boolean; reviewOnly?: boolean },
     ) => {
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
             rematerializeGapResolutions(state.activeAutomationPackage);
             currentModelUsage();
             const manualCorrection = input?.manualCorrection === true;
+            const reviewOnly = input?.reviewOnly !== false;
             return await importAutomationResponseFromPackage(state.activeAutomationPackage, {
-                ...(manualCorrection ? {
+                ...(reviewOnly || manualCorrection ? {
                     trackRepair: false,
+                } : {}),
+                ...(manualCorrection ? {
                     manualCorrection: true,
                 } : {}),
             });
