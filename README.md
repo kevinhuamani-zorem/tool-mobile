@@ -365,6 +365,38 @@ resultado válido a Revisión. La apertura manual, el prompt y la reimportación
 se conservan en **Opciones avanzadas / diagnóstico** para corregir una
 propuesta que no superó el contrato.
 
+### Permisos de Copilot
+
+El recorder añade `--add-dir <paquete>`, `--allow-tool=read`,
+`--allow-tool=write`, `--allow-tool=shell(node)`,
+`--allow-tool=shell(python)` y `--allow-tool=shell(python3)` tanto al
+lanzamiento visible como al headless de automatización. No activa
+`--allow-all`, `--allow-all-paths` ni `--allow-all-urls`.
+Los prompts permiten los intérpretes para validaciones del paquete, no para
+explorar o modificar el framework. La sesión del modo troll no recibe estos
+permisos de ejecución.
+
+La confianza inicial de la carpeta, autenticación, accesos externos y otros
+comandos todavía pueden requerir confirmación. Autorizar un intérprete **no
+es un sandbox de sistema operativo**: su código puede acceder a recursos del
+usuario; ejecuta únicamente paquetes y scripts confiables. Los permisos no
+alteran sesiones de Copilot que ya estaban abiertas.
+
+### Selección de modelo
+
+En el constructor del caso, **Modelo de Copilot** comienza en **Auto**.
+Puedes elegir **Otro modelo** e introducir el ID disponible en `/model` de tu
+Copilot. La elección se recuerda en esa instalación y se envía con `--model`
+en la siguiente generación o corrección; no cambia una sesión ya abierta.
+Un modelo fijo reduce variaciones, pero no garantiza respuestas idénticas.
+
+Al terminar, el wizard muestra **Solicitado** y **Usado**. Si Auto usa varios
+modelos durante la ejecución, se listan todos los reportados. Si el CLI no
+expone esa información, aparece **no informado por Copilot**. Los modelos
+auxiliares del CLI y la sesión del modo troll no se atribuyen a la automatización.
+Si tu cuenta no tiene acceso al modelo elegido, selecciona Auto u otro ID;
+el recorder no hace un cambio silencioso a Auto.
+
 El paquete contiene como máximo el contexto mínimo necesario:
 
 - `scenario.json` normalizado;

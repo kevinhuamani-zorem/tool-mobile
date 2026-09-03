@@ -1,9 +1,13 @@
 import { AgentProviderErrorCode } from '../contracts';
+import { AgentModelUsage } from '../domain/agentModel';
 
 export interface AgentProviderRunInput {
     cwd: string;
     prompt: string;
     timeoutMs: number;
+    model?: string;
+    /** Disable interpreter approvals for presentation-only tasks such as QA roast. */
+    allowValidationScripts?: boolean;
     traceFile?: string;
     traceLabel?: string;
     stopOnValidatedOutput?: {
@@ -26,6 +30,7 @@ export interface AgentDeniedPathStats {
 }
 
 export interface AgentProviderRunResult {
+    modelUsage?: AgentModelUsage;
     success: boolean;
     exitCode: number | null;
     stdout: string;

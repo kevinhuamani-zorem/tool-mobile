@@ -94,7 +94,8 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('generate-fwk-files', request, previewToken, reviewedContents),
     prepareAutomationPackage: (input: any) => ipcRenderer.invoke('prepare-automation-package', input),
     prepareAutomationRegeneration: (input: any) => ipcRenderer.invoke('prepare-automation-regeneration', input),
-    launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean }) =>
+    getAutomationModelUsage: () => ipcRenderer.invoke('get-automation-model-usage'),
+    launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean; model?: string }) =>
         ipcRenderer.invoke('launch-automation-agent', input),
     importAutomationResponse: (input?: { manualCorrection?: boolean }) =>
         ipcRenderer.invoke('import-automation-response', input),

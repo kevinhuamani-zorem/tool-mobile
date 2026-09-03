@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { VisibleCopilotProvider } = require('../dist/core/automation');
+const { randomUUID } = require('node:crypto');
 
 function fixture() {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'visible-copilot-'));
@@ -41,6 +42,43 @@ function delegate(result = {}) {
         },
     };
 }
+
+test('terminal identifica solo su sesión y reporta modelo real sin esperar cierre de Copilot', async () => {
+    const cwd = fixture();
+    const previousHome = process.env.COPILOT_HOME;
+    process.env.COPILOT_HOME = cwd;
+    const sessionId = randomUUID();
+    const sessionDir = path.join(cwd, 'session-state', sessionId);
+    fs.mkdirSync(sessionDir, { recursive: true });
+    fs.mkdirSync(path.join(cwd, 'session-state', 'other-session'));
+    fs.writeFileSync(path.join(cwd, 'session-state', 'other-session', 'events.jsonl'), JSON.stringify({
+        type: 'session.auto_mode_resolved', data: { chosenModel: 'wrong-model' },
+    }) + '\n');
+    let requested;
+    const provider = new VisibleCopilotProvider(delegate(), {
+        openInteractiveTerminalWithPrompt(_name, _cwd, _prompt, model) {
+            requested = model;
+            setTimeout(() => {
+                fs.writeFileSync(path.join(sessionDir, 'events.jsonl'), JSON.stringify({
+                    type: 'assistant.message', data: { model: 'gpt-5.6-terra', content: 'private text' },
+                }) + '\n');
+                fs.writeFileSync(path.join(cwd, 'response.json'), JSON.stringify({ recordingId: 'rec', files: [{}] }));
+            }, 10);
+            return { sessionId };
+        },
+    }, 'darwin', 10);
+    try {
+        const result = await provider.execute({ cwd, prompt: 'test', model: 'gpt-5.6-terra', timeoutMs: 1000,
+            stopOnValidatedOutput: { outputFile: 'response.json', schemaFile: 'response.schema.json' } });
+        assert.equal(requested, 'gpt-5.6-terra');
+        assert.deepEqual(result.modelUsage, { requestedModel: 'gpt-5.6-terra', actualModels: ['gpt-5.6-terra'] });
+        assert.equal(result.stdout, '');
+    } finally {
+        if (previousHome === undefined) delete process.env.COPILOT_HOME;
+        else process.env.COPILOT_HOME = previousHome;
+        fs.rmSync(cwd, { recursive: true, force: true });
+    }
+});
 
 test('PASS 1 permanece en el provider controlado', async () => {
     const cwd = fixture();

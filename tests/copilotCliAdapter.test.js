@@ -18,6 +18,29 @@ function fakeChild() {
     return child;
 }
 
+test('permisos headless autorizan paquete y validadores sin habilitar permisos globales', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "copilot package ' permisos-"));
+    let captured;
+    const adapter = new CopilotCliAdapter((_command, args) => {
+        captured = args;
+        const child = fakeChild();
+        process.nextTick(() => child.emit('close', 0, null));
+        return child;
+    }, 'copilot', ['-p']);
+    try {
+        await adapter.execute({ cwd: root, prompt: 'validar', timeoutMs: 1000 });
+        assert.equal(captured[captured.indexOf('--add-dir') + 1], fs.realpathSync(root));
+        for (const flag of ['--allow-tool=read', '--allow-tool=write', '--allow-tool=shell(node)',
+            '--allow-tool=shell(python)', '--allow-tool=shell(python3)', '--no-custom-instructions']) {
+            assert.ok(captured.includes(flag), flag);
+        }
+        assert.equal(captured.some(arg => /^--allow-all|^--yolo|^--deny-tool=bash$/.test(arg)), false);
+        await adapter.execute({ cwd: root, prompt: 'roast', timeoutMs: 1000, allowValidationScripts: false });
+        assert.ok(captured.includes('--deny-tool=shell'));
+        assert.equal(captured.some(arg => arg.startsWith('--allow-tool=shell(')), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('adapter reporta AGENT_NOT_INSTALLED cuando el comando no existe', async () => {
     const adapter = new CopilotCliAdapter((_command, _args, _options) => {
         const child = fakeChild();
@@ -164,6 +187,7 @@ test('adapter corta por timeout aunque el hijo ignore SIGTERM', async () => {
         spawn,
         process.execPath,
         ['-e', script, '{prompt}'],
+        'auto',
         50
     );
     const started = Date.now();
@@ -177,6 +201,41 @@ test('adapter corta por timeout aunque el hijo ignore SIGTERM', async () => {
     assert.equal(result.errorCode, 'AGENT_TIMEOUT');
     assert.equal(result.timedOut, true);
     assert.equal(elapsed < 1_500, true);
+});
+
+test('modelo por ejecución prevalece sobre args y reporta auto resuelto sin modelos auxiliares', async () => {
+    let captured;
+    const adapter = new CopilotCliAdapter((_command, args) => {
+        captured = args;
+        const child = fakeChild();
+        process.nextTick(() => {
+            const event = JSON.stringify({ type: 'session.auto_mode_resolved', data: { chosenModel: 'gpt-5.6-terra' } });
+            child.stdout.write(event.slice(0, 30));
+            child.stdout.write(event.slice(30) + '\n');
+            child.stdout.write(JSON.stringify({ type: 'model.model_call_started', data: { model: 'auxiliary-model' } }) + '\n');
+            child.stdout.write(JSON.stringify({ type: 'assistant.message', data: { model: 'gpt-5.6-terra', content: 'secret' } }));
+            child.emit('close', 0, null);
+        });
+        return child;
+    }, 'copilot', ['-p', '--model=old-model']);
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'test', timeoutMs: 1000, model: 'auto' });
+    assert.ok(!captured.includes('--model=old-model'));
+    assert.deepEqual(result.modelUsage, { requestedModel: 'auto', actualModels: ['gpt-5.6-terra'] });
+});
+
+test('modelo fijo se envía sin inventar modelo usado cuando no hay telemetría', async () => {
+    let captured;
+    const adapter = new CopilotCliAdapter((_command, args) => {
+        captured = args;
+        const child = fakeChild();
+        process.nextTick(() => child.emit('close', 1, null));
+        return child;
+    }, 'copilot', ['-p', '--model', 'old-model']);
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'test', timeoutMs: 1000, model: 'gpt-5.6-terra' });
+    assert.equal(captured[captured.indexOf('--model') + 1], 'gpt-5.6-terra');
+    assert.equal(captured.includes('old-model'), false);
+    assert.equal(result.success, false);
+    assert.deepEqual(result.modelUsage, { requestedModel: 'gpt-5.6-terra', actualModels: [] });
 });
 
 test('adapter no corta cuando una herramienta es denegada', async () => {

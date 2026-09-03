@@ -43,7 +43,7 @@ test('el renderer declara exactamente las seis features requeridas bajo src/feat
 for (const feature of EXPECTED_FEATURES) {
     test(`feature "${feature}" expone una única fábrica create*Feature con mount/unmount`, () => {
         const featureDir = path.join(featuresDir, feature);
-        const files = fs.readdirSync(featureDir).filter(name => name.endsWith('.js'));
+        const files = fs.readdirSync(featureDir).filter(name => name.endsWith('Feature.js'));
         assert.equal(files.length, 1, `se esperaba un único módulo en ${feature}/`);
         const source = fs.readFileSync(path.join(featureDir, files[0]), 'utf8');
 
@@ -56,22 +56,20 @@ for (const feature of EXPECTED_FEATURES) {
     test(`feature "${feature}" solo importa helpers compartidos, nunca otra feature ni core/`, () => {
         const featureDir = path.join(featuresDir, feature);
         const files = fs.readdirSync(featureDir).filter(name => name.endsWith('.js'));
-        const source = fs.readFileSync(path.join(featureDir, files[0]), 'utf8');
-        const specifiers = importSpecifiers(source);
+        const specifiers = files.flatMap(file => importSpecifiers(fs.readFileSync(path.join(featureDir, file), 'utf8')));
         assert.ok(specifiers.length > 0, 'se esperaba al menos un import de shared/domHelpers');
         for (const specifier of specifiers) {
-            assert.match(
-                specifier,
-                /^\.\.\/shared\//,
-                `${feature}/${files[0]} importa "${specifier}"; las features solo pueden importar ../shared/*`
-            );
+            const local = path.relative(featureDir, path.resolve(featureDir, specifier));
+            assert.ok(/^\.\.\/shared\//.test(specifier) ||
+                (specifier.startsWith('./') && !local.startsWith('..') && !path.isAbsolute(local)),
+                `${feature} importa "${specifier}" fuera de su feature o shared/`);
         }
     });
 
     test(`feature "${feature}" no declara estado mutable a nivel de módulo`, () => {
         const featureDir = path.join(featuresDir, feature);
         const files = fs.readdirSync(featureDir).filter(name => name.endsWith('.js'));
-        const source = fs.readFileSync(path.join(featureDir, files[0]), 'utf8');
+        const source = files.map(file => fs.readFileSync(path.join(featureDir, file), 'utf8')).join('\n');
         // Cualquier `let`/`var` a columna 0 fuera de la fábrica indicaría un
         // singleton compartido entre instancias, en vez de contexto explícito
         // recibido por dependencia.
@@ -104,7 +102,7 @@ test('el composition root se mantiene como una capa delgada frente al tamaño de
     const featureLineCounts = EXPECTED_FEATURES.map(feature => {
         const featureDir = path.join(featuresDir, feature);
         const files = fs.readdirSync(featureDir).filter(name => name.endsWith('.js'));
-        return fs.readFileSync(path.join(featureDir, files[0]), 'utf8').split('\n').length;
+        return files.reduce((sum, file) => sum + fs.readFileSync(path.join(featureDir, file), 'utf8').split('\n').length, 0);
     });
     assert.ok(
         controllerLines < 300,

@@ -10,6 +10,7 @@
 
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
 import { isQaRoastModeEnabled } from '../shared/recorderPreferences.js';
+import { createCopilotModelControls } from './copilotModelControls.js';
 
 const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
 
@@ -38,6 +39,7 @@ const PRODUCT_STAGE_ALIASES = {
  */
 export function createReviewFeature(deps) {
     const { api, state, setStatus, generation, stepSummary } = deps;
+    const copilotModel = createCopilotModelControls(document, api);
 
     const enlazarModal         = document.getElementById('enlazarModal');
     const enlazarStepsList     = document.getElementById('enlazarStepsList');
@@ -594,6 +596,7 @@ export function createReviewFeature(deps) {
 
     async function importAutomationResponse(preserveReviewed = false, manualCorrection = false) {
         const result = await api.importAutomationResponse({ manualCorrection });
+        await copilotModel.refresh();
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || null;
             automationPackageStatus.textContent = '✗ ' + (result.error || 'Respuesta inválida');
@@ -620,6 +623,7 @@ export function createReviewFeature(deps) {
         const reviewedContents = generation.getReviewedContents();
         disableBtn(btnPreview, '⏳ Revalidando...');
         const result = await api.revalidateAutomationResponse(reviewedContents);
+        await copilotModel.refresh();
         enableBtn(btnPreview);
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || state.invalidAutomationDraft;
@@ -636,6 +640,9 @@ export function createReviewFeature(deps) {
 
     async function runAutomationPipeline() {
         if (automationPipelineRunning) return;
+        let model;
+        try { model = copilotModel.selected(); }
+        catch (error) { setStatus(error.message, 'red'); return; }
         const objective = txtAutomationObjective.value.trim();
         const acceptanceCriteria = txtAutomationAcceptance.value.trim();
         if (!objective || !acceptanceCriteria) {
@@ -644,6 +651,9 @@ export function createReviewFeature(deps) {
             return;
         }
         automationPipelineRunning = true;
+        copilotModel.busy(true);
+        copilotModel.reset();
+        try {
         resetTestDesignReviewSummary();
         automationQaRequired && (automationQaRequired.style.display = 'none');
         setCorrectionReimportVisible(false);
@@ -686,8 +696,10 @@ export function createReviewFeature(deps) {
             );
             const launched = await api.launchAutomationAgent({
                 mode: 'automatic',
+                model,
                 qaRoastMode: isQaRoastModeEnabled()
             });
+            await copilotModel.refresh();
             if (!launched.success) {
                 state.invalidAutomationDraft = launched.draft || null;
                 const code = String(launched.run?.errorCode || launched.errorCode || '');
@@ -780,6 +792,13 @@ export function createReviewFeature(deps) {
         setWizardPage(4);
         if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
         automationPipelineRunning = false;
+        } catch (error) {
+            updateProductStage('FAILED', 'No pudimos completar la generación.', error.message, true);
+        } finally {
+            copilotModel.busy(false);
+            automationPipelineRunning = false;
+            if (btnRunAutomationPipeline) enableBtn(btnRunAutomationPipeline);
+        }
     }
 
     function mount() {
@@ -801,6 +820,7 @@ export function createReviewFeature(deps) {
         });
 
         on(btnEnlazar, 'click', async () => {
+            copilotModel.reset();
             const sr = await api.getSteps();
             enlazarSteps = sr.steps || [];
             state.automationWorkflow = false;
@@ -896,7 +916,15 @@ export function createReviewFeature(deps) {
             if (automationPipelineRunning) return;
             automationPipelineRunning = true;
             disableBtn(btnStartAutomationCorrection, '⏳ Abriendo Copilot...');
-            const launched = await api.launchAutomationAgent({ mode: 'manual', autorun: true });
+            let model;
+            try { model = copilotModel.selected(); }
+            catch (error) {
+                setStatus(error.message, 'red');
+                enableBtn(btnStartAutomationCorrection);
+                automationPipelineRunning = false;
+                return;
+            }
+            const launched = await api.launchAutomationAgent({ mode: 'manual', autorun: true, model });
             if (!launched.success) {
                 updateProductStage(
                     'FAILED',
@@ -1119,6 +1147,7 @@ export function createReviewFeature(deps) {
     }
 
     function unmount() {
+        copilotModel.dispose();
         bound.forEach(({ target, type, handler, options }) => target?.removeEventListener?.(type, handler, options));
         bound.length = 0;
         ipcUnsubscribers.forEach(unsubscribe => unsubscribe?.());

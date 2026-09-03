@@ -41,6 +41,8 @@ import {
     analyzeScenarioUiTextQuality,
     QaRoastGenerationService,
     TestDesignReview,
+    normalizeAgentModel,
+    CopilotModelEvents,
 } from '../../../core/automation';
 import { RecordingCoverageAnalyzer } from '../../../core/coverage';
 import { AutomationResponseValidator } from '../../../core/validation';
@@ -759,13 +761,33 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         }
     });
 
+    let manualModelSession: {
+        packageDirectory: string; runId?: string; sessionId: string;
+        model: string; events: CopilotModelEvents;
+    } | null = null;
+    const currentModelUsage = () => {
+        if (!state.activeAutomationPackage) return null;
+        const store = new AgentRunStore(state.activeAutomationPackage);
+        const run = store.read();
+        if (manualModelSession?.packageDirectory === state.activeAutomationPackage
+            && manualModelSession.runId === run?.runId) {
+            const usage = { requestedModel: manualModelSession.model, actualModels: manualModelSession.events.read() };
+            store.recordModelUsage('manual-correction', usage, manualModelSession.sessionId);
+            return usage;
+        }
+        return run?.agentModelUsage || null;
+    };
+    ipcMain.handle('get-automation-model-usage', () => currentModelUsage());
+
     ipcMain.handle('launch-automation-agent', async (_, input?: {
         mode?: string;
         autorun?: boolean;
         qaRoastMode?: boolean;
+        model?: string;
     }) => {
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
+            const model = normalizeAgentModel(input?.model);
             emitAutomationProgress(
                 'RESOLVING_DECISIONS',
                 'Resolviendo decisiones pendientes',
@@ -783,12 +805,22 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                 const launch = input?.autorun
                     ? automationAgentLauncher.openTerminalWithPrompt(
                         projectPaths.automationAgent,
-                        state.activeAutomationPackage
+                        state.activeAutomationPackage,
+                        model,
                     )
                     : automationAgentLauncher.openTerminal(
                         projectPaths.automationAgent,
                         state.activeAutomationPackage
                     );
+                if (launch.sessionId) {
+                    manualModelSession = {
+                        packageDirectory: state.activeAutomationPackage,
+                        runId: new AgentRunStore(state.activeAutomationPackage).read()?.runId,
+                        sessionId: launch.sessionId,
+                        model,
+                        events: CopilotModelEvents.forSession(launch.sessionId),
+                    };
+                }
                 return {
                     success: true,
                     mode,
@@ -796,7 +828,9 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                     launch,
                 };
             }
-            const run = await agentOrchestrator.run(state.activeAutomationPackage, mode);
+            manualModelSession = null;
+            const run = await agentOrchestrator.run(state.activeAutomationPackage, mode, { model });
+            run.modelUsage = currentModelUsage();
             if (run.success) {
                 let testDesignReview = run.testDesignReview;
                 let roastGeneration;
@@ -939,6 +973,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
             rematerializeGapResolutions(state.activeAutomationPackage);
+            currentModelUsage();
             const manualCorrection = input?.manualCorrection === true;
             return await importAutomationResponseFromPackage(state.activeAutomationPackage, {
                 ...(manualCorrection ? {

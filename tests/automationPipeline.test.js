@@ -2849,7 +2849,8 @@ test('launcher abre una terminal en el paquete sin ejecutar automáticamente el 
     // deterministic (DEFAULT_RECORDER_GENERATION_MODE), cuyo prompt inicial
     // confina al agente a gaps.json/gap-resolutions.json y no menciona
     // resolved-context.json (eso solo aplica al modo legacy).
-    assert.match(result.prompt, /No uses comandos de shell ni explores fwk-mobile-test/);
+    assert.match(result.prompt, /Puedes usar node, python o python3 solo para validar archivos autorizados/);
+    assert.match(result.prompt, /No explores fwk-mobile-test/);
     assert.doesNotMatch(call.args.join(' '), /instructions\.md/);
 });
 
@@ -2872,7 +2873,9 @@ test('launcher puede abrir terminal y ejecutar copilot con prompt automático', 
     assert.doesNotMatch(joined, /\/bin\/cat/);
     assert.match(joined, /\/bin\/rm -f/);
     assert.match(joined, /'-i'/);
-    assert.match(joined, /--deny-tool/);
+    assert.match(joined, /--allow-tool=shell\(node\)/);
+    assert.match(joined, /--allow-tool=shell\(python3\)/);
+    assert.doesNotMatch(joined, /--deny-tool=bash/);
     assert.match(joined, /--no-custom-instructions/);
     assert.doesNotMatch(joined, /--output-format json/);
     assert.doesNotMatch(joined, /Lee instructions\.md/);

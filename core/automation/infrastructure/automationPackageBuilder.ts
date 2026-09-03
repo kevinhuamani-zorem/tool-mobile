@@ -514,7 +514,7 @@ function instructions(result: ResolverResult): string {
         `- Agrupa acciones técnicas consecutivas dentro de un único step funcional. Varias secuencias pueden apuntar al mismo gherkinStep en actionTrace.\n` +
         `- Para cada acción create, actionTrace debe declarar locatorName y screenMethod. Ese método debe consumir el getter del locator (directamente o mediante una variable local); no uses selectores literales ni otro getter.\n` +
         `- Toda lectura y escritura se hace únicamente sobre los archivos del manifiesto, con rutas relativas dentro de esta carpeta.\n` +
-        `- No ejecutes comandos de shell para validar ni para escribir; entrega \`agent-response.json\` usando solo herramientas nativas del CLI.\n`;
+        `- Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete (por ejemplo node verify-package.js). No uses scripts para explorar el framework, modificar archivos inmutables ni escribir fuera del paquete. Entrega \`agent-response.json\` usando herramientas nativas del CLI.\n`;
 }
 
 function regenerationInstructions(
@@ -548,7 +548,7 @@ function regenerationInstructions(
         `- Incluye una resolución para gap-regeneration-refinement y entrega exactamente las cuatro capas.\n` +
         `- \`agent-response.json\` tiene forma CERRADA: la define agent-response.schema.json y no admite campos extra. En cada resolucion van \`gapId\`, \`decision\` y opcionalmente \`reason\`; en cada archivo solo \`layer\`, \`path\` y \`content\` — la operacion la fija el plan, no la repitas. Explica lo que quieras en \`reason\` o en \`assumptions\`, nunca en campos inventados.\n` +
         `- Si un gap de duplicado te ofrece locators existentes, adoptar uno de ESOS nombres esta permitido y el plan lo acepta: trazalo en actionTrace.locatorName. Adoptar cualquier otro nombre, o renombrar por tu cuenta un locator del plan, no.\n` +
-        `- No escribas fuera de esta carpeta ni uses comandos de shell para validar/escribir. Entrega \`agent-response.json\` usando solo herramientas nativas del CLI.\n`;
+        `- No escribas fuera de esta carpeta. Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete. Entrega \`agent-response.json\` usando herramientas nativas del CLI.\n`;
 }
 
 /**

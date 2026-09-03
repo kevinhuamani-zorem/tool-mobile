@@ -4,6 +4,8 @@ import { AgentProvider, AgentProviderRunInput, AgentProviderRunResult } from '..
 import { AutomationAgentLauncher } from './automationAgentLauncher';
 import { validateWithSchema } from './copilotCliAdapter';
 import { readJsonUtf8, readUtf8File } from '../../shared';
+import { normalizeAgentModel } from '../domain/agentModel';
+import { CopilotModelEvents } from './copilotModelEvents';
 
 interface ActiveInteractiveRun {
     cancelled: boolean;
@@ -85,8 +87,11 @@ export class VisibleCopilotProvider implements AgentProvider {
             );
         };
 
+        let modelEvents: CopilotModelEvents | undefined;
+        const requestedModel = normalizeAgentModel(input.model ?? process.env.RECORDER_COPILOT_MODEL);
         try {
-            this.launcher.openInteractiveTerminalWithPrompt('copilot', input.cwd, input.prompt);
+            const launch = this.launcher.openInteractiveTerminalWithPrompt('copilot', input.cwd, input.prompt, requestedModel);
+            if (launch?.sessionId) modelEvents = CopilotModelEvents.forSession(launch.sessionId);
             appendTrace('start');
         } catch (error: any) {
             return {
@@ -98,6 +103,7 @@ export class VisibleCopilotProvider implements AgentProvider {
                 timedOut: false,
                 cancelled: false,
                 errorCode: 'AGENT_UNAVAILABLE',
+                modelUsage: { requestedModel, actualModels: [] },
                 errorMessage: error?.message || 'No se pudo abrir Copilot en Terminal.',
                 deniedPathStats: emptyPathStats(),
                 deniedToolAttempts: [],
@@ -114,7 +120,7 @@ export class VisibleCopilotProvider implements AgentProvider {
                 if (timeout) clearTimeout(timeout);
                 if (this.active === active) this.active = null;
                 appendTrace(result.success ? 'validated-output' : result.cancelled ? 'cancelled' : 'timeout');
-                resolve(result);
+                resolve({ ...result, modelUsage: { requestedModel, actualModels: modelEvents?.read() || [] } });
             };
             active.finish = finish;
             const result = (
@@ -133,6 +139,7 @@ export class VisibleCopilotProvider implements AgentProvider {
                 ...extra,
             });
             timer = setInterval(() => {
+                modelEvents?.read();
                 if (active.cancelled) {
                     finish(result(false, {
                         cancelled: true,

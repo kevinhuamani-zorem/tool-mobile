@@ -14,6 +14,12 @@ además de un desglose por componente (`pass1ContextBreakdown` y
 `pass2ContextBreakdown`) para explicar exactamente qué bytes entraron en cada
 invocación. `contextBytes` conserva el máximo por invocación.
 
+`agentModelUsage` contiene `requestedModel` y `actualModels` (lista vacía si
+Copilot no informó el modelo). `agentModelInvocations` conserva esos datos
+por pasada/corrección. Los archivos históricos pueden no tener estos campos;
+no se infiere un modelo usado a partir del solicitado. Son metadatos del
+recorder, no campos que el agente deba inventar en `agent-response.json`.
+
 Además registra el número inicial/final de gaps, hints generados/usados, gaps
 resueltos determinísticamente y consultas solicitadas, aceptadas, rechazadas,
 duplicadas o evitadas por ausencia de gap. Una consulta rechazada no incrementa

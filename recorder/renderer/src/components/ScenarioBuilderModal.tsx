@@ -74,6 +74,22 @@ export function ScenarioBuilderModal() {
                 <input type="text" id="txtDataName" className="field-input" placeholder="El agente lo marcará como gap si falta" />
               </div>
             </div>
+            <div className="copilot-model-settings">
+              <div className="copilot-model-field">
+                <label className="field-label" htmlFor="cmbCopilotModel">Modelo de Copilot</label>
+                <select id="cmbCopilotModel" className="field-select" defaultValue="auto">
+                  <option value="auto">Auto (predeterminado)</option>
+                  <option value="custom">Otro modelo…</option>
+                </select>
+                <input id="txtCopilotModel" className="field-input" hidden maxLength={100}
+                  aria-label="ID del modelo de Copilot" placeholder="ID disponible en /model de Copilot" />
+              </div>
+              <div className="copilot-model-copy">
+                <strong>Configuración de generación</strong>
+                <small>Se aplicará en la próxima generación o corrección. Un modelo fijo reduce variaciones, pero no garantiza respuestas idénticas.</small>
+                <span id="copilotModelUsage" data-copilot-model-usage role="status">El modelo usado aparecerá al terminar la generación.</span>
+              </div>
+            </div>
             <div style={{display: 'none'}}>
               <input type="text" id="txtFeature" defaultValue="Flujo mobile" />
               <input type="text" id="txtScenario" defaultValue="Escenario grabado" />
@@ -105,6 +121,7 @@ export function ScenarioBuilderModal() {
               <div className="automation-agent-summary-content">
                 <h3 id="automationAgentSummaryTitle">Generación automática deterministic-first</h3>
                 <p id="automationAgentSummaryDescription">Analiza, resuelve decisiones necesarias, genera y valida antes de llevarte a revisión.</p>
+                <p className="copilot-model-usage-inline" data-copilot-model-usage>El modelo usado aparecerá al terminar la generación.</p>
               </div>
             </div>
             <div id="automationPipelineExecution">

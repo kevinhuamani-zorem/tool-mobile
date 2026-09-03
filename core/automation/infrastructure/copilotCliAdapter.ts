@@ -12,6 +12,7 @@ import {
     AgentProviderRunResult,
 } from '../ports/agentProvider';
 import { readJsonUtf8, readUtf8File } from '../../shared';
+import { copilotPermissionArgs } from './copilotPermissions';
 
 type SpawnFn = typeof spawn;
 
@@ -20,7 +21,7 @@ function splitArgs(value: string | undefined): string[] {
     return value.trim().split(/\s+/).filter(Boolean);
 }
 
-const DEFAULT_COPILOT_CLI_ARGS = '-p --output-format json --allow-tool=write';
+const DEFAULT_COPILOT_CLI_ARGS = '-p --output-format json';
 const DEFAULT_COPILOT_MODEL = 'auto';
 
 function hasModelArg(args: string[]): boolean {
@@ -222,6 +223,14 @@ export class CopilotCliAdapter implements AgentProvider {
     }
 
     async execute(input: AgentProviderRunInput): Promise<AgentProviderRunResult> {
+        const modelArgs = input.model === undefined ? this.args : this.args.filter((arg, i, all) =>
+            arg !== '--model' && arg !== '-m' && !arg.startsWith('--model=')
+            && all[i - 1] !== '--model' && all[i - 1] !== '-m');
+        const effectiveArgs = withModelArg(modelArgs, normalizeAgentModel(input.model ?? this.model));
+        const modelIndex = effectiveArgs.findIndex(arg => arg === '--model' || arg === '-m');
+        const requestedModel = modelIndex >= 0 ? effectiveArgs[modelIndex + 1]
+            : effectiveArgs.find(arg => arg.startsWith('--model='))!.slice(8);
+        const actualModels = new Set<string>();
         const timeoutMs = Math.max(1, input.timeoutMs || DEFAULT_AGENT_OPERATIONAL_BUDGETS.maxDurationMs);
         const started = process.hrtime.bigint();
         return new Promise(resolve => {
@@ -263,6 +272,10 @@ export class CopilotCliAdapter implements AgentProvider {
             ) => {
                 if (settled) return;
                 settled = true;
+                try {
+                    const model = modelFromCopilotEvent(JSON.parse(stdoutBuffer));
+                    if (model) actualModels.add(model);
+                } catch { /* A final JSONL event need not have a trailing newline. */ }
                 if (timeoutTimer) clearTimeout(timeoutTimer);
                 if (outputWatchTimer) clearInterval(outputWatchTimer);
                 this.active = null;
@@ -273,6 +286,7 @@ export class CopilotCliAdapter implements AgentProvider {
                     `${errorMessage ? ` error=${errorMessage}` : ''}`
                 );
                 resolve({
+                    modelUsage: { requestedModel, actualModels: [...actualModels] },
                     success,
                     exitCode,
                     stdout,
@@ -287,7 +301,10 @@ export class CopilotCliAdapter implements AgentProvider {
                     deniedToolAttempts,
                 });
             };
-            const args = withPromptArg(withModelArg(this.args, this.model), input.prompt);
+            const args = withPromptArg([
+                ...effectiveArgs,
+                ...copilotPermissionArgs(effectiveCwd, input.allowValidationScripts !== false),
+            ], input.prompt);
             const child = this.runner(this.command, args, {
                 cwd: effectiveCwd,
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -466,6 +483,8 @@ export class CopilotCliAdapter implements AgentProvider {
                     stdoutBuffer = stdoutBuffer.slice(index + 1);
                     try {
                         const parsed = JSON.parse(line);
+                        const actualModel = modelFromCopilotEvent(parsed);
+                        if (actualModel) actualModels.add(actualModel);
                         const credits = findCreditsCost(parsed);
                         if (credits !== undefined) creditsCost = credits;
                     } catch {
@@ -533,3 +552,4 @@ export class CopilotCliAdapter implements AgentProvider {
         });
     }
 }
+import { modelFromCopilotEvent, normalizeAgentModel } from '../domain/agentModel';

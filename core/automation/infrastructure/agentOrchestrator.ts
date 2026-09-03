@@ -49,6 +49,7 @@ interface QueryCounters {
 }
 
 interface AgentRunExecutionOverrides {
+    model?: string;
     budgetOverride?: Partial<AgentOperationalBudgets>;
 }
 
@@ -82,6 +83,7 @@ type MultiGapStrategy = 'compact-case' | 'per-gap-parallel';
 
 
 export interface AgentOrchestratorResult {
+    modelUsage?: import('../domain/agentModel').AgentModelUsage | null;
     success: boolean;
     mode: AgentExecutionMode;
     state: 'completed' | 'failed' | 'timed-out' | 'cancelled' | 'fallback-manual' | 'skipped';
@@ -438,6 +440,7 @@ function semanticPassPrompt(context: Record<string, unknown>): string {
     const promptBase = 'PASS 2 (SEMANTIC): genera gap-resolutions.json para cerrar gaps semánticos y redactar únicamente filas Gherkin template.';
     const instructions = [
         'No generes código ni archivos feature/steps/screen/locators.',
+        'Puedes ejecutar node, python o python3 solo para validar archivos autorizados de este paquete. Usa herramientas nativas para leer/escribir. No explores el framework ni modifiques archivos inmutables con scripts.',
         'No cambies recordingId ni planId.',
         'Escribe solo gap-resolutions.json con schemaVersion "1.0".',
         'Cada resolución debe incluir gapId, decision y reason cuando aplique.',
@@ -543,6 +546,11 @@ function aggregateNestedRunMetrics(
     }, {} as Record<string, { pass1Ms: number; pass2Ms: number; totalMs: number; invocations: number }>);
     const merged = {
         ...parent,
+        agentModelInvocations: nestedRuns.flatMap(run => run.agentModelInvocations || []),
+        agentModelUsage: nestedRuns.some(run => run.agentModelUsage) ? {
+            requestedModel: nestedRuns.find(run => run.agentModelUsage)?.agentModelUsage.requestedModel,
+            actualModels: [...new Set(nestedRuns.flatMap(run => run.agentModelUsage?.actualModels || []))],
+        } : null,
         agentInvocationCount: sum('agentInvocationCount'),
         agentDurationMs: sum('agentDurationMs'),
         pass1DurationMs: sum('pass1DurationMs'),
@@ -648,6 +656,7 @@ export class AgentOrchestrator {
         const generationMode = resolveRecorderGenerationMode(process.env.RECORDER_GENERATION_MODE);
         if (generationMode === 'deterministic') {
             return this.runDeterministic({
+                model: executionOverrides.model,
                 packageDirectory,
                 mode,
                 executionMode,
@@ -685,6 +694,7 @@ export class AgentOrchestrator {
                 };
                 writeJson(path.join(gapDirectory, 'gaps.json'), singleGapProjection);
                 const nested = await this.run(gapDirectory, mode, {
+                    model: executionOverrides.model,
                     budgetOverride: { ...budgets },
                 });
                 const nestedRun = readJson<Record<string, any>>(path.join(gapDirectory, 'agent-run.json'));
@@ -871,6 +881,7 @@ export class AgentOrchestrator {
             ...(openGaps.length > 1 ? { strategy: multiGapStrategy } : {}),
         });
         const pass1 = await this.provider.execute({
+            model: executionOverrides.model,
             cwd: packageDirectory,
             prompt: pass1Context.prompt,
             timeoutMs: hangStopMs,
@@ -878,6 +889,7 @@ export class AgentOrchestrator {
             traceLabel: 'pass1',
         });
         runStore.addPassDuration('pass1', pass1.durationMs);
+        runStore.recordModelUsage('pass1', pass1.modelUsage);
         if (openGaps[0]?.id) runStore.addGapPassDuration(openGaps[0].id, 'pass1', pass1.durationMs);
         if (typeof pass1.creditsCost === 'number') runStore.setCreditsCost(pass1.creditsCost);
         runStore.recordDeniedPathStats(pass1.deniedPathStats);
@@ -1055,6 +1067,7 @@ export class AgentOrchestrator {
             pass2Invocations += 1;
             clearAgentWritableOutputs(packageDirectory);
             const pass2 = await this.provider.execute({
+                model: executionOverrides.model,
                 cwd: packageDirectory,
                 prompt: pass2Context.prompt,
                 timeoutMs: hangStopMs,
@@ -1066,6 +1079,7 @@ export class AgentOrchestrator {
                 },
             });
             pass2Stdouts.push(pass2.stdout);
+            runStore.recordModelUsage('pass2', pass2.modelUsage);
             pass2Stderrs.push(pass2.stderr);
             lastPass2ExitCode = pass2.exitCode;
             runStore.addPassDuration('pass2', pass2.durationMs);
@@ -1291,6 +1305,7 @@ export class AgentOrchestrator {
     }
 
     private async runDeterministic(input: {
+        model?: string;
         packageDirectory: string;
         mode: AgentExecutionMode;
         executionMode: AgentExecutionMode;
@@ -1554,6 +1569,7 @@ export class AgentOrchestrator {
                 return qaRequired;
             };
             const pass2 = await this.provider.execute({
+                model: input.model,
                 cwd: packageDirectory,
                 prompt: semanticPrompt,
                 timeoutMs: hangStopMs,
@@ -1566,6 +1582,7 @@ export class AgentOrchestrator {
                 },
             });
             runStore.addPassDuration('pass2', pass2.durationMs);
+            runStore.recordModelUsage('deterministic-pass2', pass2.modelUsage);
             if (openGaps[0]?.id) runStore.addGapPassDuration(openGaps[0].id, 'pass2', pass2.durationMs);
             runStore.recordDeniedPathStats(pass2.deniedPathStats);
             recordDeniedToolAttempts(runStore, pass2.deniedToolAttempts);

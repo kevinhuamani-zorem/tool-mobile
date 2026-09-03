@@ -42,3 +42,5 @@ export * from './infrastructure/visibleCopilotProvider';
 
 export * from './ports/agentProvider';
 export * from './ports/qaRoastGenerationService';
+export * from './domain/agentModel';
+export { CopilotModelEvents } from './infrastructure/copilotModelEvents';

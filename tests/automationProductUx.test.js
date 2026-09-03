@@ -82,7 +82,7 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /if \(!prepare\.result\.responseAvailable\)/);
     assert.match(review, /const launched = await api\.launchAutomationAgent\(\{[\s\S]*?mode: 'automatic',[\s\S]*?qaRoastMode: isQaRoastModeEnabled\(\)/);
     assert.match(review, /else if \(launched\.fallbackSuggested\) \{/);
-    assert.match(review, /api\.launchAutomationAgent\(\{ mode: 'manual', autorun: true \}\)/);
+    assert.match(review, /api\.launchAutomationAgent\(\{ mode: 'manual', autorun: true, model \}\)/);
     assert.doesNotMatch(review, /Abrir terminal manual/);
     assert.match(review, /await api\.getAutomationQaDecisions\(\);/);
     assert.match(review, /on\(btnConfirmQaDecision, 'click', async \(\) => \{/);

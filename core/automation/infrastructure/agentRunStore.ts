@@ -6,6 +6,7 @@ import type { FrameworkQueryMetrics } from '../../workspace';
 import type { ProjectionMetrics } from '../domain/automationContextProjections';
 import { AgentExecutionMode, DEFAULT_AGENT_EXECUTION_MODE } from '../contracts';
 import type { ContextBreakdown } from './agentContextEnvelope';
+import type { AgentModelUsage } from '../domain/agentModel';
 
 export interface AgentRunArtifact {
     schemaVersion: 1;
@@ -70,6 +71,8 @@ export interface AgentRunArtifact {
     creditsCost: number | null;
     agentProvider: string | null;
     agentVersion: string | null;
+    agentModelUsage?: AgentModelUsage | null;
+    agentModelInvocations?: Array<AgentModelUsage & { stage: string; sessionId?: string }>;
     agentExecutionMode: AgentExecutionMode;
     agentInvocationCount: number;
     agentExitCode: number | null;
@@ -150,6 +153,8 @@ export class AgentRunStore {
             creditsCost: null,
             agentProvider: null,
             agentVersion: null,
+            agentModelUsage: null,
+            agentModelInvocations: [],
             agentExecutionMode: DEFAULT_AGENT_EXECUTION_MODE,
             agentInvocationCount: 0,
             agentExitCode: null,
@@ -345,6 +350,20 @@ export class AgentRunStore {
             ...run,
             agentProvider: provider || null,
             agentVersion: version || null,
+        }));
+    }
+    recordModelUsage(stage: string, usage?: AgentModelUsage, sessionId?: string): void {
+        if (!usage) return;
+        this.update(run => ({
+            ...run,
+            agentModelUsage: {
+                requestedModel: usage.requestedModel,
+                actualModels: [...new Set([...(run.agentModelUsage?.actualModels || []), ...usage.actualModels])],
+            },
+            agentModelInvocations: [
+                ...(run.agentModelInvocations || []).filter(entry => !sessionId || entry.sessionId !== sessionId),
+                { stage, requestedModel: usage.requestedModel, actualModels: usage.actualModels, ...(sessionId ? { sessionId } : {}) },
+            ],
         }));
     }
     setExecutionMode(mode: AgentExecutionMode): void {

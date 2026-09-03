@@ -75,10 +75,37 @@ Flags útiles del pipeline agentic:
   el comando del provider sin tocar código.
 - `RECORDER_COPILOT_MODEL` para definir el modelo del provider cuando
   `RECORDER_COPILOT_CLI_ARGS` no incluye `--model` (default `auto`).
+  La selección explícita del wizard prevalece sobre ambos para esa ejecución,
+  sin modificar variables de entorno. El modo troll mantiene su configuración
+  independiente. La UI permite Auto u otro ID de `/model`, sin catálogo estático.
   Por defecto el adapter usa:
-  `copilot -p "<prompt>" --output-format json --allow-tool=write --model auto`.
+  `copilot -p "<prompt>" --output-format json --model auto` más los permisos
+  compartidos de `copilotPermissions.ts`: `--add-dir <paquete>`,
+  `--allow-tool=read`, `--allow-tool=write`, `--allow-tool=shell(node)`,
+  `--allow-tool=shell(python)`, `--allow-tool=shell(python3)` y
+  `--no-custom-instructions`. La terminal visible usa la misma política;
+  no se añade `--deny-tool=bash`, que interfería con los comandos auxiliares.
+  `allowValidationScripts: false` conserva lectura/escritura y deniega shell
+  para la sesión de presentación del roast. Los overrides explícitos del
+  usuario en CLI_ARGS se conservan; una denegación tiene precedencia.
+
+Estos flags no suprimen autenticación ni confianza inicial de carpeta, ni
+constituyen aislamiento de los intérpretes. No se modifica la configuración
+global de Copilot ni se aprueban URLs o rutas globalmente.
 
 ## Wizard de finalización (UX producto)
+
+El helper privado `review/copilotModelControls.js` gestiona preferencia,
+selección y presentación del modelo. La feature conserva una única fábrica
+pública y los helpers privados no pueden importar otras features ni core.
+`get-automation-model-usage` expone solo los metadatos del paquete activo.
+
+La terminal recibe un UUID nuevo con `--session-id`. `CopilotModelEvents` lee
+incrementalmente únicamente `events.jsonl` de ese UUID bajo `COPILOT_HOME`
+(por defecto `~/.copilot`). Conserva solo los IDs en eventos
+`session.auto_mode_resolved`, `assistant.message` y `tool.execution_start`;
+descarta contenido, instrucciones y modelos auxiliares de routing. Es una
+integración tolerante a cambios del CLI: datos ausentes no bloquean el caso.
 
 En el modo predeterminado `deterministic`, el flujo visible de finalización es:
 

@@ -104,6 +104,7 @@ export class CopilotQaRoastGenerator implements QaRoastGenerationService {
                     output: { file: 'qa-roast-response.json', schema: 'qa-roast-response.schema.json' },
                 });
                 const run = await this.provider.execute({
+                    allowValidationScripts: false,
                     cwd: packageDirectory,
                     prompt: 'Lee qa-roast-request.json y qa-roast-response.schema.json. Escribe únicamente qa-roast-response.json con la herramienta write y termina.',
                     timeoutMs: this.timeoutMs,

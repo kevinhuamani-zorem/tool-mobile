@@ -1,5 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
+import { normalizeAgentModel } from '../domain/agentModel';
+import { copilotPermissionArgs } from './copilotPermissions';
 import { spawn } from 'child_process';
 import { AutomationAgent } from '../../workspace';
 import { resolveRecorderGenerationMode } from '../contracts';
@@ -8,6 +11,8 @@ export interface LaunchResult {
     provider: AutomationAgent;
     packageDirectory: string;
     prompt: string;
+    sessionId?: string;
+    requestedModel?: string;
 }
 
 export class AutomationAgentLauncher {
@@ -41,13 +46,13 @@ export class AutomationAgentLauncher {
         const repair = fs.existsSync(path.join(packageDirectory, 'repair-context.json'));
         const generationMode = resolveRecorderGenerationMode(process.env.RECORDER_GENERATION_MODE);
         if (generationMode === 'deterministic' && !repair) {
-            return 'Trabaja únicamente en esta carpeta. Lee instructions.md, gaps.json y scenario.json. Evalúa objetivo y criterio de aceptación y escribe testDesignReview como sugerencia no bloqueante, sin roast ni humor; acepta validaciones consolidadas y no inventes requisitos. Resuelve los gaps semánticos y reescribe solo las filas wording=template mediante gherkinResolutions. Escribe gap-resolutions.json con herramientas nativas del CLI. Después, lee validation-feedback.json y corrige el mismo archivo si el recorder lo solicita. Termina cuando el feedback indique valid o planner-regeneration-required. No uses comandos de shell ni explores fwk-mobile-test.';
+            return 'Trabaja únicamente en esta carpeta. Lee instructions.md, gaps.json y scenario.json. Evalúa objetivo y criterio de aceptación y escribe testDesignReview como sugerencia no bloqueante, sin roast ni humor; acepta validaciones consolidadas y no inventes requisitos. Resuelve los gaps semánticos y reescribe solo las filas wording=template mediante gherkinResolutions. Escribe gap-resolutions.json con herramientas nativas del CLI. Después, lee validation-feedback.json y corrige el mismo archivo si el recorder lo solicita. Termina cuando el feedback indique valid o planner-regeneration-required. Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete. No explores fwk-mobile-test.';
         }
         return repair
             ? generationMode === 'deterministic'
-                ? 'Lee repair-context.json y validation-feedback.json. Corrige únicamente gap-resolutions.json, incluidas sus gherkinResolutions cuando el error corresponda al Gherkin; el recorder regenerará agent-response.json al reimportar. No edites agent-response.json, no explores el repositorio y no uses comandos de shell.'
-                : 'Lee repair-context.json y corrige únicamente los archivos indicados. Prioriza exactitud y viabilidad del caso por encima de la rapidez. No explores el repositorio ni uses comandos de shell; escribe agent-response.json con herramientas nativas del CLI.'
-            : 'Trabaja únicamente en esta carpeta. Lee instructions.md y solo los archivos mínimos que allí se enumeran. No leas resolved-context.json salvo diagnóstico explícito. Prioriza exactitud y viabilidad del caso por encima de la rapidez. Resuelve solo los gaps declarados y escribe agent-response.json con herramientas nativas del CLI. No uses comandos de shell y no explores fwk-mobile-test.';
+                ? 'Lee repair-context.json y validation-feedback.json. Corrige únicamente gap-resolutions.json, incluidas sus gherkinResolutions cuando el error corresponda al Gherkin; el recorder regenerará agent-response.json al reimportar. No edites agent-response.json ni explores el repositorio. Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete.'
+                : 'Lee repair-context.json y corrige únicamente los archivos indicados. Prioriza exactitud y viabilidad del caso por encima de la rapidez. No explores el repositorio; escribe agent-response.json con herramientas nativas del CLI. Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete.'
+            : 'Trabaja únicamente en esta carpeta. Lee instructions.md y solo los archivos mínimos que allí se enumeran. No leas resolved-context.json salvo diagnóstico explícito. Prioriza exactitud y viabilidad del caso por encima de la rapidez. Resuelve solo los gaps declarados y escribe agent-response.json con herramientas nativas del CLI. Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete. No explores fwk-mobile-test.';
     }
 
     describe(provider: AutomationAgent, packageDirectory: string): LaunchResult {
@@ -76,17 +81,20 @@ export class AutomationAgentLauncher {
         return this.describe(provider, packageDirectory);
     }
 
-    openTerminalWithPrompt(provider: AutomationAgent, packageDirectory: string): LaunchResult {
-        return this.openInteractiveTerminalWithPrompt(provider, packageDirectory);
+    openTerminalWithPrompt(provider: AutomationAgent, packageDirectory: string, model?: string): LaunchResult {
+        return this.openInteractiveTerminalWithPrompt(provider, packageDirectory, undefined, model);
     }
 
     openInteractiveTerminalWithPrompt(
         provider: AutomationAgent,
         packageDirectory: string,
         prompt = this.initialPrompt(packageDirectory),
+        model?: string,
     ): LaunchResult {
         if (!fs.existsSync(packageDirectory)) throw new Error('La carpeta del paquete ya no existe');
-        const launch = { provider, packageDirectory, prompt };
+        const requestedModel = normalizeAgentModel(model ?? process.env.RECORDER_COPILOT_MODEL);
+        const sessionId = randomUUID();
+        const launch = { provider, packageDirectory, prompt, sessionId, requestedModel };
         if (process.platform !== 'darwin') {
             return this.openTerminal(provider, packageDirectory);
         }
@@ -98,10 +106,9 @@ export class AutomationAgentLauncher {
         fs.writeFileSync(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
         const args = [
             '--model',
-            process.env.RECORDER_COPILOT_MODEL || 'auto',
-            '--allow-tool=write',
-            '--deny-tool=bash',
-            '--no-custom-instructions',
+            requestedModel,
+            '--session-id', sessionId,
+            ...copilotPermissionArgs(packageDirectory),
         ];
         const bootstrapPrompt = [
             'Lee agent-task.md en esta carpeta.',

@@ -84,6 +84,24 @@ function extractGapIdFromPrompt(prompt = '') {
     return match ? match[1] : 'gap-screen';
 }
 
+test('orchestrator propaga el modelo por ejecución y registra el modelo usado incluso ante fallo', async () => {
+    const dir = packageFixture();
+    const provider = {
+        name: 'fake', getVersion: async () => '1', cancel() {},
+        async execute(input) {
+            assert.equal(input.model, 'gpt-5.6-terra');
+            return { success: false, exitCode: 1, stdout: '', stderr: '', durationMs: 1,
+                timedOut: false, cancelled: false, errorCode: 'AGENT_NON_ZERO_EXIT',
+                modelUsage: { requestedModel: input.model, actualModels: ['gpt-5.6-terra'] } };
+        },
+    };
+    const result = await new AgentOrchestrator({ execute() { throw new Error('unexpected query'); } }, provider)
+        .run(dir, 'automatic', { model: 'gpt-5.6-terra' });
+    assert.equal(result.success, false);
+    assert.deepEqual(new AgentRunStore(dir).read().agentModelUsage,
+        { requestedModel: 'gpt-5.6-terra', actualModels: ['gpt-5.6-terra'] });
+});
+
 function packageFiles(root) {
     return fs.readdirSync(root)
         .map(name => path.join(root, name))

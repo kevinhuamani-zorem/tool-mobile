@@ -34,7 +34,8 @@ declare global {
             ): () => void;
             getAutomationQaDecisions(): Promise<any>;
             resolveAutomationQaDecisions(input: any): Promise<any>;
-            launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean }): Promise<any>;
+            getAutomationModelUsage(): Promise<{ requestedModel: string; actualModels: string[] } | null>;
+            launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean; model?: string }): Promise<any>;
             revalidateAutomationResponse(reviewedContents: Record<string, string>): Promise<any>;
         };
     }
