@@ -13,6 +13,7 @@ import {
 } from '../../contracts';
 import {
     TECHNICAL_STOP_WORDS,
+    unknownTokens,
 } from '../../../shared';
 
 export const SELECTOR_ACTIONS = new Set<Action>([
@@ -85,22 +86,34 @@ export function actionIntent(step: RecordedStep, sequence: number): string {
     return semanticIntent || `${step.action.toLowerCase()} elemento ${sequence}`;
 }
 
+const NO_EXTRA_TOKENS = new Set<string>();
+
 export function compactTechnicalName(scenario: AutomationScenario): string {
+    // Primero lo que escribe el QA (criterio y objetivo) y solo despues las
+    // acciones: dos grabaciones con el mismo objetivo deben caer en la misma
+    // ruta de Feature aunque una tenga un paso mas.
     const candidates = [
         scenario.acceptanceCriteria,
-        ...scenario.actions.map(recordedStepContext),
         scenario.objective,
+        ...scenario.actions.map(recordedStepContext),
     ];
     const meaningful: string[] = [];
     for (const candidate of candidates) {
         for (const word of words(candidate)) {
             if (word.length < 3 || TECHNICAL_STOP_WORDS.has(word) || meaningful.includes(word)) continue;
+            // El nombre tecnico termina en ingles (archivo .feature, .steps.ts
+            // y modulo de locators). Una palabra que ni el diccionario ni el
+            // ingles habitual reconocen no entra: `visualiza` dejaba
+            // `visualiza-movements-last-days.feature` y `tenga` habria dejado
+            // `verify-tenga-filter-movements`. Se sigue con la siguiente
+            // palabra util del criterio, las acciones o el objetivo.
+            if (unknownTokens(word, NO_EXTRA_TOKENS).length) continue;
             meaningful.push(word);
             if (meaningful.length === 4) break;
         }
         if (meaningful.length === 4) break;
     }
-    return meaningful.join('-') || `caso-${scenario.recordingId.slice(-8)}`;
+    return meaningful.join('-') || `case-${scenario.recordingId.slice(-8)}`;
 }
 
 export function titleFromSlug(value: string): string {

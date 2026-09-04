@@ -817,3 +817,47 @@ test('no reutiliza el step si su metodo alcanza locators que este caso no grabo'
     assert.ok(assertion);
     assert.notEqual(assertion.text, 'se muestra el nombre del yapero', 'el texto se desambigua en vez de colisionar');
 });
+
+// Los archivos .feature/.steps.ts y el modulo de locators van en ingles. Una
+// palabra que el diccionario no sabe traducir no entra en el nombre tecnico
+// (`tenga` habria dado `verify-tenga-filter-movements`) y el nombre no
+// depende de las acciones cuando criterio y objetivo ya lo definen, para que
+// dos grabaciones del mismo caso caigan en la misma ruta.
+test('el nombre de archivo sale en ingles y estable aunque el criterio traiga palabras sin traduccion', () => {
+    const recorded = scenario([
+        action('CLICK', 'filtrar movimientos', '~Botón de filtrar', ''),
+        action('VERIFICAR_EXISTE', 'lista de movimientos', '~Lista', ''),
+    ]);
+    recorded.objective = 'consultar y ver los movimientos de ultimos 30 dias';
+    recorded.acceptanceCriteria = 'el usuario visualiza lo movimientos de ultimos 30 dias y que tenga filtro';
+    recorded.request = { ...recorded.request, featureName: 'Flujo mobile', fileName: 'flujo-mobile', locatorModule: 'nueva-pantalla' };
+    const result = new DeterministicResolver(emptyCatalog()).resolve(recorded);
+    const feature = result.plan.files.find(file => file.layer === 'feature');
+    assert.match(feature.path, /\/view-movements-last-days\.feature$/);
+    assert.equal(result.scenario.request.locatorModule, 'view-movements-last-days');
+    assert.equal(result.unresolvedContext.gaps.some(gap => gap.id === 'gap-english-naming'), false);
+
+    const longer = scenario([
+        action('CLICK', 'filtrar movimientos', '~Botón de filtrar', ''),
+        action('CLICK', 'descargar', '~Descargar', ''),
+        action('VERIFICAR_EXISTE', 'lista de movimientos', '~Lista', ''),
+    ]);
+    longer.objective = recorded.objective;
+    longer.acceptanceCriteria = recorded.acceptanceCriteria;
+    longer.request = recorded.request;
+    const second = new DeterministicResolver(emptyCatalog()).resolve(longer);
+    assert.equal(second.plan.files.find(file => file.layer === 'feature').path, feature.path);
+});
+
+test('avisa cuando el QA escribio a mano un nombre de archivo que no esta en ingles', () => {
+    const recorded = scenario([
+        action('CLICK', 'filtrar movimientos', '~Botón de filtrar', ''),
+        action('VERIFICAR_EXISTE', 'lista de movimientos', '~Lista', ''),
+    ]);
+    recorded.request = { ...recorded.request, fileName: 'historial-encadenado', locatorModule: 'historial-encadenado' };
+    const result = new DeterministicResolver(emptyCatalog()).resolve(recorded);
+    const gap = result.unresolvedContext.gaps.find(item => item.id === 'gap-english-naming');
+    assert.ok(gap);
+    assert.match(gap.description, /history-encadenado/);
+    assert.match(gap.description, /no la cambies/);
+});

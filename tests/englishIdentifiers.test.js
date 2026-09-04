@@ -154,3 +154,18 @@ test('learnTranslationsFromRenames aprende solo de alineaciones inequivocas y lo
     assert.equal(translateToEnglish('historial encadenado').name, 'historyChained');
     assert.deepEqual(unknownTokens('historyEncadenadoButton'), []);
 });
+
+// `el usuario visualiza los movimientos` es como escribe el QA el criterio de
+// aceptacion, y de ahi sale el nombre tecnico del caso. Sin `visualizar` en el
+// diccionario (ni deteccion morfologica del verbo) el archivo quedaba
+// `visualiza-movements-last-days.feature`.
+test('traduce verbos conjugados del criterio de aceptacion y los detecta como espanol', () => {
+    const { dictionaryLookup, translateToSlug } = require('../dist/core/shared');
+    assert.equal(dictionaryLookup('visualiza'), 'view');
+    assert.equal(dictionaryLookup('visualizan'), 'view');
+    assert.equal(dictionaryLookup('reciben'), 'receive');
+    assert.equal(dictionaryLookup('sube'), 'upload');
+    assert.ok(spanishTokens('visualiza').length);
+    assert.ok(spanishTokens('actualizando').length);
+    assert.equal(translateToSlug('visualiza movimientos ultimos dias', 'x'), 'view-movements-last-days');
+});

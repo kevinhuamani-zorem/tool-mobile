@@ -126,11 +126,24 @@ export class DeterministicResolver {
         const featureScope = normalizeFeatureScope(rawScenario.request.featureScope);
         const catalog = this.catalog.getCatalog(rawScenario.squad, rawScenario.platform, featureScope);
         const objectiveSlug = slug(rawScenario.objective, `caso-${rawScenario.recordingId.slice(-8)}`);
-        const technicalName = slug(compactTechnicalName(rawScenario), objectiveSlug);
+        // El vocabulario que ya usa el framework es ingles valido por definicion
+        // (`yapero`, `tapp`, claves y metodos existentes): una palabra que ni el
+        // diccionario ni el framework conocen no se da por buena en silencio.
+        const frameworkTokens = new Set<string>([
+            ...catalog.locators.flatMap(locator => words(locator.name)),
+            ...(catalog.screenMethods || []).flatMap(method => words(method.name)),
+        ]);
+        // Sin el vocabulario del framework a proposito: un caso encadenado sin
+        // commit deja nombres logicos aun no revisados en el catalogo, y si
+        // contaran como ingles el segundo caso con el mismo objetivo caeria en
+        // otra ruta de Feature que el primero. El nombre de archivo debe ser
+        // estable entre grabaciones; solo diccionario e ingles habitual.
+        const compactName = compactTechnicalName(rawScenario);
+        const technicalName = slug(compactName, objectiveSlug);
         // El nombre de archivo va en ingles como el resto del framework
         // (show-balance-happy-path.feature), aunque la linea `Feature:` que
         // deriva del mismo texto se quede en espanol.
-        const technicalSlug = translateToSlug(compactTechnicalName(rawScenario), technicalName);
+        const technicalSlug = translateToSlug(compactName, technicalName);
         const requestFileName = translateToSlug(rawScenario.request.fileName, slug(rawScenario.request.fileName, objectiveSlug));
         const requestLocatorModule = translateToSlug(rawScenario.request.locatorModule, slug(rawScenario.request.locatorModule, objectiveSlug));
         const requestFeatureName = slug(rawScenario.request.featureName, objectiveSlug);
@@ -358,28 +371,32 @@ export class DeterministicResolver {
         // `reuse` quedan fuera: esos nombres ya viven en el framework.
         // Lo que el diccionario no supo traducir. Solo eso llega al agente: el
         // resto ya salio en ingles sin gastar un token.
-        // El vocabulario que ya usa el framework es ingles valido por definicion
-        // (`yapero`, `tapp`, claves y metodos existentes): una palabra que ni el
-        // diccionario ni el framework conocen no se da por buena en silencio.
-        const frameworkTokens = new Set<string>([
-            ...catalog.locators.flatMap(locator => words(locator.name)),
-            ...(catalog.screenMethods || []).flatMap(method => words(method.name)),
-        ]);
         const createdNames = [...new Set(resolutions
             .filter(item => item.resolution === 'create' && item.locatorName)
             .map(item => item.locatorName as string))];
         const spanishNames = createdNames.filter(name => spanishTokens(name).length);
+        // Los nombres de archivo y de modulo tambien terminan en ingles. Cuando
+        // el QA los escribio a mano y el diccionario no supo traducirlos, no se
+        // renombran por el (la ruta ya esta fijada en el plan): se avisa.
+        const spanishFileNames = [...new Set([normalizedRequest.fileName, normalizedRequest.locatorModule])]
+            .filter(name => spanishTokens(name).length || unknownTokens(name, frameworkTokens).length);
         const unknownByName = new Map(createdNames
             .filter(name => !spanishTokens(name).length)
             .map(name => [name, unknownTokens(name, frameworkTokens)] as const)
             .filter(([, unknown]) => unknown.length));
-        if (spanishNames.length || unknownByName.size) {
+        if (spanishNames.length || unknownByName.size || spanishFileNames.length) {
             const unknownSummary = [...unknownByName]
                 .map(([name, unknown]) => `${name} (${unknown.join(', ')})`);
             gaps.push({
                 id: 'gap-english-naming',
                 type: 'semantic-naming',
                 description: [
+                    spanishFileNames.length
+                        ? 'El nombre de archivo o modulo de locators conserva palabras que el diccionario ' +
+                          `no reconoce como ingles: ${spanishFileNames.join(', ')}. La ruta ya esta fijada ` +
+                          'en el plan: no la cambies; el QA puede corregir el nombre en el formulario y ' +
+                          'volver a preparar el paquete.'
+                        : '',
                     spanishNames.length
                         ? 'Estos nombres logicos conservan palabras en espanol que no se pudieron ' +
                           `traducir automaticamente: ${spanishNames.join(', ')}.`

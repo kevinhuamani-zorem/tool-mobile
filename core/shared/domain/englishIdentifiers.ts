@@ -101,6 +101,19 @@ const TRANSLATIONS: Record<string, string> = {
     cantidad: 'quantity', descuento: 'discount', descuentos: 'discounts',
     comision: 'fee', comisiones: 'fees', deuda: 'debt', deudas: 'debts',
     cobro: 'collection', cobros: 'collections',
+    // Verbos de accion que el QA conjuga en el objetivo y el criterio de
+    // aceptacion ("el usuario visualiza los movimientos"). El nombre tecnico
+    // del caso sale de esas frases, y `visualiza` sin traducir producia
+    // `visualiza-movements-last-days.feature`: la mitad del archivo en cada
+    // idioma. Solo infinitivos; `dictionaryLookup` deriva `visualiza` y
+    // `visualizan` de `visualizar`.
+    visualizar: 'view', revisar: 'review', navegar: 'navigate', comprobar: 'check',
+    registrar: 'register', registro: 'registration', actualizar: 'update', cambiar: 'change',
+    modificar: 'modify', crear: 'create', generar: 'generate', transferir: 'transfer',
+    solicitar: 'request', aprobar: 'approve', rechazar: 'reject', iniciar: 'start',
+    finalizar: 'finish', terminar: 'finish', configurar: 'configure', subir: 'upload',
+    realizar: 'perform', enviado: 'sent', recibido: 'received', obtener: 'get',
+    intentar: 'try', intento: 'attempt', intentos: 'attempts', reintentar: 'retry',
 };
 
 /**
@@ -142,6 +155,12 @@ export function dictionaryLookup(word: string): string | undefined {
     if (word.endsWith('es') && word.length > 4) candidates.push(word.slice(0, -2));
     if (word.endsWith('s') && word.length > 3) candidates.push(word.slice(0, -1));
     if (/[ae]$/.test(word) && word.length > 3) candidates.push(`${word}r`);
+    // Tercera conjugacion: `sube` -> `subir`, `recibe` -> `recibir`.
+    if (/e$/.test(word) && word.length > 3) candidates.push(`${word.slice(0, -1)}ir`);
+    // Tercera persona del plural: `visualizan` -> `visualizar`, `reciben` -> `recibir`.
+    if (/[ae]n$/.test(word) && word.length > 4) {
+        candidates.push(`${word.slice(0, -1)}r`, `${word.slice(0, -2)}ir`);
+    }
     if (/(ado|ada|ido|ida)$/.test(word) && word.length > 5) {
         candidates.push(`${word.slice(0, -3)}ar`, `${word.slice(0, -3)}er`, `${word.slice(0, -3)}ir`);
     }
@@ -241,6 +260,9 @@ const DROPPED = new Set([
 const SPANISH_ENDINGS = [
     'cion', 'ciones', 'dad', 'dades', 'miento', 'mientos',
     'encia', 'encias', 'ancia', 'ancias', 'mente', 'aje', 'ajes',
+    // Verbos: `visualizar`/`visualiza`/`visualizan`, `actualizando`,
+    // `cargaron`. El ingles produce `-ize`, nunca `-iza`/`-izar`.
+    'izar', 'iza', 'izan', 'ando', 'iendo', 'aron', 'ieron',
 ];
 
 /** `informacion`, `cantidad`, `transferencia`... sin estar en el diccionario. */
