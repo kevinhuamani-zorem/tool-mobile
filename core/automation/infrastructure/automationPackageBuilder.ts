@@ -140,15 +140,18 @@ function responseFromPreview(
         recordingId: scenario.recordingId,
         planId: plan.planId,
         resolutions: [],
-        actionTrace: scenario.request.scenarioRows?.filter(row => row.status === 'missing')
+        // Una fila `reused` con acciones es un step existente que cubre lo
+        // grabado: sus acciones se trazan al metodo que ese step ya invoca.
+        actionTrace: (scenario.request.scenarioRows || [])
+            .filter(row => row.status === 'missing' || (row.status === 'reused' && (row.actions || []).length))
             .flatMap((row, index) =>
             (row.actions || []).map(action => ({
                 sequence: action.sequence!,
                 gherkinStep: `${row.keyword} ${row.text}`,
-                screenMethod: scenarioRowMethodName(row, index),
+                screenMethod: row.status === 'reused' ? row.methodName : scenarioRowMethodName(row, index),
                 locatorName: plan.resolutions.find(item => item.sequence === action.sequence)?.locatorName,
             }))
-        ) || [],
+        ),
         files,
         assumptions: ['Salida producida completamente por el resolver determinista.'],
     };

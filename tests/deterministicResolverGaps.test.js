@@ -736,3 +736,52 @@ test('sustantivos genericos de interfaz no convierten un Screen ajeno en objetiv
     assert.equal(result.unresolvedContext.gaps.some(gap => gap.id === 'gap-extend-existing-artifacts'), false);
     assert.equal(result.plan.deterministicCoverage, 1);
 });
+
+// Reutilizar un step existente exige evidencia, no solo el mismo texto: los
+// metodos que invoca tienen que llegar exactamente a los locators que este
+// caso resolvio como reuse. Si llega a uno mas, el step haria algo que no se
+// grabo; si el texto coincide pero el step no existe con evidencia, se sufija.
+function catalogWithAssertionStep(locatorKeys) {
+    const base = catalogWithExistingModule().getCatalog();
+    return {
+        getCatalog: () => ({
+            ...base,
+            stepDefinitions: [{
+                keyword: 'Then', expression: '^se muestra el nombre del yapero$', file: STEPS,
+                squad: 'payment', scope: 'squad',
+                screenMethods: [{ file: SCREEN, method: 'validarNombreDelYapero' }],
+            }],
+            screenMethods: [
+                method('buscarYaperoPorNumero', 'buscarYaperoPorNumero(numero: string): Promise<void>', ['yapear', 'nuevoNumero', 'continuarYapeo']),
+                method('validarNombreDelYapero', 'validarNombreDelYapero(): Promise<void>', locatorKeys),
+            ],
+        }),
+    };
+}
+
+function assertionScenario() {
+    return scenario([{
+        action: 'VERIFICAR_EXISTE', sequence: 1, selector: '//android.view.View',
+        locatorType: 'XPATH', locatorValue: '//android.view.View', selectorVerified: true,
+        contextHint: 'existe el nombre del yapero', platform: 'android',
+    }]);
+}
+
+test('reutiliza el step existente cuando su metodo llega exactamente al locator grabado', () => {
+    const result = new DeterministicResolver(catalogWithAssertionStep(['existaElNombreDelYapero'])).resolve(assertionScenario());
+    const rows = result.scenario.request.scenarioRows;
+    const reused = rows.find(row => row.status === 'reused' && (row.actions || []).length);
+    assert.ok(reused, JSON.stringify(rows.map(row => [row.keyword, row.text, row.status])));
+    assert.equal(reused.text, 'se muestra el nombre del yapero');
+    assert.equal(reused.methodName, 'validarNombreDelYapero');
+    assert.equal(result.plan.resolutions[0].resolution, 'reuse');
+});
+
+test('no reutiliza el step si su metodo alcanza locators que este caso no grabo', () => {
+    const result = new DeterministicResolver(catalogWithAssertionStep(['existaElNombreDelYapero', 'yapear'])).resolve(assertionScenario());
+    const rows = result.scenario.request.scenarioRows;
+    assert.equal(rows.some(row => row.status === 'reused' && (row.actions || []).length), false);
+    const assertion = rows.find(row => /^(Then|And)$/.test(row.keyword) && row.status === 'missing');
+    assert.ok(assertion);
+    assert.notEqual(assertion.text, 'se muestra el nombre del yapero', 'el texto se desambigua en vez de colisionar');
+});

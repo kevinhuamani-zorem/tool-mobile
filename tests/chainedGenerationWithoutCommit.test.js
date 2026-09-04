@@ -199,3 +199,46 @@ test('el caso B amplia el Screen Object de A aunque A lo haya modificado despues
         'la edicion manual del QA debe sobrevivir a la ampliacion de B');
     assert.ok(screenAfterB.length > edited.length, 'B debe seguir agregando su metodo nuevo');
 });
+
+// Un step existente se reutiliza, no se sufija, cuando hay evidencia: el
+// caso C valida exactamente el mismo elemento que A con el mismo texto, y el
+// step definition de A ya invoca el metodo que llega a ese locator.
+test('el caso C reutiliza el step de A cuando cubre exactamente los mismos elementos', t => {
+    const { frameworkRoot } = isolatedFramework(t, 'avr-chained-step-');
+    const builder = new AutomationPackageBuilder();
+    const caseA = prepareAndApply(
+        builder, 'rec-chained-step-a',
+        'el usuario consulta el historial encadenado',
+        'se muestra el titulo del historial encadenado',
+        [SHOW_HISTORY, OPEN_DETAIL, TITLE], 'TC-90005',
+    );
+    const thenA = caseA.scenario.request.scenarioRows.find(row => /^Then$/.test(row.keyword));
+    assert.equal(thenA.status, 'missing', 'en A la asercion todavia no existe: se crea');
+    const stepsPathA = caseA.plan.files.find(file => file.layer === 'steps').path;
+    const stepsAfterA = fs.readFileSync(path.join(frameworkRoot, stepsPathA), 'utf8');
+    const definitionsAfterA = [...stepsAfterA.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(match => match[1]);
+    assert.ok(definitionsAfterA.includes(thenA.text));
+
+    const caseC = prepareAndApply(
+        builder, 'rec-chained-step-c',
+        'el usuario descarga el historial encadenado',
+        'se muestra el titulo del historial encadenado',
+        [SHOW_HISTORY, OPEN_DETAIL, DOWNLOAD, TITLE], 'TC-90006',
+    );
+    const rows = caseC.scenario.request.scenarioRows;
+    const thenC = rows.find(row => row.status === 'reused' && (row.actions || []).length);
+    assert.ok(thenC, `C deberia reutilizar la asercion de A: ${JSON.stringify(rows.map(row => [row.keyword, row.text, row.status]))}`);
+    assert.equal(thenC.text, thenA.text, 'el texto es el literal del step existente, sin sufijo');
+    assert.ok(thenC.methodName, 'la fila reutilizada conoce el metodo que ya invoca el step existente');
+    // Trazabilidad completa: la accion de la asercion apunta a ese metodo.
+    const trace = caseC.response.actionTrace.find(item => item.sequence === 4);
+    assert.equal(trace.screenMethod, thenC.methodName);
+    assert.equal(caseC.validation.qualityScore, 100);
+    // El Feature usa el step literal y el Steps compartido no gana una definicion duplicada.
+    const featureC = fs.readFileSync(path.join(frameworkRoot, caseC.plan.files.find(file => file.layer === 'feature').path), 'utf8');
+    assert.match(featureC, new RegExp(`^\\s*Then ${thenA.text}$`, 'm'));
+    const stepsAfterC = fs.readFileSync(path.join(frameworkRoot, stepsPathA), 'utf8');
+    const definitionsAfterC = [...stepsAfterC.matchAll(/(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g)].map(match => match[1]);
+    assert.equal(definitionsAfterC.filter(definition => definition === thenA.text).length, 1);
+    assert.equal(definitionsAfterC.some(definition => definition.startsWith(`${thenA.text} en `)), false, 'no hay variante sufijada');
+});

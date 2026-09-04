@@ -169,7 +169,14 @@ Examples:
   navegación compleja.
 - Antes de avanzar desde Gherkin se contrasta cada texto con todas las
   definiciones y escenarios indexados. Los impactos se muestran; no se altera
-  código ajeno ni se decide reutilización automáticamente.
+  código ajeno.
+- Un step existente se **reutiliza** (fila `reused`, sin definición nueva y
+  con `methodName` del step existente para la trazabilidad) solo con
+  evidencia: el índice registra qué métodos de Screen Object invoca cada
+  definición, y se reutiliza cuando esos métodos alcanzan exactamente los
+  locators que el caso ya resolvió como `reuse` para esa fila — ni uno más ni
+  uno menos. Sin esa evidencia el texto se desambigua con un sufijo, como
+  antes; nunca se adopta un step por el texto.
 - El Screen Object se importa con
   `@screenobjects/<squad>/<modulo>.screen.ts`; no se admiten rutas relativas.
 - Un Steps planificado como `update` (el caso reutiliza el Screen Object de

@@ -559,20 +559,25 @@ function responseFromPreview(
     if (preview.screenPath && preview.screenContent) files.push({ layer: 'screen' as const, path: relative(preview.screenPath), content: preview.screenContent });
     if (preview.locatorPath && preview.locatorContent) files.push({ layer: 'locators' as const, path: relative(preview.locatorPath), content: preview.locatorContent });
 
-    const actionTrace = scenario.request.scenarioRows?.filter(row => row.status === 'missing')
+    const actionTrace = (scenario.request.scenarioRows || [])
+        .filter(row => row.status === 'missing' || (row.status === 'reused' && (row.actions || []).length))
         .flatMap((row, index) =>
             (row.actions || []).map(action => {
                 const resolution = plan.resolutions.find(item => item.sequence === action.sequence);
                 return {
                     sequence: action.sequence!,
                     gherkinStep: `${row.keyword} ${row.text}`,
-                    screenMethod: resolution?.resolution === 'reuse' && resolution.existingMethod
-                        ? resolution.existingMethod.name
-                        : scenarioRowMethodName(row, index),
+                    // Una fila reutilizada se traza al metodo que ya invoca el
+                    // step existente; no se genera ninguno nuevo.
+                    screenMethod: row.status === 'reused'
+                        ? row.methodName
+                        : resolution?.resolution === 'reuse' && resolution.existingMethod
+                            ? resolution.existingMethod.name
+                            : scenarioRowMethodName(row, index),
                     locatorName: resolution?.locatorName,
                 };
             })
-        ) || [];
+        );
     return {
         recordingId: scenario.recordingId,
         planId: plan.planId,

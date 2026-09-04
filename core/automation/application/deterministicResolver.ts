@@ -22,7 +22,7 @@ import {
     candidateAllowlist,
     SelectorCandidateStability,
 } from '../contracts';
-import { ArtifactBundle, FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog, CodeGraph, importsOf, indexModuleImports, inferredStrategy, strategyOf, strategyValue, roundTrip } from '../../indexing';
+import { ArtifactBundle, FeatureScenarioInfo, LocatorInfo, ReuseAnalyzer, SquadReuseCatalog, StepDefinitionInfo, CodeGraph, importsOf, indexModuleImports, inferredStrategy, strategyOf, strategyValue, roundTrip } from '../../indexing';
 import {
     canonicalStepExpression as canonicalStepExpressionShared,
     normalizeStepText as normalizeStepTextShared,
@@ -306,6 +306,63 @@ function collidesWithFrameworkStep(
             return false;
         }
     });
+}
+
+/** Texto literal de una expresion `^...$` sin metacaracteres; undefined si captura parametros. */
+function literalStepText(expression: string): string | undefined {
+    const inner = String(expression || '').replace(/^\^/, '').replace(/\$$/, '');
+    if (/[()[\]{}*+?|\\]/.test(inner)) return undefined;
+    return inner.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Reutiliza un step definition existente en vez de sufijar el texto.
+ *
+ * Sufijar ("... en contenedor movimientos casuisticas filtro") evita la
+ * colision pero deja dos definiciones que hacen lo mismo. Reutilizar solo es
+ * seguro con evidencia, no por el texto: el step existente tiene que invocar
+ * metodos de Screen Object cuyos locators sean exactamente los que este caso
+ * ya resolvio como `reuse` para esa fila. Ni uno mas (el step haria cosas que
+ * no se grabaron) ni uno menos (el step no cubriria lo grabado).
+ */
+function existingStepFor(
+    row: NonNullable<GenerationRequest['scenarioRows']>[number],
+    catalog: SquadReuseCatalog,
+    resolutions: ActionResolution[],
+): { text: string; methodName?: string; definition: StepDefinitionInfo } | undefined {
+    const actions = row.actions || [];
+    if (!actions.length) return undefined;
+    const canonical = canonicalStepExpressionShared(row.text);
+    const rowResolutions = actions
+        .map(action => resolutions.find(item => item.sequence === action.sequence))
+        .filter((item): item is ActionResolution => Boolean(item));
+    const withSelector = rowResolutions.filter(item => Boolean(item.selector));
+    if (!withSelector.length) return undefined;
+    if (withSelector.some(item => item.resolution !== 'reuse' || !item.locatorName || !item.source?.file)) {
+        return undefined;
+    }
+    const recordedKeys = new Set(withSelector.map(item => `${item.source!.file}\u0000${item.locatorName}`));
+    for (const definition of catalog.stepDefinitions) {
+        if (canonicalStepExpressionShared(definition.expression) !== canonical) continue;
+        const text = literalStepText(definition.expression);
+        if (!text || !definition.screenMethods?.length) continue;
+        const methods = definition.screenMethods.map(call =>
+            (catalog.screenMethods || []).find(method => method.file === call.file && method.name === call.method)
+        );
+        if (methods.some(method => !method)) continue;
+        const reachable = new Set(methods.flatMap(method =>
+            (method!.locatorFiles || []).flatMap(file => (method!.locatorKeys || []).map(key => `${file}\u0000${key}`))
+        ));
+        const sameKeys = reachable.size === recordedKeys.size
+            && [...recordedKeys].every(key => reachable.has(key));
+        if (!sameKeys) continue;
+        return {
+            text,
+            methodName: definition.screenMethods.length === 1 ? definition.screenMethods[0].method : undefined,
+            definition,
+        };
+    }
+    return undefined;
 }
 
 function disambiguateStepText(
@@ -1259,17 +1316,27 @@ export class DeterministicResolver {
             else behaviorSeen = true;
         });
         const usedCanonicals = new Set<string>();
-        const uniqueScenarioRows = scenarioRows.map(row =>
-            row.status === 'missing'
-                ? { ...row, text: disambiguateStepText(
-                    row.text,
-                    usedCanonicals,
-                    catalog.stepDefinitions,
-                    technicalName,
-                    normalizedRequest.caseId,
-                ) }
-                : row
-        );
+        const uniqueScenarioRows = scenarioRows.map(row => {
+            if (row.status !== 'missing') return row;
+            const existing = existingStepFor(row, catalog, resolutions);
+            if (existing) {
+                usedCanonicals.add(canonicalStepExpressionShared(existing.text));
+                return {
+                    ...row,
+                    text: existing.text,
+                    status: 'reused' as const,
+                    wording: 'domain' as const,
+                    ...(existing.methodName ? { methodName: existing.methodName } : {}),
+                };
+            }
+            return { ...row, text: disambiguateStepText(
+                row.text,
+                usedCanonicals,
+                catalog.stepDefinitions,
+                technicalName,
+                normalizedRequest.caseId,
+            ) };
+        });
         const consolidatedValidationRows = repetition
             ? consolidateRepeatedValidationCycle(
                 uniqueScenarioRows,

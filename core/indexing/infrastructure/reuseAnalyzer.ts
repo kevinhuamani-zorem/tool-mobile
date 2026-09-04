@@ -15,6 +15,12 @@ export interface StepDefinitionInfo {
     file: string;
     squad: string;
     scope: 'squad' | 'commons';
+    /**
+     * Metodos de Screen Object que invoca el cuerpo de la definicion, con el
+     * archivo del Screen resuelto desde el import. Es lo que permite decidir
+     * si un step existente hace exactamente lo que este caso grabo.
+     */
+    screenMethods?: Array<{ file: string; method: string }>;
 }
 
 export interface ScreenMethodInfo {
@@ -419,16 +425,35 @@ export class ReuseAnalyzer {
             const squad = relativeToSteps.split(path.sep)[0];
             if (!squad || squad === '..') continue;
             const content = this.readFrameworkFile(file);
+            const screenAliases = new Map<string, string>();
+            for (const imported of content.matchAll(
+                /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@screenobjects\/([^'"]+?)(?:\.ts)?['"]/g
+            )) {
+                screenAliases.set(imported[1], `screenobjects/${imported[2]}.ts`);
+            }
+            const starts: Array<{ index: number; match: RegExpExecArray }> = [];
             let match: RegExpExecArray | null;
             while ((match = pattern.exec(content)) !== null) {
+                starts.push({ index: match.index, match });
+            }
+            starts.forEach((entry, position) => {
+                const body = content.slice(entry.index, starts[position + 1]?.index ?? content.length);
+                const screenMethods: NonNullable<StepDefinitionInfo['screenMethods']> = [];
+                for (const call of body.matchAll(/\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(/g)) {
+                    const screenFile = screenAliases.get(call[1]);
+                    if (!screenFile) continue;
+                    if (screenMethods.some(item => item.file === screenFile && item.method === call[2])) continue;
+                    screenMethods.push({ file: screenFile, method: call[2] });
+                }
                 definitions.push({
-                    keyword: match[1] as StepDefinitionInfo['keyword'],
-                    expression: match[2].replace(/\\\//g, '/'),
+                    keyword: entry.match[1] as StepDefinitionInfo['keyword'],
+                    expression: entry.match[2].replace(/\\\//g, '/'),
                     file: path.relative(projectPaths.frameworkRoot, file),
                     squad,
-                    scope: squad === 'commons' ? 'commons' : 'squad'
+                    scope: squad === 'commons' ? 'commons' : 'squad',
+                    ...(screenMethods.length ? { screenMethods } : {}),
                 });
-            }
+            });
         }
         return definitions;
     }
