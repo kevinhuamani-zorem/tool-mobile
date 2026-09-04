@@ -126,7 +126,13 @@ features; ninguna importa un archivo interno de otra ni de `core/`
 - `recorder/src/ipc/automationHandlers.ts`: el pipeline de automatización
   completo — preparar paquete, resolver decisiones de QA, lanzar/importar la
   respuesta del agente, validar, aplicar sobre el framework y promocionar
-  memoria.
+  memoria. El archivo solo registra los canales; cada paso vive en
+  `recorder/src/ipc/automation/`: `progress` (etapas de producto y emisor),
+  `qaDecisions` (prompts y aplicación de decisiones QA al plan),
+  `responseImport` (`AutomationResponseImporter`: importar/validar la
+  respuesta y rematerializar `gap-resolutions.json`), `agentLaunch`
+  (`AutomationAgentLaunchService`: manual, por capas o determinista) y
+  `applyAutomation` (aplicar la propuesta revisada sobre el framework).
 - `recorder/src/ipc/generationHandlers.ts`: generación heredada de las cuatro
   capas sin pasar por el pipeline de automatización con agente, y el Gherkin
   con steps enlazados. Sus dos handlers de escritura final permanecen detrás
@@ -266,6 +272,15 @@ XML, screenshots, source, capabilities ni credenciales.
    juzga Sumrak; enrutado del feedback por código), `projections` (lo que
    cada rol recibe en su carpeta), `prompts`, `artifacts` (handoffs, cachés,
    contrato provisional de interfaz) y `budget`.
+   El pipeline mono-agente sigue el mismo patrón: `AgentOrchestrator` conserva
+   `run` y sus módulos viven en `core/automation/infrastructure/agent/`:
+   `orchestratorContracts`, `packageArtifacts` (JSON, saneado de rutas,
+   `status.json`, workspaces por gap), `queryAccounting`, `gapCoverage`,
+   `runMetrics`, `prompts` y `deterministicRun` (la PASS 1/PASS 2
+   determinista con validación por feedback). `DeterministicResolver`
+   igual: la clase en `core/automation/application/deterministicResolver.ts`
+   y sus funciones en `application/resolver/` (`naming`, `wording`,
+   `stepReuse`, `selectorHeuristics`, `artifactPlanning`).
    Presupuesto por etapa: cada `LayeredGenerationStageReport` lleva `budget`
    (`maxDurationMs`, `maxContextBytes`, `hangStopMs`), `contextBytes` (todo lo
    que hay en la carpeta del agente), `evidenceBytes` (solo evidencia del
@@ -364,7 +379,10 @@ XML, screenshots, source, capabilities ni credenciales.
    `(code, message, file)`. El catalogo de reglas que viaja al paquete se
    construye leyendo el orquestador **y** ese directorio
    (`readValidatorRuleSource`), asi que una regla nueva vive en su familia y
-   aparece sola en el contrato.
+   aparece sola en el contrato. Las lecturas de AST que comparten las reglas
+   (`screenInspection`) reexportan sus dos consultas grandes desde
+   `screenLocatorTypes` y `screenMethodUsage`, con `screenAst` como helper
+   comun.
    Los rellenos de plataforma solo aceptan la identidad determinista completa
    `(file, module, block, name, platform, sequence)` y el método trazado debe
    consumir ese getter; el patch conserva esa misma identidad hasta la escritura.
