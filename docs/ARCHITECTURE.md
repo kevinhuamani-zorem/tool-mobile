@@ -252,6 +252,9 @@ XML, screenshots, source, capabilities ni credenciales.
    (`behavior-author`) genera Feature y Steps, **Zorem** (`interaction-author`)
    genera Screen Object y Locators, y **Sumrak** (`integration-reviewer`)
    unifica las cuatro capas en el `agent-response.json` visible para el QA.
+   Solo Zorem recibe `shell(node|python)` para validar su Screen Object; Lorem
+   y Sumrak corren sin shell, así la prohibición de explorar el framework deja
+   de depender del prompt.
    Lorem, Zorem y Sumrak se ejecutan en modo headless con perfiles custom-agent
    y sesiones nombradas `Derek/<recordingId>/<agente>`; no abren Terminal ni
    dependen de una sesión interactiva. Cada delegado recibe un manifiesto

@@ -1289,6 +1289,10 @@ export class LayeredGenerationOrchestrator {
                 timeoutMs: options.timeoutMs || 300_000,
                 model: options.model,
                 agentName: identity.name,
+                // Solo Zorem tiene algo que ejecutar (screen-object-contract.js
+                // contra su Screen Object). Un shell abierto para Lorem seria
+                // la unica via que le queda para explorar el framework.
+                allowValidationScripts: role === 'interaction-author',
                 sessionName: feedbackRound > 0
                     ? `${namedSession}/feedback-${feedbackRound}`
                     : namedSession,
@@ -1473,6 +1477,7 @@ export class LayeredGenerationOrchestrator {
                 timeoutMs: options.timeoutMs || 300_000,
                 model: options.model,
                 agentName: identity.name,
+                allowValidationScripts: false,
                 sessionName: namedSession,
                 traceFile: './agent-execution.log',
                 traceLabel: role,

@@ -58,6 +58,7 @@ function provider(calls, mutate) {
                 role,
                 agentName: input.agentName,
                 sessionName: input.sessionName,
+                allowValidationScripts: input.allowValidationScripts,
                 hasBehaviorDependency: role === 'interaction-author'
                     ? fs.existsSync(path.join(input.cwd, 'behavior-result.json'))
                         && fs.existsSync(path.join(input.cwd, 'lorem-handoff.json'))
@@ -799,4 +800,19 @@ test('un error de Gherkin con código de comportamiento vuelve solo a Lorem', as
     assert.equal(result.success, true, result.error);
     // Lorem repara; Zorem no se relanza porque la interfaz actionTrace no cambió.
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Lorem', 'Sumrak']);
+});
+
+// Solo Zorem ejecuta algo (screen-object-contract.js). Con `shell(node)` abierto,
+// la prohibicion de explorar el framework era solo de prompt.
+test('solo Zorem recibe permiso de ejecutar scripts de validación', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+
+    await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.deepEqual(
+        calls.map(call => [call.agentName, call.allowValidationScripts]),
+        [['Lorem', false], ['Zorem', true], ['Sumrak', false]],
+    );
 });
