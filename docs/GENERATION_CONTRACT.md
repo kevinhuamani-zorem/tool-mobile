@@ -211,6 +211,13 @@ Examples:
 - Nada de esto toca selectores. Una errata en el texto de la app (`Útimos`) se
   conserva literal en el selector y en el nombre; el hallazgo va al QA en
   `qa-observations.json` (`ui-text-quality`), nunca se corrige en silencio.
+- Lo mismo con una verificación grabada con un XPath sin predicado
+  (`//android.view.View`): el selector se conserva tal cual, el QA recibe la
+  observación `weak-assertion`, y `gap-weak-assertion-N` es informativo para
+  Lorem y Zorem (pueden refinar la verificación dentro del Screen Object);
+  Derek lo firma con la decisión que el plan fijó y Sumrak no lo juzga. El QA
+  puede haber elegido ese XPath a propósito para iterar en código con el
+  agente.
 
 ## Screen Object
 

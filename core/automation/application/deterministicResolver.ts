@@ -31,6 +31,7 @@ import {
     translateToEnglish,
     translateToSlug,
     unknownTokens,
+    selectorCannotIdentifyElement,
 } from '../../shared';
 import { frameworkContract, projectPaths } from '../../workspace';
 import { ElementIdentityIndex } from '../domain/elementIdentity';
@@ -474,14 +475,6 @@ function selectorPinsAssertedValue(step: RecordedStep): boolean {
  * en practicamente cualquier pantalla. Como asercion siempre pasa, y el caso
  * queda verde sin haber comprobado nada.
  */
-function selectorCannotIdentifyElement(selector = ''): boolean {
-    const value = String(selector).trim();
-    if (!/^\/{1,2}[^/]/.test(value) && value !== '//*') return false;
-    // Cualquier predicado, atributo o funcion ya lo hace especifico.
-    if (/[\[\]@=]|contains\(|text\(\)|starts-with\(/.test(value)) return false;
-    return true;
-}
-
 /** `UiSelector().text()` es coincidencia exacta: un `*` final nunca actúa como comodín. */
 function selectorUsesFakeWildcard(selector = ''): boolean {
     return /\.(?:text|description)\(\s*["'][^"']*[*%]["']\s*\)/.test(selector);
@@ -1018,9 +1011,10 @@ export class DeterministicResolver {
                 description: `La acción ${index + 1} verifica con "${step.selector}", un XPath sin ningún ` +
                     'predicado: engancha el primer nodo de ese tipo, que existe en casi cualquier pantalla. ' +
                     'La aserción pasaría igual aunque el filtro no se haya aplicado.',
-                requiredOutput: 'Apunta la verificación a algo propio del resultado (accessibility id, ' +
-                    'texto del título del contenedor, o el XPath con un predicado que lo distinga) y ' +
-                    'explica en el Then qué prueba ese elemento.',
+                requiredOutput: 'Aviso, no bloqueo: el selector grabado se conserva tal cual. Si el QA lo ' +
+                    'eligió para iterar en código, refina la verificación dentro del Screen Object ' +
+                    '(un predicado que distinga el resultado, o el texto del título del contenedor) y ' +
+                    'explica en el Then qué prueba ese elemento. El locator grabado no se reemplaza.',
             });
         });
 

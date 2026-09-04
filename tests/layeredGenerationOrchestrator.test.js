@@ -1069,3 +1069,32 @@ test('un gap de nombres en inglés llega a los autores y no exige juicio de Sumr
     const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
     assert.deepEqual(response.resolutions.map(item => [item.gapId, item.decision]), [['gap-english-naming', 'renamed-by-authors']]);
 });
+
+// Una verificación con XPath genérico se avisa a los autores, no se decide: el
+// selector grabado se conserva y Derek firma con la decisión que el plan fijó.
+test('un gap de aserción débil llega a los autores y Derek lo firma con la decisión del plan', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.resolutions = [
+        { sequence: 2, action: 'VERIFICAR_EXISTE', intent: 'titulo', resolution: 'create', locatorName: 'containerTitle', selector: '//android.view.View', confidence: 1, reason: 'nuevo' },
+    ];
+    plan.unresolvedGapIds = ['gap-weak-assertion-2'];
+    writeJson(planFile, plan);
+    writeJson(path.join(root, 'gaps.json'), {
+        gaps: [{ id: 'gap-weak-assertion-2', sequence: 2, type: 'verification-semantics', blocking: false, description: 'XPath sin predicado' }],
+    });
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem'], 'Sumrak no abre sesión por un aviso');
+    for (const directory of ['lorem', 'zorem']) {
+        const gaps = JSON.parse(fs.readFileSync(path.join(root, 'agents', directory, 'gaps.json'), 'utf8')).gaps;
+        assert.deepEqual(gaps.map(gap => gap.id), ['gap-weak-assertion-2']);
+    }
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.deepEqual(response.resolutions.map(item => [item.gapId, item.decision]), [['gap-weak-assertion-2', 'create']]);
+});

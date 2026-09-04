@@ -48,3 +48,19 @@ test('usa la plataforma del escenario en recordings antiguos que no la guardaron
     }], '2026-09-01T00:00:00.000Z', 'ios');
     assert.equal(artifact.observations[0].platform, 'ios');
 });
+
+// Un XPath sin predicado en una verificacion se avisa y se conserva: el QA
+// puede haberlo elegido para que el agente itere en codigo sobre el.
+test('avisa una verificación con XPath genérico sin tocar el selector', () => {
+    const artifact = analyzeUiTextQuality('rec-weak', [
+        { action: 'CLICK', selector: '~Ver todos', sequence: 1, platform: 'android' },
+        { action: 'VERIFICAR_EXISTE', selector: '//android.view.View', sequence: 2, platform: 'android' },
+        { action: 'VERIFICAR_EXISTE', selector: '//android.view.View[@text="Movimientos"]', sequence: 3, platform: 'android' },
+    ], '2026-09-04T00:00:00.000Z', 'android');
+    const weak = artifact.observations.filter(item => item.type === 'weak-assertion');
+    assert.equal(weak.length, 1);
+    assert.equal(weak[0].actionSequence, 2);
+    assert.equal(weak[0].selector, '//android.view.View');
+    assert.equal(weak[0].severity, 'warning');
+    assert.match(weak[0].message, /Se conserva tal cual/);
+});

@@ -1,4 +1,5 @@
 import type { AutomationScenario, RecordedStep } from '../contracts';
+import { selectorCannotIdentifyElement } from '../../shared';
 
 export interface QaTextQualityObservation {
     id: string;
@@ -12,11 +13,27 @@ export interface QaTextQualityObservation {
     selector: string;
 }
 
+/**
+ * Verificacion con un XPath sin predicado. Solo se avisa: el selector grabado
+ * se conserva y el QA decide si lo refina o deja que el agente itere sobre el.
+ */
+export interface QaWeakAssertionObservation {
+    id: string;
+    type: 'weak-assertion';
+    severity: 'warning';
+    platform: 'android' | 'ios';
+    message: string;
+    actionSequence: number;
+    selector: string;
+}
+
+export type QaObservation = QaTextQualityObservation | QaWeakAssertionObservation;
+
 export interface QaObservationsArtifact {
     schemaVersion: 1;
     recordingId: string;
     generatedAt: string;
-    observations: QaTextQualityObservation[];
+    observations: QaObservation[];
 }
 
 interface TextCorrectionRule {
@@ -49,7 +66,7 @@ export function analyzeUiTextQuality(
     generatedAt = new Date().toISOString(),
     defaultPlatform: 'android' | 'ios' = 'android',
 ): QaObservationsArtifact {
-    const observations: QaTextQualityObservation[] = [];
+    const observations: QaObservation[] = [];
     steps.forEach((step, index) => {
         const selector = visibleText(step);
         if (!selector) return;
@@ -70,6 +87,22 @@ export function analyzeUiTextQuality(
                 selector,
             });
         }
+    });
+    steps.forEach((step, index) => {
+        if (!/^VERIFICAR_/.test(String(step.action || ''))) return;
+        const selector = String(step.selector || '');
+        if (!selectorCannotIdentifyElement(selector)) return;
+        const actionSequence = Number(step.sequence || index + 1);
+        observations.push({
+            id: `weak-assertion-${actionSequence}`,
+            type: 'weak-assertion',
+            severity: 'warning',
+            platform: step.platform || defaultPlatform,
+            message: `La verificación usa "${selector}", un XPath sin predicado que engancha el primer nodo de ese tipo. ` +
+                'Se conserva tal cual; si buscas un elemento concreto, refina el selector o pide al agente que lo haga en código.',
+            actionSequence,
+            selector,
+        });
     });
     return { schemaVersion: 1, recordingId, generatedAt, observations };
 }

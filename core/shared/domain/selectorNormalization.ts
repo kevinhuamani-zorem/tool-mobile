@@ -96,3 +96,17 @@ export const selectorNormalization = {
     slug,
     camel,
 };
+
+/**
+ * Un XPath sin predicado (`//android.view.View`, `//*`) engancha el primer
+ * nodo de ese tipo, que existe en casi cualquier pantalla. No se corrige ni
+ * se bloquea: el QA puede haberlo elegido a proposito para que el agente
+ * itere en codigo; solo se avisa.
+ */
+export function selectorCannotIdentifyElement(selector = ''): boolean {
+    const value = String(selector).trim();
+    if (!/^\/{1,2}[^/]/.test(value) && value !== '//*') return false;
+    // Cualquier predicado, atributo o funcion ya lo hace especifico.
+    if (/[\[\]@=]|contains\(|text\(\)|starts-with\(/.test(value)) return false;
+    return true;
+}

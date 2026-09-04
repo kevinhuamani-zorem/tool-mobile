@@ -821,8 +821,10 @@ interface GapJudgment {
     informational: string[];
 }
 
-/** Gaps que los autores resuelven al escribir; nunca requieren una decision de Sumrak. */
-const AUTHOR_INFORMATIONAL_GAPS = new Set(['gap-english-naming']);
+/** Gaps que los autores atienden al escribir; nunca requieren una decision de Sumrak. */
+function isAuthorInformationalGap(gapId: string): boolean {
+    return gapId === 'gap-english-naming' || /^gap-weak-assertion-\d+$/.test(gapId);
+}
 
 /**
  * Separa los gaps abiertos entre los que el plan ya decidio y los que no.
@@ -848,12 +850,15 @@ function gapJudgment(packageDirectory: string, plan: GenerationPlan): GapJudgmen
             judgment.open.push(gapId);
             continue;
         }
-        if (AUTHOR_INFORMATIONAL_GAPS.has(gapId)) {
+        if (isAuthorInformationalGap(gapId)) {
             judgment.informational.push(gapId);
+            const fixedDecision = expected.get(gapId);
             judgment.fixed.push({
                 gapId,
-                decision: 'renamed-by-authors',
-                reason: 'Los autores nombran en inglés al escribir su capa; el normalizador aplica el diccionario y el validador advierte lo que quede en español.',
+                decision: fixedDecision || 'renamed-by-authors',
+                reason: gapId === 'gap-english-naming'
+                    ? 'Los autores nombran en inglés al escribir su capa; el normalizador aplica el diccionario y el validador advierte lo que quede en español.'
+                    : `Aviso para los autores: la verificación usa un selector genérico que se conserva tal cual; Derek mantiene la decisión ${fixedDecision || 'del plan'}.`,
             });
             continue;
         }
