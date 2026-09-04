@@ -31,6 +31,8 @@ import {
 import { frameworkContract, projectPaths } from '../../workspace';
 import { ElementIdentityIndex } from '../domain/elementIdentity';
 import type { BaselineSnapshotPort } from '../ports/baselineSnapshotPort';
+import type { MemoryFragmentsPort } from '../ports/memoryFragmentsPort';
+import { InteractionFragment, actionIdentity } from '../domain/memoryFragments';
 
 
 export interface ResolverResult {
@@ -119,7 +121,8 @@ export class DeterministicResolver {
         private readonly baselineSnapshot: BaselineSnapshotPort = requireBaselineSnapshotPort(),
     ) {}
 
-    resolve(rawScenario: AutomationScenario): ResolverResult {
+    resolve(rawScenario: AutomationScenario, options: { memory?: MemoryFragmentsPort } = {}): ResolverResult {
+        const memory = options.memory;
         if (!/^[a-z0-9][a-z0-9_-]*$/.test(rawScenario.squad)) {
             throw new Error(`Squad inválido: ${rawScenario.squad}`);
         }
@@ -313,6 +316,14 @@ export class DeterministicResolver {
             if (!/^VERIFICAR_/.test(step.action)) return;
             const pinned = selectorPinsAssertedValue(step);
             if (!likelyDynamicText(step.value) && !pinned) return;
+            // La misma verificacion sobre el mismo elemento ya se decidio en
+            // otro caso validado a 100: se replica esa decision y el gap nace
+            // resuelto. El agente no vuelve a juzgarlo; el QA lo ve trazado.
+            const remembered = memory?.recallGap(
+                rawScenario.squad,
+                'verification-semantics',
+                actionIdentity(step, rawScenario.platform),
+            );
             gaps.push({
                 id: `gap-verification-${index + 1}`,
                 sequence: index + 1,
@@ -323,6 +334,11 @@ export class DeterministicResolver {
                 requiredOutput: pinned
                     ? 'Apunta el locator al contenedor del valor (id, accessibility id o relación estructural) y compara el texto contra el parámetro del Examples.'
                     : 'Validar existencia o contenido no vacío; usar igualdad exacta solo si el criterio de aceptación lo exige.',
+                ...(remembered ? {
+                    status: 'resolved' as const,
+                    resolvedBy: 'memory' as const,
+                    reason: `Decisión "${remembered.decision}" replicada desde la memoria del caso ${remembered.caseId || remembered.fingerprint.slice(0, 8)}: ${remembered.reason}`,
+                } : {}),
             });
         });
 
@@ -578,11 +594,31 @@ export class DeterministicResolver {
             if (!current || current.assertion !== assertion) chunks.push({ assertion, entries: [] });
             chunks[chunks.length - 1].entries.push({ step, resolution: resolutions[index] });
         });
-        const behaviorChunks = chunks.filter(chunk => !chunk.assertion).length;
-        const assertionChunks = chunks.filter(chunk => chunk.assertion).length;
+        // Memoria de fragmentos: un tramo del bloque que otro caso validado a
+        // 100 ya redacto (misma secuencia de elementos) se separa como fila
+        // propia con ese wording y ese metodo; el resto del bloque sigue el
+        // camino normal. Asi B = A + un paso hereda los steps de A y solo
+        // redacta el paso nuevo.
+        type Chunk = typeof chunks[number] & { memory?: InteractionFragment };
+        const usedMemoryTexts = new Set<string>();
+        const memoryChunks: Chunk[] = chunks.flatMap((chunk): Chunk[] => {
+            const recalled = memory?.recallInteractions(
+                rawScenario.squad,
+                chunk.entries.map(entry => actionIdentity(entry.step, rawScenario.platform)),
+                usedMemoryTexts,
+            );
+            if (!recalled) return [chunk];
+            return recalled.map(segment => ({
+                assertion: chunk.assertion,
+                entries: chunk.entries.slice(segment.from, segment.to + 1),
+                ...(segment.fragment ? { memory: segment.fragment } : {}),
+            }));
+        });
+        const behaviorChunks = memoryChunks.filter(chunk => !chunk.assertion && !chunk.memory).length;
+        const assertionChunks = memoryChunks.filter(chunk => chunk.assertion && !chunk.memory).length;
         let behaviorSeen = false;
         let assertionSeen = false;
-        chunks.forEach(chunk => {
+        memoryChunks.forEach(chunk => {
             const intents = chunk.entries.map(entry => entry.resolution.intent);
             const parameterizedActions = chunk.entries.map(({ step, resolution }) => {
                 if (step.action !== 'ESCRIBIR') return {
@@ -628,10 +664,22 @@ export class DeterministicResolver {
                     : assertionRow === assertionTemplate(technicalName) ? 'template' : 'qa')
                 : (domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName) ? 'domain'
                     : behavior === behaviorTemplate(technicalName) ? 'template' : 'qa');
-            scenarioRows.push({
-                keyword: chunk.assertion
-                    ? (assertionSeen ? 'And' : 'Then')
-                    : (behaviorSeen ? 'And' : 'When'),
+            const keyword = chunk.assertion
+                ? (assertionSeen ? 'And' : 'Then')
+                : (behaviorSeen ? 'And' : 'When');
+            scenarioRows.push(chunk.memory ? {
+                keyword,
+                text: chunk.memory.text,
+                status: 'missing',
+                wording: 'memory',
+                actions: parameterizedActions,
+                ...(chunk.memory.screenMethod ? { methodName: chunk.memory.screenMethod } : {}),
+                memory: {
+                    caseId: chunk.memory.caseId,
+                    ...(chunk.memory.screenMethod ? { screenMethod: chunk.memory.screenMethod } : {}),
+                },
+            } : {
+                keyword,
                 text: chunk.assertion ? assertionRow : behavior,
                 status: 'missing',
                 wording,
@@ -654,6 +702,9 @@ export class DeterministicResolver {
                     ...(existing.methodName ? { methodName: existing.methodName } : {}),
                 };
             }
+            // Una fila de memoria cuyo texto ya exista en el framework con otros
+            // locators, o que se repita en este caso, se desambigua igual que
+            // cualquier otra: reutilizar es adoptar el step, nunca colisionar.
             return { ...row, text: disambiguateStepText(
                 row.text,
                 usedCanonicals,
@@ -883,6 +934,9 @@ export class DeterministicResolver {
             reuseTarget,
         })).digest('hex').slice(0, 24)}`;
         const unresolved = resolutions.filter(item => item.resolution === 'unresolved').length;
+        // Un gap que nace resuelto (memoria) queda en unresolved-context como
+        // traza, pero no abre el paquete al agente ni exige resolucion.
+        const openGaps = gaps.filter(gap => gap.status !== 'resolved');
         const plan: GenerationPlan = {
             schemaVersion: AUTOMATION_SCHEMA_VERSION,
             pipelineVersion: AUTOMATION_PIPELINE_VERSION,
@@ -892,13 +946,13 @@ export class DeterministicResolver {
             deterministicCoverage: resolutions.length
                 ? (resolutions.length - unresolved) / resolutions.length
                 : 0,
-            status: gaps.length ? 'needs-agent' : 'deterministic',
+            status: openGaps.length ? 'needs-agent' : 'deterministic',
             resolutions,
             files,
             existingCase,
             reuseTarget,
             ...(repetition ? { repetition } : {}),
-            unresolvedGapIds: gaps.map(gap => gap.id),
+            unresolvedGapIds: openGaps.map(gap => gap.id),
             budgets: normalizeAgentOperationalBudgets(DEFAULT_AGENT_OPERATIONAL_BUDGETS),
         };
         return {

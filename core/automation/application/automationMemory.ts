@@ -4,7 +4,19 @@ import {
     AutomationScenario,
     AutomationValidation,
     GenerationPlan,
+    UnresolvedGap,
 } from '../contracts';
+import {
+    GapFragment,
+    InteractionRecall,
+    MemoryFragments,
+    emptyMemoryFragments,
+    fragmentsFromValidatedCase,
+    mergeMemoryFragments,
+    recallGap,
+    recallInteractions,
+} from '../domain/memoryFragments';
+import { MemoryFragmentsPort } from '../ports/memoryFragmentsPort';
 import { projectPaths } from '../../workspace';
 import {
     extendTranslations,
@@ -30,11 +42,72 @@ function writeJsonAtomic(file: string, value: unknown): void {
     writeJsonUtf8(file, value);
 }
 
-export class AutomationMemory {
+export class AutomationMemory implements MemoryFragmentsPort {
     constructor(private readonly root = projectPaths.automationMemory) {}
 
     private indexFile(): string { return path.join(this.root, 'index.json'); }
     private vocabularyFile(): string { return path.join(this.root, 'vocabulary.json'); }
+    private fragmentsFile(): string { return path.join(this.root, 'fragments.json'); }
+
+    /**
+     * Fragmentos reutilizables entre recordings (interacciones redactadas y
+     * gaps por elemento ya decididos). Ver `domain/memoryFragments`.
+     */
+    fragments(): MemoryFragments {
+        try {
+            const document = readJsonUtf8<MemoryFragments>(this.fragmentsFile());
+            return {
+                schemaVersion: 1,
+                interactions: Array.isArray(document.interactions) ? document.interactions : [],
+                gaps: Array.isArray(document.gaps) ? document.gaps : [],
+            };
+        } catch {
+            return this.rebuildFragmentsFromCases();
+        }
+    }
+
+    /**
+     * Los casos promocionados antes de que existiera la memoria de fragmentos
+     * ya son evidencia validada a 100: la primera lectura los indexa (solo
+     * interacciones; sus gaps no se guardaron). Si no hay casos, no escribe.
+     */
+    private rebuildFragmentsFromCases(): MemoryFragments {
+        let merged = emptyMemoryFragments();
+        for (const entry of this.readIndex().entries.filter(item => item.qualityScore === 100)) {
+            try {
+                const directory = path.join(this.root, entry.directory);
+                const scenario = readJsonUtf8<AutomationScenario>(path.join(directory, 'scenario.json'));
+                const response = readJsonUtf8<AutomationAgentResponse>(path.join(directory, 'agent-response.json'));
+                merged = mergeMemoryFragments(merged, fragmentsFromValidatedCase({
+                    scenario, response, promotedAt: entry.promotedAt,
+                }));
+            } catch {
+                continue;
+            }
+        }
+        if (merged.interactions.length) writeJsonAtomic(this.fragmentsFile(), merged);
+        return merged;
+    }
+
+    recallInteractions(squad: string, identities: string[], usedTexts?: Set<string>): InteractionRecall[] | undefined {
+        return recallInteractions(this.fragments().interactions, squad, identities, usedTexts);
+    }
+
+    recallGap(squad: string, type: UnresolvedGap['type'], identity: string): GapFragment | undefined {
+        return recallGap(this.fragments().gaps, squad, type, identity);
+    }
+
+    private learnFragments(
+        scenario: AutomationScenario,
+        response: AutomationAgentResponse,
+        gaps: UnresolvedGap[] | undefined,
+        promotedAt: string,
+    ): MemoryFragments {
+        const learned = fragmentsFromValidatedCase({ scenario, response, gaps, promotedAt });
+        const merged = mergeMemoryFragments(this.fragments(), learned);
+        writeJsonAtomic(this.fragmentsFile(), merged);
+        return learned;
+    }
 
     /** Vocabulario ES->EN aprendido de automatizaciones validadas al 100%. */
     learnedVocabulary(): Record<string, string> {
@@ -103,7 +176,8 @@ export class AutomationMemory {
         scenario: AutomationScenario,
         plan: GenerationPlan,
         response: AutomationAgentResponse,
-        validation: AutomationValidation
+        validation: AutomationValidation,
+        gaps?: UnresolvedGap[],
     ): MemoryEntry {
         if (!validation.valid || validation.qualityScore !== 100) {
             throw new Error('Solo se versionan automatizaciones validadas al 100%');
@@ -119,11 +193,13 @@ export class AutomationMemory {
         writeJsonAtomic(path.join(absolute, 'agent-response.json'), response);
         writeJsonAtomic(path.join(absolute, 'validation.json'), validation);
         this.learnVocabulary(plan, response);
+        const promotedAt = new Date().toISOString();
+        this.learnFragments(scenario, response, gaps, promotedAt);
         const entry: MemoryEntry = {
             fingerprint: scenario.fingerprint,
             version,
             qualityScore: validation.qualityScore,
-            promotedAt: new Date().toISOString(),
+            promotedAt,
             directory,
         };
         index.entries.push(entry);
@@ -131,11 +207,14 @@ export class AutomationMemory {
         return entry;
     }
 
-    stats(): { successfulCases: number; versions: number } {
+    stats(): { successfulCases: number; versions: number; interactions: number; gapDecisions: number } {
         const entries = this.readIndex().entries.filter(entry => entry.qualityScore === 100);
+        const fragments = this.fragments();
         return {
             successfulCases: new Set(entries.map(entry => entry.fingerprint)).size,
             versions: entries.length,
+            interactions: fragments.interactions.length,
+            gapDecisions: fragments.gaps.length,
         };
     }
 }

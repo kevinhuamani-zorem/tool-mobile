@@ -446,7 +446,7 @@ export const FRAMEWORK_CONTEXT_QUERIES: FrameworkContextQuery[] = [
     'validateImports',
 ];
 
-export type GapResolver = 'qa' | 'deterministic' | 'agent';
+export type GapResolver = 'qa' | 'deterministic' | 'agent' | 'memory';
 export type GapStatus = 'open' | 'resolved' | 'blocked-qa';
 
 export type AutomationHintType =
@@ -704,6 +704,12 @@ export interface AutomationPackageResult {
     deterministicCoverage: number;
     unresolvedGaps: number;
     memoryVersion?: number;
+    /**
+     * Lo que este paquete heredó de la memoria de fragmentos de OTROS casos
+     * validados: steps con wording y método ya aceptados, y gaps por elemento
+     * que nacieron resueltos. Es informativo para el QA; el plan ya lo refleja.
+     */
+    memoryRecall?: { steps: number; gaps: number; cases: string[] };
     agentRequired: boolean;
     responseAvailable: boolean;
     /** El paquete necesita la revisión funcional acotada de Copilot. */

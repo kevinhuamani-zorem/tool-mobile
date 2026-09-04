@@ -18,7 +18,6 @@ import {
     LayeredGenerationRunReport,
     LayeredGenerationStageReport,
     layeredResultSchema,
-    sha256Text,
 } from '../domain/layeredGenerationContracts';
 import type {
     AgentProvider,
@@ -69,7 +68,10 @@ import {
 } from './layered/prompts';
 import {
     actionInterfaceFingerprint,
+    agentCacheRoot,
     artifact,
+    memoryIdentity,
+    rebindCachedResult,
     filesInside,
     normalizeAutomationResponse,
     normalizeBehaviorResult,
@@ -129,7 +131,7 @@ export class LayeredGenerationOrchestrator {
         let repairAttempts = 0;
         try {
             const completeFingerprint = pipelineFingerprint(root, options.model || 'auto');
-            const completeCacheFile = pipelineCacheFile(root, completeFingerprint);
+            const completeCacheFile = pipelineCacheFile(completeFingerprint);
             if (!options.forceRegenerate) {
                 let cachedEntry: PipelineCacheEntry | undefined;
                 if (fs.existsSync(completeCacheFile)) {
@@ -154,7 +156,10 @@ export class LayeredGenerationOrchestrator {
                         };
                     }
                 }
-                if (cachedEntry) normalizeAutomationResponse(cachedEntry.response);
+                if (cachedEntry) {
+                    rebindCachedResult(cachedEntry.response, plan);
+                    normalizeAutomationResponse(cachedEntry.response);
+                }
                 if (cachedEntry
                     && cachedEntry.fingerprint === completeFingerprint
                     && this.isReusableResponse(root, plan, cachedEntry.response)) {
@@ -456,17 +461,14 @@ export class LayeredGenerationOrchestrator {
                 // Los handoffs contienen createdAt; su identidad real ya está
                 // representada por el hash del resultado al que apuntan.
                 .filter(item => !item.path.endsWith('-handoff.json'))
-                .map(item => ({ path: item.path, sha256: item.sha256 })),
+                // Identidad sin recordingId/planId/fechas: el mismo input en
+                // otro recording es el mismo trabajo para el agente.
+                .map(item => ({ path: item.path, sha256: memoryIdentity(path.join(stageDirectory, item.path)) })),
         });
-        // automation/ se reconstruye al volver a preparar el caso. El caché
-        // vive como hermano para sobrevivir esa limpieza, pero queda aislado
-        // por la ruta del paquete y por el fingerprint completo de inputs.
-        const cacheRoot = path.join(
-            path.dirname(packageDirectory),
-            '.agent-cache',
-            sha256Text(path.resolve(packageDirectory)).slice(0, 16),
-        );
-        const cacheFile = path.join(cacheRoot, role, `${cacheFingerprint}.json`);
+        // El caché vive en la memoria del recorder (no en el recording): un
+        // resultado verificado sirve a cualquier recording con los mismos
+        // inputs, y sobrevive a que automation/ se reconstruya.
+        const cacheFile = path.join(agentCacheRoot(), role, `${cacheFingerprint}.json`);
         if (attempt === 0 && repairErrors.length === 0) cacheTarget.file = cacheFile;
         const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {
@@ -493,6 +495,10 @@ export class LayeredGenerationOrchestrator {
             try {
                 fs.copyFileSync(cacheFile, outputFile);
                 const cached = readJsonUtf8<unknown>(outputFile);
+                if (typeof cached === 'object' && cached !== null) {
+                    rebindCachedResult(cached as { recordingId?: string; planId?: string }, plan);
+                    writeJsonUtf8(outputFile, cached);
+                }
                 if (role === 'behavior-author'
                     && typeof cached === 'object'
                     && cached !== null

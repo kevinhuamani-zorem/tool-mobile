@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import type { CodeGraphBuildMetrics } from '../../indexing';
 import type { FrameworkQueryMetrics } from '../../workspace';
 import type { ProjectionMetrics } from '../domain/automationContextProjections';
-import { AgentExecutionMode, DEFAULT_AGENT_EXECUTION_MODE } from '../contracts';
+import { AgentExecutionMode, DEFAULT_AGENT_EXECUTION_MODE, GapResolver } from '../contracts';
 import type { ContextBreakdown } from './agentContextEnvelope';
 import type { AgentModelUsage } from '../domain/agentModel';
 
@@ -410,7 +410,7 @@ export class AgentRunStore {
     setFinalGapCount(finalGapCount: number): void {
         this.update(run => ({ ...run, finalGapCount: Math.max(0, finalGapCount) }));
     }
-    recordGapResolved(resolvedBy: 'qa' | 'deterministic' | 'agent'): void {
+    recordGapResolved(resolvedBy: GapResolver): void {
         if (resolvedBy !== 'deterministic') return;
         this.update(run => ({
             ...run,

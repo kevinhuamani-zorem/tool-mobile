@@ -219,6 +219,16 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
   chained` queda en `runtime/automation-memory/vocabulary.json` y se carga en
   el diccionario al preparar el siguiente paquete. La memoria no aprende de
   fallos.
+- La misma memoria conserva fragmentos entre recordings
+  (`runtime/automation-memory/fragments.json`): una fila `scenarioRows` con
+  `wording: memory` trae el texto y `methodName` que otro caso validó para
+  exactamente esa secuencia de elementos, y `memory.caseId` dice cuál. Los
+  autores la tratan como wording validado, no como plantilla; pueden mejorarla
+  pero no necesitan reescribirla. Un gap `verification-semantics` con
+  `status: resolved` y `resolvedBy: memory` no aparece en
+  `plan.unresolvedGapIds`: ya se decidió sobre ese mismo elemento y no exige
+  resolución. `AutomationPackageResult.memoryRecall` resume cuántos steps y
+  decisiones se heredaron y de qué casos.
 - Nada de esto toca selectores. Una errata en el texto de la app (`Útimos`) se
   conserva literal en el selector y en el nombre; el hallazgo va al QA en
   `qa-observations.json` (`ui-text-quality`), nunca se corrige en silencio.

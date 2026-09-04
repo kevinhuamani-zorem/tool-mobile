@@ -255,7 +255,21 @@ XML, screenshots, source, capabilities ni credenciales.
    por ello un fallo temprano del resolver nunca deja una respuesta antigua
    disponible para importar.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
-   no se invoca al agente. La memoria de calidad 100 también se reutiliza.
+   no se invoca al agente. La memoria de calidad 100 también se reutiliza, y
+   no solo para la misma grabación: `runtime/automation-memory/` es global y
+   guarda, además del caso completo por fingerprint (`cases/`), **fragmentos**
+   (`fragments.json`, ver `automation/domain/memoryFragments`): por cada step
+   validado, la secuencia de elementos que cubre (identidad plataforma +
+   acción + selector normalizado, sin contextHint) con su texto, keyword y
+   método de Screen; y por cada gap de verificación sobre un elemento, la
+   decisión aceptada. Al preparar otro recording el resolver parte cada
+   bloque en tramos: el tramo que otro caso ya redactó sale como fila
+   `wording: memory` (con `methodName` y `memory.caseId`) y el gap repetido
+   nace `status: resolved, resolvedBy: memory` sin abrir el paquete al
+   agente. Un caso B = A + un paso hereda los steps de A y solo redacta el
+   nuevo. La memoria no guarda selectores ni nombres lógicos (eso lo
+   reutiliza el índice del framework) y la versión más reciente de un
+   fragmento sustituye a la anterior.
 7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
    o ejecuta el orquestador automático. El flujo predeterminado tiene un owner
    explícito, **Derek**, que conserva el orden y los handoffs definidos por el
@@ -309,10 +323,15 @@ XML, screenshots, source, capabilities ni credenciales.
    solo un error sin código se clasifica por su texto, y uno que nadie
    reconoce llega a los tres. Sumrak debe conservar las decisiones deterministas
    del plan: no puede convertir `create` en `reuse` por similitud de nombre.
-   Para evitar repetir minutos de inferencia, Lorem y Zorem mantienen un caché
-   incremental local bajo `generation/.agent-cache`, fuera del paquete
-   `automation` reconstruible e indexado por hashes de inputs, prompt y modelo.
-   Los handoffs se vuelven a verificar al restaurar la salida.
+   Para evitar repetir minutos de inferencia, Lorem, Zorem y el pipeline
+   completo mantienen un caché en la memoria del recorder
+   (`runtime/automation-memory/agent-cache/`), indexado por la identidad de
+   los inputs sin `recordingId`, `planId` ni fechas (`memoryIdentity`), el
+   prompt y el modelo. Un resultado verificado sirve así a cualquier
+   recording con los mismos inputs (una regrabación del mismo caso, una
+   regeneración desde otra carpeta); al restaurarlo se le ponen los ids del
+   paquete actual (`rebindCachedResult`) y los handoffs se vuelven a
+   verificar.
    Cuando existe `deterministic-draft.json`, Lorem y Zorem corren **en
    paralelo**: Derek publica el `actionTrace` del borrador como contrato
    provisional (`agents/derek/behavior-result.json`, con handoff verificado) y

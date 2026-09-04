@@ -106,6 +106,10 @@ generadores, validadores o plantillas.
     dependencias Appium del framework padre para iniciar una sesión.
 13. **La memoria no aprende de fallos.** Solo una propuesta generada, revisada
     y validada con score 100 puede promocionarse a `runtime/automation-memory`.
+    La memoria es global, no del recording: lo que un caso validado enseña
+    (wording y método por secuencia de elementos, decisiones de gaps por
+    elemento, cachés de agentes por identidad de inputs sin ids) lo reutiliza
+    cualquier otro recording. Nunca guarda selectores ni renombra nada.
 14. **Regenerar conserva identidad y rutas.** Un refinamiento parte del último
     `agent-response.json` validado, crea una versión histórica, mantiene
     `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry

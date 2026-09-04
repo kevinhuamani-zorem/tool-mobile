@@ -15,6 +15,7 @@ export * from './domain/automationPackageProvenance';
 export * from './domain/automationScenarioPackage';
 export * from './domain/deterministicQueryPlanner';
 export * from './domain/elementIdentity';
+export * from './domain/memoryFragments';
 export * from './domain/gapResolutionContracts';
 export * from './domain/qaRoastContracts';
 export * from './domain/layeredGenerationContracts';
@@ -44,6 +45,7 @@ export * from './infrastructure/generatedFileRegistry';
 export * from './infrastructure/visibleCopilotProvider';
 
 export * from './ports/agentProvider';
+export * from './ports/memoryFragmentsPort';
 export * from './ports/qaRoastGenerationService';
 export * from './domain/agentModel';
 export { CopilotModelEvents } from './infrastructure/copilotModelEvents';

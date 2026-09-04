@@ -226,3 +226,11 @@ test('el roast se genera en otra sesión y nunca bloquea el diagnóstico semánt
     assert.match(handlers, /input\?\.qaRoastMode/);
     assert.match(handlers, /qaRoastGenerator\.generate/);
 });
+
+test('el resumen del análisis muestra lo heredado de la memoria de otros casos', () => {
+    assert.match(review, /memoryRecall/);
+    assert.match(review, /heredados de memoria/);
+    const builder = fs.readFileSync(path.join(root, 'core/automation/infrastructure/automationPackageBuilder.ts'), 'utf8');
+    assert.match(builder, /wording === 'memory'/);
+    assert.match(builder, /resolvedBy === 'memory'/);
+});

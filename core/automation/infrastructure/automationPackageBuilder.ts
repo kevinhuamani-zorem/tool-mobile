@@ -788,7 +788,7 @@ export class AutomationPackageBuilder {
                     );
                 }
             }
-            const resolved = this.resolver.resolve(recordingScenario);
+            const resolved = this.resolver.resolve(recordingScenario, { memory: this.memory });
             if (packageDirectory) {
                 const run = new AgentRunStore(packageDirectory);
                 run.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - started) / 1_000_000);
@@ -1067,7 +1067,7 @@ export class AutomationPackageBuilder {
         const resolverStarted = process.hrtime.bigint();
         let result: ResolverResult;
         try {
-            result = this.resolver.resolve(scenario);
+            result = this.resolver.resolve(scenario, { memory: this.memory });
             runStore.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - resolverStarted) / 1_000_000);
             runStore.recordFrameworkAccess(result.frameworkMetrics);
             runStore.setPlan(result.plan.planId);
@@ -1199,6 +1199,16 @@ export class AutomationPackageBuilder {
             if (fs.existsSync(file)) fs.unlinkSync(file);
         }
 
+        const memoryRows = (result.scenario.request.scenarioRows || []).filter(row => row.wording === 'memory');
+        const memoryGaps = result.unresolvedContext.gaps.filter(gap => gap.resolvedBy === 'memory');
+        const memoryRecall = memoryRows.length || memoryGaps.length ? {
+            steps: memoryRows.length,
+            gaps: memoryGaps.length,
+            cases: [...new Set([
+                ...memoryRows.map(row => row.memory?.caseId || ''),
+                ...memoryGaps.map(gap => (gap.reason || '').match(/caso (TC-[0-9A-Za-z-]+|[0-9a-f]{8})/)?.[1] || ''),
+            ].filter(Boolean))],
+        } : undefined;
         let response: AutomationAgentResponse | undefined;
         let memoryVersion: number | undefined;
         if (memoryHit) {
@@ -1266,6 +1276,7 @@ export class AutomationPackageBuilder {
             deterministicCoverage: result.plan.deterministicCoverage,
             unresolvedGaps: result.plan.unresolvedGapIds.length,
             memoryVersion,
+            ...(memoryRecall ? { memoryRecall } : {}),
             agentRequired: !response,
             responseAvailable: Boolean(response),
             testDesignReviewRequired,

@@ -2119,7 +2119,7 @@ test('memoria solo promociona calidad 100 y recupera la versión más reciente',
     });
     assert.equal(entry.version, 1);
     assert.equal(memory.find(resolved.scenario.fingerprint).response.planId, resolved.plan.planId);
-    assert.deepEqual(memory.stats(), { successfulCases: 1, versions: 1 });
+    assert.deepEqual(memory.stats(), { successfulCases: 1, versions: 1, interactions: 1, gapDecisions: 0 });
 });
 
 // La memoria aprende vocabulario de respuestas validadas al 100%: el recorder

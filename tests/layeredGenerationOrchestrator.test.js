@@ -8,6 +8,9 @@ const {
     LayeredGenerationOrchestrator,
     validateLayeredAgentResult,
 } = require('../dist/core/automation');
+const { configureWorkspacePaths, projectPaths } = require('../dist/core/workspace');
+
+const FRAMEWORK_ROOT = projectPaths.frameworkRoot;
 
 function writeJson(file, value) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -16,6 +19,10 @@ function writeJson(file, value) {
 
 function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'layered-generation-'));
+    // El caché de agentes vive en la memoria del recorder (global entre
+    // recordings): cada fixture usa un runtime propio para no heredar
+    // resultados de otro test ni escribir en la memoria real.
+    configureWorkspacePaths({ targetProject: FRAMEWORK_ROOT, runtimeRoot: path.join(root, 'runtime'), source: 'selected' });
     writeJson(path.join(root, 'generation-plan.json'), {
         schemaVersion: 1,
         pipelineVersion: '1.0.0',
@@ -602,6 +609,60 @@ test('reutiliza Lorem y Zorem por fingerprint cuando sus entradas no cambiaron',
     const report = JSON.parse(fs.readFileSync(second.reportFile, 'utf8'));
     assert.deepEqual(report.stages.map(stage => stage.execution), ['cache', 'cache', 'cache']);
     assert.deepEqual(report.stages.map(stage => stage.cacheHit), [true, true, true]);
+});
+
+// La memoria no es del recording: otro recording con las mismas acciones,
+// plan y baselines (una regrabacion del mismo caso, una regeneracion desde
+// otra carpeta) reutiliza el trabajo verificado de Lorem y Zorem aunque
+// cambien recordingId, planId y fechas.
+test('otro recording con los mismos inputs reutiliza el pipeline verificado y recibe sus propios ids', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    const orchestrator = new LayeredGenerationOrchestrator(fake, fake);
+    assert.equal((await orchestrator.run(root)).success, true);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+
+    // Segundo recording: misma memoria (mismo runtime), otra carpeta, otros ids.
+    const other = path.join(path.dirname(root), `${path.basename(root)}-other`);
+    fs.cpSync(root, other, { recursive: true });
+    fs.rmSync(path.join(other, 'agents'), { recursive: true, force: true });
+    fs.rmSync(path.join(other, 'agent-response.json'), { force: true });
+    for (const name of ['generation-plan.json', 'scenario.json']) {
+        const file = path.join(other, name);
+        const document = JSON.parse(fs.readFileSync(file, 'utf8'));
+        document.recordingId = 'rec-2';
+        if (document.planId) document.planId = 'plan-2';
+        document.createdAt = '2030-01-01T00:00:00.000Z';
+        writeJson(file, document);
+    }
+    calls.length = 0;
+    const second = await orchestrator.run(other);
+
+    assert.equal(second.success, true);
+    assert.deepEqual(calls.map(call => call.agentName), [], 'ningun agente vuelve a correr');
+    const report = JSON.parse(fs.readFileSync(second.reportFile, 'utf8'));
+    assert.deepEqual(report.stages.map(stage => stage.execution), ['cache', 'cache', 'cache']);
+    const response = JSON.parse(fs.readFileSync(path.join(other, 'agent-response.json'), 'utf8'));
+    assert.equal(response.recordingId, 'rec-2');
+    assert.equal(response.planId, 'plan-2');
+
+    // Un cambio real de contenido (otra accion) no reutiliza nada. (El
+    // proveedor falso responde con los ids del fixture, asi que este tercer
+    // recording conserva rec-1/plan-1 y solo cambia las acciones.)
+    const changed = path.join(path.dirname(root), `${path.basename(root)}-changed`);
+    fs.cpSync(root, changed, { recursive: true });
+    fs.rmSync(path.join(changed, 'agents'), { recursive: true, force: true });
+    fs.rmSync(path.join(changed, 'agent-response.json'), { force: true });
+    fs.rmSync(path.join(changed, 'layered-generation-run.json'), { force: true });
+    const scenarioFile = path.join(changed, 'scenario.json');
+    const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'));
+    scenario.request.actions = [{ action: 'CLICK', selector: '~otro', sequence: 1 }];
+    writeJson(scenarioFile, scenario);
+    calls.length = 0;
+    const third = await orchestrator.run(changed);
+    assert.equal(third.success, true, third.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
 });
 
 test('no promueve al caché una generación que falló la validación oficial', async () => {

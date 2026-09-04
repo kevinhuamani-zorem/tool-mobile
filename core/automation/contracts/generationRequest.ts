@@ -39,10 +39,14 @@ export interface GenerationRequest {
         actions?: RecordedStep[];
         status?: 'reused' | 'missing';
         /**
-         * Origen del texto: `domain`, `qa` o `template`. Solo `template` es
-         * wording generado por máquina y puede requerir reescritura.
+         * Origen del texto: `domain`, `qa`, `template`, `agent` o `memory`.
+         * Solo `template` es wording generado por máquina y puede requerir
+         * reescritura; `memory` es wording que ya validó otro caso a score 100
+         * para exactamente esta secuencia de elementos.
          */
-        wording?: 'domain' | 'qa' | 'template' | 'agent';
+        wording?: 'domain' | 'qa' | 'template' | 'agent' | 'memory';
         methodName?: string;
+        /** Trazabilidad de una fila `wording: memory`: de qué caso viene. */
+        memory?: { caseId: string; screenMethod?: string };
     }[];
 }

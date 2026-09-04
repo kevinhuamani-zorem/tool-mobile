@@ -20,6 +20,7 @@ import {
     readUtf8File,
     writeJsonUtf8,
 } from '../../../shared';
+import { projectPaths } from '../../../workspace';
 import {
     AuthorCacheTarget,
     DELEGATES,
@@ -53,12 +54,64 @@ export function stableFingerprint(value: unknown): string {
     return sha256Text(JSON.stringify(value));
 }
 
-export function agentCacheRoot(packageDirectory: string): string {
-    return path.join(
-        path.dirname(packageDirectory),
-        '.agent-cache',
-        sha256Text(path.resolve(packageDirectory)).slice(0, 16),
-    );
+/**
+ * Cachés de Lorem/Zorem/Sumrak: viven en la memoria del recorder, no en el
+ * recording. Un resultado verificado sirve a cualquier recording cuyos inputs
+ * sean los mismos una vez quitados los identificadores propios de la
+ * grabación (recordingId, planId, fechas): una regrabación del mismo caso o
+ * una regeneración desde otra carpeta no vuelven a pagar al agente.
+ */
+export function agentCacheRoot(): string {
+    return path.join(projectPaths.automationMemory, 'agent-cache');
+}
+
+/**
+ * Claves que cambian entre recordings sin cambiar lo que el agente tiene que
+ * producir. Todo lo demas (acciones, selectores, caseId, tag, plan de
+ * archivos, baselines) si forma parte de la identidad del input.
+ */
+const VOLATILE_KEYS = new Set([
+    'recordingId', 'planId', 'fingerprint', 'revision', 'createdAt', 'updatedAt',
+    'generatedAt', 'promotedAt', 'materializedAt', 'startedAt', 'finishedAt',
+    'timestamp', 'runId', 'sessionId', 'sessionName',
+]);
+
+function withoutVolatileKeys(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(withoutVolatileKeys);
+    if (value && typeof value === 'object') {
+        const output: Record<string, unknown> = {};
+        for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+            if (VOLATILE_KEYS.has(key)) continue;
+            output[key] = withoutVolatileKeys((value as Record<string, unknown>)[key]);
+        }
+        return output;
+    }
+    return value;
+}
+
+/** Identidad de un input sin los ids del recording: la clave de caché. */
+export function memoryIdentity(file: string): string {
+    const content = readUtf8File(file);
+    if (!file.endsWith('.json')) return sha256Text(content);
+    try {
+        return sha256Text(JSON.stringify(withoutVolatileKeys(JSON.parse(content))));
+    } catch {
+        return sha256Text(content);
+    }
+}
+
+/**
+ * Un resultado cacheado nacio en otro recording: antes de validarlo contra el
+ * plan actual se le ponen los ids de este paquete. El contenido no cambia.
+ */
+export function rebindCachedResult<T extends { recordingId?: string; planId?: string }>(
+    value: T,
+    plan: Pick<GenerationPlan, 'recordingId' | 'planId'>,
+): T {
+    if (!value || typeof value !== 'object') return value;
+    if ('recordingId' in value) value.recordingId = plan.recordingId;
+    if ('planId' in value) value.planId = plan.planId;
+    return value;
 }
 
 export function normalizeCucumberStepDefinitions(content: string): string {
@@ -128,8 +181,10 @@ export function pipelineFingerprint(packageDirectory: string, model: string): st
     ]
         .filter(file => fs.existsSync(file) && fs.statSync(file).isFile())
         .sort()
-        .map(file => artifact(file, packageDirectory))
-        .map(item => ({ path: item.path, sha256: item.sha256 }));
+        .map(file => ({
+            path: path.relative(packageDirectory, file).replace(/\\/g, '/'),
+            sha256: memoryIdentity(file),
+        }));
     return stableFingerprint({
         schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
         model,
@@ -142,8 +197,8 @@ export function pipelineFingerprint(packageDirectory: string, model: string): st
     });
 }
 
-export function pipelineCacheFile(packageDirectory: string, fingerprint: string): string {
-    return path.join(agentCacheRoot(packageDirectory), 'pipeline', `${fingerprint}.json`);
+export function pipelineCacheFile(fingerprint: string): string {
+    return path.join(agentCacheRoot(), 'pipeline', `${fingerprint}.json`);
 }
 
 export function promoteAuthorCache(outputFile: string, target: AuthorCacheTarget): void {

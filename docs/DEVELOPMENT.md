@@ -141,10 +141,11 @@ ya cerró y, si continúa inválida, relanza solo ese autor como
 vigente de Lorem, nunca de un borrador anterior de Sumrak.
 
 El pipeline usa fingerprints de contenido para reutilizar resultados válidos de
-Lorem y Zorem cuando no cambiaron recording, plan, baselines, prompt o modelo.
-El caché vive en `generation/.agent-cache`, por lo que sobrevive a la
-reconstrucción de `generation/automation`; cualquier cambio de contenido genera
-otra clave y evita reutilizaciones obsoletas.
+Lorem y Zorem cuando no cambiaron acciones, plan, baselines, prompt o modelo.
+El caché vive en `runtime/automation-memory/agent-cache/` (no en el recording):
+la clave ignora `recordingId`, `planId` y fechas, así que otro recording con los
+mismos inputs reutiliza el resultado; cualquier cambio de contenido genera otra
+clave y evita reutilizaciones obsoletas.
 Los inputs se proyectan por responsabilidad: Lorem no recibe contratos ni
 baselines exclusivos de Screen/Locators, y Zorem no recibe baselines de
 Feature/Steps. En reparación, Zorem solo se relanza por feedback de interacción

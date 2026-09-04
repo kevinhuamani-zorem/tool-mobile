@@ -6,6 +6,7 @@ import {
     AutomationMemory,
     AutomationApplier,
     AutomationAgentResponse,
+    UnresolvedGap,
     AgentRunStore,
     AutomationApplicationReceipt,
     createAutomationApplicationReceipt,
@@ -94,7 +95,13 @@ export async function applyReviewedAutomation(
         // El flujo completo vive en core (`AutomationApplier`), compartido
         // con las pruebas.
         const { generated, patched } = automationApplier.apply(scenario, plan, response, preview);
-        const memoryEntry = automationMemory.promote(scenario, plan, response, validation);
+        // La memoria aprende tambien de los gaps que este caso cerro: con la
+        // decision aceptada por elemento, otro recording no vuelve a preguntar.
+        const unresolvedFile = path.join(state.activeAutomationPackage, 'unresolved-context.json');
+        const memorizedGaps = fs.existsSync(unresolvedFile)
+            ? (readJsonUtf8<{ gaps?: UnresolvedGap[] }>(unresolvedFile).gaps || [])
+            : [];
+        const memoryEntry = automationMemory.promote(scenario, plan, response, validation, memorizedGaps);
         writeJsonUtf8(path.join(state.activeAutomationPackage, 'agent-response.json'), response);
         writeJsonUtf8(path.join(state.activeAutomationPackage, 'validation.json'), validation);
         const applicationReceipt = createAutomationApplicationReceipt(
