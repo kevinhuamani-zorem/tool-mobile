@@ -617,6 +617,16 @@ function alignResolutionsWithPlan(
     });
 }
 
+/**
+ * Resoluciones que Derek puede firmar sin abrir una sesion de Sumrak.
+ *
+ * La respuesta integrada solo lleva `{ gapId, decision, reason }`, y el
+ * integrador rechaza cualquier decision distinta de la que el plan ya fijo por
+ * secuencia (`expectedGapDecisions`). Cuando TODOS los gaps abiertos tienen su
+ * decision fijada, pedirsela a un LLM es pagar una sesion para que repita lo
+ * que ya esta escrito: Derek la ensambla. Basta un gap sin decision fijada
+ * para que Sumrak siga siendo quien decide.
+ */
 function deterministicGapResolutions(
     packageDirectory: string,
     plan: GenerationPlan,
@@ -626,18 +636,26 @@ function deterministicGapResolutions(
         ? readJsonUtf8<{ gaps?: Array<{ id?: string; sequence?: number }> }>(gapsFile).gaps || []
         : [];
     const gapById = new Map(gaps.filter(gap => gap.id).map(gap => [gap.id!, gap]));
+    const expected = expectedGapDecisions(packageDirectory, plan);
     const resolutions: AutomationAgentResponse['resolutions'] = [];
     for (const gapId of plan.unresolvedGapIds || []) {
-        // La extensión de rutas update ya fue decidida por el planner. Para
-        // create/reuse todavía se conserva Sumrak, porque reuse puede requerir
-        // selectedCandidate y evidencia adicional del query layer.
-        if (gapId !== 'gap-extend-existing-artifacts' || !gapById.has(gapId)) return null;
-        const decision = 'extend-existing';
+        const gap = gapById.get(gapId);
+        if (!gap) return null;
+        if (gapId === 'gap-extend-existing-artifacts') {
+            resolutions.push({
+                gapId,
+                decision: 'extend-existing',
+                reason: 'Derek conserva las rutas update fijadas por el plan y extiende los artefactos existentes.',
+            });
+            continue;
+        }
+        const decision = expected.get(gapId);
+        if (!decision) return null;
         resolutions.push({
             gapId,
             decision,
-            reason: decision === 'extend-existing'
-                ? 'Derek conserva las rutas update fijadas por el plan y extiende los artefactos existentes.'
+            reason: Number.isInteger(gap.sequence)
+                ? `Derek conserva la decisión determinista ${decision} que el plan fijó para la acción ${gap.sequence}.`
                 : `Derek conserva la decisión determinista ${decision} fijada por el plan.`,
         });
     }

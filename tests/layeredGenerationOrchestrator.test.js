@@ -630,3 +630,66 @@ test('Derek integra sin Sumrak cuando el único gap ya está fijado como extend-
     assert.equal(report.stages.at(-1).execution, 'deterministic');
     assert.equal(report.stages.at(-1).durationMs, 0);
 });
+
+// Es el caso normal: el plan ya fijó create/reuse por secuencia y el integrador
+// rechazaría cualquier otra decisión. Pedírsela a Sumrak era pagar una sesión
+// de Copilot para que repitiera lo escrito. Derek firma esas resoluciones.
+test('Derek integra sin Sumrak cuando todas las decisiones abiertas ya están fijadas por el plan', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.resolutions = [
+        { sequence: 1, action: 'CLICK', intent: 'botón principal', resolution: 'create', locatorName: 'primaryButton', selector: '~primary', confidence: 1, reason: 'nuevo' },
+        { sequence: 2, action: 'CLICK', intent: 'botón secundario', resolution: 'reuse', locatorName: 'secondaryButton', selector: '~secondary', confidence: 1, reason: 'ya existe' },
+    ];
+    plan.unresolvedGapIds = ['gap-duplicate-1', 'gap-duplicate-2', 'gap-extend-existing-artifacts'];
+    writeJson(planFile, plan);
+    writeJson(path.join(root, 'gaps.json'), {
+        gaps: [
+            { id: 'gap-duplicate-1', sequence: 1, type: 'semantic-naming', blocking: false },
+            { id: 'gap-duplicate-2', sequence: 2, type: 'semantic-naming', blocking: false },
+            { id: 'gap-extend-existing-artifacts', type: 'semantic-naming', blocking: false },
+        ],
+    });
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem'], 'Sumrak no abre sesión');
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.deepEqual(
+        response.resolutions.map(resolution => [resolution.gapId, resolution.decision]),
+        [['gap-duplicate-1', 'create'], ['gap-duplicate-2', 'reuse'], ['gap-extend-existing-artifacts', 'extend-existing']],
+    );
+    assert.match(response.resolutions[0].reason, /acción 1/);
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.equal(report.stages.at(-1).agentName, 'Sumrak');
+    assert.equal(report.stages.at(-1).execution, 'deterministic');
+});
+
+test('Sumrak sigue decidiendo cuando algún gap abierto no tiene decisión fijada por el plan', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.resolutions = [
+        { sequence: 1, action: 'CLICK', intent: 'botón principal', resolution: 'create', locatorName: 'primaryButton', selector: '~primary', confidence: 1, reason: 'nuevo' },
+    ];
+    // gap-open no está ligado a ninguna secuencia decidida: exige juicio.
+    plan.unresolvedGapIds = ['gap-duplicate-1', 'gap-open'];
+    writeJson(planFile, plan);
+    writeJson(path.join(root, 'gaps.json'), {
+        gaps: [
+            { id: 'gap-duplicate-1', sequence: 1, type: 'semantic-naming', blocking: false },
+            { id: 'gap-open', type: 'verification-semantics', blocking: false },
+        ],
+    });
+    const calls = [];
+    const fake = provider(calls);
+
+    await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.deepEqual(calls.slice(0, 3).map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    assert.ok(calls.some(call => call.agentName === 'Sumrak'), 'Sumrak abre sesión para el gap sin decisión fijada');
+});

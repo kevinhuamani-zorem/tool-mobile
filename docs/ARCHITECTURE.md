@@ -271,10 +271,13 @@ XML, screenshots, source, capabilities ni credenciales.
    `automation` reconstruible e indexado por hashes de inputs, prompt y modelo.
    Los handoffs se vuelven a verificar al restaurar la salida.
    Una corrección de Gherkin solo invalida Zorem cuando cambia la interfaz
-   `screenMethod`/`locatorName` de `actionTrace`. Cuando el único gap abierto es
-   `gap-extend-existing-artifacts`, Derek ensambla la respuesta directamente y
-   ejecuta el mismo validador oficial; Sumrak queda reservado para decisiones
-   semánticas que el plan todavía no fijó.
+   `screenMethod`/`locatorName` de `actionTrace`. Cuando todos los gaps abiertos
+   ya tienen decisión fijada por el plan (`create`/`reuse` por secuencia, o
+   `gap-extend-existing-artifacts`), Derek firma esas resoluciones, ensambla la
+   respuesta directamente y ejecuta el mismo validador oficial sin abrir sesión
+   de Sumrak; es el caso normal, porque el integrador rechazaría cualquier
+   decisión distinta de la del plan. Sumrak queda reservado para gaps sin
+   decisión fijada.
    Cada rol usa una memoria aislada descrita por `agent-memory.json`. Lorem
    recibe únicamente evidencia funcional para `feature/steps`; Zorem recibe
    selectores, APIs y baselines de `screen/locators`; Sumrak recibe los dos
