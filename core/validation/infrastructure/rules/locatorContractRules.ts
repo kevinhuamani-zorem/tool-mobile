@@ -187,6 +187,21 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
         // el contrato: getter homonimo, clave del JSON y metodo que lo consume.
         const aliasByExpected = new Map<string, string>();
         for (const [alias, expected] of expectedGetterByAlias) aliasByExpected.set(expected, alias);
+        // En un Screen escrito a mano el getter no se llama como la clave del
+        // JSON (`get btnenviar()` lee `movementsAndroid.btnsend`). Un metodo
+        // que consume ese getter esta consumiendo esa clave: se juzga por la
+        // clave que resuelve, no por el nombre del getter.
+        const locatorKeysByGetter = new Map<string, Set<string>>();
+        for (const key of referencedTypes.keys()) {
+            const [getter, , , , locatorName] = key.split('\u0000');
+            if (!getter || !locatorName) continue;
+            const keys = locatorKeysByGetter.get(getter) || new Set<string>();
+            keys.add(locatorName);
+            locatorKeysByGetter.set(getter, keys);
+        }
+        const getterResolves = (getter: string, expected: Set<string> | undefined): boolean =>
+            Boolean(expected) && (expected!.has(getter)
+                || [...(locatorKeysByGetter.get(getter) || [])].some(locatorName => expected!.has(locatorName)));
         const tracedGettersByMethod = new Map<string, Set<string>>();
         response.actionTrace.forEach(trace => {
             if (!trace.screenMethod) return;
@@ -300,8 +315,8 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
                 || usage.hardcodedSelector
                 || literals.some(value => usage.literals.has(value))
                 || !completionMappingValid
-                || !usage.getters.has(expectedGetter)
-                || [...usage.getters].some(getter => !tracedGetters?.has(getter))
+                || ![...usage.getters].some(getter => getterResolves(getter, new Set([expectedGetter])))
+                || [...usage.getters].some(getter => !getterResolves(getter, tracedGetters))
             )) {
                 errors.push({
                     code: 'trace-screen-method',

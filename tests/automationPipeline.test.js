@@ -1041,13 +1041,18 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
         '        const selector = LocatorProvider.getElement(TypeLocator.CLASSCHAIN, LocatorMovements.movementsIos.titleMovements, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.titleMovements);',
         '        await $(selector).click();',
         '    }',
+        // Getter legacy cuyo nombre no coincide con la clave del JSON.
+        '    get btnenviar() {',
+        '        const selector = LocatorProvider.getElement(TypeLocator.CLASSCHAIN, LocatorMovements.movementsIos.btnsend, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.btnsend);',
+        '        return $(selector);',
+        '    }',
         '}',
         'export default new movementScreen();',
         '',
     ].join('\n');
     const legacyLocators = JSON.stringify({
-        movementsAndroid: { titleMovements: 'new UiSelector().text("Movimientos")' },
-        movementsIos: { titleMovements: 'Movimientos' },
+        movementsAndroid: { titleMovements: 'new UiSelector().text("Movimientos")', btnsend: 'new UiSelector().text("ENVIAR")' },
+        movementsIos: { titleMovements: 'Movimientos', btnsend: '**/XCUIElementTypeButton[`name == "Enviar"`]' },
     }, null, 2);
     const absoluteScreen = path.join(projectPaths.frameworkRoot, screenPath);
     const absoluteLocators = path.join(projectPaths.frameworkRoot, locatorPath);
@@ -1061,6 +1066,11 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
             selector: 'android=new UiSelector().description("Botón de enviar por correo")',
             selectorVerified: true,
             contextHint: 'envio de reporte a correo',
+        }, {
+            action: 'CLICK',
+            selector: 'android=new UiSelector().text("ENVIAR")',
+            selectorVerified: true,
+            contextHint: 'envia el reporte',
         }, {
             action: 'VERIFICAR_EXISTE',
             selector: 'android=new UiSelector().description("Tu correo se estará enviando")',
@@ -1076,10 +1086,20 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
                 if (file.layer === 'locators') return { ...file, path: locatorPath, operation: 'update' };
                 return file;
             }),
-            resolutions: resolved.plan.resolutions.map(resolution => ({
-                ...resolution,
-                locatorName: resolution.sequence === 1 ? 'envioReporteCorreo' : 'emailSentMessage',
-            })),
+            resolutions: resolved.plan.resolutions.map(resolution => resolution.sequence === 2
+                // El boton ENVIAR ya existe como clave btnsend (getter legacy btnenviar).
+                ? {
+                    ...resolution,
+                    resolution: 'reuse',
+                    locatorName: 'btnsend',
+                    confidence: 1,
+                    source: { file: locatorPath, module: 'payment/movements', scope: 'squad' },
+                    reason: 'Locator existente.',
+                }
+                : {
+                    ...resolution,
+                    locatorName: resolution.sequence === 1 ? 'envioReporteCorreo' : 'emailSentMessage',
+                }),
         };
         const response = validResponse(plan);
         response.files.find(file => file.layer === 'feature').content =
@@ -1106,6 +1126,7 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
             '    public async sendReportByEmail(): Promise<void> {\n' +
             '        await this.uiHelper.waitForElementExistByLocator(this.sendReportEmail, true);\n' +
             '        await this.sendReportEmail.click();\n' +
+            '        await this.btnenviar.click();\n' +
             '    }\n' +
             '    public get emailSentMessage() {\n' +
             '        const locator = LocatorProvider.getElement(TypeLocator.XPATH, LocatorMovements.movementsIos.emailSentMessage, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.emailSentMessage);\n' +
@@ -1119,10 +1140,16 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
         response.files.find(file => file.layer === 'locators').content = JSON.stringify({
             movementsAndroid: {
                 titleMovements: 'new UiSelector().text("Movimientos")',
+                btnsend: 'new UiSelector().text("ENVIAR")',
                 sendReportEmail: 'new UiSelector().description("Botón de enviar por correo")',
                 emailSentMessage: 'new UiSelector().description("Tu correo se estará enviando")',
             },
-            movementsIos: { titleMovements: 'Movimientos', sendReportEmail: '', emailSentMessage: '' },
+            movementsIos: {
+                titleMovements: 'Movimientos',
+                btnsend: '**/XCUIElementTypeButton[`name == "Enviar"`]',
+                sendReportEmail: '',
+                emailSentMessage: '',
+            },
         }, null, 2);
         response.actionTrace = [{
             sequence: 1,
@@ -1131,6 +1158,11 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
             locatorName: 'sendReportEmail',
         }, {
             sequence: 2,
+            gherkinStep: 'When el usuario envia el reporte por correo',
+            screenMethod: 'sendReportByEmail',
+            locatorName: 'btnsend',
+        }, {
+            sequence: 3,
             gherkinStep: 'Then se muestra la confirmacion del envio',
             screenMethod: 'validateEmailSentMessage',
             locatorName: 'emailSentMessage',
