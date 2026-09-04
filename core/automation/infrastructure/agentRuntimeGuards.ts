@@ -23,6 +23,22 @@ export interface AgentOutputSummary {
     summary: string;
 }
 
+/**
+ * Tope de seguridad de una sesion del agente, no su presupuesto.
+ *
+ * `maxDurationMs` del plan es un objetivo de coste que se reporta; matar la
+ * sesion al cumplirse tiraria una respuesta casi completa y produciria una
+ * automatizacion incompleta. Lo que corta la sesion es este hang stop: una
+ * hora por defecto, ajustable con RECORDER_AGENT_HANG_STOP_MS.
+ */
+export const DEFAULT_AGENT_HANG_STOP_MS = 3_600_000;
+
+export function resolveAgentHangStopMs(raw: unknown = process.env.RECORDER_AGENT_HANG_STOP_MS): number {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return DEFAULT_AGENT_HANG_STOP_MS;
+    return Math.max(1, Math.floor(value));
+}
+
 export function resolveAgentExecutionMode(
     mode?: string | null,
 ): AgentExecutionMode {

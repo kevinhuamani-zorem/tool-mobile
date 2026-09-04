@@ -59,6 +59,7 @@ function provider(calls, mutate) {
                 agentName: input.agentName,
                 sessionName: input.sessionName,
                 allowValidationScripts: input.allowValidationScripts,
+                timeoutMs: input.timeoutMs,
                 hasBehaviorDependency: role === 'interaction-author'
                     ? fs.existsSync(path.join(input.cwd, 'behavior-result.json'))
                         && fs.existsSync(path.join(input.cwd, 'lorem-handoff.json'))
@@ -815,4 +816,49 @@ test('solo Zorem recibe permiso de ejecutar scripts de validación', async () =>
         calls.map(call => [call.agentName, call.allowValidationScripts]),
         [['Lorem', false], ['Zorem', true], ['Sumrak', false]],
     );
+});
+
+// El presupuesto del plan es una referencia de coste que se reporta; nunca
+// recorta evidencia ni corta la sesion. Lo unico que corta es el hang stop.
+test('el presupuesto informa por etapa y la sesión solo se corta al hang stop', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.budgets = { maxDurationMs: 1, maxContextBytes: 10 };
+    writeJson(planFile, plan);
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true, result.error);
+    // Nadie recibe 300 s como limite de vida: el hang stop es de una hora.
+    assert.deepEqual([...new Set(calls.map(call => call.timeoutMs))], [3_600_000]);
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    const lorem = report.stages.find(stage => stage.agentName === 'Lorem');
+    assert.deepEqual(lorem.budget, { maxDurationMs: 1, maxContextBytes: 10, hangStopMs: 3_600_000 });
+    assert.ok(lorem.contextBytes > lorem.evidenceBytes, 'contextBytes cuenta tambien el protocolo de la carpeta');
+    assert.equal(lorem.timedOut, false);
+    assert.equal(lorem.budgetWarnings.length, 2, JSON.stringify(lorem.budgetWarnings));
+    assert.match(lorem.budgetWarnings[0], /No se recortó evidencia/);
+    assert.match(lorem.budgetWarnings[1], /hang stop/);
+    // Con presupuesto holgado no hay avisos y la evidencia es la misma.
+    const relaxed = fixture();
+    const relaxedCalls = [];
+    const relaxedResult = await new LayeredGenerationOrchestrator(provider(relaxedCalls), provider(relaxedCalls)).run(relaxed);
+    const relaxedReport = JSON.parse(fs.readFileSync(relaxedResult.reportFile, 'utf8'));
+    const relaxedLorem = relaxedReport.stages.find(stage => stage.agentName === 'Lorem');
+    assert.deepEqual(relaxedLorem.budgetWarnings, []);
+    // Misma evidencia con y sin presupuesto ajustado: el plan solo difiere en
+    // el bloque budgets, que tambien viaja.
+    assert.equal(relaxedLorem.contextFiles, lorem.contextFiles);
+    assert.ok(Math.abs(relaxedLorem.evidenceBytes - lorem.evidenceBytes) < 100);
+});
+
+test('un timeoutMs explícito en las opciones sigue mandando como hang stop', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    await new LayeredGenerationOrchestrator(fake, fake).run(root, { timeoutMs: 42_000 });
+    assert.deepEqual([...new Set(calls.map(call => call.timeoutMs))], [42_000]);
 });

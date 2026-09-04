@@ -36,6 +36,7 @@ import {
     resolveAgentExecutionMode,
     resolvePackageArtifactPath,
     summarizeAgentProcessOutput,
+    resolveAgentHangStopMs,
 } from './agentRuntimeGuards';
 import { GapExecutionPlanner, partitionGapsById } from '../application/gapExecutionPlanner';
 import { DeterministicQueryPlanner } from '../domain/deterministicQueryPlanner';
@@ -292,20 +293,7 @@ function mergeGapResponses(responses: Array<Record<string, any>>): Record<string
     };
 }
 
-function normalizeBudget(value: unknown, fallback: number): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
-    return Math.max(1, Math.floor(value));
-}
-
-const DEFAULT_AGENT_HANG_STOP_MS = 3_600_000;
 const DEFAULT_MULTI_GAP_STRATEGY: MultiGapStrategy = 'compact-case';
-
-function resolveAgentHangStopMs(): number {
-    return normalizeBudget(
-        Number(process.env.RECORDER_AGENT_HANG_STOP_MS),
-        DEFAULT_AGENT_HANG_STOP_MS,
-    );
-}
 
 function resolveMultiGapStrategy(raw = process.env.RECORDER_AGENT_MULTI_GAP_STRATEGY): MultiGapStrategy {
     return raw === 'per-gap-parallel' ? 'per-gap-parallel' : DEFAULT_MULTI_GAP_STRATEGY;

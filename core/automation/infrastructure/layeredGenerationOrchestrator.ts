@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
+    normalizeAgentOperationalBudgets,
     AutomationAgentResponse,
     GenerationPlan,
 } from '../contracts';
@@ -18,6 +19,7 @@ import {
 import type { AgentProvider } from '../ports/agentProvider';
 import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from '../../shared';
 import { DeterministicDraftBuilder } from '../../generation';
+import { resolveAgentHangStopMs } from './agentRuntimeGuards';
 
 const INPUT_FILES = [
     'scenario.json',
@@ -465,6 +467,51 @@ function writeHandoff(
         ...input,
         createdAt: new Date().toISOString(),
     });
+}
+
+/**
+ * Presupuesto de una etapa: referencia de coste, nunca recorte.
+ *
+ * La reutilizacion completa la garantiza el resolver, que indexa todo el
+ * framework antes de que exista un agente. Lo que llega a cada rol es la
+ * decision ya tomada mas la evidencia para escribir codigo; quitar evidencia
+ * para cumplir un numero produciria una automatizacion incompleta. Por eso el
+ * presupuesto se mide y se reporta, y la sesion solo la corta el hang stop.
+ */
+function stageBudget(plan: GenerationPlan, options: LayeredGenerationOptions) {
+    const budgets = normalizeAgentOperationalBudgets(plan.budgets);
+    return {
+        maxDurationMs: budgets.maxDurationMs,
+        maxContextBytes: budgets.maxContextBytes,
+        hangStopMs: options.timeoutMs || resolveAgentHangStopMs(),
+    };
+}
+
+function budgetWarnings(
+    agentName: string,
+    budget: ReturnType<typeof stageBudget>,
+    contextBytes: number,
+    durationMs?: number,
+): string[] {
+    const warnings: string[] = [];
+    if (contextBytes > budget.maxContextBytes) {
+        warnings.push(
+            `${agentName} recibió ${contextBytes} bytes de contexto; el objetivo es ${budget.maxContextBytes}. `
+            + 'No se recortó evidencia: costará más tokens.',
+        );
+    }
+    if (durationMs !== undefined && durationMs > budget.maxDurationMs) {
+        warnings.push(
+            `${agentName} tardó ${Math.round(durationMs)} ms; el objetivo es ${budget.maxDurationMs} ms. `
+            + `La sesión solo se corta al hang stop de ${budget.hangStopMs} ms.`,
+        );
+    }
+    return warnings;
+}
+
+/** Todo lo que el agente puede leer en su carpeta al arrancar, protocolo incluido. */
+function stageContextBytes(stageDirectory: string): number {
+    return filesInside(stageDirectory).reduce((total, file) => total + fs.statSync(file).size, 0);
 }
 
 function sessionName(recordingId: string, role: GenerationAgentRole, attempt = 0): string {
@@ -1159,6 +1206,7 @@ export class LayeredGenerationOrchestrator {
         );
         const cacheFile = path.join(cacheRoot, role, `${cacheFingerprint}.json`);
         if (attempt === 0 && repairErrors.length === 0) cacheTarget.file = cacheFile;
+        const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {
             role,
             agentName: identity.name,
@@ -1170,10 +1218,13 @@ export class LayeredGenerationOrchestrator {
             execution: 'agent',
             fingerprint: cacheFingerprint,
             cacheHit: false,
-            contextBytes,
+            contextBytes: stageContextBytes(stageDirectory),
             contextFiles: inputArtifacts.length,
+            evidenceBytes: contextBytes,
             assignedLayers: [...ROLE_LAYERS[role]],
+            budget,
         };
+        report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!);
         stages.push(report);
         options.onStageChange?.({ ...report });
         if (attempt === 0 && repairErrors.length === 0 && fs.existsSync(cacheFile)) {
@@ -1286,7 +1337,7 @@ export class LayeredGenerationOrchestrator {
             run = await this.controlledProvider.execute({
                 cwd: stageDirectory,
                 prompt,
-                timeoutMs: options.timeoutMs || 300_000,
+                timeoutMs: budget.hangStopMs,
                 model: options.model,
                 agentName: identity.name,
                 // Solo Zorem tiene algo que ejecutar (screen-object-contract.js
@@ -1315,6 +1366,8 @@ export class LayeredGenerationOrchestrator {
         report.model = [...actualModels][0] || run.modelUsage?.requestedModel;
         report.requestedModel = run.modelUsage?.requestedModel;
         report.actualModels = [...actualModels];
+        report.timedOut = Boolean(run.timedOut);
+        report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, totalDurationMs);
         if (!run.success || !fs.existsSync(outputFile)) {
             report.state = 'failed';
             report.error = run.errorMessage || `No se generó ${ROLE_OUTPUTS[role]}.`;
@@ -1438,6 +1491,7 @@ export class LayeredGenerationOrchestrator {
         });
         const outputFile = path.join(stageDirectory, ROLE_OUTPUTS[role]);
         const namedSession = sessionName(plan.recordingId, role, attempt);
+        const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {
             role,
             agentName: identity.name,
@@ -1448,9 +1502,11 @@ export class LayeredGenerationOrchestrator {
             outputFile: path.relative(packageDirectory, outputFile).replace(/\\/g, '/'),
             execution: 'agent',
             cacheHit: false,
-            contextBytes,
+            contextBytes: stageContextBytes(stageDirectory),
             contextFiles: integrationArtifacts.length,
+            evidenceBytes: contextBytes,
             assignedLayers: [...ROLE_LAYERS[role]],
+            budget,
         };
         stages.push(report);
         options.onStageChange?.({ ...report });
@@ -1471,10 +1527,11 @@ export class LayeredGenerationOrchestrator {
             report.execution = 'deterministic';
             report.sessionName = `${namedSession}/deterministic`;
         } else {
+            report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!);
             const run = await this.reviewProvider.execute({
                 cwd: stageDirectory,
                 prompt,
-                timeoutMs: options.timeoutMs || 300_000,
+                timeoutMs: budget.hangStopMs,
                 model: options.model,
                 agentName: identity.name,
                 allowValidationScripts: false,
@@ -1490,6 +1547,8 @@ export class LayeredGenerationOrchestrator {
             report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
             report.requestedModel = run.modelUsage?.requestedModel;
             report.actualModels = run.modelUsage?.actualModels || [];
+            report.timedOut = Boolean(run.timedOut);
+            report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, run.durationMs);
             if (!run.success || !fs.existsSync(outputFile)) {
                 report.state = 'failed';
                 report.error = run.errorMessage || 'El integrador no generó agent-response.json.';

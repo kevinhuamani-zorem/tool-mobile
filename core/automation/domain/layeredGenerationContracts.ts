@@ -86,6 +86,17 @@ export interface LayeredGenerationStageReport {
     contextBytes?: number;
     contextFiles?: number;
     assignedLayers?: Array<'feature' | 'steps' | 'screen' | 'locators'>;
+    /** Bytes de evidencia del framework entregados al rol (sin protocolo). */
+    evidenceBytes?: number;
+    /**
+     * Objetivo de coste del plan para esta etapa. Es una referencia que se
+     * reporta, nunca un recorte: superarlo no elimina evidencia ni corta la
+     * sesion (eso lo hace el hang stop, mucho mayor).
+     */
+    budget?: { maxDurationMs: number; maxContextBytes: number; hangStopMs: number };
+    /** Avisos de presupuesto superado; informan al QA, no bloquean. */
+    budgetWarnings?: string[];
+    timedOut?: boolean;
     error?: string;
 }
 

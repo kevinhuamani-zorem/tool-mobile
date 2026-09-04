@@ -252,6 +252,14 @@ XML, screenshots, source, capabilities ni credenciales.
    (`behavior-author`) genera Feature y Steps, **Zorem** (`interaction-author`)
    genera Screen Object y Locators, y **Sumrak** (`integration-reviewer`)
    unifica las cuatro capas en el `agent-response.json` visible para el QA.
+   Presupuesto por etapa: cada `LayeredGenerationStageReport` lleva `budget`
+   (`maxDurationMs`, `maxContextBytes`, `hangStopMs`), `contextBytes` (todo lo
+   que hay en la carpeta del agente), `evidenceBytes` (solo evidencia del
+   framework), `budgetWarnings` y `timedOut`. El presupuesto se reporta y se
+   muestra al QA; no recorta evidencia. La sesión de cada rol se corta al hang
+   stop (`RECORDER_AGENT_HANG_STOP_MS`, 1 h), igual que en el pipeline
+   mono-agente; antes cada etapa moría a los 300 s y una respuesta casi lista
+   se perdía.
    Solo Zorem recibe `shell(node|python)` para validar su Screen Object; Lorem
    y Sumrak corren sin shell, así la prohibición de explorar el framework deja
    de depender del prompt.

@@ -113,7 +113,20 @@ generadores, validadores o plantillas.
 15. **Squad y ruta Feature son conceptos distintos.** `featureScope` puede
     limitar Features a una subruta como `tapp/payment`, pero Steps, Screen
     Objects y Locators mantienen como owner al squad seleccionado.
-16. **Reutiliza por relaciones, no por basename.** Sigue Feature -> definición
+16. **El presupuesto informa; la completitud manda.** `maxContextBytes` y
+    `maxDurationMs` del plan son objetivos de coste que se miden y se reportan
+    por etapa (`budgetWarnings`); nunca recortan evidencia ni cortan una
+    sesión. La sesión solo la corta el hang stop
+    (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto). La reutilización completa
+    la garantiza el resolver, que indexa todo el framework antes de que exista
+    un agente: lo que un agente deja de recibir es siempre lo que ya está
+    decidido (gaps con decisión fijada), lo que ya tiene por otra vía (código
+    de getters presente en `baselines/`) o lo que no puede ejercer (protocolo
+    de queries, reglas de otra capa). Si el resolver no encuentra reutilización
+    se crea; si crea algo que ya existía, `framework-*-collision` lo bloquea.
+    Nunca reduzcas las entradas del resolver ni del índice para cumplir un
+    presupuesto.
+17. **Reutiliza por relaciones, no por basename.** Sigue Feature -> definición
     Gherkin -> import de Screen Object -> import de Locator. Si el plan marca
     `update`, conserva la ruta y el baseline, y añade únicamente APIs faltantes.
     No borres ni renombres definitions, methods o locators existentes.

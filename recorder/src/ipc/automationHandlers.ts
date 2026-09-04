@@ -902,6 +902,9 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                                     cacheHit: stage.cacheHit,
                                     contextBytes: stage.contextBytes,
                                     contextFiles: stage.contextFiles,
+                                    evidenceBytes: stage.evidenceBytes,
+                                    budgetWarnings: stage.budgetWarnings,
+                                    timedOut: stage.timedOut,
                                     assignedLayers: stage.assignedLayers,
                                 },
                             );
