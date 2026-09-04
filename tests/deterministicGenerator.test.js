@@ -350,3 +350,44 @@ test('mergeFeatureUpdate añade solo los Scenarios nuevos con sus tags y conserv
     assert.match(merged, /\n\n  @historial @android\n  Scenario Outline: \[TC-2\]/, 'el Scenario nuevo llega con sus tags');
     assert.equal(mergeFeatureUpdate(baseline, baseline), baseline, 'un Scenario ya existente no se duplica');
 });
+
+test('mergeFeatureUpdate sustituye el Scenario del mismo caso regenerado y conserva los demás', () => {
+    const { mergeFeatureUpdate } = require('../dist/core/generation');
+    const other = [
+        '  @otro @android',
+        '  Scenario Outline: [TC-9][Happy Path][AUTO-FRONT] Otro caso',
+        '    Given el usuario <username> inicia sesión en Yape',
+        '    Then se muestra otra cosa',
+        '',
+        '    Examples:',
+        '      | username |',
+        '      | QA |',
+    ].join('\n');
+    const baseline = ['@payment', 'Feature: Historial', '', other, '',
+        '  @historial @android',
+        '  Scenario Outline: [TC-1][Happy Path][AUTO-FRONT] Consulta',
+        '    Given el usuario <username> inicia sesión en Yape',
+        '    Then se muestra el titulo viejo',
+        '',
+        '    Examples:',
+        '      | username |',
+        '      | QA |',
+        ''].join('\n');
+    const generated = ['@payment', 'Feature: Historial', '',
+        '  @historial @android',
+        '  Scenario Outline: [TC-1][Happy Path][AUTO-FRONT] Consulta',
+        '    Given el usuario <username> inicia sesión en Yape',
+        '    When el usuario consulta el historial',
+        '    Then se muestra el titulo nuevo',
+        '',
+        '    Examples:',
+        '      | username |',
+        '      | QA |',
+        ''].join('\n');
+    const merged = mergeFeatureUpdate(baseline, generated);
+    assert.match(merged, /Otro caso/, 'el otro Scenario se conserva');
+    assert.match(merged, /Then se muestra el titulo nuevo/);
+    assert.doesNotMatch(merged, /titulo viejo/, 'el bloque del mismo TC se sustituye');
+    assert.equal([...merged.matchAll(/Scenario Outline:/g)].length, 2);
+    assert.ok(merged.indexOf('Otro caso') < merged.indexOf('titulo nuevo'), 'conserva la posicion del bloque');
+});

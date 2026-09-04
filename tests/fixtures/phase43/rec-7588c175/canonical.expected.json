@@ -32,7 +32,7 @@
           "expression": "el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
           "args": "dataTable: DataTable",
           "usesDataTable": true,
-          "method": "userViewAllMovementsEnMovementsCasesFilterContainer",
+          "method": "userViewAllMovementsMovementsCasesFilterContainer",
           "methodArgs": "filtroValues"
         },
         {
@@ -49,7 +49,7 @@
       "importsDataTableDrivenSignals": false,
       "methods": [
         {
-          "name": "userViewAllMovementsEnMovementsCasesFilterContainer",
+          "name": "userViewAllMovementsMovementsCasesFilterContainer",
           "args": "filtroValues: string[]",
           "hasLoop": false,
           "usesDynamicLocator": false
@@ -107,85 +107,85 @@
     {
       "sequence": 1,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "showMovementsButton"
     },
     {
       "sequence": 2,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": ""
     },
     {
       "sequence": 3,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": ""
     },
     {
       "sequence": 4,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "seeAllMovementsButton"
     },
     {
       "sequence": 5,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterMovementsButton"
     },
     {
       "sequence": 6,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterOnlyToday"
     },
     {
       "sequence": 7,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterMovementsButton"
     },
     {
       "sequence": 8,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterLast7Days"
     },
     {
       "sequence": 9,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterMovementsButton"
     },
     {
       "sequence": 10,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "last15Days"
     },
     {
       "sequence": 11,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterMovementsButton"
     },
     {
       "sequence": 12,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "last30Days"
     },
     {
       "sequence": 13,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "filterMovementsButton"
     },
     {
       "sequence": 14,
       "gherkinStep": "When el usuario consulta todos sus movimientos en contenedor movimientos casuisticas filtro",
-      "screenMethod": "userViewAllMovementsEnMovementsCasesFilterContainer",
+      "screenMethod": "userViewAllMovementsMovementsCasesFilterContainer",
       "locatorName": "last90Days"
     },
     {
@@ -197,8 +197,8 @@
   ],
   "fingerprints": {
     "feature": "626ea7792b51659f4f4e5ec1e61e065ac8e5bd9b741df4ec02a1148f35797376",
-    "steps": "1f3c6a0934c2ca98b2377b647f8f05ef177da0fd845ebb92d63a2295f72d7412",
-    "screen": "f8ad465ab4f3acca3d49a42609b4ef1cebf56bb2f3e483e6e800a561818adc50",
+    "steps": "c1a5f5b276ebd8c54b1518a6a3c308c6248eb03691a8ad1ea0c534f9898c4952",
+    "screen": "7cae6cb0f221c15fd3c5734024238b414df7bb2c045a529cd94d3bc7e3c2f2d8",
     "locators": "bf38a7838a50b8a8a61bc6a47aca6a905e0b0fc272d4a3b737d776cb31a13441"
   }
 }

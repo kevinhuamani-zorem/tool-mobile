@@ -342,7 +342,8 @@ function existingStepFor(
     if (withSelector.some(item => item.resolution !== 'reuse' || !item.locatorName || !item.source?.file)) {
         return undefined;
     }
-    const recordedKeys = new Set(withSelector.map(item => `${item.source!.file}\u0000${item.locatorName}`));
+    const recordedNames = new Set(withSelector.map(item => item.locatorName as string));
+    const recordedFiles = new Set(withSelector.map(item => item.source!.file));
     for (const definition of catalog.stepDefinitions) {
         if (canonicalStepExpressionShared(definition.expression) !== canonical) continue;
         const text = literalStepText(definition.expression);
@@ -351,11 +352,13 @@ function existingStepFor(
             (catalog.screenMethods || []).find(method => method.file === call.file && method.name === call.method)
         );
         if (methods.some(method => !method)) continue;
-        const reachable = new Set(methods.flatMap(method =>
-            (method!.locatorFiles || []).flatMap(file => (method!.locatorKeys || []).map(key => `${file}\u0000${key}`))
-        ));
-        const sameKeys = reachable.size === recordedKeys.size
-            && [...recordedKeys].every(key => reachable.has(key));
+        // El indice conoce las claves que alcanza el metodo y los modulos de
+        // locators que importa; la clave no viene atada a un modulo concreto.
+        const reachableNames = new Set(methods.flatMap(method => method!.locatorKeys || []));
+        const reachableFiles = new Set(methods.flatMap(method => method!.locatorFiles || []));
+        const sameKeys = reachableNames.size === recordedNames.size
+            && [...recordedNames].every(name => reachableNames.has(name))
+            && [...recordedFiles].every(file => reachableFiles.has(file));
         if (!sameKeys) continue;
         return {
             text,

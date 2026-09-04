@@ -218,7 +218,7 @@ const DROPPED = new Set([
     'hay', 'existe', 'existen', 'tiene', 'tienen',
     // Modales y conectores que no nombran nada: `pueda ver` es `see`.
     'pueda', 'puede', 'pueden', 'poder', 'cada', 'ya', 'aun', 'tambien', 'luego',
-    'segun', 'mediante', 'entre', 'sobre', 'hacia', 'ante',
+    'segun', 'mediante', 'entre', 'sobre', 'hacia', 'ante', 'en',
 ]);
 
 /**

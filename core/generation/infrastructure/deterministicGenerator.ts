@@ -533,10 +533,21 @@ function scenarioBlocks(content: string): Array<{ name: string; block: string }>
  * caso anterior). Los Scenarios cuyo nombre ya existe no se duplican.
  */
 export function mergeFeatureUpdate(baseline: string, generated: string): string {
-    const existing = new Set(scenarioBlocks(baseline).map(item => item.name));
-    const additions = scenarioBlocks(generated).filter(item => item.name && !existing.has(item.name));
-    if (!additions.length) return baseline;
-    return `${baseline.replace(/\s+$/, '')}\n\n${additions.map(item => item.block).join('\n')}`;
+    const existing = scenarioBlocks(baseline);
+    const existingNames = new Set(existing.map(item => item.name));
+    const proposed = scenarioBlocks(generated).filter(item => item.name);
+    // El mismo caso regenerado (mismo nombre de Scenario, es decir mismo TC)
+    // sustituye su propio bloque: conservar el viejo dejaria el Feature
+    // desalineado con los Steps y la trazabilidad recien generados.
+    let output = baseline;
+    for (const item of proposed.filter(candidate => existingNames.has(candidate.name))) {
+        const current = scenarioBlocks(output).find(block => block.name === item.name);
+        if (!current || current.block.trim() === item.block.trim()) continue;
+        output = output.replace(current.block.trimEnd(), item.block.trimEnd());
+    }
+    const additions = proposed.filter(item => !existingNames.has(item.name));
+    if (!additions.length) return output;
+    return `${output.replace(/\s+$/, '')}\n\n${additions.map(item => item.block).join('\n')}`;
 }
 
 function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan): GeneratedPreview {
