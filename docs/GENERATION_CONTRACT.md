@@ -192,6 +192,17 @@ Examples:
   el baseline (`mergeStepsUpdate`) igual que ya hacía con Screen y Locators, y
   `destructive-update` rechaza cualquier propuesta que pierda una definición.
 
+### Redacción de las filas del borrador
+
+Orden de preferencia para el texto de cada fila: frase de dominio redactada a
+mano (`domainBehaviorText`/`domainAssertionText`), las palabras del QA en el
+objetivo/criterio cuando hay un único bloque, una frase construida desde la
+pista contextual de la acción que define el bloque (`el usuario selecciona
+ultimos 30 dias`, `se muestra la opción ultimos 30 dias`), y solo al final la
+plantilla de máquina (`wording: template`). La frase por intención es única
+por elemento, así que grabaciones que alternan click y verificación dejan de
+producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
+
 ### Nombres en inglés: diccionario, detección y aprendizaje
 
 - Los nombres lógicos (claves de locator, getters, métodos, slugs) salen de

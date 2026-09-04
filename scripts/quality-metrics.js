@@ -103,7 +103,7 @@ const thresholds = {
     codeGraphContextReduction: 0.5,
     recorderGraphContextReduction: 0.5,
     deterministicCoverage: 1,
-    maxContextBytes: 20_000,
+    maxContextBytes: 120_000,
     maxDurationMs: 300_000,
     maxRepairAttempts: 1
 };

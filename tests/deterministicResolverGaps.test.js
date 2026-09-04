@@ -690,9 +690,41 @@ test('un objetivo procedimental no se usa y la fila queda marcada template', () 
     recorded.objective = 'el usuario hace clic en el boton de recarga';
     recorded.acceptanceCriteria = 'ok';
     const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows;
-    assert.equal(rows.find(row => row.keyword === 'When').wording, 'template');
+    const when = rows.find(row => row.keyword === 'When');
+    const then = rows.find(row => row.keyword === 'Then');
+    // El objetivo procedimental no se copia; la fila se redacta con la pista
+    // contextual del QA (sus palabras), no con la plantilla de maquina.
+    assert.doesNotMatch(when.text, /hace clic/);
+    assert.equal(when.text, 'el usuario selecciona recarga');
+    assert.equal(when.wording, 'qa');
     // Un criterio demasiado corto tampoco sirve como resultado esperado.
-    assert.equal(rows.find(row => row.keyword === 'Then').wording, 'template');
+    assert.equal(then.text, 'se muestra confirmacion de recarga');
+    assert.equal(then.wording, 'qa');
+});
+
+// Grabaciones que alternan click y verificacion por accion: cada fila se
+// redacta con las palabras del QA en vez de la plantilla, y por ser unica por
+// elemento no necesita sufijo.
+test('redacta filas desde la pista contextual cuando no hay frase de dominio', () => {
+    const recorded = scenario([
+        action('CLICK', 'boton filtros de movimientos', '~Botón de filtrar'),
+        action('VERIFICAR_TEXTO', 'verificar si existe boton ultimos 30 dias', 'android=new UiSelector().text("Últimos 30 días")'),
+        action('CLICK', 'boton ultimos 30 dias', 'android=new UiSelector().text("Últimos 30 días")'),
+        action('VERIFICAR_EXISTE', 'fecha', '(//android.view.View[@content-desc]/..)[last()]//android.widget.TextView'),
+        action('CLICK', 'boton atras', '~Atrás'),
+    ]);
+    recorded.objective = 'consultar y ver los movimientos';
+    recorded.acceptanceCriteria = 'el usuario visualiza los movimientos filtrados';
+    const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows
+        .filter(row => row.status === 'missing');
+    assert.deepEqual(rows.map(row => row.text), [
+        'el usuario selecciona filtros de movimientos',
+        'se muestra la opción ultimos 30 dias',
+        'el usuario selecciona ultimos 30 dias',
+        'se muestra fecha',
+        'el usuario selecciona atras',
+    ]);
+    assert.ok(rows.every(row => !/resultado esperado de|el usuario completa/.test(row.text)), 'sin plantillas');
 });
 
 // Una pantalla nueva no se "extiende" sobre un Screen ajeno solo porque ambos

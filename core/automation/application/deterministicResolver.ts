@@ -204,7 +204,10 @@ function domainBehaviorText(
         .lastIndexOf(true);
     const intent = intents[relevantIndex >= 0 ? relevantIndex : intents.length - 1] || titleFromSlug(technicalName).toLowerCase();
     const all = intents.join(' ');
-    if (/movimiento/i.test(all)) {
+    // Solo cuando la intencion es VER los movimientos: "boton filtros de
+    // movimientos" tambien menciona movimientos y no es consultarlos.
+    if (/movimiento/i.test(all) && /\b(?:mostrar|muestra|ver|consulta|consultar|todos)\b/i.test(all)
+        && !/\b(?:filtr|cerrar|cierra|atr[aá]s|volver)/i.test(intent)) {
         return /todos/i.test(all)
             ? 'el usuario consulta todos sus movimientos'
             : 'el usuario consulta sus movimientos';
@@ -212,6 +215,60 @@ function domainBehaviorText(
     if (/^mostrar\s+/i.test(intent)) return `el usuario consulta ${intent.replace(/^mostrar\s+/i, '')}`;
     if (/^ver\s+/i.test(intent)) return `el usuario consulta ${intent.replace(/^ver\s+/i, '')}`;
     return undefined;
+}
+
+/**
+ * Limpia la pista contextual del QA para usarla como objeto de una frase:
+ * quita el verbo de la accion y el sustantivo de UI que la encabezan.
+ * "boton ultimos 30 dias" -> "ultimos 30 dias";
+ * "verificar si existe boton ultimos 30 dias" -> "ultimos 30 dias".
+ */
+function intentObject(intent: string): string {
+    return String(intent || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/^(?:se\s+)?(?:(?:verificar|verifica|validar|valida|comprobar|comprueba|revisar|revisa)\s+)?(?:que\s+|si\s+)?(?:exist[ae]n?\s+|aparezcan?\s+|se\s+muestr[ae]n?\s+|(?:el|la)\s+)?/i, '')
+        .replace(/^(?:hacer|hace|dar|da)\s+(?:clic|click)\s+(?:en\s+)?/i, '')
+        .replace(/^(?:presionar|presiona|pulsar|pulsa|tocar|toca|seleccionar|selecciona|abrir|abre)\s+/i, '')
+        .replace(/^(?:el|la|los|las|un|una)\s+/i, '')
+        .replace(/^(?:bot[oó]n|campo|icono|opci[oó]n|link|enlace|pesta[ñn]a|texto|label|etiqueta)\s+(?:de\s+)?/i, '')
+        .replace(/\b(?:bot[oó]n|icono)\s+(?:de\s+)?/gi, '')
+        .trim();
+}
+
+/**
+ * Frase construida con las palabras del QA para la accion que define el
+ * bloque. Peor que una frase de dominio, mucho mejor que la plantilla: el
+ * texto es unico por elemento, asi que no hace falta sufijarlo, y le da a
+ * Lorem un punto de partida con sentido.
+ */
+function intentBehaviorText(actions: RecordedStep[], intents: string[]): string | undefined {
+    const relevantIndex = actions.map(action => !['SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'ESPERAR', 'SCREENSHOT'].includes(action.action))
+        .lastIndexOf(true);
+    if (relevantIndex < 0) return undefined;
+    const action = actions[relevantIndex];
+    const object = intentObject(intents[relevantIndex] || '');
+    if (!object || object.split(' ').length < 1) return undefined;
+    if (/^[\w\s]{0,2}$/.test(object)) return undefined;
+    switch (action.action) {
+        case 'CLICK': return `el usuario selecciona ${object}`;
+        case 'PRESION_LARGA': return `el usuario mantiene presionado ${object}`;
+        case 'ESCRIBIR': return `el usuario ingresa ${object}`;
+        case 'LIMPIAR': return `el usuario limpia ${object}`;
+        default: return undefined;
+    }
+}
+
+function intentAssertionText(actions: RecordedStep[], intents: string[]): string | undefined {
+    const index = actions.map(action => /^VERIFICAR_/.test(action.action)).lastIndexOf(true);
+    if (index < 0) return undefined;
+    const raw = intents[index] || '';
+    const object = intentObject(raw);
+    if (!object) return undefined;
+    const uiNoun = /\b(?:bot[oó]n|opci[oó]n)\b/i.test(raw);
+    return actions[index].action === 'VERIFICAR_NO_EXISTE'
+        ? `no se muestra ${uiNoun ? 'la opción ' : ''}${object}`
+        : `se muestra ${uiNoun ? 'la opción ' : ''}${object}`;
 }
 
 /** Ultimo recurso: arma la frase con el slug tecnico. Sale de maquina. */
@@ -1291,9 +1348,11 @@ export class DeterministicResolver {
                 // cuando no hay ninguna de las dos.
                 : domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName)
                     || (behaviorChunks === 1 ? qaSentence(rawScenario.objective) : undefined)
+                    || intentBehaviorText(chunk.entries.map(entry => entry.step), intents)
                     || behaviorTemplate(technicalName);
             const assertionRow = domainAssertionText(intents)
                 || (assertionChunks === 1 ? qaSentence(rawScenario.acceptanceCriteria) : undefined)
+                || intentAssertionText(chunk.entries.map(entry => entry.step), intents)
                 || assertionTemplate(technicalName);
             const wording: 'domain' | 'qa' | 'template' = chunk.assertion
                 ? (domainAssertionText(intents) ? 'domain'

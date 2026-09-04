@@ -117,7 +117,8 @@ generadores, validadores o plantillas.
     `maxDurationMs` del plan son objetivos de coste que se miden y se reportan
     por etapa (`budgetWarnings`); nunca recortan evidencia ni cortan una
     sesión. La sesión solo la corta el hang stop
-    (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto). La reutilización completa
+    (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto). El objetivo por defecto es
+    120 000 bytes por etapa: un autor recibe legítimamente 40–110 KB. La reutilización completa
     la garantiza el resolver, que indexa todo el framework antes de que exista
     un agente: lo que un agente deja de recibir es siempre lo que ya está
     decidido (gaps con decisión fijada), lo que ya tiene por otra vía (código

@@ -131,9 +131,19 @@ export interface AgentOperationalBudgets {
     maxRepairAttempts: number;
 }
 
+/**
+ * Objetivos de coste, no limites: se miden y se reportan, nunca recortan
+ * evidencia ni cortan una sesion (eso lo hace el hang stop).
+ *
+ * `maxContextBytes` mide el contexto que recibe UNA etapa. 20 000 era el
+ * objetivo del pipeline mono-agente; en el pipeline por capas un autor recibe
+ * entre 40 y 110 KB de evidencia legitima (baselines, contrato del framework,
+ * borrador) y el aviso saltaba en todos los casos, con lo que dejaba de
+ * significar algo. 120 000 deja el aviso para el caso realmente largo.
+ */
 export const DEFAULT_AGENT_OPERATIONAL_BUDGETS: AgentOperationalBudgets = {
     maxDurationMs: 300_000,
-    maxContextBytes: 20_000,
+    maxContextBytes: 120_000,
     maxResponseBytes: 400_000,
     maxAgentInvocations: 2,
     maxTotalQueries: 24,
