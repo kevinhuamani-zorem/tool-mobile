@@ -746,3 +746,45 @@ test('los agentes reciben solo los gaps abiertos y Derek firma los que el plan y
         [['gap-duplicate-1', 'create'], ['gap-extend-existing-artifacts', 'extend-existing'], ['gap-1', 'resolved']],
     );
 });
+
+// El feedback se dirige por el `code` de la regla, no por palabras del mensaje.
+// "La acción 5 traza btnfilter, pero el plan exige filtersDaysButton" no
+// nombra locator ni screen: por texto iba a los tres agentes; por código
+// (`trace-locator`) es de Zorem.
+test('Derek dirige el feedback por código de regla aunque el mensaje no delate la capa', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    let validations = 0;
+    const result = await new LayeredGenerationOrchestrator(fake, fake, () => {
+        validations += 1;
+        return validations === 1
+            ? { valid: false, errors: [{ code: 'trace-locator', message: 'La acción 5 traza btnfilter, pero el plan exige filtersDaysButton.' }] }
+            : { valid: true, errors: [] };
+    }).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Zorem', 'Sumrak']);
+    // Tras aceptar la reparación, Derek deja el feedback de Zorem en `accepted`;
+    // Lorem nunca recibió el error.
+    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
+    assert.equal(feedback.status, 'accepted');
+    assert.equal(fs.existsSync(path.join(root, 'agents/lorem/repair-feedback.json')), false, 'Lorem no recibe un error de locator');
+});
+
+test('un error de Gherkin con código de comportamiento vuelve solo a Lorem', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    let validations = 0;
+    const result = await new LayeredGenerationOrchestrator(fake, fake, () => {
+        validations += 1;
+        return validations === 1
+            ? { valid: false, errors: [{ code: 'imperative-gherkin', message: 'Describe la intención de negocio.' }] }
+            : { valid: true, errors: [] };
+    }).run(root);
+
+    assert.equal(result.success, true, result.error);
+    // Lorem repara; Zorem no se relanza porque la interfaz actionTrace no cambió.
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Lorem', 'Sumrak']);
+});

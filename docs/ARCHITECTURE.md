@@ -264,7 +264,10 @@ XML, screenshots, source, capabilities ni credenciales.
    Ante un fallo, Derek clasifica el feedback por propietario y reejecuta solo
    la capa afectada. Durante una reparación, cada escritura se valida en vivo;
    si Copilot cierra con feedback pendiente, Derek relanza únicamente ese autor
-   en una ronda `feedback-N`. Sumrak debe conservar las decisiones deterministas
+   en una ronda `feedback-N`. Derek dirige cada error por el `code` de la regla
+   (la misma tabla por capa con la que proyecta `validation-contract.json`);
+   solo un error sin código se clasifica por su texto, y uno que nadie
+   reconoce llega a los tres. Sumrak debe conservar las decisiones deterministas
    del plan: no puede convertir `create` en `reuse` por similitud de nombre.
    Para evitar repetir minutos de inferencia, Lorem y Zorem mantienen un caché
    incremental local bajo `generation/.agent-cache`, fuera del paquete

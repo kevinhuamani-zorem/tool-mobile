@@ -132,7 +132,7 @@ export interface LayeredGenerationResult {
 export type LayeredResponseValidator = (
     packageDirectory: string,
     response: AutomationAgentResponse,
-) => { valid: boolean; errors: Array<{ message: string }> };
+) => { valid: boolean; errors: Array<{ code?: string; message: string }> };
 
 function ensureInside(root: string, candidate: string): string {
     const resolvedRoot = path.resolve(root);
@@ -161,6 +161,33 @@ function copyIfPresent(
     writeJsonUtf8(target, projectSharedJson(relativePath, readJsonUtf8<any>(source), judgment));
 }
 
+/**
+ * Codigos del validador por capa responsable. Son la misma tabla con la que se
+ * proyecta `validation-contract.json` a cada autor y con la que Derek dirige el
+ * feedback de reparacion: un error llega solo al agente que puede corregirlo.
+ */
+const BEHAVIOR_RULE_CODES = new Set([
+    'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
+    'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
+    'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
+    'verbatim-context-hint', 'platform-tag', 'behavior-path',
+]);
+const INTERACTION_RULE_CODES = new Set([
+    'completion-duplicate', 'completion-file', 'completion-key', 'completion-occupied',
+    'completion-platform', 'completion-sequence', 'completion-shape',
+    'completion-unauthorized', 'create-locator-contract', 'destructive-update',
+    'duplicate-screen-method', 'framework-locator-collision', 'invalid-locator-access',
+    'invented-selector', 'locator-type-mismatch', 'platform-coverage',
+    'screen-alias-usage', 'screen-import-alias', 'trace-locator', 'trace-screen-method',
+    'framework-symbol', 'framework-import-alias', 'missing-update-target', 'interaction-path',
+]);
+const INTEGRATION_RULE_CODES = new Set([
+    'schema', 'recording-id', 'plan-id', 'resolution-shape', 'resolution-needs-shape',
+    'resolution-needs-query', 'resolution-needs-args', 'trace-shape', 'trace',
+    'missing-gap-resolution', 'gap-resolution-decision', 'unresolved-gap-without-reason',
+    'existing-automation', 'duplicate-layer', 'missing-layer', 'extra-layer',
+]);
+
 function projectRoleJson(relativePath: string, value: any, role: AuthorRole): any {
     if (relativePath === 'deterministic-draft.json') {
         const layers = new Set(ROLE_LAYERS[role]);
@@ -174,24 +201,10 @@ function projectRoleJson(relativePath: string, value: any, role: AuthorRole): an
         };
     }
     if (relativePath === 'validation-contract.json') {
-        const behaviorOnly = new Set([
-            'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
-            'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
-            'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
-            'verbatim-context-hint',
-        ]);
-        const interactionOnly = new Set([
-            'completion-duplicate', 'completion-file', 'completion-key', 'completion-occupied',
-            'completion-platform', 'completion-sequence', 'completion-shape',
-            'completion-unauthorized', 'create-locator-contract', 'destructive-update',
-            'duplicate-screen-method', 'framework-locator-collision', 'invalid-locator-access',
-            'invented-selector', 'locator-type-mismatch', 'platform-coverage',
-            'screen-alias-usage', 'screen-import-alias', 'trace-locator', 'trace-screen-method',
-        ]);
         const rules = (value.rules || []).filter((rule: any) =>
             role === 'behavior-author'
-                ? !interactionOnly.has(rule.code)
-                : !behaviorOnly.has(rule.code)
+                ? !INTERACTION_RULE_CODES.has(rule.code)
+                : !BEHAVIOR_RULE_CODES.has(rule.code)
         );
         return {
             ...value,
@@ -715,25 +728,50 @@ function projectSharedJson(relativePath: string, value: any, judgment: GapJudgme
     return value;
 }
 
-function classifyValidationErrors(errors: string[]): LayeredRepairFeedback {
+export interface RepairIssue {
+    code?: string;
+    message: string;
+}
+
+/**
+ * Dirige cada error al agente que puede corregirlo.
+ *
+ * El `code` del validador es la fuente: cada regla vive en una familia con
+ * capa responsable. Solo los errores sin codigo (contratos del propio
+ * orquestador o mensajes de `output`/`preview`) se clasifican por su texto, y
+ * un error que nadie reconoce llega a los tres para no perderse.
+ */
+function classifyValidationErrors(issues: Array<RepairIssue | string>): LayeredRepairFeedback {
+    const normalized = issues.map(issue => typeof issue === 'string' ? { message: issue } : issue);
     const feedback: LayeredRepairFeedback = {
-        all: [...new Set(errors.filter(Boolean))],
+        all: [...new Set(normalized.map(issue => issue.message).filter(Boolean))],
         behavior: [],
         interaction: [],
         integration: [],
     };
-    for (const error of feedback.all) {
-        const lower = error.toLowerCase();
-        const behavior = /(feature|scenario|gherkin|step definition|steps\b|tag\b|@android|@ios)/.test(lower);
-        const interaction = /(screenobject|screen object|screenmethod|locator|getter|typelocator|selector|import|api existente|apis existentes)/.test(lower);
-        const integration = /(resoluci[oó]n|gap abierto|gap-|recordingid|planid|trazabilidad)/.test(lower);
-        if (behavior) feedback.behavior.push(error);
-        if (interaction) feedback.interaction.push(error);
-        if (integration) feedback.integration.push(error);
+    const seen = new Set<string>();
+    for (const issue of normalized) {
+        if (!issue.message || seen.has(issue.message)) continue;
+        seen.add(issue.message);
+        let behavior = false;
+        let interaction = false;
+        let integration = false;
+        if (issue.code && BEHAVIOR_RULE_CODES.has(issue.code)) behavior = true;
+        else if (issue.code && INTERACTION_RULE_CODES.has(issue.code)) interaction = true;
+        else if (issue.code && INTEGRATION_RULE_CODES.has(issue.code)) integration = true;
+        else {
+            const lower = issue.message.toLowerCase();
+            behavior = /(feature|scenario|gherkin|step definition|steps\b|tag\b|@android|@ios)/.test(lower);
+            interaction = /(screenobject|screen object|screenmethod|locator|getter|typelocator|selector|import|api existente|apis existentes)/.test(lower);
+            integration = /(resoluci[oó]n|gap abierto|gap-|recordingid|planid|trazabilidad)/.test(lower);
+        }
+        if (behavior) feedback.behavior.push(issue.message);
+        if (interaction) feedback.interaction.push(issue.message);
+        if (integration) feedback.integration.push(issue.message);
         if (!behavior && !interaction && !integration) {
-            feedback.behavior.push(error);
-            feedback.interaction.push(error);
-            feedback.integration.push(error);
+            feedback.behavior.push(issue.message);
+            feedback.interaction.push(issue.message);
+            feedback.integration.push(issue.message);
         }
     }
     return feedback;
@@ -1173,9 +1211,7 @@ export class LayeredGenerationOrchestrator {
                             };
                             const validation = this.responseValidator!(packageDirectory, provisionalResponse);
                             if (!validation.valid) {
-                                const classified = classifyValidationErrors(
-                                    validation.errors.map(error => error.message),
-                                );
+                                const classified = classifyValidationErrors(validation.errors);
                                 candidateErrors.push(...classified[role === 'behavior-author'
                                     ? 'behavior'
                                     : 'interaction']);
@@ -1442,44 +1478,48 @@ export class LayeredGenerationOrchestrator {
         fs.copyFileSync(outputFile, finalResponse);
         const expectedFiles = new Map(plan.files.map(file => [file.layer, file.path]));
         const integratedFiles = new Map(response.files.map(file => [file.layer, file.path]));
-        const fileContractErrors = [...expectedFiles].flatMap(([layer, expectedPath]) =>
+        const fileContractErrors: RepairIssue[] = [...expectedFiles].flatMap(([layer, expectedPath]) =>
             integratedFiles.get(layer) === expectedPath
                 ? []
-                : [`La capa ${layer} debe conservar la ruta ${expectedPath}.`]
+                : [{
+                    code: layer === 'feature' || layer === 'steps' ? 'behavior-path' : 'interaction-path',
+                    message: `La capa ${layer} debe conservar la ruta ${expectedPath}.`,
+                }]
         );
         if (response.files.length !== integratedFiles.size) {
-            fileContractErrors.push('La respuesta integrada contiene capas duplicadas.');
+            fileContractErrors.push({ code: 'duplicate-layer', message: 'La respuesta integrada contiene capas duplicadas.' });
         }
         if (integratedFiles.size !== expectedFiles.size) {
-            fileContractErrors.push('La respuesta integrada debe contener exactamente las capas del plan.');
+            fileContractErrors.push({ code: 'missing-layer', message: 'La respuesta integrada debe contener exactamente las capas del plan.' });
         }
         const resolvedGapIds = new Set((response.resolutions || []).map(resolution => resolution.gapId));
         for (const gapId of plan.unresolvedGapIds || []) {
             if (!resolvedGapIds.has(gapId)) {
-                fileContractErrors.push(`Falta resolución para gap abierto: ${gapId}`);
+                fileContractErrors.push({ code: 'missing-gap-resolution', message: `Falta resolución para gap abierto: ${gapId}` });
             }
         }
         for (const gapId of resolvedGapIds) {
             if (!(plan.unresolvedGapIds || []).includes(gapId)) {
-                fileContractErrors.push(`Resolución no autorizada para gap inexistente: ${gapId}`);
+                fileContractErrors.push({ code: 'missing-gap-resolution', message: `Resolución no autorizada para gap inexistente: ${gapId}` });
             }
         }
         const expectedDecisions = expectedGapDecisions(packageDirectory, plan);
         for (const resolution of response.resolutions || []) {
             const expected = expectedDecisions.get(resolution.gapId);
             if (expected && resolution.decision !== expected) {
-                fileContractErrors.push(
-                    `La resolución ${resolution.gapId} debe conservar decision ${expected} del plan; recibió ${resolution.decision}.`,
-                );
+                fileContractErrors.push({
+                    code: 'gap-resolution-decision',
+                    message: `La resolución ${resolution.gapId} debe conservar decision ${expected} del plan; recibió ${resolution.decision}.`,
+                });
             }
         }
         const officialValidation = this.responseValidator?.(packageDirectory, response);
         if (officialValidation && !officialValidation.valid) {
-            fileContractErrors.push(...officialValidation.errors.map(error => error.message));
+            fileContractErrors.push(...officialValidation.errors.map(error => ({ code: error.code, message: error.message })));
         }
         if (fileContractErrors.length) {
             report.state = allowRepair ? 'repairing' : 'failed';
-            report.error = fileContractErrors.join(' | ');
+            report.error = fileContractErrors.map(issue => issue.message).join(' | ');
             options.onStageChange?.({ ...report });
             throw new LayeredValidationError(classifyValidationErrors(fileContractErrors));
         }
