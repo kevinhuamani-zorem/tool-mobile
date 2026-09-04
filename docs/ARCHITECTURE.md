@@ -260,6 +260,12 @@ XML, screenshots, source, capabilities ni credenciales.
    (`behavior-author`) genera Feature y Steps, **Zorem** (`interaction-author`)
    genera Screen Object y Locators, y **Sumrak** (`integration-reviewer`)
    unifica las cuatro capas en el `agent-response.json` visible para el QA.
+   `LayeredGenerationOrchestrator` solo coordina; sus piezas viven en
+   `core/automation/infrastructure/layered/`: `roles` (contratos y
+   constantes), `gapJudgment` (qué gap firma Derek, cuál es informativo, cuál
+   juzga Sumrak; enrutado del feedback por código), `projections` (lo que
+   cada rol recibe en su carpeta), `prompts`, `artifacts` (handoffs, cachés,
+   contrato provisional de interfaz) y `budget`.
    Presupuesto por etapa: cada `LayeredGenerationStageReport` lleva `budget`
    (`maxDurationMs`, `maxContextBytes`, `hangStopMs`), `contextBytes` (todo lo
    que hay en la carpeta del agente), `evidenceBytes` (solo evidencia del
