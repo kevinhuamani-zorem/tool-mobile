@@ -243,25 +243,35 @@ XML, screenshots, source, capabilities ni credenciales.
 6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
    no se invoca al agente. La memoria de calidad 100 también se reutiliza.
 7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
-   o ejecuta el orquestador automático. En macOS, la pasada que materializa la
-   salida se abre como una sesión visible de Copilot con el prompt exacto del
-   recorder; el proceso principal espera el JSON validado por schema y lo
-   importa automáticamente para continuar a Revisión. PASS 1 permanece bajo el
-   adapter controlado para resolver consultas antes de abrir la sesión visible.
-   En modo automático el agente opera en
-   dos pasadas (`query-requests/query-results` y luego `agent-response`) bajo
-   `GapQueryPolicy` y budgets del plan. Con múltiples gaps la estrategia
-   predeterminada es `compact-case` (un solo PASS 1 + PASS 2 para el caso
-   completo); `per-gap-parallel` queda solo como opt-in.
-   PASS 1 usa una proyección compacta para decidir consultas; PASS 2 usa otra
-   proyección orientada a generar las cuatro capas. Cada pasada valida su
-   contexto contra `maxContextBytes`.
-   PASS 2 incluye además `testDesignReview`, una revisión funcional estructurada.
+   o ejecuta el orquestador automático. El flujo predeterminado tiene un owner
+   explícito, **Derek**, que conserva el orden y los handoffs definidos por el
+   recorder. Derek delega tres responsabilidades aisladas: **Lorem**
+   (`behavior-author`) genera Feature y Steps, **Zorem** (`interaction-author`)
+   genera Screen Object y Locators, y **Sumrak** (`integration-reviewer`)
+   unifica las cuatro capas en el `agent-response.json` visible para el QA.
+   Lorem, Zorem y Sumrak se ejecutan en modo headless con perfiles custom-agent
+   y sesiones nombradas `Derek/<recordingId>/<agente>`; no abren Terminal ni
+   dependen de una sesión interactiva. Cada delegado recibe un manifiesto
+   acotado, trabaja bajo `agents/<nombre>` y publica un handoff por ruta, tamaño
+   y SHA-256. Sumrak rechaza artefactos que cambiaron después del handoff. El
+   recorder impone byte por byte los cuatro contenidos publicados por Lorem y
+   Zorem: Sumrak solo aporta resoluciones y trazabilidad. La respuesta final pasa por
+   `AutomationResponseValidator` antes de aplicarse.
+   Lorem entrega además su interfaz de `screenMethod` directamente a Zorem.
+   Ante un fallo, Derek clasifica el feedback por propietario y reejecuta solo
+   la capa afectada. Durante una reparación, cada escritura se valida en vivo;
+   si Copilot cierra con feedback pendiente, Derek relanza únicamente ese autor
+   en una ronda `feedback-N`. Sumrak debe conservar las decisiones deterministas
+   del plan: no puede convertir `create` en `reuse` por similitud de nombre.
+   El orquestador anterior de dos pasadas (`query-requests/query-results` y
+   respuesta semántica) se conserva como estrategia `deterministic` de
+   compatibilidad mediante `RECORDER_AGENT_PIPELINE=deterministic`.
+   La revisión semántica incluye además `testDesignReview`, una revisión funcional estructurada.
    Contrasta objetivo, criterio de aceptación,
    acciones y aserciones. Si una interacción solo verifica que existe el control
-   o carece de una aserción posterior sobre el resultado de negocio, el pipeline
-   termina en `QA_TEST_DESIGN_REQUIRED`, guarda `test-design-review.json` y
-   devuelve al QA a la grabación sin crear `agent-response.json`.
+   o carece de una aserción posterior sobre el resultado de negocio, Lorem
+   publica una sugerencia en `test-design-review.json`; no bloquea la respuesta
+   ni obliga al QA a volver a grabar.
    El roast no pertenece a PASS 2. Si la preferencia **QA Roast Mode** está
    activa, `CopilotQaRoastGenerator` usa después el puerto
    `QaRoastGenerationService` para abrir una sesión headless independiente con

@@ -44,6 +44,19 @@ export class AutomationAgentLauncher {
 
     initialPrompt(packageDirectory: string): string {
         const repair = fs.existsSync(path.join(packageDirectory, 'repair-context.json'));
+        const statusFile = path.join(packageDirectory, 'status.json');
+        let layered = false;
+        try {
+            layered = fs.existsSync(statusFile)
+                && JSON.parse(fs.readFileSync(statusFile, 'utf8')).generationMode === 'layered';
+        } catch {
+            layered = false;
+        }
+        if (layered) {
+            return repair
+                ? 'Lee repair-context.json, validation.json, generation-plan.json y agent-response.schema.json. Corrige directamente agent-response.json conservando recordingId, planId y las cuatro rutas del plan. Modifica solo los archivos afectados por los errores; no edites los resultados ni handoffs bajo agents/. Puedes usar node, python o python3 únicamente para validar archivos de este paquete. Termina cuando agent-response.json quede listo para reimportar.'
+                : 'Lee agent-response.json, generation-plan.json y agent-response.schema.json. Revisa la propuesta integrada y aplica únicamente los cambios solicitados por el QA directamente en agent-response.json, conservando recordingId, planId, rutas y trazabilidad. No edites los resultados ni handoffs bajo agents/ y no explores el framework. Deja el archivo listo para reimportar.';
+        }
         const generationMode = resolveRecorderGenerationMode(process.env.RECORDER_GENERATION_MODE);
         if (generationMode === 'deterministic' && !repair) {
             return 'Trabaja únicamente en esta carpeta. Lee instructions.md, gaps.json y scenario.json. Evalúa objetivo y criterio de aceptación y escribe testDesignReview como sugerencia no bloqueante, sin roast ni humor; acepta validaciones consolidadas y no inventes requisitos. Resuelve los gaps semánticos y reescribe solo las filas wording=template mediante gherkinResolutions. Escribe gap-resolutions.json con herramientas nativas del CLI. Después, lee validation-feedback.json y corrige el mismo archivo si el recorder lo solicita. Termina cuando el feedback indique valid o planner-regeneration-required. Puedes usar node, python o python3 solo para validar archivos autorizados de este paquete. No explores fwk-mobile-test.';

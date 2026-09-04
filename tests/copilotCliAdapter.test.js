@@ -73,6 +73,30 @@ test('adapter devuelve éxito cuando el proceso termina en 0', async () => {
     assert.equal(capturedArgs.includes('auto'), true);
 });
 
+test('adapter selecciona el custom agent y nombra la sesión de Copilot', async () => {
+    let capturedArgs = [];
+    const adapter = new CopilotCliAdapter((_command, args) => {
+        capturedArgs = args;
+        const child = fakeChild();
+        process.nextTick(() => child.emit('close', 0, null));
+        return child;
+    }, 'copilot', ['-p', '--agent', 'Anterior', '--name=sesion-anterior']);
+    const result = await adapter.execute({
+        cwd: process.cwd(),
+        prompt: 'genera',
+        timeoutMs: 1000,
+        agentName: 'Lorem',
+        sessionName: 'Derek/rec-1/Lorem',
+    });
+    assert.equal(result.success, true);
+    assert.equal(capturedArgs.filter(value => value === '--agent').length, 1);
+    assert.equal(capturedArgs[capturedArgs.indexOf('--agent') + 1], 'Lorem');
+    assert.equal(capturedArgs.filter(value => value === '--name').length, 1);
+    assert.equal(capturedArgs[capturedArgs.indexOf('--name') + 1], 'Derek/rec-1/Lorem');
+    assert.equal(capturedArgs.includes('Anterior'), false);
+    assert.equal(capturedArgs.some(value => value.includes('sesion-anterior')), false);
+});
+
 test('adapter conserva UTF-8 cuando Copilot parte una tilde entre chunks', async () => {
     const expected = 'Últimos 30 días · Más información';
     const bytes = Buffer.from(expected, 'utf8');

@@ -2894,6 +2894,18 @@ test('launcher puede abrir terminal y ejecutar copilot con prompt automático', 
     assert.equal(result.packageDirectory, root);
 });
 
+test('launcher de corrección layered permite editar agent-response sin tocar handoffs', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-launcher-layered-'));
+    fs.writeFileSync(path.join(root, 'status.json'), JSON.stringify({ generationMode: 'layered' }), 'utf8');
+    fs.writeFileSync(path.join(root, 'repair-context.json'), JSON.stringify({ errors: [] }), 'utf8');
+    const launcher = new AutomationAgentLauncher(() => ({ unref() {} }));
+    const prompt = launcher.initialPrompt(root);
+
+    assert.match(prompt, /Corrige directamente agent-response\.json/);
+    assert.match(prompt, /no edites los resultados ni handoffs bajo agents\//i);
+    assert.doesNotMatch(prompt, /gap-resolutions\.json/);
+});
+
 test('launcher no incrusta JSON ni comillas del contexto en AppleScript', () => {
     if (process.platform !== 'darwin') return;
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-launcher-safe-prompt-'));

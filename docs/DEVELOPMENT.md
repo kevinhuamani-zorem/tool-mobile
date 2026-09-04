@@ -58,6 +58,9 @@ copia el resultado a `node_modules/.cache`.
 Flags útiles del pipeline agentic:
 
 - `RECORDER_AGENT_EXECUTION_MODE=manual|automatic` (default `automatic`).
+- `RECORDER_AGENT_PIPELINE=layered|deterministic` (default `layered`). El modo
+  `layered` ejecuta Derek → Lorem → Zorem → Sumrak;
+  `deterministic` conserva temporalmente el orquestador anterior.
 - `RECORDER_GENERATION_MODE=deterministic|legacy` (default `deterministic`).
   `legacy` se conserva solo para diagnóstico; solicita al agente las cuatro
   capas completas y no debe usarse en el flujo normal del QA.
@@ -79,7 +82,8 @@ Flags útiles del pipeline agentic:
   sin modificar variables de entorno. El modo troll mantiene su configuración
   independiente. La UI permite Auto u otro ID de `/model`, sin catálogo estático.
   Por defecto el adapter usa:
-  `copilot -p "<prompt>" --output-format json --model auto` más los permisos
+  `copilot -p "<prompt>" --output-format json --model auto` más `--agent`
+  y `--name Derek/<recordingId>/<agente>` para cada sesión, y los permisos
   compartidos de `copilotPermissions.ts`: `--add-dir <paquete>`,
   `--allow-tool=read`, `--allow-tool=write`, `--allow-tool=shell(node)`,
   `--allow-tool=shell(python)`, `--allow-tool=shell(python3)` y
@@ -107,7 +111,7 @@ incrementalmente únicamente `events.jsonl` de ese UUID bajo `COPILOT_HOME`
 descarta contenido, instrucciones y modelos auxiliares de routing. Es una
 integración tolerante a cambios del CLI: datos ausentes no bloquean el caso.
 
-En el modo predeterminado `deterministic`, el flujo visible de finalización es:
+En el modo predeterminado `layered`, el flujo visible de finalización es:
 
 1. Evidencia
 2. Análisis
@@ -115,15 +119,21 @@ En el modo predeterminado `deterministic`, el flujo visible de finalización es:
 4. Revisión
 
 La ejecución es automática (sin paso "Agente" en el happy path): análisis,
-resolución semántica si aplica, generación determinística, validación y revisión.
-En macOS, Copilot se muestra en Terminal durante la pasada de generación con
-`copilot -i`; al escribir una salida nueva que cumple el schema, el recorder la
-importa y avanza a Revisión sin que el QA pulse un botón adicional.
-Si Copilot solicita autorización para leer o escribir el paquete, la espera del
-usuario no se considera un error inmediato y el wizard lo indica. Cada versión
-JSON completa se entrega también al validador oficial aunque incumpla el schema:
+coordinación de Derek, autoría de Feature/Steps por Lorem, autoría de
+Screen/Locators por Zorem, integración de Sumrak, validación y revisión. Los
+tres delegados usan Copilot CLI headless con perfiles propios y permisos
+limitados al workspace de su etapa; no se abre Terminal ni se espera
+interacción del QA. Sumrak no es propietario del código: el recorder
+reconstruye sus cuatro archivos desde los resultados protegidos de Lorem y
+Zorem. Cada
+versión JSON completa se entrega también al validador oficial aunque incumpla el schema:
 este publica `validation-feedback.json` y mantiene la sesión abierta hasta que
 Copilot escriba una corrección o se alcance el límite de reparación.
+En el pipeline por capas, `repair-feedback.json` cumple ese mismo papel para
+Lorem y Zorem. Derek vuelve a comprobar la última escritura incluso si Copilot
+ya cerró y, si continúa inválida, relanza solo ese autor como
+`.../repair-1/feedback-N`. La traza provisional siempre sale del resultado
+vigente de Lorem, nunca de un borrador anterior de Sumrak.
 
 QA Roast Mode no altera esa pasada. Cuando `testDesignReview` termina en
 `qa-required` y la preferencia está activa, el renderer envía `qaRoastMode` por

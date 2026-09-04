@@ -76,11 +76,15 @@ generadores, validadores o plantillas.
    Las consultas obedecen **NO SEARCH WITHOUT GAP**: pasan por
    `GapQueryPolicy`, deben estar autorizadas por el gap abierto y respetar su
    presupuesto; un gap bloqueante del QA nunca habilita búsquedas del agente.
-   En la misma pasada semántica, el agente realiza una revisión acotada de
+   En el pipeline por capas, Derek conserva el orden y delega únicamente a
+   Lorem (Feature/Steps), Zorem (Screen/Locators) y Sumrak (integración). Los
+   tres delegados trabajan en sesiones headless nombradas, con perfiles y
+   workspaces separados; el recorder sigue siendo la autoridad que valida y
+   aplica. En la misma pasada semántica, Lorem realiza una revisión acotada de
    diseño de prueba: contrasta objetivo y aceptación con las verificaciones
    grabadas. Si solo se observa la existencia del control y no su efecto de
-   negocio, devuelve `testDesignReview.status: qa-required`; no se materializa
-   código hasta que el QA corrija la grabación.
+   negocio, devuelve `testDesignReview.status: suggestion`; la observación se
+   muestra al QA, pero no bloquea la materialización ni la revisión del código.
 10. **IA opt-in y contexto mínimo.** Copilot solo se ejecuta por una
     decisión explícita del usuario. Reciben el paquete confinado bajo
     `runtime/recordings`, sin secretos, y no deben explorar el target ni leer

@@ -383,7 +383,7 @@ permite únicamente si esos archivos continúan intactos. Para archivos
 compartidos con operación `update`, la corrección se recalcula desde la baseline
 original; si falta la baseline o hubo una edición externa, se bloquea sin
 sobrescribir el framework.
-El agente devuelve un solo `agent-response.json` con:
+El contrato final sigue siendo un solo `agent-response.json` con:
 
 - los mismos `recordingId` y `planId`;
 - exactamente las cuatro rutas fijadas por el plan;
@@ -391,20 +391,47 @@ El agente devuelve un solo `agent-response.json` con:
 - una traza por cada secuencia grabada;
 - contenido completo de Feature, Steps, Screen Object y Locators.
 
+En el pipeline por capas Derek coordina tres artefactos intermedios controlados:
+
+- `agents/derek/orchestration.json`: owner, orden y delegaciones autorizadas;
+- `agents/lorem/behavior-result.json`: Lorem produce solo Feature y Steps;
+- `agents/zorem/interaction-result.json`: Zorem produce solo Screen y Locators;
+- `agents/sumrak/agent-response.json`: Sumrak produce la integración completa.
+
+Lorem y Zorem deben conservar las rutas fijadas por el plan y no pueden emitir
+capas del otro autor. Los `output-handoff.json` contienen únicamente referencias,
+tamaño y SHA-256; el integrador verifica esos hashes antes de leer los
+resultados. Aunque Sumrak devuelva contenido distinto, el recorder
+reconstruye `files` con las salidas exactas de ambos autores. Su responsabilidad
+queda limitada a resoluciones, trazabilidad, supuestos y revisión cruzada. Cada
+delegado se ejecuta con un perfil `.github/agents/<nombre>.agent.md` confinado a
+su workspace y una sesión nombrada `Derek/<recordingId>/<nombre>`. Si la
+validación final falla, el borrador se conserva en la raíz del paquete para
+revisión, pero no se puede aplicar al framework.
+
+Lorem publica `actionTrace` como contrato directo para Zorem. Durante una
+reparación, Derek valida cada resultado parcial con el validador oficial y
+actualiza `repair-feedback.json` con `awaiting-output`, `correction-required` o
+`accepted`. Si el proceso termina antes de alcanzar `accepted`, solo ese autor
+se relanza en una ronda `feedback-N`; no se repiten capas sanas. Para las
+resoluciones ligadas a una secuencia, Sumrak conserva `create` o `reuse` fijado
+por `generation-plan.json`. `reuse` requiere el mismo `TypeLocator`, el selector
+normalizado idéntico y un candidato autorizado.
+
 Antes de materializar esa respuesta, la pasada semántica escribe también
 `testDesignReview` dentro de `gap-resolutions.json`. Su contrato es cerrado:
 
 - `status`: `pass` o `qa-required`;
 - `summary`: explicación breve para el QA;
 - hasta ocho `issues`, con código permitido, severidad, secuencias reales y una
-  recomendación concreta para volver a grabar.
+  recomendación concreta para mejorar o volver a grabar.
 
 La revisión no certifica el funcionamiento de la app. Solo decide si la
 grabación contiene un oráculo observable alineado con objetivo y aceptación.
 Verificar que aparece un botón, opción o campo antes de usarlo no demuestra su
-efecto funcional. `qa-required` necesita al menos un hallazgo bloqueante y
-detiene la generación antes de producir `agent-response.json`; el detalle se
-persiste en `test-design-review.json` sin prompts, XML ni capturas.
+efecto funcional. Los hallazgos se presentan como sugerencias al QA y no
+bloquean la generación ni la importación de `agent-response.json`; el detalle
+se persiste en `test-design-review.json` sin prompts, XML ni capturas.
 Cuando el QA activa **QA Roast Mode**, el proceso principal inicia después una
 segunda sesión headless de Copilot. Esta recibe un `qa-roast-request.json`
 compacto con el diagnóstico, acciones relacionadas y ejemplos; escribe

@@ -17,6 +17,7 @@ export * from './domain/deterministicQueryPlanner';
 export * from './domain/elementIdentity';
 export * from './domain/gapResolutionContracts';
 export * from './domain/qaRoastContracts';
+export * from './domain/layeredGenerationContracts';
 export * from './domain/uiTextQualityObservations';
 export * from './domain/verifiedSelectorCandidates';
 
@@ -37,6 +38,7 @@ export * from './infrastructure/copilotCliAdapter';
 export * from './infrastructure/copilotQaRoastGenerator';
 export * from './infrastructure/deterministicResolver';
 export * from './infrastructure/gapQueryPolicy';
+export * from './infrastructure/layeredGenerationOrchestrator';
 export * from './infrastructure/generatedFileRegistry';
 export * from './infrastructure/visibleCopilotProvider';
 

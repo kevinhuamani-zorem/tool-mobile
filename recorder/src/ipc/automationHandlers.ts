@@ -28,6 +28,7 @@ import {
     parseGapResolutions,
     AgentRunStore,
     AgentOrchestrator,
+    LayeredGenerationOrchestrator,
     resolveAgentExecutionMode,
     normalizeAgentResponseEnglishIdentifiers,
     enforceAgentResponsePlatformTags,
@@ -180,6 +181,7 @@ export interface AutomationHandlersContext {
     automationPackageBuilder: AutomationPackageBuilder;
     automationAgentLauncher: AutomationAgentLauncher;
     agentOrchestrator: AgentOrchestrator;
+    layeredGenerationOrchestrator: LayeredGenerationOrchestrator;
     qaRoastGenerator: QaRoastGenerationService;
     deterministicGenerator: DeterministicGenerator;
     automationResponseValidator: AutomationResponseValidator;
@@ -198,6 +200,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         automationPackageBuilder,
         automationAgentLauncher,
         agentOrchestrator,
+        layeredGenerationOrchestrator,
         qaRoastGenerator,
         deterministicGenerator,
         automationResponseValidator,
@@ -406,8 +409,10 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
             status.state = 'manual-correction-validation';
             status.updatedAt = new Date().toISOString();
         }
-        const deterministicMode = status.generationMode === 'deterministic'
-            || fs.existsSync(path.join(packageDirectory, 'gap-resolutions.json'));
+        const deterministicMode = status.generationMode !== 'layered' && (
+            status.generationMode === 'deterministic'
+            || fs.existsSync(path.join(packageDirectory, 'gap-resolutions.json'))
+        );
         const repairAttempts = Number(status.repairAttempts || 0);
         const responseHash = crypto.createHash('sha256')
             .update(JSON.stringify(response))
@@ -581,10 +586,11 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
     function rematerializeGapResolutions(packageDirectory: string): boolean {
         const resolutionsFile = path.join(packageDirectory, 'gap-resolutions.json');
         if (!fs.existsSync(resolutionsFile)) return false;
-        const raw = fs.readFileSync(resolutionsFile);
-        const hash = crypto.createHash('sha256').update(raw).digest('hex');
         const statusFile = path.join(packageDirectory, 'status.json');
         const status = fs.existsSync(statusFile) ? readJsonUtf8<Record<string, unknown>>(statusFile) : {};
+        if (status.generationMode === 'layered') return false;
+        const raw = fs.readFileSync(resolutionsFile);
+        const hash = crypto.createHash('sha256').update(raw).digest('hex');
         const responseFile = path.join(packageDirectory, 'agent-response.json');
         if (status.lastMaterializedGapResolutionsHash === hash
             && fs.existsSync(responseFile)) {
@@ -784,6 +790,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         autorun?: boolean;
         qaRoastMode?: boolean;
         model?: string;
+        pipeline?: 'layered' | 'deterministic';
     }) => {
         try {
             if (!state.activeAutomationPackage) throw new Error('Primero prepara el paquete');
@@ -829,6 +836,139 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                 };
             }
             manualModelSession = null;
+            const pipeline = input?.pipeline
+                || (process.env.RECORDER_AGENT_PIPELINE === 'deterministic' ? 'deterministic' : 'layered');
+            if (pipeline === 'layered') {
+                const layeredStatusFile = path.join(state.activeAutomationPackage, 'status.json');
+                const layeredStatus = fs.existsSync(layeredStatusFile)
+                    ? readJsonUtf8<Record<string, unknown>>(layeredStatusFile)
+                    : {};
+                writeJsonUtf8(layeredStatusFile, {
+                    ...layeredStatus,
+                    generationMode: 'layered',
+                    pipeline: 'derek-lorem-zorem-sumrak',
+                    ownerAgent: 'Derek',
+                    updatedAt: new Date().toISOString(),
+                });
+                emitAutomationProgress(
+                    'ANALYZING',
+                    'Derek coordina la generación',
+                    2,
+                    6,
+                    { detail: 'Derek delegará en orden a Lorem, Zorem y Sumrak mediante handoffs verificados.' },
+                );
+                const layered = await layeredGenerationOrchestrator.run(
+                    state.activeAutomationPackage,
+                    {
+                        model,
+                        onStageChange(stage) {
+                            const progress = stage.role === 'behavior-author'
+                                ? {
+                                    productStage: 'RESOLVING_DECISIONS' as ProductStage,
+                                    message: 'Lorem redacta Feature y Steps',
+                                    completed: stage.state === 'completed' ? 3 : 2,
+                                    detail: 'Derek delegó a Lorem únicamente el comportamiento declarativo y su trazabilidad.',
+                                }
+                                : stage.role === 'interaction-author'
+                                    ? {
+                                        productStage: 'GENERATING' as ProductStage,
+                                        message: 'Zorem construye Screen Object y Locators',
+                                        completed: stage.state === 'completed' ? 4 : 3,
+                                        detail: 'Derek delegó a Zorem la reutilización autorizada y los selectores grabados.',
+                                    }
+                                    : {
+                                    productStage: 'VALIDATING' as ProductStage,
+                                    message: 'Sumrak integra y revisa la automatización',
+                                    completed: stage.state === 'completed' ? 5 : 4,
+                                    detail: 'Sumrak revisa en headless sin poder reescribir las capas de Lorem y Zorem.',
+                                };
+                            emitAutomationProgress(
+                                stage.state === 'failed' ? 'FAILED' : progress.productStage,
+                                stage.state === 'failed' ? `Falló ${stage.agentName}` : progress.message,
+                                progress.completed,
+                                6,
+                                {
+                                    detail: stage.error || progress.detail,
+                                    role: stage.role,
+                                    agentName: stage.agentName,
+                                    sessionName: stage.sessionName,
+                                    roleState: stage.state,
+                                },
+                            );
+                        },
+                    },
+                );
+                if (fs.existsSync(layered.reportFile)) {
+                    const layeredReport = readJsonUtf8<{
+                        stages?: Array<{
+                            role: string;
+                            agentName?: string;
+                            requestedModel?: string;
+                            actualModels?: string[];
+                        }>;
+                    }>(layered.reportFile);
+                    const layeredRunStore = new AgentRunStore(state.activeAutomationPackage);
+                    for (const stage of layeredReport.stages || []) {
+                        if (!stage.requestedModel) continue;
+                        layeredRunStore.recordModelUsage(`${stage.agentName || stage.role}:${stage.role}`, {
+                            requestedModel: stage.requestedModel,
+                            actualModels: stage.actualModels || [],
+                        });
+                    }
+                }
+                if (!layered.success) {
+                    const layeredResponseFile = path.join(
+                        state.activeAutomationPackage,
+                        'agent-response.json',
+                    );
+                    const inspected = fs.existsSync(layeredResponseFile)
+                        ? await importAutomationResponseFromPackage(
+                            state.activeAutomationPackage,
+                            { trackRepair: false },
+                        )
+                        : { success: false, validation: undefined, draft: undefined };
+                    return {
+                        success: false,
+                        mode,
+                        automatic: true,
+                        pipeline,
+                        layeredRun: layered,
+                        error: layered.error || 'El pipeline por capas no pudo completar la integración.',
+                        failureKind: 'layered-generation',
+                        validation: inspected.validation,
+                        draft: inspected.draft,
+                        repairAvailable: Boolean(inspected.draft),
+                    };
+                }
+                const layeredReviewFile = path.join(
+                    state.activeAutomationPackage,
+                    'test-design-review.json',
+                );
+                const testDesignReview = fs.existsSync(layeredReviewFile)
+                    ? readJsonUtf8<TestDesignReview>(layeredReviewFile)
+                    : undefined;
+                const imported = await importAutomationResponseFromPackage(state.activeAutomationPackage);
+                if (imported.success) {
+                    emitAutomationProgress('READY_FOR_REVIEW', 'Listo para revisión', 6, 6);
+                }
+                return {
+                    success: imported.success,
+                    mode,
+                    automatic: true,
+                    pipeline,
+                    layeredRun: layered,
+                    ...(testDesignReview ? { testDesignReview } : {}),
+                    ...(imported.success
+                        ? { imported }
+                        : {
+                            error: imported.error,
+                            failureKind: imported.failureKind || 'generated-output-validation',
+                            validation: imported.validation,
+                            repairAvailable: imported.repairAvailable,
+                            draft: imported.draft,
+                        }),
+                };
+            }
             const run = await agentOrchestrator.run(state.activeAutomationPackage, mode, { model });
             run.modelUsage = currentModelUsage();
             if (run.success) {

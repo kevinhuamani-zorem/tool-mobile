@@ -27,8 +27,10 @@ import {
     CopilotCliAdapter,
     VisibleCopilotProvider,
     AgentOrchestrator,
+    LayeredGenerationOrchestrator,
     CopilotQaRoastGenerator,
 } from '../../core/automation';
+import { readJsonUtf8 } from '../../core/shared';
 import { RecordingCoverageAnalyzer, RecordingPlatformUpdater } from '../../core/coverage';
 import {
     embeddedInspectorAssetsAvailable,
@@ -147,6 +149,15 @@ app.whenReady().then(async () => {
         (scenario, plan, response, attempt) =>
             automationResponseValidator.validate(scenario, plan, response, attempt),
     );
+    const layeredGenerationOrchestrator = new LayeredGenerationOrchestrator(
+        copilotCliAdapter,
+        copilotCliAdapter,
+        (packageDirectory, response) => automationResponseValidator.validate(
+            readJsonUtf8(path.join(packageDirectory, 'scenario.json')),
+            readJsonUtf8(path.join(packageDirectory, 'generation-plan.json')),
+            response,
+        ),
+    );
     const embeddedInspectorProxy = new EmbeddedInspectorProxy();
     const sessionOwnership = new RecorderSessionOwnership();
     const featureGen = new FeatureGenerator(
@@ -191,6 +202,7 @@ app.whenReady().then(async () => {
         automationPackageBuilder,
         automationAgentLauncher,
         agentOrchestrator,
+        layeredGenerationOrchestrator,
         qaRoastGenerator,
         deterministicGenerator,
         automationResponseValidator,

@@ -56,6 +56,38 @@ function withPromptArg(args: string[], prompt: string): string[] {
     ];
 }
 
+function withoutOption(args: string[], names: string[]): string[] {
+    const normalizedNames = new Set(names);
+    const output: string[] = [];
+    for (let index = 0; index < args.length; index += 1) {
+        const value = args[index];
+        if (normalizedNames.has(value)) {
+            index += 1;
+            continue;
+        }
+        if (names.some(name => value.startsWith(`${name}=`))) continue;
+        output.push(value);
+    }
+    return output;
+}
+
+function withAgentIdentityArgs(
+    args: string[],
+    agentName?: string,
+    sessionName?: string,
+): string[] {
+    let output = args;
+    const normalizedAgent = String(agentName || '').trim();
+    const normalizedSession = String(sessionName || '').trim();
+    if (normalizedAgent) {
+        output = [...withoutOption(output, ['--agent']), '--agent', normalizedAgent];
+    }
+    if (normalizedSession) {
+        output = [...withoutOption(output, ['--name', '-n']), '--name', normalizedSession];
+    }
+    return output;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -302,7 +334,7 @@ export class CopilotCliAdapter implements AgentProvider {
                 });
             };
             const args = withPromptArg([
-                ...effectiveArgs,
+                ...withAgentIdentityArgs(effectiveArgs, input.agentName, input.sessionName),
                 ...copilotPermissionArgs(effectiveCwd, input.allowValidationScripts !== false),
             ], input.prompt);
             const child = this.runner(this.command, args, {

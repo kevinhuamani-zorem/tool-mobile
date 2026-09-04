@@ -80,6 +80,9 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /async function runAutomationPipeline\(\)/);
     assert.match(review, /if \(!prepare\.result\.responseAvailable\)/);
     assert.match(review, /const launched = await api\.launchAutomationAgent\(\{[\s\S]*?mode: 'automatic',[\s\S]*?qaRoastMode: isQaRoastModeEnabled\(\)/);
+    assert.match(automationHandlers, /process\.env\.RECORDER_AGENT_PIPELINE === 'deterministic' \? 'deterministic' : 'layered'/);
+    assert.match(automationHandlers, /new LayeredGenerationOrchestrator|layeredGenerationOrchestrator\.run/);
+    assert.match(automationHandlers, /generationMode === 'layered'/);
     assert.match(review, /else if \(launched\.fallbackSuggested\) \{/);
     assert.match(review, /api\.launchAutomationAgent\(\{ mode: 'manual', autorun: true, model \}\)/);
     assert.doesNotMatch(review, /Abrir terminal manual/);
@@ -142,9 +145,15 @@ test('reimportar y revalidar rematerializan gap-resolutions cuando cambió', () 
     assert.match(automationHandlers, /status\.manualCorrectionAttempts/);
 });
 
-test('main usa Copilot visible y deja que el pipeline importe la respuesta validada', () => {
+test('main conserva Copilot visible para legacy y usa Derek con tres agentes headless', () => {
     const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
     assert.match(main, /new VisibleCopilotProvider\(copilotCliAdapter, automationAgentLauncher\)/);
+    assert.match(main, /new LayeredGenerationOrchestrator\(\s*copilotCliAdapter,\s*copilotCliAdapter,/);
+    assert.match(automationHandlers, /pipeline: 'derek-lorem-zorem-sumrak'/);
+    assert.match(automationHandlers, /Derek coordina la generación/);
+    assert.match(automationHandlers, /Lorem redacta Feature y Steps/);
+    assert.match(automationHandlers, /Zorem construye Screen Object y Locators/);
+    assert.match(automationHandlers, /Sumrak integra y revisa la automatización/);
     assert.doesNotMatch(main, /openExecutionMonitor\(activeAutomationPackage\)/);
     assert.match(review, /qaRoastMode: isQaRoastModeEnabled\(\)/);
     assert.match(review, /const imported = await importAutomationResponse\(true\);/);

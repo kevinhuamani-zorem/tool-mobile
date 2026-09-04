@@ -6,6 +6,10 @@ export interface AgentProviderRunInput {
     prompt: string;
     timeoutMs: number;
     model?: string;
+    /** Perfil custom-agent cargado desde `.github/agents` para esta ejecución. */
+    agentName?: string;
+    /** Nombre humano y estable de la sesión de Copilot. */
+    sessionName?: string;
     /** Disable interpreter approvals for presentation-only tasks such as QA roast. */
     allowValidationScripts?: boolean;
     traceFile?: string;

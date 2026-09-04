@@ -91,3 +91,27 @@ La puerta exige:
     añadir una acción que use `browser.` y comprobar que lo importe una vez.
 19. Sustituir un alias por una ruta relativa en Steps o Screen Object y
     comprobar que tanto `verify-package.js` como la importación lo rechacen.
+
+## Pipeline por capas
+
+La evolución multiagente se introduce sin reemplazar todavía el flujo estable:
+
+1. Derek es el owner determinístico y fija orden, identidad y handoffs.
+2. Lorem (`behavior-author`) produce únicamente Feature y Steps.
+3. Zorem (`interaction-author`) produce únicamente Screen Object y Locators.
+4. Sumrak (`integration-reviewer`) consume ambos resultados, valida la trazabilidad
+   cruzada y produce el `agent-response.json` que verá el QA.
+
+Cada delegado trabaja en `generation/automation/agents/<nombre>`, recibe un manifiesto
+acotado y publica un handoff por ruta, tamaño y SHA-256. El integrador rechaza
+un resultado si cambió después del handoff. Los tres delegados son headless,
+usan perfiles custom-agent y sesiones nombradas bajo Derek, y el pipeline es
+la estrategia predeterminada. El recorder reemplaza cualquier
+contenido reescrito por el integrador con las salidas exactas de los autores.
+Lorem entrega a Zorem la interfaz de métodos por handoff. Si el validador
+rechaza una capa, Derek actualiza el feedback y mantiene o relanza únicamente
+al autor responsable hasta el límite controlado. La integración tampoco puede
+contradecir una decisión determinista del plan: `reuse` solo es válido con
+`TypeLocator` y selector normalizado idénticos.
+El modo anterior permanece disponible con
+`RECORDER_AGENT_PIPELINE=deterministic`.
