@@ -17,6 +17,7 @@ import {
 } from '../domain/layeredGenerationContracts';
 import type { AgentProvider } from '../ports/agentProvider';
 import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from '../../shared';
+import { DeterministicDraftBuilder } from '../../generation';
 
 const INPUT_FILES = [
     'scenario.json',
@@ -31,7 +32,50 @@ const INPUT_FILES = [
     'english-vocabulary.json',
     'validation-contract.json',
     'screen-object-contract.js',
+    'deterministic-draft.json',
 ];
+
+const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
+    'behavior-author': [
+        'scenario.json',
+        'generation-plan.json',
+        'gaps.json',
+        'hints.json',
+        'query-results.json',
+        'reuse-context.json',
+        'english-vocabulary.json',
+        'validation-contract.json',
+        'deterministic-draft.json',
+    ],
+    'interaction-author': [
+        'scenario.json',
+        'generation-plan.json',
+        'gaps.json',
+        'query-results.json',
+        'reuse-context.json',
+        'framework-api.json',
+        'english-vocabulary.json',
+        'validation-contract.json',
+        'screen-object-contract.js',
+        'deterministic-draft.json',
+    ],
+};
+
+const INTEGRATION_INPUT_FILES = [
+    'scenario.json',
+    'generation-plan.json',
+    'gaps.json',
+    'query-results.json',
+    'reuse-context.json',
+    'validation-contract.json',
+    'agent-response.schema.json',
+];
+
+const ROLE_LAYERS = {
+    'behavior-author': ['feature', 'steps'] as const,
+    'interaction-author': ['screen', 'locators'] as const,
+    'integration-reviewer': ['feature', 'steps', 'screen', 'locators'] as const,
+};
 
 const ROLE_OUTPUTS = {
     'behavior-author': 'behavior-result.json',
@@ -47,6 +91,7 @@ const DELEGATES = [
 
 const MAX_LAYERED_REPAIR_ATTEMPTS = 1;
 const MAX_LIVE_FEEDBACK_ROUNDS = 2;
+const LAYERED_CACHE_SCHEMA_VERSION = 2;
 
 type AuthorRole = LayeredAgentResult['role'];
 
@@ -55,6 +100,10 @@ interface LayeredRepairFeedback {
     behavior: string[];
     interaction: string[];
     integration: string[];
+}
+
+interface AuthorCacheTarget {
+    file?: string;
 }
 
 class LayeredValidationError extends Error {
@@ -69,6 +118,7 @@ class LayeredValidationError extends Error {
 export interface LayeredGenerationOptions {
     model?: string;
     timeoutMs?: number;
+    forceRegenerate?: boolean;
     onStageChange?: (stage: LayeredGenerationStageReport) => void;
 }
 
@@ -102,13 +152,133 @@ function copyIfPresent(sourceRoot: string, targetRoot: string, relativePath: str
     fs.copyFileSync(source, target);
 }
 
-function copyDirectoryIfPresent(sourceRoot: string, targetRoot: string, relativePath: string): void {
+function projectRoleJson(relativePath: string, value: any, role: AuthorRole): any {
+    if (relativePath === 'deterministic-draft.json') {
+        const layers = new Set(ROLE_LAYERS[role]);
+        return {
+            ...value,
+            files: (value.files || []).filter((file: any) => layers.has(file.layer)),
+            actionTrace: value.actionTrace || [],
+            assumptions: [
+                'Referencia generada localmente. Puedes corregirla o reemplazar APIs provisionales por reutilización autorizada.',
+            ],
+        };
+    }
+    if (relativePath === 'validation-contract.json') {
+        const behaviorOnly = new Set([
+            'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
+            'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
+            'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
+            'verbatim-context-hint',
+        ]);
+        const interactionOnly = new Set([
+            'completion-duplicate', 'completion-file', 'completion-key', 'completion-occupied',
+            'completion-platform', 'completion-sequence', 'completion-shape',
+            'completion-unauthorized', 'create-locator-contract', 'destructive-update',
+            'duplicate-screen-method', 'framework-locator-collision', 'invalid-locator-access',
+            'invented-selector', 'locator-type-mismatch', 'platform-coverage',
+            'screen-alias-usage', 'screen-import-alias', 'trace-locator', 'trace-screen-method',
+        ]);
+        const rules = (value.rules || []).filter((rule: any) =>
+            role === 'behavior-author'
+                ? !interactionOnly.has(rule.code)
+                : !behaviorOnly.has(rule.code)
+        );
+        return {
+            ...value,
+            totalRules: rules.length,
+            expressibleWithMinimalExampleCount: rules.filter((rule: any) => rule.minimalExample).length,
+            explanationOnlyCount: rules.filter((rule: any) => rule.needsExplanation).length,
+            rules,
+        };
+    }
+    if (relativePath === 'reuse-context.json') {
+        if (role === 'behavior-author') {
+            return {
+                schemaVersion: value.schemaVersion,
+                recordingId: value.recordingId,
+                decision: value.decision,
+                reuseTarget: value.reuseTarget,
+                candidates: value.candidates || [],
+                updateBaselines: (value.updateBaselines || []).filter((item: any) =>
+                    item?.layer === 'feature' || item?.layer === 'steps'
+                ),
+            };
+        }
+        return {
+            schemaVersion: value.schemaVersion,
+            recordingId: value.recordingId,
+            decision: value.decision,
+            reuseTarget: value.reuseTarget,
+            elements: value.elements || [],
+            updateBaselines: (value.updateBaselines || []).filter((item: any) =>
+                item?.layer === 'screen' || item?.layer === 'locators'
+            ),
+        };
+    }
+    if (relativePath === 'hints.json') {
+        const behaviorTypes = new Set(['existing_step', 'existing_scenario', 'builtin_action']);
+        const interactionTypes = new Set(['existing_locator', 'existing_screen', 'builtin_action']);
+        const allowed = role === 'behavior-author' ? behaviorTypes : interactionTypes;
+        return {
+            ...value,
+            hints: (value.hints || []).filter((hint: any) =>
+                !hint?.type || allowed.has(hint.type)
+            ),
+        };
+    }
+    if (relativePath === 'query-results.json') {
+        const behaviorTypes = new Set(['feature', 'scenario', 'stepDefinition', 'example']);
+        const interactionTypes = new Set(['screenObject', 'screenMethod', 'locator', 'helper', 'contract', 'import']);
+        const allowed = role === 'behavior-author' ? behaviorTypes : interactionTypes;
+        return {
+            ...value,
+            results: (value.results || []).map((result: any) => ({
+                ...result,
+                data: result?.data && Array.isArray(result.data.items)
+                    ? {
+                        ...result.data,
+                        items: result.data.items.filter((item: any) =>
+                            !item?.type || allowed.has(item.type)
+                        ),
+                    }
+                    : result?.data,
+            })),
+        };
+    }
+    return value;
+}
+
+function copyRoleInput(
+    sourceRoot: string,
+    targetRoot: string,
+    relativePath: string,
+    role: AuthorRole,
+): void {
     const source = ensureInside(sourceRoot, path.join(sourceRoot, relativePath));
-    if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) return;
-    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-        const childRelative = path.join(relativePath, entry.name);
-        if (entry.isDirectory()) copyDirectoryIfPresent(sourceRoot, targetRoot, childRelative);
-        else if (entry.isFile()) copyIfPresent(sourceRoot, targetRoot, childRelative);
+    if (!fs.existsSync(source) || !fs.statSync(source).isFile()) return;
+    const target = ensureInside(targetRoot, path.join(targetRoot, relativePath));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    if (!relativePath.endsWith('.json')) {
+        fs.copyFileSync(source, target);
+        return;
+    }
+    writeJsonUtf8(target, projectRoleJson(relativePath, readJsonUtf8<any>(source), role));
+}
+
+function copyRoleBaselines(
+    sourceRoot: string,
+    targetRoot: string,
+    role: AuthorRole,
+): void {
+    const sourceDirectory = path.join(sourceRoot, 'baselines');
+    if (!fs.existsSync(sourceDirectory)) return;
+    const allowedPrefixes = role === 'behavior-author'
+        ? ['feature-', 'steps-']
+        : ['screen-', 'locators-'];
+    for (const entry of fs.readdirSync(sourceDirectory, { withFileTypes: true })) {
+        if (!entry.isFile() || !allowedPrefixes.some(prefix => entry.name.startsWith(prefix))) continue;
+        copyIfPresent(sourceRoot, targetRoot, path.join('baselines', entry.name));
     }
 }
 
@@ -127,6 +297,121 @@ function filesInside(directory: string): string[] {
         const candidate = path.join(directory, entry.name);
         return entry.isDirectory() ? filesInside(candidate) : entry.isFile() ? [candidate] : [];
     });
+}
+
+function stableFingerprint(value: unknown): string {
+    return sha256Text(JSON.stringify(value));
+}
+
+function agentCacheRoot(packageDirectory: string): string {
+    return path.join(
+        path.dirname(packageDirectory),
+        '.agent-cache',
+        sha256Text(path.resolve(packageDirectory)).slice(0, 16),
+    );
+}
+
+function normalizeCucumberStepDefinitions(content: string): string {
+    let previousKeyword: 'Given' | 'When' | 'Then' = 'Then';
+    return content.split('\n').map(line => {
+        let normalized = line.replace(
+            /import\s*\{([^}]*)\}\s*from\s*(['"])(@cucumber\/cucumber|@wdio\/cucumber-framework)\2;?/g,
+            (_match, names: string, quote: string, source: string) => {
+                const supported = names
+                    .split(',')
+                    .map(item => item.trim())
+                    .filter(Boolean)
+                    .filter(item => !/^(?:And|But)(?:\s+as\s+\w+)?$/.test(item));
+                return `import { ${supported.join(', ')} } from ${quote}${source}${quote};`;
+            },
+        );
+        const declaration = normalized.match(/^(\s*)(Given|When|Then|And|But)(\s*\()/);
+        if (!declaration) return normalized;
+        const keyword = declaration[2];
+        if (keyword === 'Given' || keyword === 'When' || keyword === 'Then') {
+            previousKeyword = keyword;
+            return normalized;
+        }
+        normalized = normalized.replace(
+            /^(\s*)(?:And|But)(\s*\()/,
+            `$1${previousKeyword}$2`,
+        );
+        return normalized;
+    }).join('\n');
+}
+
+function normalizeBehaviorResult(result: LayeredAgentResult): boolean {
+    if (result.role !== 'behavior-author') return false;
+    let changed = false;
+    for (const file of result.files) {
+        if (file.layer !== 'steps') continue;
+        const normalized = normalizeCucumberStepDefinitions(file.content);
+        if (normalized !== file.content) {
+            file.content = normalized;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+function normalizeAutomationResponse(response: AutomationAgentResponse): boolean {
+    let changed = false;
+    for (const file of response.files || []) {
+        if (file.layer !== 'steps') continue;
+        const normalized = normalizeCucumberStepDefinitions(file.content);
+        if (normalized !== file.content) {
+            file.content = normalized;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+interface PipelineCacheEntry {
+    schemaVersion: 1;
+    fingerprint: string;
+    response: AutomationAgentResponse;
+    testDesignReview?: unknown;
+}
+
+function actionInterfaceFingerprint(resultFile: string): string {
+    const result = readJsonUtf8<LayeredAgentResult>(resultFile);
+    return stableFingerprint((result.actionTrace || []).map(trace => ({
+        sequence: trace.sequence,
+        screenMethod: trace.screenMethod || '',
+        locatorName: trace.locatorName || '',
+    })));
+}
+
+function pipelineFingerprint(packageDirectory: string, model: string): string {
+    const files = [
+        ...INPUT_FILES.map(file => path.join(packageDirectory, file)),
+        ...filesInside(path.join(packageDirectory, 'baselines')),
+    ]
+        .filter(file => fs.existsSync(file) && fs.statSync(file).isFile())
+        .sort()
+        .map(file => artifact(file, packageDirectory))
+        .map(item => ({ path: item.path, sha256: item.sha256 }));
+    return stableFingerprint({
+        schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
+        model,
+        files,
+        prompts: {
+            behavior: partialPrompt('behavior-author', ROLE_OUTPUTS['behavior-author'], false),
+            interaction: partialPrompt('interaction-author', ROLE_OUTPUTS['interaction-author'], false),
+            integration: integrationPrompt(false),
+        },
+    });
+}
+
+function pipelineCacheFile(packageDirectory: string, fingerprint: string): string {
+    return path.join(agentCacheRoot(packageDirectory), 'pipeline', `${fingerprint}.json`);
+}
+
+function promoteAuthorCache(outputFile: string, target: AuthorCacheTarget): void {
+    if (!target.file) return;
+    fs.mkdirSync(path.dirname(target.file), { recursive: true });
+    fs.copyFileSync(outputFile, target.file);
 }
 
 function writeHandoff(
@@ -209,13 +494,16 @@ function partialPrompt(role: AuthorRole, outputFile: string, repair = false): st
     const ownership = role === 'behavior-author'
         ? [
             'Genera únicamente Feature y Steps.',
+            'Usa deterministic-draft.json como punto de partida rápido, no como restricción: mejora su Gherkin y reutilización cuando el plan lo autorice.',
             'El Gherkin debe ser declarativo, conservar tags y formato del framework y cada acción grabada debe quedar trazada.',
+            'En el archivo Feature puedes usar And/But; en TypeScript importa e invoca únicamente Given, When y Then porque Cucumber no exporta And/But como funciones.',
             'Steps solo puede invocar métodos del Screen Object: prohíbe XPath, UiSelector, accessibility id y selectores literales.',
             'Declara en actionTrace el screenMethod requerido para que Zorem implemente exactamente esa interfaz.',
             'Evalúa el diseño funcional como pass o suggestion; una sugerencia nunca bloquea la generación.',
         ].join(' ')
         : [
             'Genera únicamente Screen Object y Locators.',
+            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan.',
             'Lee behavior-result.json y lorem-handoff.json: implementa exactamente los screenMethod requeridos por Lorem.',
             'Para operation update parte de baselines y preserva byte a byte toda API, import y locator no afectado.',
             'La operación y decisión del plan mandan: si indica create, crea la key y getter homónimos con el primary exacto aunque exista un elemento semánticamente parecido; reutiliza solo cuando el plan lo autorice.',
@@ -227,7 +515,7 @@ function partialPrompt(role: AuthorRole, outputFile: string, repair = false): st
         ].join(' ');
     return [
         `Eres ${identity.name}, responsable de ${role} bajo la coordinación de Derek.`,
-        'Lee agent-task.md y los archivos enumerados en input-manifest.json.',
+        'Lee primero agent-memory.json: respeta su ownership y usa solo los archivos enumerados en input-manifest.json.',
         ...(repair ? ['Lee repair-feedback.json y corrige únicamente los errores asignados a tu capa.'] : []),
         ownership,
         `Escribe solo ${outputFile} y cumple result.schema.json.`,
@@ -270,7 +558,7 @@ function authorContractErrors(
 function integrationPrompt(repair = false): string {
     return [
         'Eres Sumrak, integration-reviewer bajo la coordinación de Derek.',
-        'Lee agent-task.md, behavior-result.json, interaction-result.json y sus handoffs.',
+        'Lee primero agent-memory.json y luego behavior-result.json, interaction-result.json y sus handoffs.',
         ...(repair ? ['Lee integration-feedback.json y corrige la integración solicitada.'] : []),
         'Integra ambos resultados sin cambiar recordingId, planId, rutas ni el contenido de los cuatro archivos.',
         'Copia byte por byte files[].content desde los resultados de los autores; el recorder los impondrá como fuente de verdad.',
@@ -329,6 +617,33 @@ function alignResolutionsWithPlan(
     });
 }
 
+function deterministicGapResolutions(
+    packageDirectory: string,
+    plan: GenerationPlan,
+): AutomationAgentResponse['resolutions'] | null {
+    const gapsFile = path.join(packageDirectory, 'gaps.json');
+    const gaps = fs.existsSync(gapsFile)
+        ? readJsonUtf8<{ gaps?: Array<{ id?: string; sequence?: number }> }>(gapsFile).gaps || []
+        : [];
+    const gapById = new Map(gaps.filter(gap => gap.id).map(gap => [gap.id!, gap]));
+    const resolutions: AutomationAgentResponse['resolutions'] = [];
+    for (const gapId of plan.unresolvedGapIds || []) {
+        // La extensión de rutas update ya fue decidida por el planner. Para
+        // create/reuse todavía se conserva Sumrak, porque reuse puede requerir
+        // selectedCandidate y evidencia adicional del query layer.
+        if (gapId !== 'gap-extend-existing-artifacts' || !gapById.has(gapId)) return null;
+        const decision = 'extend-existing';
+        resolutions.push({
+            gapId,
+            decision,
+            reason: decision === 'extend-existing'
+                ? 'Derek conserva las rutas update fijadas por el plan y extiende los artefactos existentes.'
+                : `Derek conserva la decisión determinista ${decision} fijada por el plan.`,
+        });
+    }
+    return resolutions;
+}
+
 function classifyValidationErrors(errors: string[]): LayeredRepairFeedback {
     const feedback: LayeredRepairFeedback = {
         all: [...new Set(errors.filter(Boolean))],
@@ -358,6 +673,7 @@ export class LayeredGenerationOrchestrator {
         private readonly controlledProvider: AgentProvider,
         private readonly reviewProvider: AgentProvider = controlledProvider,
         private readonly responseValidator?: LayeredResponseValidator,
+        private readonly draftBuilder = new DeterministicDraftBuilder(),
     ) {}
 
     async run(packageDirectory: string, options: LayeredGenerationOptions = {}): Promise<LayeredGenerationResult> {
@@ -372,13 +688,88 @@ export class LayeredGenerationOrchestrator {
         fs.rmSync(ownerDirectory, { recursive: true, force: true });
         writeOwnerManifest(agentsRoot, plan, 'running');
 
+        // El borrador acelera la comprensión del caso, pero nunca bloquea la
+        // generación: paquetes históricos o incompletos siguen por el flujo
+        // de agentes sin conservar un draft obsoleto de otra ejecución.
+        const draftFile = path.join(root, 'deterministic-draft.json');
+        try {
+            this.draftBuilder.build(root);
+        } catch {
+            fs.rmSync(draftFile, { force: true });
+        }
+
         let repairAttempts = 0;
         try {
+            const completeFingerprint = pipelineFingerprint(root, options.model || 'auto');
+            const completeCacheFile = pipelineCacheFile(root, completeFingerprint);
+            if (!options.forceRegenerate) {
+                let cachedEntry: PipelineCacheEntry | undefined;
+                if (fs.existsSync(completeCacheFile)) {
+                    cachedEntry = readJsonUtf8<PipelineCacheEntry>(completeCacheFile);
+                } else {
+                    // Migración transparente: una respuesta oficial existente y
+                    // válida pertenece al mismo plan y puede sembrar el caché.
+                    const existingResponseFile = path.join(root, 'agent-response.json');
+                    if (fs.existsSync(existingResponseFile)) {
+                        const response = readJsonUtf8<AutomationAgentResponse>(existingResponseFile);
+                        if (normalizeAutomationResponse(response)) {
+                            writeJsonUtf8(existingResponseFile, response);
+                        }
+                        const reviewFile = path.join(root, 'test-design-review.json');
+                        cachedEntry = {
+                            schemaVersion: 1,
+                            fingerprint: completeFingerprint,
+                            response,
+                            testDesignReview: fs.existsSync(reviewFile)
+                                ? readJsonUtf8<unknown>(reviewFile)
+                                : undefined,
+                        };
+                    }
+                }
+                if (cachedEntry) normalizeAutomationResponse(cachedEntry.response);
+                if (cachedEntry
+                    && cachedEntry.fingerprint === completeFingerprint
+                    && this.isReusableResponse(root, plan, cachedEntry.response)) {
+                    const responseFile = path.join(root, 'agent-response.json');
+                    writeJsonUtf8(responseFile, cachedEntry.response);
+                    if (cachedEntry.testDesignReview) {
+                        writeJsonUtf8(path.join(root, 'test-design-review.json'), cachedEntry.testDesignReview);
+                    }
+                    fs.mkdirSync(path.dirname(completeCacheFile), { recursive: true });
+                    writeJsonUtf8(completeCacheFile, cachedEntry);
+                    for (const role of ['behavior-author', 'interaction-author', 'integration-reviewer'] as const) {
+                        const stage: LayeredGenerationStageReport = {
+                            role,
+                            agentName: LAYERED_GENERATION_AGENTS[role].name,
+                            sessionName: `${sessionName(plan.recordingId, role)}/pipeline-cache`,
+                            attempt: 0,
+                            state: 'completed',
+                            durationMs: 0,
+                            outputFile: 'agent-response.json',
+                            execution: 'cache',
+                            fingerprint: completeFingerprint,
+                            cacheHit: true,
+                            contextBytes: 0,
+                            contextFiles: 0,
+                            assignedLayers: [...ROLE_LAYERS[role]],
+                        };
+                        stages.push(stage);
+                        options.onStageChange?.({ ...stage });
+                    }
+                    writeOwnerManifest(agentsRoot, plan, 'completed');
+                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, 0);
+                    return { success: true, responseFile, reportFile };
+                }
+            }
+            const behaviorCache: AuthorCacheTarget = {};
+            const interactionCache: AuthorCacheTarget = {};
             let behavior = await this.runAuthor(
                 root, agentsRoot, plan, 'behavior-author', options, stages, 0,
+                undefined, [], behaviorCache,
             );
             let interaction = await this.runAuthor(
                 root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
+                [], interactionCache,
             );
             let integrationFeedback: LayeredRepairFeedback | undefined;
             while (true) {
@@ -395,6 +786,22 @@ export class LayeredGenerationOrchestrator {
                         integrationFeedback,
                         repairAttempts < MAX_LAYERED_REPAIR_ATTEMPTS,
                     );
+                    // Solo una respuesta completa validada promueve sus capas.
+                    // Si hubo reparación, estas rutas apuntan al resultado final.
+                    promoteAuthorCache(behavior, behaviorCache);
+                    promoteAuthorCache(interaction, interactionCache);
+                    const response = readJsonUtf8<AutomationAgentResponse>(responseFile);
+                    const reviewFile = path.join(root, 'test-design-review.json');
+                    const completeEntry: PipelineCacheEntry = {
+                        schemaVersion: 1,
+                        fingerprint: completeFingerprint,
+                        response,
+                        testDesignReview: fs.existsSync(reviewFile)
+                            ? readJsonUtf8<unknown>(reviewFile)
+                            : undefined,
+                    };
+                    fs.mkdirSync(path.dirname(completeCacheFile), { recursive: true });
+                    writeJsonUtf8(completeCacheFile, completeEntry);
                     writeOwnerManifest(agentsRoot, plan, 'completed');
                     this.writeReport(reportFile, plan, startedAt, 'completed', stages, repairAttempts);
                     return { success: true, responseFile, reportFile };
@@ -406,6 +813,9 @@ export class LayeredGenerationOrchestrator {
                     repairAttempts += 1;
                     const feedback = error.feedback;
                     integrationFeedback = feedback;
+                    const previousBehaviorInterface = feedback.behavior.length
+                        ? actionInterfaceFingerprint(behavior)
+                        : undefined;
                     if (feedback.behavior.length) {
                         behavior = await this.runAuthor(
                             root,
@@ -417,11 +827,15 @@ export class LayeredGenerationOrchestrator {
                             repairAttempts,
                             undefined,
                             feedback.behavior,
+                            behaviorCache,
                         );
                     }
-                    // Si Lorem cambia su interfaz, Zorem siempre debe reconstruir
-                    // su capa aunque la observación original fuera solo behavior.
-                    if (feedback.interaction.length || feedback.behavior.length) {
+                    const behaviorInterfaceChanged = previousBehaviorInterface !== undefined
+                        && previousBehaviorInterface !== actionInterfaceFingerprint(behavior);
+                    // Un ajuste de redacción Gherkin no invalida Screen/Locators.
+                    // Zorem se relanza solo con feedback propio o si Lorem cambió
+                    // el contrato screenMethod/locatorName que debe implementar.
+                    if (feedback.interaction.length || behaviorInterfaceChanged) {
                         interaction = await this.runAuthor(
                             root,
                             agentsRoot,
@@ -431,7 +845,10 @@ export class LayeredGenerationOrchestrator {
                             stages,
                             repairAttempts,
                             behavior,
-                            feedback.interaction.length ? feedback.interaction : feedback.behavior,
+                            feedback.interaction.length
+                                ? feedback.interaction
+                                : ['Lorem cambió la interfaz actionTrace; sincroniza únicamente los métodos afectados.'],
+                            interactionCache,
                         );
                     }
                 }
@@ -441,6 +858,22 @@ export class LayeredGenerationOrchestrator {
             this.writeReport(reportFile, plan, startedAt, 'failed', stages, repairAttempts);
             return { success: false, reportFile, error: error?.message || String(error) };
         }
+    }
+
+    private isReusableResponse(
+        packageDirectory: string,
+        plan: GenerationPlan,
+        response: AutomationAgentResponse,
+    ): boolean {
+        if (response.recordingId !== plan.recordingId || response.planId !== plan.planId) return false;
+        const expected = new Map(plan.files.map(file => [file.layer, file.path]));
+        const actual = new Map((response.files || []).map(file => [file.layer, file.path]));
+        if (actual.size !== expected.size) return false;
+        if ([...expected].some(([layer, file]) => actual.get(layer) !== file)) return false;
+        const resolved = new Set((response.resolutions || []).map(item => item.gapId));
+        if ((plan.unresolvedGapIds || []).some(gapId => !resolved.has(gapId))) return false;
+        const validation = this.responseValidator?.(packageDirectory, response);
+        return validation ? validation.valid : true;
     }
 
     private async runAuthor(
@@ -453,13 +886,16 @@ export class LayeredGenerationOrchestrator {
         attempt = 0,
         dependencyFile?: string,
         repairErrors: string[] = [],
+        cacheTarget: AuthorCacheTarget = {},
     ): Promise<string> {
         const identity = LAYERED_GENERATION_AGENTS[role];
         const stageDirectory = path.join(agentsRoot, identity.directory);
         fs.rmSync(stageDirectory, { recursive: true, force: true });
         fs.mkdirSync(stageDirectory, { recursive: true });
-        for (const file of INPUT_FILES) copyIfPresent(packageDirectory, stageDirectory, file);
-        copyDirectoryIfPresent(packageDirectory, stageDirectory, 'baselines');
+        for (const file of ROLE_INPUT_FILES[role]) {
+            copyRoleInput(packageDirectory, stageDirectory, file, role);
+        }
+        copyRoleBaselines(packageDirectory, stageDirectory, role);
         if (dependencyFile) {
             verifyOutputHandoff(dependencyFile);
             const dependencyCopy = path.join(stageDirectory, path.basename(dependencyFile));
@@ -488,7 +924,7 @@ export class LayeredGenerationOrchestrator {
             });
         }
         const inputArtifacts = [
-            ...INPUT_FILES
+            ...ROLE_INPUT_FILES[role]
             .map(file => path.join(stageDirectory, file))
             .filter(file => fs.existsSync(file)),
             ...filesInside(path.join(stageDirectory, 'baselines')),
@@ -497,6 +933,32 @@ export class LayeredGenerationOrchestrator {
             ...(repairErrors.length ? [path.join(stageDirectory, 'repair-feedback.json')] : []),
         ]
             .map(file => artifact(file, stageDirectory));
+        const contextBytes = inputArtifacts.reduce((total, item) => total + item.bytes, 0);
+        const originalContextBytes = INPUT_FILES
+            .map(file => path.join(packageDirectory, file))
+            .filter(file => fs.existsSync(file) && fs.statSync(file).isFile())
+            .reduce((total, file) => total + fs.statSync(file).size, 0)
+            + filesInside(path.join(packageDirectory, 'baselines'))
+                .reduce((total, file) => total + fs.statSync(file).size, 0);
+        writeJsonUtf8(path.join(stageDirectory, 'agent-memory.json'), {
+            schemaVersion: 1,
+            recordingId: plan.recordingId,
+            planId: plan.planId,
+            agent: LAYERED_GENERATION_AGENTS[role].name,
+            role,
+            ownership: {
+                layers: ROLE_LAYERS[role],
+                mayReadOtherAgentOutput: role === 'interaction-author',
+                mayWriteOutsideOwnedLayers: false,
+            },
+            context: {
+                files: inputArtifacts.length,
+                bytes: contextBytes,
+                sourceBytes: originalContextBytes,
+                savedBytes: Math.max(0, originalContextBytes - contextBytes),
+            },
+            artifacts: inputArtifacts.map(item => ({ path: item.path, sha256: item.sha256, bytes: item.bytes })),
+        });
         writeJsonUtf8(path.join(stageDirectory, 'input-manifest.json'), {
             schemaVersion: 1,
             recordingId: plan.recordingId,
@@ -522,6 +984,27 @@ export class LayeredGenerationOrchestrator {
         });
         const outputFile = path.join(stageDirectory, ROLE_OUTPUTS[role]);
         const namedSession = sessionName(plan.recordingId, role, attempt);
+        const cacheFingerprint = stableFingerprint({
+            schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
+            role,
+            model: options.model || 'auto',
+            prompt,
+            artifacts: inputArtifacts
+                // Los handoffs contienen createdAt; su identidad real ya está
+                // representada por el hash del resultado al que apuntan.
+                .filter(item => !item.path.endsWith('-handoff.json'))
+                .map(item => ({ path: item.path, sha256: item.sha256 })),
+        });
+        // automation/ se reconstruye al volver a preparar el caso. El caché
+        // vive como hermano para sobrevivir esa limpieza, pero queda aislado
+        // por la ruta del paquete y por el fingerprint completo de inputs.
+        const cacheRoot = path.join(
+            path.dirname(packageDirectory),
+            '.agent-cache',
+            sha256Text(path.resolve(packageDirectory)).slice(0, 16),
+        );
+        const cacheFile = path.join(cacheRoot, role, `${cacheFingerprint}.json`);
+        if (attempt === 0 && repairErrors.length === 0) cacheTarget.file = cacheFile;
         const report: LayeredGenerationStageReport = {
             role,
             agentName: identity.name,
@@ -530,9 +1013,54 @@ export class LayeredGenerationOrchestrator {
             state: 'running',
             durationMs: 0,
             outputFile: path.relative(packageDirectory, outputFile).replace(/\\/g, '/'),
+            execution: 'agent',
+            fingerprint: cacheFingerprint,
+            cacheHit: false,
+            contextBytes,
+            contextFiles: inputArtifacts.length,
+            assignedLayers: [...ROLE_LAYERS[role]],
         };
         stages.push(report);
         options.onStageChange?.({ ...report });
+        if (attempt === 0 && repairErrors.length === 0 && fs.existsSync(cacheFile)) {
+            try {
+                fs.copyFileSync(cacheFile, outputFile);
+                const cached = readJsonUtf8<unknown>(outputFile);
+                if (role === 'behavior-author'
+                    && typeof cached === 'object'
+                    && cached !== null
+                    && normalizeBehaviorResult(cached as LayeredAgentResult)) {
+                    writeJsonUtf8(outputFile, cached);
+                }
+                const cacheErrors = authorContractErrors(cached, role, plan);
+                if (!cacheErrors.length) {
+                    const typedCached = cached as LayeredAgentResult;
+                    if (role === 'behavior-author' && typedCached.testDesignReview) {
+                        writeJsonUtf8(path.join(packageDirectory, 'test-design-review.json'), typedCached.testDesignReview);
+                    }
+                    report.state = 'completed';
+                    report.execution = 'cache';
+                    report.cacheHit = true;
+                    options.onStageChange?.({ ...report });
+                    writeHandoff(path.join(stageDirectory, 'output-handoff.json'), {
+                        from: role,
+                        to: 'integration-reviewer',
+                        fromAgent: identity.name,
+                        toAgent: LAYERED_GENERATION_AGENTS['integration-reviewer'].name,
+                        recordingId: plan.recordingId,
+                        planId: plan.planId,
+                        stage: role,
+                        status: 'completed',
+                        artifacts: [artifact(outputFile, stageDirectory)],
+                        instructions: ['Resultado incremental reutilizado por fingerprint verificado.'],
+                    });
+                    return outputFile;
+                }
+                fs.unlinkSync(outputFile);
+            } catch {
+                try { fs.unlinkSync(outputFile); } catch {}
+            }
+        }
         const repairFeedbackFile = path.join(stageDirectory, 'repair-feedback.json');
         const acceptOutput = repairErrors.length > 0
             && this.responseValidator
@@ -650,6 +1178,12 @@ export class LayeredGenerationOrchestrator {
             throw new Error(report.error);
         }
         const result = readJsonUtf8<unknown>(outputFile);
+        if (role === 'behavior-author'
+            && typeof result === 'object'
+            && result !== null
+            && normalizeBehaviorResult(result as LayeredAgentResult)) {
+            writeJsonUtf8(outputFile, result);
+        }
         const errors = authorContractErrors(result, role, plan);
         if (errors.length) {
             report.state = 'failed';
@@ -700,7 +1234,7 @@ export class LayeredGenerationOrchestrator {
         fs.mkdirSync(stageDirectory, { recursive: true });
         verifyOutputHandoff(behaviorFile);
         verifyOutputHandoff(interactionFile);
-        for (const file of [...INPUT_FILES, 'agent-response.schema.json']) {
+        for (const file of INTEGRATION_INPUT_FILES) {
             copyIfPresent(packageDirectory, stageDirectory, file);
         }
         for (const source of [behaviorFile, interactionFile]) {
@@ -723,6 +1257,28 @@ export class LayeredGenerationOrchestrator {
         const prompt = integrationPrompt(Boolean(repairFeedback));
         fs.writeFileSync(path.join(stageDirectory, 'agent-task.md'), prompt, 'utf8');
         writeAgentProfile(stageDirectory, role, prompt);
+        const integrationArtifacts = [
+            ...INTEGRATION_INPUT_FILES.map(file => path.join(stageDirectory, file)),
+            path.join(stageDirectory, path.basename(behaviorFile)),
+            path.join(stageDirectory, path.basename(interactionFile)),
+            ...(repairFeedback ? [path.join(stageDirectory, 'integration-feedback.json')] : []),
+        ].filter(file => fs.existsSync(file)).map(file => artifact(file, stageDirectory));
+        const contextBytes = integrationArtifacts.reduce((total, item) => total + item.bytes, 0);
+        writeJsonUtf8(path.join(stageDirectory, 'agent-memory.json'), {
+            schemaVersion: 1,
+            recordingId: plan.recordingId,
+            planId: plan.planId,
+            agent: identity.name,
+            role,
+            ownership: {
+                layers: ROLE_LAYERS[role],
+                mayReadOtherAgentOutput: true,
+                mayWriteOutsideOwnedLayers: false,
+                mayRewriteAuthorFiles: false,
+            },
+            context: { files: integrationArtifacts.length, bytes: contextBytes },
+            artifacts: integrationArtifacts,
+        });
         const outputFile = path.join(stageDirectory, ROLE_OUTPUTS[role]);
         const namedSession = sessionName(plan.recordingId, role, attempt);
         const report: LayeredGenerationStageReport = {
@@ -733,32 +1289,56 @@ export class LayeredGenerationOrchestrator {
             state: 'running',
             durationMs: 0,
             outputFile: path.relative(packageDirectory, outputFile).replace(/\\/g, '/'),
+            execution: 'agent',
+            cacheHit: false,
+            contextBytes,
+            contextFiles: integrationArtifacts.length,
+            assignedLayers: [...ROLE_LAYERS[role]],
         };
         stages.push(report);
         options.onStageChange?.({ ...report });
-        const run = await this.reviewProvider.execute({
-            cwd: stageDirectory,
-            prompt,
-            timeoutMs: options.timeoutMs || 300_000,
-            model: options.model,
-            agentName: identity.name,
-            sessionName: namedSession,
-            traceFile: './agent-execution.log',
-            traceLabel: role,
-            stopOnValidatedOutput: {
-                outputFile: './agent-response.json',
-                schemaFile: './agent-response.schema.json',
-            },
-        });
-        report.durationMs = run.durationMs;
-        report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
-        report.requestedModel = run.modelUsage?.requestedModel;
-        report.actualModels = run.modelUsage?.actualModels || [];
-        if (!run.success || !fs.existsSync(outputFile)) {
-            report.state = 'failed';
-            report.error = run.errorMessage || 'El integrador no generó agent-response.json.';
-            options.onStageChange?.({ ...report });
-            throw new Error(report.error);
+        const deterministicResolutions = deterministicGapResolutions(packageDirectory, plan);
+        if (deterministicResolutions) {
+            const behavior = readJsonUtf8<LayeredAgentResult>(behaviorFile);
+            const interaction = readJsonUtf8<LayeredAgentResult>(interactionFile);
+            writeJsonUtf8(outputFile, {
+                schemaVersion: 1,
+                recordingId: plan.recordingId,
+                planId: plan.planId,
+                resolutions: deterministicResolutions,
+                actionTrace: behavior.actionTrace,
+                files: [...behavior.files, ...interaction.files],
+                assumptions: [
+                    'Integración ensamblada por Derek: todas las decisiones abiertas estaban fijadas por el plan.',
+                ],
+            } satisfies AutomationAgentResponse);
+            report.execution = 'deterministic';
+            report.sessionName = `${namedSession}/deterministic`;
+        } else {
+            const run = await this.reviewProvider.execute({
+                cwd: stageDirectory,
+                prompt,
+                timeoutMs: options.timeoutMs || 300_000,
+                model: options.model,
+                agentName: identity.name,
+                sessionName: namedSession,
+                traceFile: './agent-execution.log',
+                traceLabel: role,
+                stopOnValidatedOutput: {
+                    outputFile: './agent-response.json',
+                    schemaFile: './agent-response.schema.json',
+                },
+            });
+            report.durationMs = run.durationMs;
+            report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
+            report.requestedModel = run.modelUsage?.requestedModel;
+            report.actualModels = run.modelUsage?.actualModels || [];
+            if (!run.success || !fs.existsSync(outputFile)) {
+                report.state = 'failed';
+                report.error = run.errorMessage || 'El integrador no generó agent-response.json.';
+                options.onStageChange?.({ ...report });
+                throw new Error(report.error);
+            }
         }
         const proposedResponse = readJsonUtf8<AutomationAgentResponse>(outputFile);
         const behavior = readJsonUtf8<LayeredAgentResult>(behaviorFile);

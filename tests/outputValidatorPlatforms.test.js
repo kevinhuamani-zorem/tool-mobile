@@ -47,3 +47,21 @@ test('bloquea únicamente cuando falta el bloque de la plataforma grabada', () =
     assert.equal(result.valid, false);
     assert.equal(result.errors.some(error => error === 'Locators sin bloque Android activo'), true);
 });
+
+test('rechaza And y But como funciones TypeScript de Cucumber', () => {
+    const candidate = preview(JSON.stringify({
+        movementsAndroid: { showMovements: '~Movimientos' },
+    }));
+    candidate.stepPath = path.join(projectPaths.stepDefinitions, 'payment', 'invalid-and.steps.ts');
+    candidate.stepContent = [
+        "import { Given, And } from '@cucumber/cucumber';",
+        "Given(/^inicio$/, async () => {});",
+        "And(/^continúa$/, async () => {});",
+    ].join('\n');
+    candidate.files.push(candidate.stepPath);
+
+    const result = new OutputValidator().validate(candidate, 'android');
+
+    assert.equal(result.valid, false);
+    assert.equal(result.errors.some(error => /And\/But como función TypeScript/.test(error)), true);
+});

@@ -157,3 +157,25 @@ test('validator exige normalización NFC en los archivos del agente', () => {
     assert.equal(validation.valid, false);
     assert.equal(validation.errors.some(error => error.code === 'unicode-normalization'), true);
 });
+
+test('validator rechaza una llamada Steps incompatible con la firma del Screen Object', () => {
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE',
+        selector: 'id=movimientos',
+        selectorVerified: true,
+        elementIntent: 'lista de movimientos',
+    }]));
+    const response = validResponse(resolved.plan);
+    const screenFile = response.files.find(file => file.layer === 'screen');
+    screenFile.content = screenFile.content.replace(
+        'verifyMovementsList(): Promise<void>',
+        'verifyMovementsList(periodo: string): Promise<void>',
+    );
+    const validation = new AutomationResponseValidator(undefined, emptyCatalog)
+        .validate(resolved.scenario, resolved.plan, response);
+
+    assert.equal(validation.valid, false);
+    assert.equal(validation.errors.some(error =>
+        /verifyMovementsList con 0 argumento\(s\), pero el Screen Object declara 1/.test(error.message)
+    ), true);
+});

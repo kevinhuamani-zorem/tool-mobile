@@ -544,15 +544,31 @@ function responseFromPreview(
 export class DeterministicGenerator {
     constructor(private readonly generator = new FwkMobileGenerator()) {}
 
+    /** Materializa una referencia rápida sin alterar el plan efectivo oficial. */
+    createDraft(packageDirectory: string): AutomationAgentResponse {
+        return this.materialize(packageDirectory, [], [], false);
+    }
+
     generate(
         packageDirectory: string,
         resolutions: GapResolution[],
         gherkinResolutions: GherkinResolution[] = [],
     ): AutomationAgentResponse {
+        return this.materialize(packageDirectory, resolutions, gherkinResolutions, true);
+    }
+
+    private materialize(
+        packageDirectory: string,
+        resolutions: GapResolution[],
+        gherkinResolutions: GherkinResolution[],
+        persistEffectivePlan: boolean,
+    ): AutomationAgentResponse {
         const scenario = readJson<AutomationScenario>(path.join(packageDirectory, 'scenario.json'));
         const basePlan = readJson<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
         const plan = effectiveGenerationPlan(packageDirectory, basePlan, resolutions);
-        writeJsonUtf8(path.join(packageDirectory, 'effective-generation-plan.json'), plan);
+        if (persistEffectivePlan) {
+            writeJsonUtf8(path.join(packageDirectory, 'effective-generation-plan.json'), plan);
+        }
         const resolvedContext = fs.existsSync(path.join(packageDirectory, 'resolved-context.json'))
             ? readJson<ResolvedContext>(path.join(packageDirectory, 'resolved-context.json'))
             : undefined;

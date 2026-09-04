@@ -163,10 +163,17 @@ test('ejecuta autores aislados y deja la revisión integrada como respuesta ofic
     assert.equal(report.owner.name, 'Derek');
     assert.deepEqual(report.owner.delegates.map(delegate => delegate.name), ['Lorem', 'Zorem', 'Sumrak']);
     assert.deepEqual(report.stages.map(stage => stage.state), ['completed', 'completed', 'completed']);
+    assert.deepEqual(report.stages.map(stage => stage.assignedLayers), [
+        ['feature', 'steps'],
+        ['screen', 'locators'],
+        ['feature', 'steps', 'screen', 'locators'],
+    ]);
+    assert.equal(report.stages.every(stage => stage.contextBytes > 0), true);
     for (const call of calls) {
         const directory = call.agentName.toLowerCase();
         assert.equal(fs.existsSync(path.join(root, 'agents', directory, 'agent-task.md')), true);
         assert.equal(fs.existsSync(path.join(root, 'agents', directory, '.github', 'agents', `${call.agentName}.agent.md`)), true);
+        assert.equal(fs.existsSync(path.join(root, 'agents', directory, 'agent-memory.json')), true);
     }
     assert.equal(fs.existsSync(path.join(root, 'agents', 'derek', 'orchestration.json')), true);
     assert.equal(calls.find(call => call.agentName === 'Zorem').hasBehaviorDependency, true);
@@ -176,6 +183,111 @@ test('ejecuta autores aislados y deja la revisión integrada como respuesta ofic
     ));
     assert.equal(loremHandoff.fromAgent, 'Lorem');
     assert.equal(loremHandoff.toAgent, 'Zorem');
+});
+
+test('separa la memoria del framework según el ownership de Lorem y Zorem', async () => {
+    const root = fixture();
+    writeJson(path.join(root, 'reuse-context.json'), {
+        schemaVersion: 1,
+        recordingId: 'rec-1',
+        decision: 'extend-existing',
+        candidates: [{ feature: 'Caso existente', file: 'features/payment/existing.feature' }],
+        elements: [{ module: 'payment/movements', elements: [{ name: 'btnFilter' }] }],
+        updateBaselines: [
+            { layer: 'steps', reference: 'baselines/steps-existing.ts' },
+            { layer: 'screen', reference: 'baselines/screen-existing.ts' },
+        ],
+    });
+    writeJson(path.join(root, 'resolved-context.json'), {
+        schemaVersion: 1,
+        recordingId: 'rec-1',
+        planId: 'plan-1',
+        reusedLocators: [{ sequence: 1, locatorName: 'btnFilter' }],
+        elementDeclarations: [{ name: 'btnFilter' }],
+        frameworkAwareness: { unrelatedCatalog: 'x'.repeat(5_000) },
+        frameworkContract: { locatorFactory: 'LocatorProvider' },
+    });
+    writeJson(path.join(root, 'validation-contract.json'), {
+        schemaVersion: 1,
+        totalRules: 3,
+        rules: [
+            { code: 'assertion', minimalExample: 'Then resultado' },
+            { code: 'create-locator-contract', minimalExample: 'get locator()' },
+            { code: 'typescript-syntax', minimalExample: 'class Screen {}' },
+        ],
+    });
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true);
+    const loremReuse = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/reuse-context.json')));
+    const zoremReuse = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/reuse-context.json')));
+    const loremValidation = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/validation-contract.json')));
+    const zoremValidation = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/validation-contract.json')));
+    assert.equal(Array.isArray(loremReuse.candidates), true);
+    assert.equal('elements' in loremReuse, false);
+    assert.equal(Array.isArray(zoremReuse.elements), true);
+    assert.equal('candidates' in zoremReuse, false);
+    assert.equal(fs.existsSync(path.join(root, 'agents/zorem/resolved-context.json')), false);
+    assert.equal(fs.existsSync(path.join(root, 'agents/lorem/unresolved-context.json')), false);
+    assert.equal(fs.existsSync(path.join(root, 'agents/zorem/unresolved-context.json')), false);
+    assert.deepEqual(loremValidation.rules.map(rule => rule.code), ['assertion', 'typescript-syntax']);
+    assert.deepEqual(zoremValidation.rules.map(rule => rule.code), ['create-locator-contract', 'typescript-syntax']);
+    assert.deepEqual(loremReuse.updateBaselines.map(item => item.layer), ['steps']);
+    assert.deepEqual(zoremReuse.updateBaselines.map(item => item.layer), ['screen']);
+    const loremMemory = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/agent-memory.json')));
+    const zoremMemory = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/agent-memory.json')));
+    assert.deepEqual(loremMemory.ownership.layers, ['feature', 'steps']);
+    assert.deepEqual(zoremMemory.ownership.layers, ['screen', 'locators']);
+    assert.equal(loremMemory.context.savedBytes > 0, true);
+});
+
+test('proyecta a cada autor solo sus dos capas del borrador determinístico', async () => {
+    const root = fixture();
+    writeJson(path.join(root, 'unresolved-context.json'), {
+        obsolete: 'este artefacto de compatibilidad no debe llegar a los agentes',
+    });
+    const draftBuilder = {
+        build(packageDirectory) {
+            const draft = {
+                schemaVersion: 1,
+                recordingId: 'rec-1',
+                planId: 'plan-1',
+                planFingerprint: 'fp-1',
+                files: [
+                    { layer: 'feature', path: 'features/payment/case.feature', content: 'Feature: Draft' },
+                    { layer: 'steps', path: 'features/steps/payment/case.steps.ts', content: 'export {}' },
+                    { layer: 'screen', path: 'screenobjects/payment/case.screen.ts', content: 'export class Draft {}' },
+                    { layer: 'locators', path: 'resources/locators/payment/case.locator.json', content: '{}' },
+                ],
+                actionTrace: [{ sequence: 1, gherkinStep: 'When acción', screenMethod: 'executeAction' }],
+                assumptions: ['full draft'],
+            };
+            writeJson(path.join(packageDirectory, 'deterministic-draft.json'), draft);
+            return draft;
+        },
+    };
+    const calls = [];
+    const fake = provider(calls);
+    const result = await new LayeredGenerationOrchestrator(
+        fake,
+        fake,
+        undefined,
+        draftBuilder,
+    ).run(root);
+
+    assert.equal(result.success, true);
+    const loremDraft = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/deterministic-draft.json')));
+    const zoremDraft = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/deterministic-draft.json')));
+    assert.deepEqual(loremDraft.files.map(file => file.layer), ['feature', 'steps']);
+    assert.deepEqual(zoremDraft.files.map(file => file.layer), ['screen', 'locators']);
+    assert.deepEqual(loremDraft.actionTrace.map(trace => trace.sequence), [1]);
+    assert.deepEqual(zoremDraft.actionTrace.map(trace => trace.sequence), [1]);
+    assert.equal(fs.existsSync(path.join(root, 'agents/lorem/unresolved-context.json')), false);
+    assert.equal(fs.existsSync(path.join(root, 'agents/zorem/unresolved-context.json')), false);
+    assert.equal(fs.existsSync(path.join(root, 'agents/sumrak/deterministic-draft.json')), false);
 });
 
 test('el recorder impone el contenido de los autores aunque el integrador intente reescribirlo', async () => {
@@ -190,6 +302,42 @@ test('el recorder impone el contenido de los autores aunque el integrador intent
     assert.equal(response.files.find(file => file.layer === 'steps').content, 'export {}');
     assert.equal(response.files.find(file => file.layer === 'screen').content, 'export class CaseScreen {}');
     assert.equal(response.files.find(file => file.layer === 'locators').content, '{}');
+});
+
+test('normaliza And y But de Steps a keywords ejecutables por Cucumber', async () => {
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    const fake = {
+        ...base,
+        async execute(input) {
+            const result = await base.execute(input);
+            if (input.agentName === 'Lorem') {
+                const outputFile = path.join(input.cwd, 'behavior-result.json');
+                const behavior = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
+                behavior.files.find(file => file.layer === 'steps').content = [
+                    "import { Given, When, Then, And, But } from '@cucumber/cucumber';",
+                    "Given(/^inicio$/, async () => {});",
+                    "And(/^continúa$/, async () => {});",
+                    "When(/^actúa$/, async () => {});",
+                    "But(/^alternativa$/, async () => {});",
+                    "Then(/^termina$/, async () => {});",
+                ].join('\n');
+                writeJson(outputFile, behavior);
+            }
+            return result;
+        },
+    };
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true);
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    const steps = response.files.find(file => file.layer === 'steps').content;
+    assert.match(steps, /import \{ Given, When, Then \}/);
+    assert.match(steps, /Given\(\/\^continúa/);
+    assert.match(steps, /When\(\/\^alternativa/);
+    assert.doesNotMatch(steps, /^\s*(?:And|But)\s*\(/m);
 });
 
 test('rechaza una capa fuera del ownership del autor', () => {
@@ -420,4 +568,65 @@ test('Sumrak no puede cambiar create a reuse contra la resolución determinista 
 
     assert.equal(result.success, false);
     assert.match(result.error, /gap-1 debe conservar decision create del plan; recibió resolved/);
+});
+
+test('reutiliza Lorem y Zorem por fingerprint cuando sus entradas no cambiaron', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    const orchestrator = new LayeredGenerationOrchestrator(fake, fake);
+
+    assert.equal((await orchestrator.run(root)).success, true);
+    // Simula la reconstrucción del paquete automation: los workspaces se
+    // eliminan, mientras el caché sibling del recording debe sobrevivir.
+    fs.rmSync(path.join(root, 'agents'), { recursive: true, force: true });
+    calls.length = 0;
+    const second = await orchestrator.run(root);
+
+    assert.equal(second.success, true);
+    assert.deepEqual(calls.map(call => call.agentName), []);
+    const report = JSON.parse(fs.readFileSync(second.reportFile, 'utf8'));
+    assert.deepEqual(report.stages.map(stage => stage.execution), ['cache', 'cache', 'cache']);
+    assert.deepEqual(report.stages.map(stage => stage.cacheHit), [true, true, true]);
+});
+
+test('no promueve al caché una generación que falló la validación oficial', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    const orchestrator = new LayeredGenerationOrchestrator(fake, fake, () => ({
+        valid: false,
+        errors: [{ message: 'Feature inválido para esta prueba.' }],
+    }));
+
+    assert.equal((await orchestrator.run(root)).success, false);
+    calls.length = 0;
+    assert.equal((await orchestrator.run(root)).success, false);
+
+    assert.deepEqual(calls.slice(0, 2).map(call => call.agentName), ['Lorem', 'Zorem']);
+});
+
+test('Derek integra sin Sumrak cuando el único gap ya está fijado como extend-existing', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const gapsFile = path.join(root, 'gaps.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.unresolvedGapIds = ['gap-extend-existing-artifacts'];
+    writeJson(planFile, plan);
+    writeJson(gapsFile, {
+        gaps: [{ id: 'gap-extend-existing-artifacts', type: 'semantic-naming', blocking: false }],
+    });
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem']);
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.equal(response.resolutions[0].decision, 'extend-existing');
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.equal(report.stages.at(-1).agentName, 'Sumrak');
+    assert.equal(report.stages.at(-1).execution, 'deterministic');
+    assert.equal(report.stages.at(-1).durationMs, 0);
 });

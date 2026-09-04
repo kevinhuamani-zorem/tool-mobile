@@ -4,13 +4,52 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { DeterministicGenerator, mergeLocatorUpdate, mergeScreenUpdate } = require('../dist/core/generation');
+const {
+    DeterministicDraftBuilder,
+    DeterministicGenerator,
+    mergeLocatorUpdate,
+    mergeScreenUpdate,
+} = require('../dist/core/generation');
 const { projectPaths } = require('../dist/core/workspace');
 
 function writeJson(file, value) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
+
+test('deterministic draft builder persiste una referencia estable de cuatro capas', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deterministic-draft-'));
+    writeJson(path.join(dir, 'generation-plan.json'), {
+        recordingId: 'rec-draft',
+        planId: 'plan-draft',
+        fingerprint: 'fingerprint-draft',
+    });
+    const files = ['feature', 'steps', 'screen', 'locators'].map(layer => ({
+        layer,
+        path: `${layer}.txt`,
+        content: `${layer} content`,
+    }));
+    const builder = new DeterministicDraftBuilder({
+        createDraft() {
+            return {
+                recordingId: 'rec-draft',
+                planId: 'plan-draft',
+                resolutions: [],
+                actionTrace: [{ sequence: 1, gherkinStep: 'When acción' }],
+                files,
+            };
+        },
+    });
+
+    const draft = builder.build(dir);
+
+    assert.deepEqual(draft.files.map(file => file.layer), ['feature', 'steps', 'screen', 'locators']);
+    assert.equal(draft.planFingerprint, 'fingerprint-draft');
+    assert.deepEqual(
+        JSON.parse(fs.readFileSync(path.join(dir, 'deterministic-draft.json'), 'utf8')),
+        draft,
+    );
+});
 
 test('deterministic generator aplica wording híbrido sin perder trazabilidad', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deterministic-generator-'));
@@ -116,6 +155,10 @@ test('deterministic generator aplica wording híbrido sin perder trazabilidad', 
             return { ...preview };
         },
     });
+    const draft = generator.createDraft(dir);
+    assert.deepEqual(draft.files.map(file => file.layer), ['feature', 'steps', 'screen', 'locators']);
+    assert.equal(fs.existsSync(path.join(dir, 'effective-generation-plan.json')), false);
+
     const response = generator.generate(dir, [], [{
         keyword: 'When',
         text: 'el usuario consulta sus movimientos mediante los filtros disponibles',

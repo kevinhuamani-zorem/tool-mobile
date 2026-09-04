@@ -10,6 +10,7 @@ export type {
     GeneratedPreview,
     ReusedLocator,
 } from './domain/generatedPreview';
+export * from './domain/deterministicDraft';
 export * from './domain/generationQuality';
 export {
     GENERATED_FILE_AUTHOR,
@@ -19,5 +20,5 @@ export {
 } from './application/generatedFileMetadata';
 export * from './infrastructure/fwkMobileGenerator';
 export * from './infrastructure/deterministicGenerator';
+export * from './infrastructure/deterministicDraftBuilder';
 export * from './infrastructure/effectiveGenerationPlan';
-

@@ -393,6 +393,8 @@ El contrato final sigue siendo un solo `agent-response.json` con:
 
 En el pipeline por capas Derek coordina tres artefactos intermedios controlados:
 
+- `deterministic-draft.json`: referencia local de las cuatro capas antes de
+  invocar agentes; nunca es una respuesta oficial ni se aplica directamente;
 - `agents/derek/orchestration.json`: owner, orden y delegaciones autorizadas;
 - `agents/lorem/behavior-result.json`: Lorem produce solo Feature y Steps;
 - `agents/zorem/interaction-result.json`: Zorem produce solo Screen y Locators;
@@ -408,6 +410,12 @@ delegado se ejecuta con un perfil `.github/agents/<nombre>.agent.md` confinado a
 su workspace y una sesión nombrada `Derek/<recordingId>/<nombre>`. Si la
 validación final falla, el borrador se conserva en la raíz del paquete para
 revisión, pero no se puede aplicar al framework.
+
+El borrador se proyecta por ownership: Lorem ve solo Feature/Steps y Zorem solo
+Screen/Locators. Ambos pueden corregirlo o sustituir APIs provisionales por
+reutilización autorizada. Sumrak no lo recibe. Tampoco se copia
+`unresolved-context.json` a ningún agente, pues pertenece al contrato histórico
+anterior a `gaps.json` y la query layer.
 
 Lorem publica `actionTrace` como contrato directo para Zorem. Durante una
 reparación, Derek valida cada resultado parcial con el validador oficial y

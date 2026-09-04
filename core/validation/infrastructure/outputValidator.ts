@@ -151,5 +151,16 @@ export class OutputValidator {
         if (usesBrowser && !importsBrowser) {
             errors.push(`${label} utiliza browser pero no lo importa desde @wdio/globals`);
         }
+
+        if (label === 'Steps') {
+            const importsUnsupportedKeyword = /import\s*\{[^}]*(?:\bAnd\b|\bBut\b)[^}]*\}\s*from\s*['"](?:@cucumber\/cucumber|@wdio\/cucumber-framework)['"]/.test(content);
+            const invokesUnsupportedKeyword = /^\s*(?:And|But)\s*\(/m.test(content);
+            if (importsUnsupportedKeyword || invokesUnsupportedKeyword) {
+                errors.push(
+                    'Steps usa And/But como función TypeScript; conserva And/But solo en el Feature ' +
+                    'y registra la definición con Given, When o Then.'
+                );
+            }
+        }
     }
 }

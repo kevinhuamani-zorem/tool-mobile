@@ -728,6 +728,40 @@ function importsFrom(content: string, source: string): boolean {
         .some(match => match[1] === source);
 }
 
+function screenMethodArities(content: string): Map<string, { required: number; maximum: number }> {
+    const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const result = new Map<string, { required: number; maximum: number }>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isMethodDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
+            const required = node.parameters.filter(parameter =>
+                !parameter.questionToken && !parameter.initializer && !parameter.dotDotDotToken
+            ).length;
+            result.set(node.name.text, {
+                required,
+                maximum: node.parameters.some(parameter => parameter.dotDotDotToken)
+                    ? Number.POSITIVE_INFINITY
+                    : node.parameters.length,
+            });
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return result;
+}
+
+function stepScreenMethodCalls(content: string): Array<{ method: string; arguments: number }> {
+    const source = ts.createSourceFile('steps.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const calls: Array<{ method: string; arguments: number }> = [];
+    const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+            calls.push({ method: node.expression.name.text, arguments: node.arguments.length });
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return calls;
+}
+
 export class AutomationResponseValidator {
     private readonly relaxedContract = process.env.RECORDER_AGENT_RELAXED_CONTRACT === '1';
 
@@ -848,6 +882,25 @@ export class AutomationResponseValidator {
                     code: 'typescript-syntax',
                     message: `Sintaxis TypeScript inválida: ${diagnosticText}`,
                     file: file.path,
+                });
+            }
+        }
+        const generatedSteps = response.files.find(file => file.layer === 'steps');
+        const generatedScreen = response.files.find(file => file.layer === 'screen');
+        if (generatedSteps && generatedScreen) {
+            const arities = screenMethodArities(generatedScreen.content);
+            for (const call of stepScreenMethodCalls(generatedSteps.content)) {
+                const arity = arities.get(call.method);
+                if (!arity || (call.arguments >= arity.required && call.arguments <= arity.maximum)) continue;
+                const expected = arity.required === arity.maximum
+                    ? `${arity.required}`
+                    : `${arity.required}..${Number.isFinite(arity.maximum) ? arity.maximum : 'n'}`;
+                errors.push({
+                    code: 'typescript-syntax',
+                    message:
+                        `Steps invoca ${call.method} con ${call.arguments} argumento(s), ` +
+                        `pero el Screen Object declara ${expected}.`,
+                    file: generatedSteps.path,
                 });
             }
         }

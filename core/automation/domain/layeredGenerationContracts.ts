@@ -77,6 +77,15 @@ export interface LayeredGenerationStageReport {
     model?: string;
     requestedModel?: string;
     actualModels?: string[];
+    /** Cómo se obtuvo el resultado de la etapa. */
+    execution?: 'agent' | 'cache' | 'deterministic';
+    /** Fingerprint estable de los inputs usado para reutilización incremental. */
+    fingerprint?: string;
+    cacheHit?: boolean;
+    /** Memoria efectiva entregada únicamente a este rol. */
+    contextBytes?: number;
+    contextFiles?: number;
+    assignedLayers?: Array<'feature' | 'steps' | 'screen' | 'locators'>;
     error?: string;
 }
 

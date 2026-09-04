@@ -74,6 +74,11 @@ Flags útiles del pipeline agentic:
   `RECORDER_AGENT_QUERY_RESULT_MAX_STRING` compactan el payload de
   `query-results` que viaja en el prompt de PASS 2 (defaults `12` y `320`),
   reduciendo latencia sin alterar los artifacts del paquete.
+- El pipeline `layered` genera un `agents/<rol>/agent-memory.json` independiente
+  para Lorem, Zorem y Sumrak. Usa `layered-generation-run.json` para comparar
+  `contextBytes`, `contextFiles`, `assignedLayers` y `cacheHit` por etapa antes
+  de ampliar contexto; un caso idéntico validado debe resolverse desde el caché
+  completo sin iniciar nuevas sesiones de Copilot.
 - `RECORDER_COPILOT_CLI_COMMAND` y `RECORDER_COPILOT_CLI_ARGS` para adaptar
   el comando del provider sin tocar código.
 - `RECORDER_COPILOT_MODEL` para definir el modelo del provider cuando
@@ -134,6 +139,23 @@ Lorem y Zorem. Derek vuelve a comprobar la última escritura incluso si Copilot
 ya cerró y, si continúa inválida, relanza solo ese autor como
 `.../repair-1/feedback-N`. La traza provisional siempre sale del resultado
 vigente de Lorem, nunca de un borrador anterior de Sumrak.
+
+El pipeline usa fingerprints de contenido para reutilizar resultados válidos de
+Lorem y Zorem cuando no cambiaron recording, plan, baselines, prompt o modelo.
+El caché vive en `generation/.agent-cache`, por lo que sobrevive a la
+reconstrucción de `generation/automation`; cualquier cambio de contenido genera
+otra clave y evita reutilizaciones obsoletas.
+Los inputs se proyectan por responsabilidad: Lorem no recibe contratos ni
+baselines exclusivos de Screen/Locators, y Zorem no recibe baselines de
+Feature/Steps. En reparación, Zorem solo se relanza por feedback de interacción
+o cuando cambió la interfaz de `actionTrace`. Derek integra sin invocar Sumrak si
+todos los gaps abiertos son extensiones de artefactos ya decididas por el plan.
+Antes de invocar Copilot, el recorder crea `deterministic-draft.json` con una
+propuesta rápida de las cuatro capas. A Lorem se copia únicamente Feature/Steps
+y a Zorem únicamente Screen/Locators. Es una referencia editable: plan,
+candidatos autorizados y validadores siguen siendo la autoridad. Los paquetes
+de agentes ya no reciben `unresolved-context.json`; su contenido histórico está
+cubierto por `gaps.json`, `query-results.json` y los contextos proyectados.
 
 QA Roast Mode no altera esa pasada. Cuando `testDesignReview` termina en
 `qa-required` y la preferencia está activa, el renderer envía `qaRoastMode` por

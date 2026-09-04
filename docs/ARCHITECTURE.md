@@ -245,7 +245,10 @@ XML, screenshots, source, capabilities ni credenciales.
 7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
    o ejecuta el orquestador automático. El flujo predeterminado tiene un owner
    explícito, **Derek**, que conserva el orden y los handoffs definidos por el
-   recorder. Derek delega tres responsabilidades aisladas: **Lorem**
+   recorder. Antes de delegar, el recorder materializa en memoria las cuatro
+   capas y guarda `deterministic-draft.json`. Este borrador local da forma y
+   trazabilidad inmediatas al caso, pero no es una respuesta aplicable ni una
+   restricción de reutilización. Derek delega tres responsabilidades aisladas: **Lorem**
    (`behavior-author`) genera Feature y Steps, **Zorem** (`interaction-author`)
    genera Screen Object y Locators, y **Sumrak** (`integration-reviewer`)
    unifica las cuatro capas en el `agent-response.json` visible para el QA.
@@ -263,6 +266,29 @@ XML, screenshots, source, capabilities ni credenciales.
    si Copilot cierra con feedback pendiente, Derek relanza únicamente ese autor
    en una ronda `feedback-N`. Sumrak debe conservar las decisiones deterministas
    del plan: no puede convertir `create` en `reuse` por similitud de nombre.
+   Para evitar repetir minutos de inferencia, Lorem y Zorem mantienen un caché
+   incremental local bajo `generation/.agent-cache`, fuera del paquete
+   `automation` reconstruible e indexado por hashes de inputs, prompt y modelo.
+   Los handoffs se vuelven a verificar al restaurar la salida.
+   Una corrección de Gherkin solo invalida Zorem cuando cambia la interfaz
+   `screenMethod`/`locatorName` de `actionTrace`. Cuando el único gap abierto es
+   `gap-extend-existing-artifacts`, Derek ensambla la respuesta directamente y
+   ejecuta el mismo validador oficial; Sumrak queda reservado para decisiones
+   semánticas que el plan todavía no fijó.
+   Cada rol usa una memoria aislada descrita por `agent-memory.json`. Lorem
+   recibe únicamente evidencia funcional para `feature/steps`; Zorem recibe
+   selectores, APIs y baselines de `screen/locators`; Sumrak recibe los dos
+   handoffs y el mínimo contractual para integrar. Lorem y Zorem reciben solo
+   su mitad proyectada de `deterministic-draft.json`; Sumrak no recibe el draft
+   porque su fuente son los resultados definitivos de los autores.
+   `unresolved-context.json` queda fuera de todos los workspaces de agentes por
+   ser compatibilidad histórica ya sustituida por `gaps.json` y queries.
+   `reuse-context`, hints,
+   resultados de queries y reglas de validación se proyectan por ownership,
+   sin copiar el catálogo completo del framework. El reporte por etapa publica
+   `contextBytes`, `contextFiles` y `assignedLayers`. La respuesta completa se
+   cachea solo después de superar el validador oficial, por lo que reducir
+   memoria nunca relaja el contrato ni cambia silenciosamente el resultado.
    El orquestador anterior de dos pasadas (`query-requests/query-results` y
    respuesta semántica) se conserva como estrategia `deterministic` de
    compatibilidad mediante `RECORDER_AGENT_PIPELINE=deterministic`.

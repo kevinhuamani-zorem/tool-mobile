@@ -862,6 +862,11 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                     {
                         model,
                         onStageChange(stage) {
+                            const acceleratedDetail = stage.execution === 'cache'
+                                ? `${stage.agentName} reutilizó una salida verificada: los inputs no cambiaron.`
+                                : stage.execution === 'deterministic'
+                                    ? 'Derek ensambló y validó las capas sin otra llamada a Copilot.'
+                                    : undefined;
                             const progress = stage.role === 'behavior-author'
                                 ? {
                                     productStage: 'RESOLVING_DECISIONS' as ProductStage,
@@ -888,11 +893,16 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                                 progress.completed,
                                 6,
                                 {
-                                    detail: stage.error || progress.detail,
+                                    detail: stage.error || acceleratedDetail || progress.detail,
                                     role: stage.role,
                                     agentName: stage.agentName,
                                     sessionName: stage.sessionName,
                                     roleState: stage.state,
+                                    execution: stage.execution,
+                                    cacheHit: stage.cacheHit,
+                                    contextBytes: stage.contextBytes,
+                                    contextFiles: stage.contextFiles,
+                                    assignedLayers: stage.assignedLayers,
                                 },
                             );
                         },
@@ -905,6 +915,9 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                             agentName?: string;
                             requestedModel?: string;
                             actualModels?: string[];
+                            contextBytes?: number;
+                            contextFiles?: number;
+                            assignedLayers?: string[];
                         }>;
                     }>(layered.reportFile);
                     const layeredRunStore = new AgentRunStore(state.activeAutomationPackage);
