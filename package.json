@@ -29,6 +29,10 @@
   },
   "author": "Kevin Huamani",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "build": {
     "appId": "com.kevinarnold.appium-visual-recorder",
     "productName": "Appium Recorder",

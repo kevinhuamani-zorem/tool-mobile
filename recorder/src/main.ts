@@ -24,6 +24,7 @@ import {
     AutomationAgentLauncher,
     AutomationMemory,
     AutomationPatchWriter,
+    AutomationApplier,
     CopilotCliAdapter,
     VisibleCopilotProvider,
     AgentOrchestrator,
@@ -126,6 +127,7 @@ app.whenReady().then(async () => {
     const automationRecordingStore = new AutomationRecordingStore();
     const automationMemory = new AutomationMemory();
     const automationPatchWriter = new AutomationPatchWriter();
+    const automationApplier = new AutomationApplier(automationPatchWriter, fwkMobileGenerator, generatedFileRegistry);
     const automationResponseValidator = new AutomationResponseValidator();
     const automationPackageBuilder = new AutomationPackageBuilder(
         undefined,
@@ -208,6 +210,7 @@ app.whenReady().then(async () => {
         automationResponseValidator,
         automationMemory,
         automationPatchWriter,
+        automationApplier,
         generatedFileRegistry,
         fwkMobileGenerator,
         syncRecording,

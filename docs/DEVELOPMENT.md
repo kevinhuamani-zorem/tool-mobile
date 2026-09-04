@@ -297,6 +297,15 @@ invariantes contractuales con fixtures estables y luego `test:phase43:baseline`
 para capturar el estado real de la suite y clasificar fallos en
 `PREEXISTING_CONFIRMED` o `PHASE_4_2_REGRESSION`.
 
+## Integración continua
+
+`.github/workflows/quality.yml` ejecuta la misma puerta que `npm run quality`
+en cada PR y en `main`. Como las suites que leen el destino necesitan el
+framework padre, el job clona `yaperos/fwk-mobile-test` (repositorio privado:
+requiere el secreto `FWK_MOBILE_TOKEN` con permiso de lectura) y anida el
+checkout del recorder en `tools/visual-recorder`. `engines` en `package.json`
+fija Node 22+ / npm 10+, el mínimo con el que corre la suite completa.
+
 ## Git e higiene
 
 Antes de entregar:

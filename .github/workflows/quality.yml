@@ -1,0 +1,63 @@
+# Puerta de calidad del recorder en cada PR.
+#
+# Los tests que leen o escriben el destino (`automationPipeline`, `phase43`,
+# casos encadenados) usan `tests/helpers/isolatedFramework.js`, que copia el
+# estado commiteado de fwk-mobile-test a una carpeta temporal: el recorder
+# tiene que vivir en `<fwk-mobile-test>/tools/visual-recorder` para que el
+# workspace resuelva el framework padre. Por eso el job clona el framework
+# (repositorio privado: requiere el secreto FWK_MOBILE_TOKEN con permiso de
+# lectura) y anida este checkout dentro.
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout fwk-mobile-test (framework destino)
+        uses: actions/checkout@v4
+        with:
+          repository: yaperos/fwk-mobile-test
+          token: ${{ secrets.FWK_MOBILE_TOKEN }}
+          path: fwk-mobile-test
+
+      - name: Checkout del recorder dentro del framework
+        uses: actions/checkout@v4
+        with:
+          path: fwk-mobile-test/tools/visual-recorder
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fwk-mobile-test/tools/visual-recorder/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: fwk-mobile-test/tools/visual-recorder
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: fwk-mobile-test/tools/visual-recorder
+        run: npm run typecheck
+
+      - name: Arquitectura
+        working-directory: fwk-mobile-test/tools/visual-recorder
+        run: npm run architecture:check
+
+      - name: Tests
+        working-directory: fwk-mobile-test/tools/visual-recorder
+        run: npm test
+
+      - name: Métricas de calidad
+        working-directory: fwk-mobile-test/tools/visual-recorder
+        run: npm run quality:metrics
+
+      - name: Build (main + renderer)
+        working-directory: fwk-mobile-test/tools/visual-recorder
+        run: npm run build

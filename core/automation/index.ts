@@ -33,6 +33,7 @@ export * from './infrastructure/automationApplicationReceipt';
 export * from './infrastructure/automationCorrectionBaseline';
 export * from './infrastructure/automationPackageBuilder';
 export * from './infrastructure/automationPatchWriter';
+export * from './infrastructure/automationApplier';
 export * from './infrastructure/automationRecordingStore';
 export * from './infrastructure/copilotCliAdapter';
 export * from './infrastructure/copilotQaRoastGenerator';

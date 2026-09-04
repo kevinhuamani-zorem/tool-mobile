@@ -14,10 +14,7 @@ import {
     AutomationAgentLauncher,
     AutomationMemory,
     AutomationPatchWriter,
-    featureAdditions,
-    locatorAdditions,
-    screenAdditions,
-    stepsAdditions,
+    AutomationApplier,
     AutomationAgentResponse,
     AutomationScenario,
     DEFAULT_AGENT_EXECUTION_MODE,
@@ -187,6 +184,7 @@ export interface AutomationHandlersContext {
     automationResponseValidator: AutomationResponseValidator;
     automationMemory: AutomationMemory;
     automationPatchWriter: AutomationPatchWriter;
+    automationApplier: AutomationApplier;
     generatedFileRegistry: GeneratedFileRegistry;
     fwkMobileGenerator: FwkMobileGenerator;
     syncRecording: () => void;
@@ -206,6 +204,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         automationResponseValidator,
         automationMemory,
         automationPatchWriter,
+        automationApplier,
         generatedFileRegistry,
         fwkMobileGenerator,
         syncRecording,
@@ -226,107 +225,6 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
             total,
             ...(meta || {}),
         });
-    }
-
-    /**
-     * Convierte las capas planificadas como `update` en un patch aditivo.
-     *
-     * El contenido propuesto (por el resolver o por el agente) trae el archivo
-     * completo; aquí se compara contra el que está en disco y solo se insertan los
-     * símbolos nuevos, con su comentario de trazabilidad. Devuelve además las rutas
-     * absolutas ya atendidas para que la escritura de archivos completos las omita.
-     */
-    function applyAdditiveUpdates(
-        scenario: AutomationScenario,
-        plan: GenerationPlan,
-        response: AutomationAgentResponse,
-        updates: Map<string, string>
-    ): { outcomes: ReturnType<AutomationPatchWriter['apply']>; absolute: Set<string> } {
-        const absolute = new Set<string>();
-        const contentOf = (layer: string) => response.files.find(file => file.layer === layer)?.content;
-        const read = (relative: string) => fs.readFileSync(path.join(projectPaths.frameworkRoot, relative), 'utf-8');
-        const createdAt = new Date().toISOString();
-        const input: any = { recordingId: scenario.recordingId, createdAt };
-
-        // Rellenos de claves existentes. El valor NUNCA sale de la respuesta: se
-        // copia del selector que el QA verifico en esa accion de la grabacion, asi
-        // que por esta via no puede entrar un selector inventado.
-        const completionsByFile = new Map<
-            string,
-            { name: string; platform: 'android' | 'ios'; block: string; value: string }[]
-        >();
-        for (const completion of response.completions || []) {
-            const targets = plan.resolutions
-                .find(resolution => resolution.sequence === completion.sequence)
-                ?.completionTargets?.filter(candidate =>
-                    candidate.file === completion.file
-                    && candidate.name === completion.name
-                    && candidate.platform === completion.platform
-                    && candidate.block.toLowerCase().endsWith(completion.platform)
-                ) || [];
-            const target = targets.length === 1 ? targets[0] : undefined;
-            if (!target) {
-                throw new Error(`Completion no autorizado para ${completion.file}#${completion.name}.`);
-            }
-            const action = scenario.actions.find(step => step.sequence === completion.sequence);
-            const value = action?.locatorValue
-                || (action?.selector ? frameworkLocator(action.selector, completion.platform).value : '');
-            if (!value) {
-                throw new Error(`La acción ${completion.sequence} no contiene un locator primario aplicable.`);
-            }
-            const bucket = completionsByFile.get(completion.file) || [];
-            bucket.push({
-                name: completion.name,
-                platform: completion.platform,
-                block: target.block,
-                value,
-            });
-            completionsByFile.set(completion.file, bucket);
-        }
-
-        const locatorsPath = updates.get('locators');
-        const locatorsProposed = contentOf('locators');
-        if (locatorsPath && locatorsProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, locatorsPath))) {
-            input.locators = {
-                file: locatorsPath,
-                additions: locatorAdditions(read(locatorsPath), locatorsProposed),
-                completions: completionsByFile.get(locatorsPath) || [],
-            };
-            completionsByFile.delete(locatorsPath);
-        }
-        const screenPath = updates.get('screen');
-        const screenProposed = contentOf('screen');
-        if (screenPath && screenProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, screenPath))) {
-            input.screen = { file: screenPath, ...screenAdditions(read(screenPath), screenProposed) };
-        }
-        const stepsPath = updates.get('steps');
-        const stepsProposed = contentOf('steps');
-        if (stepsPath && stepsProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, stepsPath))) {
-            const { definitions, imports } = stepsAdditions(read(stepsPath), stepsProposed);
-            input.steps = { file: stepsPath, definitions, screenImport: imports[0] };
-        }
-        const featurePath = updates.get('feature');
-        const featureProposed = contentOf('feature');
-        if (featurePath && featureProposed && fs.existsSync(path.join(projectPaths.frameworkRoot, featurePath))) {
-            const scenarioBlock = featureAdditions(read(featurePath), featureProposed);
-            if (scenarioBlock) input.feature = { file: featurePath, scenario: scenarioBlock };
-        }
-
-        const outcomes = automationPatchWriter.apply(input, projectPaths.frameworkRoot);
-        // Un relleno puede caer en un modulo que este caso no escribe —el clasico es
-        // grabar en Android sobre un modulo que se hizo grabando en iOS—, asi que va
-        // en su propia pasada sobre ese archivo.
-        for (const [file, completions] of completionsByFile) {
-            if (!fs.existsSync(path.join(projectPaths.frameworkRoot, file))) {
-                throw new Error(`No existe el archivo externo autorizado para completion: ${file}`);
-            }
-            outcomes.push(...automationPatchWriter.apply(
-                { recordingId: scenario.recordingId, createdAt, locators: { file, additions: [], completions } },
-                projectPaths.frameworkRoot
-            ));
-        }
-        for (const outcome of outcomes) absolute.add(path.join(projectPaths.frameworkRoot, outcome.file));
-        return { outcomes, absolute };
     }
 
     async function importAutomationResponseFromPackage(
@@ -1288,6 +1186,8 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
             runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
             if (!validation.valid) throw new Error(validation.errors.map(item => item.message).join(' | '));
             const preview = automationResponseValidator.toPreview(response);
+            // La evaluacion del registro va antes de restaurar baselines de
+            // correccion: un archivo ajeno se detecta sin tocar nada.
             const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
             if (managed.conflicts.length) {
                 throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
@@ -1307,30 +1207,11 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                     plan,
                 );
             }
-            // Los `update` se amplían con un patch aditivo en vez de reescribirse: el
-            // archivo puede ser ajeno y solo debe recibir los símbolos nuevos.
-            const updates = new Map(plan.files
-                .filter(file => file.operation === 'update')
-                .map(file => [file.layer, file.path]));
-            const patched = applyAdditiveUpdates(scenario, plan, response, updates);
-            const createOnly: GeneratedPreview = {
-                ...preview,
-                files: preview.files.filter(file => !patched.absolute.has(file)),
-            };
-            const generated = fwkMobileGenerator.writePreview(
-                createOnly,
-                new Set([...managed.writable].filter(file => !patched.absolute.has(file)))
-            );
-            generatedFileRegistry.register(generated, scenario.squad, plan.files);
-            for (const outcome of patched.outcomes) {
-                if (!outcome.added.length) continue;
-                generatedFileRegistry.registerPatch(
-                    path.join(projectPaths.frameworkRoot, outcome.file),
-                    scenario.squad,
-                    scenario.recordingId,
-                    outcome.added
-                );
-            }
+            // Los `update` se amplían con un patch aditivo en vez de reescribirse:
+            // el archivo puede ser ajeno y solo debe recibir los símbolos nuevos.
+            // El flujo completo vive en core (`AutomationApplier`), compartido
+            // con las pruebas.
+            const { generated, patched } = automationApplier.apply(scenario, plan, response, preview);
             const memoryEntry = automationMemory.promote(scenario, plan, response, validation);
             writeJsonUtf8(path.join(state.activeAutomationPackage, 'agent-response.json'), response);
             writeJsonUtf8(path.join(state.activeAutomationPackage, 'validation.json'), validation);

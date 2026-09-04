@@ -150,13 +150,16 @@ test('clears stale backups on edits or alternative selection and persists only t
 });
 
 test('aplica completions externos aunque el plan no tenga capas update', () => {
-    const additiveUpdates = between(
-        automationHandlers,
-        'function applyAdditiveUpdates(',
-        'async function importAutomationResponseFromPackage(',
+    // La logica de aplicacion vive en core (`AutomationApplier`), compartida
+    // por el handler y las pruebas; el handler solo la invoca.
+    const applier = fs.readFileSync(
+        path.join(__dirname, '../core/automation/infrastructure/automationApplier.ts'), 'utf8',
     );
+    const additiveUpdates = between(applier, 'applyAdditiveUpdates(', '    apply(');
     assert.doesNotMatch(additiveUpdates, /if \(!updates\.size\) return/);
     assert.match(additiveUpdates, /for \(const \[file, completions\] of completionsByFile\)/);
-    assert.match(additiveUpdates, /automationPatchWriter\.apply\([\s\S]*additions: \[\], completions/);
+    assert.match(additiveUpdates, /this\.patchWriter\.apply\([\s\S]*additions: \[\], completions/);
     assert.match(additiveUpdates, /No existe el archivo externo autorizado para completion/);
+    assert.match(automationHandlers, /automationApplier\.apply\(scenario, plan, response, preview\)/);
+    assert.doesNotMatch(automationHandlers, /function applyAdditiveUpdates\(/);
 });
