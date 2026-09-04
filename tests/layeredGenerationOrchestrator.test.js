@@ -693,3 +693,56 @@ test('Sumrak sigue decidiendo cuando algún gap abierto no tiene decisión fijad
     assert.deepEqual(calls.slice(0, 3).map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
     assert.ok(calls.some(call => call.agentName === 'Sumrak'), 'Sumrak abre sesión para el gap sin decisión fijada');
 });
+
+// Los agentes solo ven los gaps que exigen juicio, sin el protocolo de queries
+// que no pueden ejercer en este pipeline; las decisiones que el plan ya fijó
+// las firma Derek y Sumrak no puede alterarlas ni tiene que repetirlas.
+test('los agentes reciben solo los gaps abiertos y Derek firma los que el plan ya fijó', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.resolutions = [
+        { sequence: 1, action: 'CLICK', intent: 'botón principal', resolution: 'create', locatorName: 'primaryButton', selector: '~primary', confidence: 1, reason: 'nuevo' },
+    ];
+    // gap-1 es el que responde el integrador falso; sigue exigiendo juicio.
+    plan.unresolvedGapIds = ['gap-duplicate-1', 'gap-1', 'gap-extend-existing-artifacts'];
+    writeJson(planFile, plan);
+    const querySchema = { findExistingScreen: { squad: 'string', term: 'string' } };
+    writeJson(path.join(root, 'gaps.json'), {
+        gaps: [
+            { id: 'gap-duplicate-1', sequence: 1, type: 'semantic-naming', blocking: false, allowedQueries: ['findExistingScreen'], allowedQueryArgsSchemas: querySchema, maxQueries: 6, expectedAnswerSchema: { type: 'object' } },
+            { id: 'gap-1', type: 'verification-semantics', blocking: false, description: 'Aserción débil', allowedQueries: ['findLocator'], allowedQueryArgsSchemas: querySchema, maxQueries: 6, expectedAnswerSchema: { type: 'object' } },
+            { id: 'gap-extend-existing-artifacts', type: 'semantic-naming', blocking: false },
+        ],
+    });
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    for (const directory of ['lorem', 'zorem', 'sumrak']) {
+        const gaps = JSON.parse(fs.readFileSync(path.join(root, 'agents', directory, 'gaps.json'), 'utf8')).gaps;
+        assert.deepEqual(gaps.map(gap => gap.id), ['gap-1'], `${directory} solo ve el gap que exige juicio`);
+        for (const field of ['allowedQueries', 'allowedQueryArgsSchemas', 'maxQueries', 'expectedAnswerSchema']) {
+            assert.equal(field in gaps[0], false, `${directory}: ${field} no viaja al agente`);
+        }
+        assert.equal(gaps[0].description, 'Aserción débil', 'la descripción funcional sí viaja');
+        const stagePlan = JSON.parse(fs.readFileSync(path.join(root, 'agents', directory, 'generation-plan.json'), 'utf8'));
+        assert.deepEqual(stagePlan.unresolvedGapIds, ['gap-1']);
+        assert.deepEqual(
+            stagePlan.fixedGapResolutions.map(resolution => [resolution.gapId, resolution.decision]),
+            [['gap-duplicate-1', 'create'], ['gap-extend-existing-artifacts', 'extend-existing']],
+        );
+    }
+    // El paquete oficial conserva los gaps completos: es lo que revisa el QA.
+    const packageGaps = JSON.parse(fs.readFileSync(path.join(root, 'gaps.json'), 'utf8')).gaps;
+    assert.equal(packageGaps.length, 3);
+    assert.ok(packageGaps[0].allowedQueries);
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.deepEqual(
+        response.resolutions.map(resolution => [resolution.gapId, resolution.decision]),
+        [['gap-duplicate-1', 'create'], ['gap-extend-existing-artifacts', 'extend-existing'], ['gap-1', 'resolved']],
+    );
+});

@@ -144,12 +144,21 @@ function ensureInside(root: string, candidate: string): string {
     return resolved;
 }
 
-function copyIfPresent(sourceRoot: string, targetRoot: string, relativePath: string): void {
+function copyIfPresent(
+    sourceRoot: string,
+    targetRoot: string,
+    relativePath: string,
+    judgment?: GapJudgment,
+): void {
     const source = ensureInside(sourceRoot, path.join(sourceRoot, relativePath));
     if (!fs.existsSync(source) || !fs.statSync(source).isFile()) return;
     const target = ensureInside(targetRoot, path.join(targetRoot, relativePath));
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(source, target);
+    if (!judgment || !relativePath.endsWith('.json')) {
+        fs.copyFileSync(source, target);
+        return;
+    }
+    writeJsonUtf8(target, projectSharedJson(relativePath, readJsonUtf8<any>(source), judgment));
 }
 
 function projectRoleJson(relativePath: string, value: any, role: AuthorRole): any {
@@ -254,6 +263,7 @@ function copyRoleInput(
     targetRoot: string,
     relativePath: string,
     role: AuthorRole,
+    judgment: GapJudgment,
 ): void {
     const source = ensureInside(sourceRoot, path.join(sourceRoot, relativePath));
     if (!fs.existsSync(source) || !fs.statSync(source).isFile()) return;
@@ -263,7 +273,11 @@ function copyRoleInput(
         fs.copyFileSync(source, target);
         return;
     }
-    writeJsonUtf8(target, projectRoleJson(relativePath, readJsonUtf8<any>(source), role));
+    writeJsonUtf8(target, projectRoleJson(
+        relativePath,
+        projectSharedJson(relativePath, readJsonUtf8<any>(source), judgment),
+        role,
+    ));
 }
 
 function copyRoleBaselines(
@@ -617,32 +631,39 @@ function alignResolutionsWithPlan(
     });
 }
 
+interface GapJudgment {
+    /** Resoluciones que Derek firma: el plan ya fijo la decision. */
+    fixed: AutomationAgentResponse['resolutions'];
+    /** Gaps que siguen exigiendo juicio; solo estos viajan a los agentes. */
+    open: string[];
+}
+
 /**
- * Resoluciones que Derek puede firmar sin abrir una sesion de Sumrak.
+ * Separa los gaps abiertos entre los que el plan ya decidio y los que no.
  *
  * La respuesta integrada solo lleva `{ gapId, decision, reason }`, y el
- * integrador rechaza cualquier decision distinta de la que el plan ya fijo por
- * secuencia (`expectedGapDecisions`). Cuando TODOS los gaps abiertos tienen su
- * decision fijada, pedirsela a un LLM es pagar una sesion para que repita lo
- * que ya esta escrito: Derek la ensambla. Basta un gap sin decision fijada
- * para que Sumrak siga siendo quien decide.
+ * integrador rechaza cualquier decision distinta de la que el plan fijo por
+ * secuencia (`expectedGapDecisions`). Enviarle esos gaps a un agente es pagar
+ * contexto y una sesion para que repita lo que ya esta escrito: Derek los
+ * firma, los agentes solo ven los que requieren juicio y, si no queda
+ * ninguno, Sumrak no abre sesion.
  */
-function deterministicGapResolutions(
-    packageDirectory: string,
-    plan: GenerationPlan,
-): AutomationAgentResponse['resolutions'] | null {
+function gapJudgment(packageDirectory: string, plan: GenerationPlan): GapJudgment {
     const gapsFile = path.join(packageDirectory, 'gaps.json');
     const gaps = fs.existsSync(gapsFile)
         ? readJsonUtf8<{ gaps?: Array<{ id?: string; sequence?: number }> }>(gapsFile).gaps || []
         : [];
     const gapById = new Map(gaps.filter(gap => gap.id).map(gap => [gap.id!, gap]));
     const expected = expectedGapDecisions(packageDirectory, plan);
-    const resolutions: AutomationAgentResponse['resolutions'] = [];
+    const judgment: GapJudgment = { fixed: [], open: [] };
     for (const gapId of plan.unresolvedGapIds || []) {
         const gap = gapById.get(gapId);
-        if (!gap) return null;
+        if (!gap) {
+            judgment.open.push(gapId);
+            continue;
+        }
         if (gapId === 'gap-extend-existing-artifacts') {
-            resolutions.push({
+            judgment.fixed.push({
                 gapId,
                 decision: 'extend-existing',
                 reason: 'Derek conserva las rutas update fijadas por el plan y extiende los artefactos existentes.',
@@ -650,8 +671,11 @@ function deterministicGapResolutions(
             continue;
         }
         const decision = expected.get(gapId);
-        if (!decision) return null;
-        resolutions.push({
+        if (!decision) {
+            judgment.open.push(gapId);
+            continue;
+        }
+        judgment.fixed.push({
             gapId,
             decision,
             reason: Number.isInteger(gap.sequence)
@@ -659,7 +683,36 @@ function deterministicGapResolutions(
                 : `Derek conserva la decisión determinista ${decision} fijada por el plan.`,
         });
     }
-    return resolutions;
+    return judgment;
+}
+
+/** Campos del protocolo de queries: en el pipeline por capas no hay ronda de consultas. */
+const GAP_QUERY_FIELDS = ['allowedQueries', 'allowedQueryArgsSchemas', 'maxQueries', 'expectedAnswerSchema'];
+
+/**
+ * Proyeccion comun a todos los roles: los agentes reciben unicamente los gaps
+ * que requieren juicio y sin el protocolo de queries que no pueden ejercer.
+ */
+function projectSharedJson(relativePath: string, value: any, judgment: GapJudgment): any {
+    if (relativePath === 'gaps.json') {
+        const open = new Set(judgment.open);
+        return {
+            ...value,
+            gaps: (value.gaps || [])
+                .filter((gap: any) => open.has(gap?.id))
+                .map((gap: any) => Object.fromEntries(
+                    Object.entries(gap).filter(([key]) => !GAP_QUERY_FIELDS.includes(key))
+                )),
+        };
+    }
+    if (relativePath === 'generation-plan.json') {
+        return {
+            ...value,
+            unresolvedGapIds: judgment.open,
+            fixedGapResolutions: judgment.fixed,
+        };
+    }
+    return value;
 }
 
 function classifyValidationErrors(errors: string[]): LayeredRepairFeedback {
@@ -910,8 +963,9 @@ export class LayeredGenerationOrchestrator {
         const stageDirectory = path.join(agentsRoot, identity.directory);
         fs.rmSync(stageDirectory, { recursive: true, force: true });
         fs.mkdirSync(stageDirectory, { recursive: true });
+        const judgment = gapJudgment(packageDirectory, plan);
         for (const file of ROLE_INPUT_FILES[role]) {
-            copyRoleInput(packageDirectory, stageDirectory, file, role);
+            copyRoleInput(packageDirectory, stageDirectory, file, role, judgment);
         }
         copyRoleBaselines(packageDirectory, stageDirectory, role);
         if (dependencyFile) {
@@ -1252,8 +1306,9 @@ export class LayeredGenerationOrchestrator {
         fs.mkdirSync(stageDirectory, { recursive: true });
         verifyOutputHandoff(behaviorFile);
         verifyOutputHandoff(interactionFile);
+        const judgment = gapJudgment(packageDirectory, plan);
         for (const file of INTEGRATION_INPUT_FILES) {
-            copyIfPresent(packageDirectory, stageDirectory, file);
+            copyIfPresent(packageDirectory, stageDirectory, file, judgment);
         }
         for (const source of [behaviorFile, interactionFile]) {
             fs.copyFileSync(source, path.join(stageDirectory, path.basename(source)));
@@ -1315,15 +1370,14 @@ export class LayeredGenerationOrchestrator {
         };
         stages.push(report);
         options.onStageChange?.({ ...report });
-        const deterministicResolutions = deterministicGapResolutions(packageDirectory, plan);
-        if (deterministicResolutions) {
+        if (judgment.open.length === 0) {
             const behavior = readJsonUtf8<LayeredAgentResult>(behaviorFile);
             const interaction = readJsonUtf8<LayeredAgentResult>(interactionFile);
             writeJsonUtf8(outputFile, {
                 schemaVersion: 1,
                 recordingId: plan.recordingId,
                 planId: plan.planId,
-                resolutions: deterministicResolutions,
+                resolutions: judgment.fixed,
                 actionTrace: behavior.actionTrace,
                 files: [...behavior.files, ...interaction.files],
                 assumptions: [
@@ -1363,9 +1417,15 @@ export class LayeredGenerationOrchestrator {
         const interaction = readJsonUtf8<LayeredAgentResult>(interactionFile);
         // Los autores son propietarios exclusivos del código. El integrador
         // decide resoluciones y trazabilidad, pero no puede reescribir una capa
-        // ya entregada y protegida por handoff.
+        // ya entregada y protegida por handoff. Las resoluciones que el plan ya
+        // fijó las firma Derek: Sumrak solo aporta las de los gaps abiertos.
+        const fixedGapIds = new Set(judgment.fixed.map(resolution => resolution.gapId));
         const response: AutomationAgentResponse = {
             ...proposedResponse,
+            resolutions: [
+                ...judgment.fixed,
+                ...(proposedResponse.resolutions || []).filter(resolution => !fixedGapIds.has(resolution.gapId)),
+            ],
             files: [...behavior.files, ...interaction.files],
         };
         writeJsonUtf8(outputFile, response);

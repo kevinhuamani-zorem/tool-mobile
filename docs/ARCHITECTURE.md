@@ -277,7 +277,12 @@ XML, screenshots, source, capabilities ni credenciales.
    respuesta directamente y ejecuta el mismo validador oficial sin abrir sesión
    de Sumrak; es el caso normal, porque el integrador rechazaría cualquier
    decisión distinta de la del plan. Sumrak queda reservado para gaps sin
-   decisión fijada.
+   decisión fijada, y aun entonces Derek fusiona sus resoluciones con las que
+   ya firmó. Los tres roles reciben `gaps.json` proyectado: solo los gaps que
+   exigen juicio y sin `allowedQueries`/schemas (en este pipeline no hay ronda
+   de consultas); su copia de `generation-plan.json` lleva `unresolvedGapIds`
+   filtrado y `fixedGapResolutions`. El `gaps.json` del paquete no cambia: es
+   el que revisa el QA.
    Cada rol usa una memoria aislada descrita por `agent-memory.json`. Lorem
    recibe únicamente evidencia funcional para `feature/steps`; Zorem recibe
    selectores, APIs y baselines de `screen/locators`; Sumrak recibe los dos
