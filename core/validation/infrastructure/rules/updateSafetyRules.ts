@@ -31,7 +31,10 @@ export function updateSafetyRules(context: PreviewRuleContext, report: RuleRepor
                         ? [...baseline.matchAll(/public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(match => match[1])
                         : plannedFile.layer === 'locators'
                             ? responseLocatorValues(baseline).map(locator => locator.name)
-                            : [];
+                            // Un Feature `update` suma Scenarios: los existentes se conservan.
+                            : plannedFile.layer === 'feature'
+                                ? [...baseline.matchAll(/^\s*Scenario(?: Outline)?:\s*(.+?)\s*$/gm)].map(match => match[1])
+                                : [];
                 const missingTokens = requiredTokens.filter(token => !proposed.includes(token));
                 if (missingTokens.length) {
                     errors.push({

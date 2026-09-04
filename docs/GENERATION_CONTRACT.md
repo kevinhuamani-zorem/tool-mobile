@@ -161,6 +161,13 @@ Examples:
   | usuario_qa | Primer yapeo |
 ```
 
+- Si la ruta del Feature ya existe (otro caso con el mismo objetivo, típicamente
+  sin commitear), el plan lo marca `update`: el camino determinista fusiona el
+  baseline (`mergeFeatureUpdate`) añadiendo solo el Scenario nuevo con sus
+  tags, el patch de aplicación es aditivo y `destructive-update` rechaza una
+  propuesta que pierda un Scenario existente. Antes se creaba encima y el caso
+  anterior desaparecía del framework.
+
 ## Step Definitions
 
 - Las expresiones deben coincidir con el texto Gherkin y capturar parámetros.

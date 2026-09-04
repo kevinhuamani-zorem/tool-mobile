@@ -242,3 +242,37 @@ test('el caso C reutiliza el step de A cuando cubre exactamente los mismos eleme
     assert.equal(definitionsAfterC.filter(definition => definition === thenA.text).length, 1);
     assert.equal(definitionsAfterC.some(definition => definition.startsWith(`${thenA.text} en `)), false, 'no hay variante sufijada');
 });
+
+// Dos grabaciones con el mismo objetivo caen en la misma ruta de Feature. La
+// segunda añade su Scenario; antes lo creaba encima y el caso anterior
+// desaparecía del framework sin aviso.
+test('un segundo caso con el mismo objetivo amplía el Feature de A en vez de pisarlo', t => {
+    const { frameworkRoot } = isolatedFramework(t, 'avr-chained-feature-');
+    const builder = new AutomationPackageBuilder();
+    const caseA = prepareAndApply(
+        builder, 'rec-chained-feature-a',
+        'el usuario consulta el historial encadenado',
+        'se muestra el titulo del historial encadenado',
+        [SHOW_HISTORY, OPEN_DETAIL, TITLE], 'TC-90007',
+    );
+    const featurePath = caseA.plan.files.find(file => file.layer === 'feature').path;
+    const featureAfterA = fs.readFileSync(path.join(frameworkRoot, featurePath), 'utf8');
+
+    const caseA2 = prepareAndApply(
+        builder, 'rec-chained-feature-a2',
+        'el usuario consulta el historial encadenado',
+        'se muestra el titulo del historial encadenado',
+        [SHOW_HISTORY, OPEN_DETAIL, DOWNLOAD, TITLE], 'TC-90008',
+    );
+    const featureFile = caseA2.plan.files.find(file => file.layer === 'feature');
+    assert.equal(featureFile.path, featurePath, 'mismo objetivo, misma ruta de Feature');
+    assert.equal(featureFile.operation, 'update');
+    const featureAfterA2 = fs.readFileSync(path.join(frameworkRoot, featurePath), 'utf8');
+    assert.ok(featureAfterA2.startsWith(featureAfterA.trimEnd()), 'el Feature de A se conserva byte a byte al inicio');
+    const scenarios = [...featureAfterA2.matchAll(/^\s*Scenario(?: Outline)?:\s*(.+?)\s*$/gm)].map(match => match[1]);
+    assert.equal(scenarios.length, 2, featureAfterA2);
+    assert.ok(scenarios[0].includes('TC-90007'));
+    assert.ok(scenarios[1].includes('TC-90008'));
+    assert.equal([...featureAfterA2.matchAll(/^Feature:/gm)].length, 1, 'un solo encabezado Feature');
+    assert.equal(caseA2.validation.qualityScore, 100);
+});

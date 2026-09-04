@@ -311,3 +311,42 @@ test('mergeStepsUpdate conserva las definiciones del baseline y agrega solo las 
     assert.ok(merged.startsWith(baseline.trimEnd()), 'el baseline se conserva byte a byte al inicio');
     assert.equal(mergeStepsUpdate(baseline, baseline), baseline, 'sin novedades devuelve el baseline intacto');
 });
+
+test('mergeFeatureUpdate añade solo los Scenarios nuevos con sus tags y conserva el baseline', () => {
+    const { mergeFeatureUpdate } = require('../dist/core/generation');
+    const baseline = [
+        '@payment',
+        'Feature: Historial',
+        '',
+        '  @historial @android',
+        '  Scenario Outline: [TC-1][Happy Path][AUTO-FRONT] Consulta',
+        '    Given el usuario <username> inicia sesión en Yape',
+        '    Then se muestra el titulo',
+        '',
+        '    Examples:',
+        '      | username |',
+        '      | QA |',
+        '',
+    ].join('\n');
+    const generated = [
+        '@payment',
+        'Feature: Historial',
+        '',
+        '  @historial @android',
+        '  Scenario Outline: [TC-2][Happy Path][AUTO-FRONT] Descarga',
+        '    Given el usuario <username> inicia sesión en Yape',
+        '    When el usuario descarga el historial',
+        '    Then se muestra el titulo',
+        '',
+        '    Examples:',
+        '      | username |',
+        '      | QA |',
+        '',
+    ].join('\n');
+    const merged = mergeFeatureUpdate(baseline, generated);
+    assert.ok(merged.startsWith(baseline.trimEnd()));
+    assert.equal([...merged.matchAll(/^Feature:/gm)].length, 1);
+    assert.equal([...merged.matchAll(/Scenario Outline:/g)].length, 2);
+    assert.match(merged, /\n\n  @historial @android\n  Scenario Outline: \[TC-2\]/, 'el Scenario nuevo llega con sus tags');
+    assert.equal(mergeFeatureUpdate(baseline, baseline), baseline, 'un Scenario ya existente no se duplica');
+});

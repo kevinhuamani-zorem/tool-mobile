@@ -1426,7 +1426,17 @@ export class DeterministicResolver {
             plannedFile('screen', existingCase.paths.screen, 'update', this.baselineSnapshot),
             plannedFile('locators', existingCase.paths.locators, 'update', this.baselineSnapshot),
         ] : [
-            plannedFile('feature', `features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`, 'create', this.baselineSnapshot),
+            // Un Feature que ya existe en esa ruta (otro caso con el mismo
+            // objetivo, normalmente sin commitear) se amplia con un Scenario
+            // mas; crearlo lo pisaria y el caso anterior desapareceria.
+            plannedFile(
+                'feature',
+                `features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`,
+                this.baselineSnapshot.read(`features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`).exists
+                    ? 'update'
+                    : 'create',
+                this.baselineSnapshot,
+            ),
             plannedFile('steps', reuseTarget?.steps || `features/yape-steps-definitions/${scenario.squad}/${normalizedRequest.fileName}.steps.ts`, reuseTarget?.steps ? 'update' : 'create', this.baselineSnapshot),
             plannedFile('screen', reuseTarget?.screen || `screenobjects/${scenario.squad}/${normalizedRequest.locatorModule}.screen.ts`, reuseTarget?.screen ? 'update' : 'create', this.baselineSnapshot),
             plannedFile('locators', reuseTarget?.locators || `resources/locators/${scenario.squad}/${normalizedRequest.locatorModule}.locator.json`, reuseTarget?.locators ? 'update' : 'create', this.baselineSnapshot),

@@ -510,10 +510,47 @@ export function mergeStepsUpdate(baseline: string, generated: string): string {
     return `${output}\n\n${additions.map(block => block.code).join('\n\n')}\n`;
 }
 
+function scenarioBlocks(content: string): Array<{ name: string; block: string }> {
+    const lines = content.split(/\r?\n/);
+    const starts = lines.flatMap((line, index) => /^\s*Scenario(?: Outline)?:/.test(line) ? [index] : []);
+    return starts.map((start, position) => {
+        const name = (lines[start].match(/^\s*Scenario(?: Outline)?:\s*(.+?)\s*$/) || [])[1] || '';
+        // Los tags inmediatamente anteriores pertenecen al Scenario.
+        let from = start;
+        while (from > 0 && /^\s*@[^\n]*$/.test(lines[from - 1])) from -= 1;
+        const next = starts[position + 1];
+        let to = next === undefined ? lines.length : next;
+        while (next !== undefined && to > from && /^\s*@[^\n]*$/.test(lines[to - 1])) to -= 1;
+        return { name, block: lines.slice(from, to).join('\n').replace(/\s*$/, '\n') };
+    });
+}
+
+/**
+ * Un Feature `update` conserva el archivo existente y solo suma Scenarios.
+ *
+ * Dos grabaciones con el mismo objetivo caen en la misma ruta de Feature; la
+ * segunda debe anadir su Scenario, no reemplazar el archivo (y con el, el
+ * caso anterior). Los Scenarios cuyo nombre ya existe no se duplican.
+ */
+export function mergeFeatureUpdate(baseline: string, generated: string): string {
+    const existing = new Set(scenarioBlocks(baseline).map(item => item.name));
+    const additions = scenarioBlocks(generated).filter(item => item.name && !existing.has(item.name));
+    if (!additions.length) return baseline;
+    return `${baseline.replace(/\s+$/, '')}\n\n${additions.map(item => item.block).join('\n')}`;
+}
+
 function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan): GeneratedPreview {
     let screenContent = preview.screenContent;
     let locatorContent = preview.locatorContent;
     let stepContent = preview.stepContent;
+    let featureContent = preview.featureContent;
+    const featurePlan = plan.files.find(file => file.layer === 'feature' && file.operation === 'update');
+    if (featurePlan && featureContent && !plan.existingCase) {
+        featureContent = mergeFeatureUpdate(
+            readUtf8File(path.join(projectPaths.frameworkRoot, featurePlan.path)),
+            featureContent,
+        );
+    }
     const screenPlan = plan.files.find(file => file.layer === 'screen' && file.operation === 'update');
     const locatorPlan = plan.files.find(file => file.layer === 'locators' && file.operation === 'update');
     const stepsPlan = plan.files.find(file => file.layer === 'steps' && file.operation === 'update');
@@ -541,7 +578,7 @@ function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan
             plan,
         );
     }
-    return { ...preview, screenContent, locatorContent, stepContent };
+    return { ...preview, screenContent, locatorContent, stepContent, featureContent };
 }
 
 function responseFromPreview(

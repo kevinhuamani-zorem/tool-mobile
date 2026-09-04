@@ -686,6 +686,7 @@ function partialPrompt(role: AuthorRole, outputFile: string, repair = false): st
             'Genera únicamente Feature y Steps.',
             'Usa deterministic-draft.json como punto de partida rápido, no como restricción: mejora su Gherkin y reutilización cuando el plan lo autorice.',
             'El Gherkin debe ser declarativo, conservar tags y formato del framework y cada acción grabada debe quedar trazada.',
+            'Si el Feature o los Steps tienen operation update, parte del archivo de baselines/ y solo añade tu Scenario o tus definiciones: los Scenarios y definiciones existentes se conservan byte a byte.',
             'En el archivo Feature puedes usar And/But; en TypeScript importa e invoca únicamente Given, When y Then porque Cucumber no exporta And/But como funciones.',
             'Steps solo puede invocar métodos del Screen Object: prohíbe XPath, UiSelector, accessibility id y selectores literales.',
             'Declara en actionTrace el screenMethod requerido para que Zorem implemente exactamente esa interfaz.',
