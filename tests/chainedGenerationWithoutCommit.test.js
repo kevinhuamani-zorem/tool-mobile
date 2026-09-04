@@ -59,6 +59,11 @@ function prepareAndApply(builder, recordingId, objective, acceptance, steps, cas
         if (gapId === 'gap-extend-existing-artifacts') {
             return { gapId, decision: 'extend-existing', reason: 'El plan ya fijo las rutas update.' };
         }
+        if (gapId === 'gap-english-naming') {
+            // "encadenado" es español sin traducción: el gap es informativo para
+            // los autores, no una decisión. Aquí no hay autores; se conserva.
+            return { gapId, decision: 'renamed-by-authors', reason: 'Sin agente: se conserva el nombre propuesto.' };
+        }
         const gap = gaps.find(candidate => candidate.id === gapId);
         const fixed = plan.resolutions.find(resolution => resolution.sequence === gap?.sequence)?.resolution;
         assert.ok(fixed === 'create' || fixed === 'reuse',

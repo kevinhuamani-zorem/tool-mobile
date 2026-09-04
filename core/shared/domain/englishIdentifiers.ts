@@ -86,6 +86,9 @@ const TRANSLATIONS: Record<string, string> = {
     cambio: 'exchange', moneda: 'currency', monedas: 'currencies', dolares: 'dollars',
     atras: 'back', ordenar: 'sort', elegir: 'choose', recibir: 'receive',
     compartir: 'share', descargar: 'download', copiar: 'copy', pegar: 'paste',
+    // Conectores temporales y de modo que si aportan al nombre.
+    tras: 'after', despues: 'after', antes: 'before', durante: 'during', hasta: 'until',
+    acceder: 'access', accede: 'access', acceso: 'access',
     editar: 'edit', eliminar: 'delete', borrar: 'clear',
     agregar: 'add', anadir: 'add', quitar: 'remove',
     activar: 'enable', habilitar: 'enable', desactivar: 'disable',
@@ -105,6 +108,83 @@ const TRANSLATIONS: Record<string, string> = {
  * abreviatura de "version" y `solo`/`mas`/`dia` existen o parecen inglesas.
  * Necesitan compania para marcar; el resto del diccionario marca solo.
  */
+/**
+ * Vocabulario aprendido de respuestas validadas a score 100: cuando el agente
+ * renombro `userDescargaHistory` a `userDownloadHistory`, `descarga->download`
+ * queda registrado y el siguiente caso ya no paga tokens por esa palabra.
+ * Vive en la memoria del recorder; aqui solo se aplica en proceso.
+ */
+const LEARNED: Record<string, string> = {};
+
+export function extendTranslations(entries: Record<string, string>): void {
+    for (const [word, translation] of Object.entries(entries || {})) {
+        const key = String(word || '').trim().toLowerCase();
+        const value = String(translation || '').trim();
+        if (!key || !value || TRANSLATIONS[key]) continue;
+        LEARNED[key] = value;
+    }
+}
+
+export function learnedTranslations(): Record<string, string> {
+    return { ...LEARNED };
+}
+
+/**
+ * Busca una palabra en el diccionario tolerando su forma: plural, sustantivo
+ * deverbal (`descarga` -> `descargar`) y participio (`descargado` ->
+ * `descargar`). Solo deriva formas cuya raiz este en el diccionario; nunca
+ * inventa una traduccion.
+ */
+export function dictionaryLookup(word: string): string | undefined {
+    const direct = TRANSLATIONS[word] || LEARNED[word];
+    if (direct) return direct;
+    const candidates: string[] = [];
+    if (word.endsWith('es') && word.length > 4) candidates.push(word.slice(0, -2));
+    if (word.endsWith('s') && word.length > 3) candidates.push(word.slice(0, -1));
+    if (/[ae]$/.test(word) && word.length > 3) candidates.push(`${word}r`);
+    if (/(ado|ada|ido|ida)$/.test(word) && word.length > 5) {
+        candidates.push(`${word.slice(0, -3)}ar`, `${word.slice(0, -3)}er`, `${word.slice(0, -3)}ir`);
+    }
+    if (/(ados|adas|idos|idas)$/.test(word) && word.length > 6) {
+        candidates.push(`${word.slice(0, -4)}ar`, `${word.slice(0, -4)}er`, `${word.slice(0, -4)}ir`);
+    }
+    for (const candidate of candidates) {
+        const found = TRANSLATIONS[candidate] || LEARNED[candidate];
+        if (found) return found;
+    }
+    return undefined;
+}
+
+/**
+ * Ingles y vocabulario propio que pasa sin traducir ni marcar. Es una lista
+ * corta a proposito: lo que no este aqui, en el diccionario ni en el framework
+ * se reporta como no traducido en vez de darse por bueno.
+ */
+export const KNOWN_ENGLISH_TOKENS = new Set([
+    // ingles habitual en codigo de pruebas
+    'get', 'set', 'tap', 'click', 'open', 'close', 'show', 'hide', 'see', 'view', 'go', 'back',
+    'home', 'login', 'logout', 'sign', 'in', 'out', 'up', 'down', 'on', 'off', 'to', 'from', 'with',
+    'and', 'or', 'not', 'no', 'yes', 'ok', 'new', 'old', 'all', 'any', 'each', 'first', 'last',
+    'next', 'previous', 'prev', 'only', 'more', 'less', 'main', 'sub', 'top', 'bottom', 'left', 'right',
+    'button', 'field', 'input', 'text', 'label', 'title', 'subtitle', 'icon', 'image', 'link',
+    'list', 'item', 'items', 'row', 'rows', 'card', 'cards', 'tab', 'tabs', 'menu', 'modal', 'dialog',
+    'screen', 'page', 'view', 'container', 'header', 'footer', 'banner', 'toast', 'popup',
+    'user', 'users', 'name', 'number', 'amount', 'balance', 'account', 'payment', 'pay', 'send',
+    'receive', 'transfer', 'confirm', 'cancel', 'accept', 'continue', 'skip', 'retry', 'submit',
+    'search', 'filter', 'filters', 'sort', 'select', 'option', 'options', 'check', 'verify',
+    'validate', 'validation', 'error', 'success', 'warning', 'info', 'message', 'status', 'state',
+    'date', 'day', 'days', 'today', 'week', 'month', 'year', 'time', 'hour', 'minute', 'range',
+    'phone', 'email', 'password', 'code', 'otp', 'pin', 'qr', 'id', 'url', 'sms', 'app', 'api',
+    'android', 'ios', 'mobile', 'web', 'data', 'value', 'values', 'total', 'detail', 'details',
+    'summary', 'history', 'movement', 'movements', 'receipt', 'contact', 'contacts', 'store',
+    'service', 'services', 'card', 'cash', 'credit', 'debit', 'loan', 'wallet', 'promo', 'promotion',
+    'scroll', 'swipe', 'wait', 'press', 'long', 'type', 'clear', 'enter', 'exit', 'save', 'delete',
+    'edit', 'add', 'remove', 'create', 'update', 'load', 'refresh', 'expected', 'actual', 'result',
+    'happy', 'unhappy', 'path', 'case', 'cases', 'test', 'tests', 'flow', 'step', 'steps',
+    // marcas y vocabulario propio de Yape
+    'yape', 'yapeo', 'yapear', 'yapero', 'yaperos', 'tapp', 'bcp', 'plin', 'yapecard',
+]);
+
 const AMBIGUOUS_ALONE = new Set(['ver', 'solo', 'mas', 'dia', 'dias', 'mes', 'ano']);
 
 /**
@@ -136,6 +216,9 @@ const DROPPED = new Set([
     'este', 'esta', 'estos', 'estas', 'ese', 'esa', 'esos', 'esas',
     // `no hay X` es `no X`: el verbo no aporta nada al identificador.
     'hay', 'existe', 'existen', 'tiene', 'tienen',
+    // Modales y conectores que no nombran nada: `pueda ver` es `see`.
+    'pueda', 'puede', 'pueden', 'poder', 'cada', 'ya', 'aun', 'tambien', 'luego',
+    'segun', 'mediante', 'entre', 'sobre', 'hacia', 'ante',
 ]);
 
 /**
@@ -281,13 +364,34 @@ function identifierTokens(value: string): string[] {
         .filter(word => word.length > 1 || /^[0-9]$/.test(word));
 }
 
+/**
+ * Palabras de un texto que nadie sabe traducir ni reconoce como inglesas:
+ * ni el diccionario (con sus formas), ni la lista de ingles conocido, ni el
+ * vocabulario que ya usa el framework (`knownTokens`). Es la red que cierra el
+ * silencio: antes `descarga` o `tras` pasaban como buenas por no tener una
+ * terminacion espanola.
+ */
+export function unknownTokens(value: string, knownTokens: Set<string> = new Set()): string[] {
+    return [...new Set(identifierTokens(value)
+        // `last30` es `last` + un numero: el numero no se juzga.
+        .map(word => word.replace(/\d+/g, ''))
+        .filter(word => !DROPPED.has(word))
+        .filter(word => word.length >= 3)
+        .filter(word => !dictionaryLookup(word))
+        .filter(word => !KNOWN_ENGLISH_TOKENS.has(word))
+        .filter(word => !ENGLISH_VALUES.has(word))
+        .filter(word => !knownTokens.has(word)))];
+}
+
+const ENGLISH_VALUES = new Set(Object.values(TRANSLATIONS).flatMap(value => identifierTokens(value)));
+
 export function translateToEnglish(value: string): Translation {
     const tokens = identifierTokens(value).filter(word => !DROPPED.has(word));
     // `no tiene ninguna venta` traduce `no` y `ninguna` a lo mismo; repetirlo
     // daria `noNoSale`.
-    const translated = tokens.map(word => TRANSLATIONS[word] || word)
+    const translated = tokens.map(word => dictionaryLookup(word) || word)
         .filter((word, index, all) => word !== all[index - 1]);
-    const untranslated = tokens.filter(word => !TRANSLATIONS[word] && spanishTokens(word).length);
+    const untranslated = tokens.filter(word => !dictionaryLookup(word) && spanishTokens(word).length);
     const leading = translated.filter(word => !TRAILING_NOUNS.has(word));
     const trailing = translated.filter(word => TRAILING_NOUNS.has(word));
     // Si TODO era sustantivo de UI no hay nada que mover: `lista` -> `list`.
@@ -309,10 +413,42 @@ export function translateToSlug(value: string, fallback: string): string {
     return parts.length ? parts.join('-').slice(0, 64).replace(/-+$/, '') : fallback;
 }
 
+/**
+ * Deduce traducciones a partir de renombres validados: el recorder propuso
+ * `userDescargaHistory` y el agente entrego `userDownloadHistory`; con el
+ * resto de tokens iguales, `descarga -> download` queda aprendido. Solo se
+ * aprende de tokens que nadie sabia traducir, y solo cuando la alineacion es
+ * inequivoca (misma cantidad de tokens, una unica diferencia).
+ */
+export function learnTranslationsFromRenames(
+    renames: Array<{ before: string; after: string }>,
+): Record<string, string> {
+    const learned: Record<string, string> = {};
+    for (const { before, after } of renames) {
+        const source = identifierTokens(before);
+        const target = identifierTokens(after);
+        if (!source.length || source.length !== target.length) continue;
+        const differences = source
+            .map((token, index) => [token, target[index]] as const)
+            .filter(([token, replacement]) => token !== replacement);
+        if (differences.length !== 1) continue;
+        const [token, replacement] = differences[0];
+        if (dictionaryLookup(token) || KNOWN_ENGLISH_TOKENS.has(token)) continue;
+        if (!/^[a-z]{3,}$/.test(replacement) || !/^[a-z]{3,}$/.test(token)) continue;
+        learned[token] = replacement;
+    }
+    return learned;
+}
+
 export const englishIdentifiers = {
     spanishTokens,
     isSpanishIdentifier,
     declaredIdentifiers,
     translateToEnglish,
     translateToSlug,
+    dictionaryLookup,
+    unknownTokens,
+    extendTranslations,
+    learnedTranslations,
+    learnTranslationsFromRenames,
 };

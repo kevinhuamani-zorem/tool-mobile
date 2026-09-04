@@ -114,3 +114,43 @@ test('las terminaciones espanolas se detectan sin diccionario', () => {
         assert.equal(isSpanishIdentifier(identifier), false, identifier);
     }
 });
+
+const {
+    dictionaryLookup, unknownTokens, learnTranslationsFromRenames, extendTranslations,
+} = require('../dist/core/shared');
+
+// El diccionario entiende la forma de la palabra: `descarga` y `descargados`
+// salen de `descargar` sin enumerar cada forma a mano.
+test('dictionaryLookup deriva plurales, sustantivos deverbales y participios', () => {
+    assert.equal(dictionaryLookup('descargar'), 'download');
+    assert.equal(dictionaryLookup('descarga'), 'download');
+    assert.equal(dictionaryLookup('descargados'), 'download');
+    assert.equal(dictionaryLookup('filtros'), 'filters');
+    assert.equal(dictionaryLookup('encadenado'), undefined, 'no inventa: la raiz no esta en el diccionario');
+    assert.equal(translateToEnglish('el usuario descarga el historial').name, 'userDownloadHistory');
+    assert.equal(translateToEnglish('se muestra el titulo tras descargar').name, 'showAfterDownloadTitle');
+    assert.equal(translateToEnglish('validar que pueda ver el contenedor').name, 'validateSeeContainer');
+});
+
+// Lo que nadie sabe traducir ya no pasa en silencio; el vocabulario del
+// framework y las marcas propias si pasan.
+test('unknownTokens reporta lo que ni el diccionario ni el framework reconocen', () => {
+    assert.deepEqual(unknownTokens('historyEncadenadoButton'), ['encadenado']);
+    assert.deepEqual(unknownTokens('showMovementsButton'), []);
+    assert.deepEqual(unknownTokens('yaperoTappHome'), []);
+    assert.deepEqual(unknownTokens('siLast30DaysButton'), []);  // "si" es corto: no se juzga
+    assert.deepEqual(unknownTokens('historyEncadenadoButton', new Set(['encadenado'])), [],
+        'una palabra que el framework ya usa es vocabulario valido');
+});
+
+test('learnTranslationsFromRenames aprende solo de alineaciones inequivocas y lo aplica', () => {
+    assert.deepEqual(learnTranslationsFromRenames([
+        { before: 'userEncadenadoHistory', after: 'userChainedHistory' },
+        { before: 'showMovementsButton', after: 'showMovementsButton' },
+        { before: 'aButton', after: 'anotherButtonEntirely' },          // distinta cantidad de tokens
+        { before: 'filterTodayButton', after: 'filterNowButton' },       // `today` ya es ingles: no se aprende
+    ]), { encadenado: 'chained' });
+    extendTranslations({ encadenado: 'chained' });
+    assert.equal(translateToEnglish('historial encadenado').name, 'historyChained');
+    assert.deepEqual(unknownTokens('historyEncadenadoButton'), []);
+});

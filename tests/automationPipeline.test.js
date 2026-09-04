@@ -2122,6 +2122,31 @@ test('memoria solo promociona calidad 100 y recupera la versión más reciente',
     assert.deepEqual(memory.stats(), { successfulCases: 1, versions: 1 });
 });
 
+// La memoria aprende vocabulario de respuestas validadas al 100%: el recorder
+// propuso un nombre con una palabra que no supo traducir y el agente lo
+// renombro; el siguiente caso ya nace en ingles sin gastar tokens.
+test('memoria aprende traducciones de renombres validados y las carga al preparar', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-memory-vocab-'));
+    const memory = new AutomationMemory(root);
+    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=historial', selectorVerified: true,
+        elementIntent: 'lista de historial encadenado'
+    }]));
+    assert.equal(resolved.plan.resolutions[0].locatorName, 'historyEncadenadoList');
+    const response = validResponse(resolved.plan);
+    response.actionTrace = response.actionTrace.map(trace => ({ ...trace, locatorName: 'historyChainedList' }));
+    memory.promote(resolved.scenario, resolved.plan, response, {
+        valid: true, qualityScore: 100, errors: [], warnings: []
+    });
+    assert.deepEqual(memory.learnedVocabulary(), { encadenado: 'chained' });
+    assert.deepEqual(new AutomationMemory(root).loadLearnedVocabulary(), { encadenado: 'chained' });
+    const again = new DeterministicResolver(emptyCatalog).resolve(scenario([{
+        action: 'VERIFICAR_EXISTE', selector: 'id=historial', selectorVerified: true,
+        elementIntent: 'lista de historial encadenado'
+    }]));
+    assert.equal(again.plan.resolutions[0].locatorName, 'historyChainedList');
+});
+
 // Regla ISTQB: sin resultado esperado no hay caso de prueba. El corte tiene que
 // ser antes de escribir el paquete funcional. Solo queda la telemetría segura
 // del intento fallido; no hay plan ni contexto que permita arrancar al agente.

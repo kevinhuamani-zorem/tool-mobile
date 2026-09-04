@@ -6,7 +6,12 @@ import {
     GenerationPlan,
 } from '../contracts';
 import { projectPaths } from '../../workspace';
-import { readJsonUtf8, writeJsonUtf8 } from '../../shared';
+import {
+    extendTranslations,
+    learnTranslationsFromRenames,
+    readJsonUtf8,
+    writeJsonUtf8,
+} from '../../shared';
 
 interface MemoryEntry {
     fingerprint: string;
@@ -29,6 +34,47 @@ export class AutomationMemory {
     constructor(private readonly root = projectPaths.automationMemory) {}
 
     private indexFile(): string { return path.join(this.root, 'index.json'); }
+    private vocabularyFile(): string { return path.join(this.root, 'vocabulary.json'); }
+
+    /** Vocabulario ES->EN aprendido de automatizaciones validadas al 100%. */
+    learnedVocabulary(): Record<string, string> {
+        try {
+            const document = readJsonUtf8<{ schemaVersion: 1; translations?: Record<string, string> }>(this.vocabularyFile());
+            return { ...(document.translations || {}) };
+        } catch {
+            return {};
+        }
+    }
+
+    /** Carga el vocabulario aprendido en el diccionario del proceso. */
+    loadLearnedVocabulary(): Record<string, string> {
+        const learned = this.learnedVocabulary();
+        extendTranslations(learned);
+        return learned;
+    }
+
+    /**
+     * Aprende de los renombres que el agente hizo sobre los nombres que el
+     * recorder propuso. Solo se llama con una respuesta validada al 100%, la
+     * misma condicion que promociona el caso: la memoria no aprende de fallos.
+     */
+    private learnVocabulary(plan: GenerationPlan, response: AutomationAgentResponse): Record<string, string> {
+        const finalNames = new Map(
+            (response.actionTrace || [])
+                .filter(trace => trace.locatorName)
+                .map(trace => [trace.sequence, trace.locatorName as string]),
+        );
+        const renames = (plan.resolutions || [])
+            .filter(item => item.resolution === 'create' && item.locatorName && finalNames.has(item.sequence))
+            .map(item => ({ before: item.locatorName as string, after: finalNames.get(item.sequence)! }))
+            .filter(pair => pair.before !== pair.after);
+        const learned = learnTranslationsFromRenames(renames);
+        if (!Object.keys(learned).length) return {};
+        const merged = { ...this.learnedVocabulary(), ...learned };
+        writeJsonAtomic(this.vocabularyFile(), { schemaVersion: 1, translations: merged });
+        extendTranslations(learned);
+        return learned;
+    }
 
     private readIndex(): MemoryIndex {
         try {
@@ -72,6 +118,7 @@ export class AutomationMemory {
         writeJsonAtomic(path.join(absolute, 'generation-plan.json'), plan);
         writeJsonAtomic(path.join(absolute, 'agent-response.json'), response);
         writeJsonAtomic(path.join(absolute, 'validation.json'), validation);
+        this.learnVocabulary(plan, response);
         const entry: MemoryEntry = {
             fingerprint: scenario.fingerprint,
             version,

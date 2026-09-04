@@ -178,6 +178,26 @@ Examples:
   el baseline (`mergeStepsUpdate`) igual que ya hacía con Screen y Locators, y
   `destructive-update` rechaza cualquier propuesta que pierda una definición.
 
+### Nombres en inglés: diccionario, detección y aprendizaje
+
+- Los nombres lógicos (claves de locator, getters, métodos, slugs) salen de
+  `translateToEnglish` sobre el contextHint/objetivo del QA con un diccionario
+  ES→EN determinista (`core/shared/domain/englishIdentifiers.ts`) que entiende
+  la forma de la palabra (`descarga`, `descargados` → `download`).
+- Una palabra que ni el diccionario, ni la lista de inglés conocido, ni el
+  vocabulario que ya usa el framework reconocen **no pasa en silencio**: abre
+  `gap-english-naming`. En el pipeline por capas ese gap es informativo para
+  Lorem y Zorem (nombran en inglés al escribir), Derek lo firma como
+  `renamed-by-authors` y Sumrak no lo juzga.
+- La memoria del recorder aprende de respuestas validadas al 100%: si el agente
+  renombró `historyEncadenadoList` a `historyChainedList`, `encadenado →
+  chained` queda en `runtime/automation-memory/vocabulary.json` y se carga en
+  el diccionario al preparar el siguiente paquete. La memoria no aprende de
+  fallos.
+- Nada de esto toca selectores. Una errata en el texto de la app (`Útimos`) se
+  conserva literal en el selector y en el nombre; el hallazgo va al QA en
+  `qa-observations.json` (`ui-text-quality`), nunca se corrige en silencio.
+
 ## Screen Object
 
 - Clase que extiende `BaseScreen`.

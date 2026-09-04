@@ -1051,6 +1051,9 @@ export class AutomationPackageBuilder {
 
     prepare(scenario: AutomationScenario, recordingDirectory: string): AutomationPackageResult {
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
+        // El diccionario del proceso incorpora lo aprendido de casos validados
+        // antes de que el resolver ponga un solo nombre.
+        this.memory.loadLearnedVocabulary();
         // Aplica tanto a un caso nuevo como a una grabacion retomada. Se hace
         // antes del resolver para que incluso un fallo temprano invalide una
         // respuesta anterior y nunca pueda reimportarse por accidente.

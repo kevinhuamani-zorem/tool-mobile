@@ -813,7 +813,15 @@ interface GapJudgment {
     fixed: AutomationAgentResponse['resolutions'];
     /** Gaps que siguen exigiendo juicio; solo estos viajan a los agentes. */
     open: string[];
+    /**
+     * Gaps que no piden una decision sino trabajo de los autores (renombrar a
+     * ingles): viajan a Lorem y Zorem, Derek los firma y Sumrak no los juzga.
+     */
+    informational: string[];
 }
+
+/** Gaps que los autores resuelven al escribir; nunca requieren una decision de Sumrak. */
+const AUTHOR_INFORMATIONAL_GAPS = new Set(['gap-english-naming']);
 
 /**
  * Separa los gaps abiertos entre los que el plan ya decidio y los que no.
@@ -832,11 +840,20 @@ function gapJudgment(packageDirectory: string, plan: GenerationPlan): GapJudgmen
         : [];
     const gapById = new Map(gaps.filter(gap => gap.id).map(gap => [gap.id!, gap]));
     const expected = expectedGapDecisions(packageDirectory, plan);
-    const judgment: GapJudgment = { fixed: [], open: [] };
+    const judgment: GapJudgment = { fixed: [], open: [], informational: [] };
     for (const gapId of plan.unresolvedGapIds || []) {
         const gap = gapById.get(gapId);
         if (!gap) {
             judgment.open.push(gapId);
+            continue;
+        }
+        if (AUTHOR_INFORMATIONAL_GAPS.has(gapId)) {
+            judgment.informational.push(gapId);
+            judgment.fixed.push({
+                gapId,
+                decision: 'renamed-by-authors',
+                reason: 'Los autores nombran en inglés al escribir su capa; el normalizador aplica el diccionario y el validador advierte lo que quede en español.',
+            });
             continue;
         }
         if (gapId === 'gap-extend-existing-artifacts') {
@@ -901,7 +918,7 @@ function projectIntegrationJson(relativePath: string, value: any): any {
  */
 function projectSharedJson(relativePath: string, value: any, judgment: GapJudgment): any {
     if (relativePath === 'gaps.json') {
-        const open = new Set(judgment.open);
+        const open = new Set([...judgment.open, ...judgment.informational]);
         return {
             ...value,
             gaps: (value.gaps || [])

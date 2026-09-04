@@ -26,7 +26,7 @@
           "expression": "el usuario tiene que poder acceder a ventas",
           "args": "",
           "usesDataTable": false,
-          "method": "userPoderAccederSales",
+          "method": "userAccessSales",
           "methodArgs": ""
         },
         {
@@ -43,7 +43,7 @@
       "importsDataTableDrivenSignals": false,
       "methods": [
         {
-          "name": "userPoderAccederSales",
+          "name": "userAccessSales",
           "args": "",
           "hasLoop": false,
           "usesDynamicLocator": false
@@ -77,7 +77,7 @@
     {
       "sequence": 1,
       "gherkinStep": "When el usuario tiene que poder acceder a ventas",
-      "screenMethod": "userPoderAccederSales",
+      "screenMethod": "userAccessSales",
       "locatorName": "salesButton"
     },
     {
@@ -89,8 +89,8 @@
   ],
   "fingerprints": {
     "feature": "e6bb5e371938baabab382fc65972c95fbd9f833e2be6be0b29a71c57616ddf3e",
-    "steps": "626375ad94503f163e0a014338bbd93be535d316213e74a775f56c39db09afec",
-    "screen": "7cceed001f7cbcdb881f139197ab7e55e89a0425b03ab1d4a13a37b98dd9968f",
+    "steps": "42da6e4ae59d28d6a9db497446670e62e97acdfafa90c22a0bb3ade9b1c529e3",
+    "screen": "1660ce29f170d92fd0328ab8a5266ec2151f0760e596104403e278085eda2a5c",
     "locators": "ba295e70a4e3687da6e8e88ddd1f68e8ab8f5bb46ee7ef6214dfe4ae6a347723"
   }
 }

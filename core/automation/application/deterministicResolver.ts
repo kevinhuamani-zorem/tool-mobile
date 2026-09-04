@@ -30,6 +30,7 @@ import {
     spanishTokens,
     translateToEnglish,
     translateToSlug,
+    unknownTokens,
 } from '../../shared';
 import { frameworkContract, projectPaths } from '../../workspace';
 import { ElementIdentityIndex } from '../domain/elementIdentity';
@@ -994,16 +995,38 @@ export class DeterministicResolver {
         // `reuse` quedan fuera: esos nombres ya viven en el framework.
         // Lo que el diccionario no supo traducir. Solo eso llega al agente: el
         // resto ya salio en ingles sin gastar un token.
-        const spanishNames = [...new Set(resolutions
+        // El vocabulario que ya usa el framework es ingles valido por definicion
+        // (`yapero`, `tapp`, claves y metodos existentes): una palabra que ni el
+        // diccionario ni el framework conocen no se da por buena en silencio.
+        const frameworkTokens = new Set<string>([
+            ...catalog.locators.flatMap(locator => words(locator.name)),
+            ...(catalog.screenMethods || []).flatMap(method => words(method.name)),
+        ]);
+        const createdNames = [...new Set(resolutions
             .filter(item => item.resolution === 'create' && item.locatorName)
-            .map(item => item.locatorName as string)
-            .filter(name => spanishTokens(name).length))];
-        if (spanishNames.length) {
+            .map(item => item.locatorName as string))];
+        const spanishNames = createdNames.filter(name => spanishTokens(name).length);
+        const unknownByName = new Map(createdNames
+            .filter(name => !spanishTokens(name).length)
+            .map(name => [name, unknownTokens(name, frameworkTokens)] as const)
+            .filter(([, unknown]) => unknown.length));
+        if (spanishNames.length || unknownByName.size) {
+            const unknownSummary = [...unknownByName]
+                .map(([name, unknown]) => `${name} (${unknown.join(', ')})`);
             gaps.push({
                 id: 'gap-english-naming',
                 type: 'semantic-naming',
-                description: 'Estos nombres logicos conservan palabras en espanol que no se pudieron ' +
-                    `traducir automaticamente: ${spanishNames.join(', ')}.`,
+                description: [
+                    spanishNames.length
+                        ? 'Estos nombres logicos conservan palabras en espanol que no se pudieron ' +
+                          `traducir automaticamente: ${spanishNames.join(', ')}.`
+                        : '',
+                    unknownSummary.length
+                        ? 'Estos nombres contienen palabras que ni el diccionario ni el framework ' +
+                          `reconocen: ${unknownSummary.join('; ')}. Si son ingles o vocabulario propio, ` +
+                          'consérvalas; si son español, tradúcelas.'
+                        : '',
+                ].filter(Boolean).join(' '),
                 requiredOutput: 'Renombralos a ingles y usa el mismo nombre en las tres capas (clave del ' +
                     'locator, getter y metodo del Screen Object). El selector y la decision reuse/create no ' +
                     'cambian, solo el nombre. El Gherkin sigue en espanol.',
