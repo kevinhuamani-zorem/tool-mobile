@@ -22,7 +22,7 @@ const { projectPaths } = require('../dist/core/workspace');
 const { screenObjectNames } = require('../dist/core/shared');
 const { locatorImportIdentifier } = require('../dist/core/automation');
 const {
-    defaultValidatorSourcePath,
+    readValidatorRuleSource,
     validatorRuleCodesFromSource,
 } = require('../dist/core/validation');
 
@@ -2243,10 +2243,7 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
     const validationContract = JSON.parse(fs.readFileSync(
         path.join(result.packageDirectory, 'validation-contract.json'), 'utf8'
     ));
-    const validatorSource = fs.readFileSync(
-        defaultValidatorSourcePath(),
-        'utf8'
-    );
+    const validatorSource = readValidatorRuleSource();
     const validatorCodes = validatorRuleCodesFromSource(validatorSource);
     const declaredCodes = validationContract.rules.map(rule => rule.code).sort();
     assert.deepEqual(declaredCodes, validatorCodes);

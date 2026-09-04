@@ -36,4 +36,6 @@ export type {
 export {
     buildValidationRuleContractFromFile,
     defaultValidatorSourcePath,
+    readValidatorRuleSource,
+    validatorRuleSourcePaths,
 } from './infrastructure/validationRuleCatalogFileAdapter';

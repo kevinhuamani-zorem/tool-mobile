@@ -9,16 +9,58 @@ const {
 const {
     buildValidationRuleContractFromFile,
     defaultValidatorSourcePath,
+    readValidatorRuleSource,
+    validatorRuleSourcePaths,
 } = require('../dist/core/validation');
 
 test('el contrato declara todos los códigos que emite el validador', () => {
     const sourcePath = defaultValidatorSourcePath();
-    const source = fs.readFileSync(sourcePath, 'utf8');
+    // Las reglas viven en familias separadas: la fuente del contrato es el
+    // orquestador mas su directorio `rules/`, no un unico archivo.
+    const source = readValidatorRuleSource(sourcePath);
     const emitted = validatorRuleCodesFromSource(source);
     const contract = buildValidationRuleContractFromFile(sourcePath);
     const declared = contract.rules.map(rule => rule.code).sort();
     assert.deepEqual(declared, emitted);
     assert.deepEqual(contract, buildValidationRuleContractFromSource(source));
+});
+
+test('la fuente del contrato incluye cada familia de reglas del validador', () => {
+    const sourcePath = defaultValidatorSourcePath();
+    const paths = validatorRuleSourcePaths(sourcePath);
+    assert.equal(paths[0], sourcePath, 'el orquestador encabeza la fuente');
+    const families = [
+        'envelopeRules',
+        'syntaxRules',
+        'completionRules',
+        'layerRules',
+        'gapRules',
+        'locatorContractRules',
+        'existingAutomationRules',
+        'outputRules',
+        'gherkinQualityRules',
+        'codeStructureRules',
+        'updateSafetyRules',
+        'frameworkCollisionRules',
+    ];
+    const extension = path.extname(sourcePath);
+    for (const family of families) {
+        assert.ok(
+            paths.some(candidate => path.basename(candidate) === `${family}${extension}`),
+            `Falta la familia ${family} en la fuente del contrato`
+        );
+    }
+    // El orquestador ya no declara reglas de contenido: solo compone familias.
+    // Conserva `preview` porque es su propio contrato, el fallo al construir el
+    // preview o al leer el framework. Cualquier otro codigo que reaparezca aqui
+    // es una regla que se escapo de su familia.
+    assert.deepEqual(
+        validatorRuleCodesFromSource(fs.readFileSync(sourcePath, 'utf8')),
+        ['preview'],
+        'las reglas de contenido viven en rules/, no en el orquestador'
+    );
+    const emitted = validatorRuleCodesFromSource(readValidatorRuleSource(sourcePath));
+    assert.ok(emitted.length > 40, `El contrato quedo con ${emitted.length} codigos`);
 });
 
 test('automation package publica validation-contract.json', () => {

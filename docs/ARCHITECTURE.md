@@ -156,7 +156,7 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver la raíz padre y el catálogo del framework |
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationContextProjections`, `automationPackageBuilder` | Recording, plan, hints/gaps derivados y contexto mínimo |
 | IA acotada | `agentOrchestrator`, `copilotCliAdapter`, `automationAgentLauncher`, `automationContracts` | Modo `manual` (handoff en Terminal) o `automatic` (dos pasadas controladas por contratos y budgets) |
-| Validación/memoria | `automationResponseValidator`, `automationMemory` | Validar, reparar una vez y versionar score 100 |
+| Validación/memoria | `automationResponseValidator` + `rules/` (familias), `automationMemory` | Validar, reparar una vez y versionar score 100 |
 | Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
 | Análisis | `reuseAnalyzer`, `scenarioCoverageAnalyzer` | Impacto de steps y cobertura Android/iOS |
@@ -305,6 +305,16 @@ XML, screenshots, source, capabilities ni credenciales.
    el diagnóstico estructurado.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
+   La clase no contiene reglas: compone en un orden fijo las familias de
+   `core/validation/infrastructure/rules/` sobre un unico reporte
+   (`envelope`, `syntax`, `completion`, `layer`, `gap`, `locatorContract`,
+   `existingAutomation` y, ya sobre el preview, `output`, `gherkinQuality`,
+   `codeStructure`, `updateSafety`, `frameworkCollision`). Ese orden es parte
+   del contrato: la deduplicacion final conserva la primera aparicion de cada
+   `(code, message, file)`. El catalogo de reglas que viaja al paquete se
+   construye leyendo el orquestador **y** ese directorio
+   (`readValidatorRuleSource`), asi que una regla nueva vive en su familia y
+   aparece sola en el contrato.
    Los rellenos de plataforma solo aceptan la identidad determinista completa
    `(file, module, block, name, platform, sequence)` y el método trazado debe
    consumir ese getter; el patch conserva esa misma identidad hasta la escritura.
