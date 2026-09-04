@@ -862,3 +862,184 @@ test('un timeoutMs explícito en las opciones sigue mandando como hang stop', as
     await new LayeredGenerationOrchestrator(fake, fake).run(root, { timeoutMs: 42_000 });
     assert.deepEqual([...new Set(calls.map(call => call.timeoutMs))], [42_000]);
 });
+
+function draftBuilderWith(actionTrace) {
+    return {
+        build(packageDirectory) {
+            const draft = {
+                schemaVersion: 1,
+                recordingId: 'rec-1',
+                planId: 'plan-1',
+                planFingerprint: 'fp-1',
+                files: [
+                    { layer: 'feature', path: 'features/payment/case.feature', content: 'Feature: Draft' },
+                    { layer: 'steps', path: 'features/steps/payment/case.steps.ts', content: 'export {}' },
+                    { layer: 'screen', path: 'screenobjects/payment/case.screen.ts', content: 'export class Draft {}' },
+                    { layer: 'locators', path: 'resources/locators/payment/case.locator.json', content: '{}' },
+                ],
+                actionTrace,
+                assumptions: ['draft'],
+            };
+            writeJson(path.join(packageDirectory, 'deterministic-draft.json'), draft);
+            return draft;
+        },
+    };
+}
+
+// Provider que registra cuándo empieza y termina cada sesión y deja que Lorem
+// entregue una interfaz concreta (la del contrato, o una distinta).
+function timedProvider(calls, loremActionTrace, delayMs = 30) {
+    const base = provider(calls);
+    return {
+        ...base,
+        async execute(input) {
+            const started = Date.now();
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            const result = await base.execute(input);
+            if (input.agentName === 'Lorem') {
+                const file = path.join(input.cwd, 'behavior-result.json');
+                const behavior = JSON.parse(fs.readFileSync(file, 'utf8'));
+                behavior.actionTrace = loremActionTrace;
+                writeJson(file, behavior);
+            }
+            calls.at(-1).startedAt = started;
+            calls.at(-1).finishedAt = Date.now();
+            return result;
+        },
+    };
+}
+
+const DRAFT_TRACE = [{ sequence: 1, gherkinStep: 'When acción', screenMethod: 'executeAction', locatorName: 'primaryButton' }];
+
+test('Lorem y Zorem corren en paralelo sobre el contrato del borrador y Zorem no se relanza si la interfaz coincide', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = timedProvider(calls, DRAFT_TRACE);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    const lorem = calls[0];
+    const zorem = calls[1];
+    assert.ok(zorem.startedAt < lorem.finishedAt, 'Zorem arranca antes de que Lorem termine');
+    assert.equal(zorem.hasBehaviorDependency, true, 'Zorem recibe el contrato con la forma de behavior-result.json');
+    const handoff = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/lorem-handoff.json'), 'utf8'));
+    assert.equal(handoff.from, 'recorder');
+    assert.equal(handoff.fromAgent, 'Derek');
+    assert.equal(handoff.stage, 'draft-contract-to-interaction');
+    const contract = JSON.parse(fs.readFileSync(path.join(root, 'agents/derek/behavior-result.json'), 'utf8'));
+    assert.deepEqual(contract.actionTrace, DRAFT_TRACE);
+    assert.deepEqual(contract.files.map(file => file.layer), ['feature', 'steps']);
+});
+
+test('si Lorem cambia la interfaz del contrato, Zorem se sincroniza con el resultado real', async () => {
+    const root = fixture();
+    const calls = [];
+    const changed = [{ sequence: 1, gherkinStep: 'When acción', screenMethod: 'tapPrimary', locatorName: 'primaryButton' }];
+    const fake = timedProvider(calls, changed);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Zorem', 'Sumrak']);
+    const handoff = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/lorem-handoff.json'), 'utf8'));
+    assert.equal(handoff.from, 'behavior-author', 'la segunda pasada de Zorem parte del resultado real de Lorem');
+    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
+    assert.match(feedback.errors.join(' '), /interfaz actionTrace distinta del contrato provisional/);
+});
+
+test('parallelAuthors:false conserva la secuencia Lorem -> Zorem aunque exista borrador', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = timedProvider(calls, DRAFT_TRACE);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE))
+        .run(root, { parallelAuthors: false });
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    assert.ok(calls[1].startedAt >= calls[0].finishedAt, 'Zorem espera a Lorem');
+    const handoff = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/lorem-handoff.json'), 'utf8'));
+    assert.equal(handoff.from, 'behavior-author');
+    assert.equal(fs.existsSync(path.join(root, 'agents/derek/behavior-result.json')), false);
+});
+
+// El baseline ya viaja íntegro en baselines/: el borrador de un archivo
+// `update` lleva a Zorem solo lo que añade sobre él.
+test('Zorem recibe el borrador de un archivo update como adiciones sobre el baseline', async () => {
+    const root = fixture();
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.files = plan.files.map(file => file.layer === 'screen' || file.layer === 'locators'
+        ? { ...file, operation: 'update' }
+        : file);
+    writeJson(planFile, plan);
+    const baselineScreen = [
+        'class CaseScreen extends BaseScreen {',
+        '    private get existingButton(): string {',
+        '        return Locators["caseAndroid"].existingButton;',
+        '    }',
+        '    public async tapExisting(): Promise<void> {',
+        '        await this.uiHelper.waitForDisplayed(this.existingButton);',
+        '    }',
+        '}',
+        'export default new CaseScreen();',
+        '',
+    ].join('\n');
+    const draftScreen = baselineScreen.replace(
+        '    public async tapExisting',
+        [
+            '    private get newButton(): string {',
+            '        return Locators["caseAndroid"].newButton;',
+            '    }',
+            '    public async tapNew(): Promise<void> {',
+            '        await this.uiHelper.waitForDisplayed(this.newButton);',
+            '    }',
+            '    public async tapExisting',
+        ].join('\n'),
+    );
+    fs.mkdirSync(path.join(root, 'baselines'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'baselines/screen-case.screen.ts'), baselineScreen);
+    fs.writeFileSync(path.join(root, 'baselines/locators-case.locator.json'),
+        JSON.stringify({ caseAndroid: { existingButton: '~existing' }, caseIos: { existingButton: '' } }, null, 4));
+    const draftBuilder = {
+        build(packageDirectory) {
+            const draft = {
+                schemaVersion: 1, recordingId: 'rec-1', planId: 'plan-1', planFingerprint: 'fp-1',
+                files: [
+                    { layer: 'feature', path: 'features/payment/case.feature', content: 'Feature: Draft' },
+                    { layer: 'steps', path: 'features/steps/payment/case.steps.ts', content: 'export {}' },
+                    { layer: 'screen', path: 'screenobjects/payment/case.screen.ts', content: draftScreen },
+                    { layer: 'locators', path: 'resources/locators/payment/case.locator.json',
+                        content: JSON.stringify({ caseAndroid: { existingButton: '~existing', newButton: '~new' }, caseIos: { existingButton: '', newButton: '' } }, null, 4) },
+                ],
+                actionTrace: [],
+                assumptions: [],
+            };
+            writeJson(path.join(packageDirectory, 'deterministic-draft.json'), draft);
+            return draft;
+        },
+    };
+    const calls = [];
+    const fake = provider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilder).run(root);
+
+    assert.equal(result.success, true, result.error);
+    const zoremDraft = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/deterministic-draft.json'), 'utf8'));
+    const screen = zoremDraft.files.find(file => file.layer === 'screen');
+    const locators = zoremDraft.files.find(file => file.layer === 'locators');
+    assert.equal(screen.operation, 'update');
+    assert.equal(screen.baseline, 'baselines/screen-case.screen.ts');
+    assert.equal('content' in screen, false, 'el archivo completo no se repite: ya esta en baselines/');
+    assert.deepEqual(screen.additions.getters.map(item => item.name), ['newButton']);
+    assert.deepEqual(screen.additions.methods.map(item => item.name), ['tapNew']);
+    assert.match(screen.additions.methods[0].code, /waitForDisplayed\(this\.newButton\)/);
+    assert.equal(locators.operation, 'update');
+    assert.deepEqual(locators.additions.locators.map(item => item.name), ['newButton']);
+    assert.match(zoremDraft.assumptions.join(' '), /solo sus adiciones/);
+    // Lorem no cambia: sus capas son create y viajan completas.
+    const loremDraft = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/deterministic-draft.json'), 'utf8'));
+    assert.equal(loremDraft.files.find(file => file.layer === 'feature').content, 'Feature: Draft');
+});

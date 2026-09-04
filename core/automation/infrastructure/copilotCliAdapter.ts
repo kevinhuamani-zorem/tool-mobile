@@ -189,7 +189,8 @@ function sanitizeTrace(text: string): string {
 
 export class CopilotCliAdapter implements AgentProvider {
     readonly name = 'copilot';
-    private active: ChildProcess | null = null;
+    /** Sesiones vivas. Lorem y Zorem pueden correr a la vez: cancelar corta todas. */
+    private readonly active = new Set<ChildProcess>();
 
     constructor(
         private readonly runner: SpawnFn = spawn,
@@ -229,14 +230,7 @@ export class CopilotCliAdapter implements AgentProvider {
     }
 
     cancel(): void {
-        if (!this.active) return;
-        this.killProcessTree('SIGTERM');
-    }
-
-    private killProcessTree(signal: NodeJS.Signals): void {
-        const child = this.active;
-        if (!child) return;
-        this.killPidTree(child.pid, signal);
+        for (const child of this.active) this.killPidTree(child.pid, 'SIGTERM');
     }
 
     private killPidTree(pid: number | undefined, signal: NodeJS.Signals): void {
@@ -310,7 +304,7 @@ export class CopilotCliAdapter implements AgentProvider {
                 } catch { /* A final JSONL event need not have a trailing newline. */ }
                 if (timeoutTimer) clearTimeout(timeoutTimer);
                 if (outputWatchTimer) clearInterval(outputWatchTimer);
-                this.active = null;
+                this.active.delete(child);
                 appendTrace(
                     'result',
                     `success=${success} exitCode=${exitCode ?? 'null'} timedOut=${timedOut} cancelled=${cancelled}` +
@@ -353,7 +347,7 @@ export class CopilotCliAdapter implements AgentProvider {
             child.stdout?.setEncoding?.('utf8');
             child.stderr?.setEncoding?.('utf8');
             appendTrace('start', `command=${this.command} timeoutMs=${timeoutMs}`);
-            this.active = child;
+            this.active.add(child);
             const stopOnValidatedOutput = input.stopOnValidatedOutput;
             if (stopOnValidatedOutput?.outputFile && stopOnValidatedOutput?.schemaFile) {
                 const outputPath = path.resolve(effectiveCwd, stopOnValidatedOutput.outputFile);

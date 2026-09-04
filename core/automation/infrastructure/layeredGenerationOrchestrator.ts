@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import {
     normalizeAgentOperationalBudgets,
+    AgentGeneratedFile,
     AutomationAgentResponse,
     GenerationPlan,
 } from '../contracts';
@@ -20,6 +21,7 @@ import type { AgentProvider } from '../ports/agentProvider';
 import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from '../../shared';
 import { DeterministicDraftBuilder } from '../../generation';
 import { resolveAgentHangStopMs } from './agentRuntimeGuards';
+import { locatorAdditions, screenAdditions } from './automationPatchWriter';
 
 const INPUT_FILES = [
     'scenario.json',
@@ -118,6 +120,13 @@ class LayeredValidationError extends Error {
 }
 
 export interface LayeredGenerationOptions {
+    /**
+     * Lorem y Zorem en paralelo usando el `actionTrace` del borrador
+     * determinista como contrato de interfaz. Si Lorem cambia esa interfaz,
+     * Zorem se relanza con el resultado real. Activo por defecto cuando existe
+     * el borrador; `false` fuerza la secuencia Lorem -> Zorem.
+     */
+    parallelAuthors?: boolean;
     model?: string;
     timeoutMs?: number;
     forceRegenerate?: boolean;
@@ -193,15 +202,58 @@ const INTEGRATION_RULE_CODES = new Set([
     'existing-automation', 'duplicate-layer', 'missing-layer', 'extra-layer',
 ]);
 
-function projectRoleJson(relativePath: string, value: any, role: AuthorRole): any {
+/**
+ * Un archivo `update` del borrador viaja a Zorem como sus adiciones sobre el
+ * baseline, no como el archivo completo: el baseline ya esta integro en
+ * `baselines/` y repetirlo dentro del draft duplicaba el Screen Object entero
+ * en su contexto. Si no hay baseline (create) el contenido viaja tal cual.
+ */
+function draftFileForInteraction(packageDirectory: string, file: any): any {
+    if (!file || (file.layer !== 'screen' && file.layer !== 'locators')) return file;
+    const baselineReference = `baselines/${file.layer}-${path.basename(String(file.path || ''))}`;
+    const baselineFile = path.join(packageDirectory, baselineReference);
+    if (!fs.existsSync(baselineFile)) return file;
+    const baseline = fs.readFileSync(baselineFile, 'utf8');
+    const { content, ...rest } = file;
+    try {
+        if (file.layer === 'screen') {
+            const additions = screenAdditions(baseline, String(content || ''));
+            return {
+                ...rest,
+                operation: 'update',
+                baseline: baselineReference,
+                additions: {
+                    getters: additions.getters.map(item => ({ name: item.name, code: item.code })),
+                    methods: additions.methods.map(item => ({ name: item.name, code: item.code })),
+                },
+            };
+        }
+        return {
+            ...rest,
+            operation: 'update',
+            baseline: baselineReference,
+            additions: { locators: locatorAdditions(baseline, String(content || '')) },
+        };
+    } catch {
+        return file;
+    }
+}
+
+function projectRoleJson(relativePath: string, value: any, role: AuthorRole, packageDirectory: string): any {
     if (relativePath === 'deterministic-draft.json') {
         const layers = new Set(ROLE_LAYERS[role]);
+        const files = (value.files || []).filter((file: any) => layers.has(file.layer));
         return {
             ...value,
-            files: (value.files || []).filter((file: any) => layers.has(file.layer)),
+            files: role === 'interaction-author'
+                ? files.map((file: any) => draftFileForInteraction(packageDirectory, file))
+                : files,
             actionTrace: value.actionTrace || [],
             assumptions: [
                 'Referencia generada localmente. Puedes corregirla o reemplazar APIs provisionales por reutilización autorizada.',
+                ...(role === 'interaction-author'
+                    ? ['Un archivo con `operation: update` trae solo sus adiciones sobre `baseline`; el archivo completo de partida está en baselines/.']
+                    : []),
             ],
         };
     }
@@ -307,6 +359,7 @@ function copyRoleInput(
         relativePath,
         projectSharedJson(relativePath, readJsonUtf8<any>(source), judgment),
         role,
+        sourceRoot,
     ));
 }
 
@@ -419,12 +472,7 @@ interface PipelineCacheEntry {
 }
 
 function actionInterfaceFingerprint(resultFile: string): string {
-    const result = readJsonUtf8<LayeredAgentResult>(resultFile);
-    return stableFingerprint((result.actionTrace || []).map(trace => ({
-        sequence: trace.sequence,
-        screenMethod: trace.screenMethod || '',
-        locatorName: trace.locatorName || '',
-    })));
+    return interfaceFingerprint(readJsonUtf8<LayeredAgentResult>(resultFile).actionTrace);
 }
 
 function pipelineFingerprint(packageDirectory: string, model: string): string {
@@ -514,6 +562,59 @@ function stageContextBytes(stageDirectory: string): number {
     return filesInside(stageDirectory).reduce((total, file) => total + fs.statSync(file).size, 0);
 }
 
+function interfaceFingerprint(actionTrace: LayeredAgentResult['actionTrace'] | undefined): string {
+    return stableFingerprint((actionTrace || []).map(trace => ({
+        sequence: trace.sequence,
+        screenMethod: trace.screenMethod || '',
+        locatorName: trace.locatorName || '',
+    })));
+}
+
+/**
+ * Contrato provisional de interfaz para que Zorem arranque sin esperar a
+ * Lorem: el `actionTrace` del borrador determinista con la misma forma que un
+ * `behavior-result.json`. Derek lo publica con handoff verificado; si Lorem
+ * entrega otra interfaz, Zorem se relanza con la real.
+ */
+function writeDraftBehaviorContract(
+    packageDirectory: string,
+    agentsRoot: string,
+    plan: GenerationPlan,
+): string | undefined {
+    const draftFile = path.join(packageDirectory, 'deterministic-draft.json');
+    if (!fs.existsSync(draftFile)) return undefined;
+    const draft = readJsonUtf8<{ files?: AgentGeneratedFile[]; actionTrace?: LayeredAgentResult['actionTrace'] }>(draftFile);
+    if (!Array.isArray(draft.actionTrace) || !draft.actionTrace.length) return undefined;
+    const ownerDirectory = path.join(agentsRoot, LAYERED_GENERATION_AGENTS.owner.directory);
+    fs.mkdirSync(ownerDirectory, { recursive: true });
+    const contractFile = path.join(ownerDirectory, 'behavior-result.json');
+    const contract: LayeredAgentResult = {
+        schemaVersion: 1,
+        role: 'behavior-author',
+        recordingId: plan.recordingId,
+        planId: plan.planId,
+        files: (draft.files || []).filter(file => file.layer === 'feature' || file.layer === 'steps'),
+        actionTrace: draft.actionTrace,
+        assumptions: [
+            'Contrato provisional de Derek derivado del borrador determinista: Lorem puede ajustar la redacción, no la interfaz screenMethod/locatorName.',
+        ],
+    };
+    writeJsonUtf8(contractFile, contract);
+    writeHandoff(path.join(ownerDirectory, 'output-handoff.json'), {
+        from: 'recorder',
+        to: 'interaction-author',
+        fromAgent: LAYERED_GENERATION_AGENTS.owner.name,
+        toAgent: LAYERED_GENERATION_AGENTS['interaction-author'].name,
+        recordingId: plan.recordingId,
+        planId: plan.planId,
+        stage: 'draft-contract',
+        status: 'completed',
+        artifacts: [artifact(contractFile, ownerDirectory)],
+        instructions: ['Interfaz provisional del borrador determinista; Lorem redacta en paralelo.'],
+    });
+    return contractFile;
+}
+
 function sessionName(recordingId: string, role: GenerationAgentRole, attempt = 0): string {
     const base = `${LAYERED_GENERATION_AGENTS.owner.name}/${recordingId}/${LAYERED_GENERATION_AGENTS[role].name}`;
     return attempt > 0 ? `${base}/repair-${attempt}` : base;
@@ -588,11 +689,12 @@ function partialPrompt(role: AuthorRole, outputFile: string, repair = false): st
             'En el archivo Feature puedes usar And/But; en TypeScript importa e invoca únicamente Given, When y Then porque Cucumber no exporta And/But como funciones.',
             'Steps solo puede invocar métodos del Screen Object: prohíbe XPath, UiSelector, accessibility id y selectores literales.',
             'Declara en actionTrace el screenMethod requerido para que Zorem implemente exactamente esa interfaz.',
+            'Conserva los screenMethod y locatorName de deterministic-draft.json: Zorem ya trabaja sobre esa interfaz en paralelo; cámbiala solo si el plan lo exige.',
             'Evalúa el diseño funcional como pass o suggestion; una sugerencia nunca bloquea la generación.',
         ].join(' ')
         : [
             'Genera únicamente Screen Object y Locators.',
-            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan.',
+            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan. Un archivo del borrador con operation update trae solo sus adiciones (getters, métodos, claves) sobre el baseline de baselines/.',
             'Lee behavior-result.json y lorem-handoff.json: implementa exactamente los screenMethod requeridos por Lorem.',
             'Para operation update parte de baselines y preserva byte a byte toda API, import y locator no afectado.',
             'La operación y decisión del plan mandan: si indica create, crea la key y getter homónimos con el primary exacto aunque exista un elemento semánticamente parecido; reutiliza solo cuando el plan lo autorice.',
@@ -963,14 +1065,43 @@ export class LayeredGenerationOrchestrator {
             }
             const behaviorCache: AuthorCacheTarget = {};
             const interactionCache: AuthorCacheTarget = {};
-            let behavior = await this.runAuthor(
-                root, agentsRoot, plan, 'behavior-author', options, stages, 0,
-                undefined, [], behaviorCache,
-            );
-            let interaction = await this.runAuthor(
-                root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
-                [], interactionCache,
-            );
+            const draftContract = options.parallelAuthors === false
+                ? undefined
+                : writeDraftBehaviorContract(root, agentsRoot, plan);
+            let behavior: string;
+            let interaction: string;
+            if (draftContract) {
+                // Zorem no depende de la prosa de Lorem, solo de la interfaz
+                // screenMethod/locatorName, y esa ya la fija el borrador. Ambos
+                // arrancan a la vez; si Lorem se aparta del contrato, Zorem se
+                // sincroniza con el resultado real como en una reparación.
+                [behavior, interaction] = await Promise.all([
+                    this.runAuthor(
+                        root, agentsRoot, plan, 'behavior-author', options, stages, 0,
+                        undefined, [], behaviorCache,
+                    ),
+                    this.runAuthor(
+                        root, agentsRoot, plan, 'interaction-author', options, stages, 0,
+                        draftContract, [], interactionCache, 'recorder',
+                    ),
+                ]);
+                if (actionInterfaceFingerprint(behavior) !== actionInterfaceFingerprint(draftContract)) {
+                    interaction = await this.runAuthor(
+                        root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
+                        ['Lorem entregó una interfaz actionTrace distinta del contrato provisional; sincroniza únicamente los métodos afectados.'],
+                        interactionCache,
+                    );
+                }
+            } else {
+                behavior = await this.runAuthor(
+                    root, agentsRoot, plan, 'behavior-author', options, stages, 0,
+                    undefined, [], behaviorCache,
+                );
+                interaction = await this.runAuthor(
+                    root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
+                    [], interactionCache,
+                );
+            }
             let integrationFeedback: LayeredRepairFeedback | undefined;
             while (true) {
                 try {
@@ -1087,6 +1218,7 @@ export class LayeredGenerationOrchestrator {
         dependencyFile?: string,
         repairErrors: string[] = [],
         cacheTarget: AuthorCacheTarget = {},
+        dependencyOrigin: 'behavior-author' | 'recorder' = 'behavior-author',
     ): Promise<string> {
         const identity = LAYERED_GENERATION_AGENTS[role];
         const stageDirectory = path.join(agentsRoot, identity.directory);
@@ -1102,16 +1234,20 @@ export class LayeredGenerationOrchestrator {
             const dependencyCopy = path.join(stageDirectory, path.basename(dependencyFile));
             fs.copyFileSync(dependencyFile, dependencyCopy);
             writeHandoff(path.join(stageDirectory, 'lorem-handoff.json'), {
-                from: 'behavior-author',
+                from: dependencyOrigin,
                 to: 'interaction-author',
-                fromAgent: LAYERED_GENERATION_AGENTS['behavior-author'].name,
+                fromAgent: dependencyOrigin === 'recorder'
+                    ? LAYERED_GENERATION_AGENTS.owner.name
+                    : LAYERED_GENERATION_AGENTS['behavior-author'].name,
                 toAgent: identity.name,
                 recordingId: plan.recordingId,
                 planId: plan.planId,
-                stage: 'behavior-to-interaction',
+                stage: dependencyOrigin === 'recorder' ? 'draft-contract-to-interaction' : 'behavior-to-interaction',
                 status: 'ready',
                 artifacts: [artifact(dependencyCopy, stageDirectory)],
-                instructions: ['Implementar exactamente los screenMethod requeridos por Lorem.'],
+                instructions: [dependencyOrigin === 'recorder'
+                    ? 'Implementar exactamente los screenMethod del contrato provisional de Derek; Lorem redacta en paralelo sobre esa misma interfaz.'
+                    : 'Implementar exactamente los screenMethod requeridos por Lorem.'],
             });
         }
         if (repairErrors.length) {

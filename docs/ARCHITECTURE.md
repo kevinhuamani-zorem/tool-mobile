@@ -284,6 +284,17 @@ XML, screenshots, source, capabilities ni credenciales.
    incremental local bajo `generation/.agent-cache`, fuera del paquete
    `automation` reconstruible e indexado por hashes de inputs, prompt y modelo.
    Los handoffs se vuelven a verificar al restaurar la salida.
+   Cuando existe `deterministic-draft.json`, Lorem y Zorem corren **en
+   paralelo**: Derek publica el `actionTrace` del borrador como contrato
+   provisional (`agents/derek/behavior-result.json`, con handoff verificado) y
+   Zorem implementa esa interfaz mientras Lorem redacta; Lorem tiene la
+   instrucción de conservar esa interfaz. Al terminar ambos, si la huella
+   `screenMethod`/`locatorName` de Lorem difiere del contrato, Zorem se
+   sincroniza con el resultado real (`parallelAuthors: false` fuerza la
+   secuencia). El adaptador de Copilot mantiene varias sesiones vivas y
+   `cancel()` las corta todas. Zorem recibe el borrador de un archivo `update`
+   como sus adiciones sobre `baseline` (getters, métodos, claves), no como el
+   archivo completo que ya está en `baselines/`.
    Una corrección de Gherkin solo invalida Zorem cuando cambia la interfaz
    `screenMethod`/`locatorName` de `actionTrace`. Cuando todos los gaps abiertos
    ya tienen decisión fijada por el plan (`create`/`reuse` por secuencia, o
