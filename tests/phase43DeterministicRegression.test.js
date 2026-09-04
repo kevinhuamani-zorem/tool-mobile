@@ -7,6 +7,7 @@ const os = require('node:os');
 const { DeterministicGenerator } = require('../dist/core/generation');
 const { AutomationResponseValidator } = require('../dist/core/validation');
 const { canonicalResponse } = require('./helpers/phase43Canonical.js');
+const { isolatedFramework } = require('./helpers/isolatedFramework');
 
 const FIXTURE_ROOT = path.join(process.cwd(), 'tests/fixtures/phase43');
 const CASES = [
@@ -28,7 +29,11 @@ async function copyFixture(srcDir, dstDir) {
     }));
 }
 
-test('phase43 deterministic fixtures remain stable and valid', async () => {
+test('phase43 deterministic fixtures remain stable and valid', async (t) => {
+    // Las fixtures se contrastan contra el estado commiteado del framework:
+    // lo que el QA tenga sin commitear (casos encadenados) no puede alterar
+    // este contrato ni hacer que colisione con sus propios artefactos.
+    isolatedFramework(t, 'avr-phase43-');
     const validator = new AutomationResponseValidator();
     for (const fixture of CASES) {
         const sourceDir = path.join(FIXTURE_ROOT, fixture.folder);

@@ -26,6 +26,12 @@ const {
     validatorRuleCodesFromSource,
 } = require('../dist/core/validation');
 
+const { isolatedFramework } = require('./helpers/isolatedFramework');
+
+// Toda la suite corre contra una copia del estado commiteado del framework:
+// los casos que el QA encadena sin commitear no pueden hacerla colisionar ni
+// alterar el catalogo que estos contratos asumen.
+isolatedFramework({ after: callback => test.after(callback) }, 'avr-pipeline-');
 const CONTRACT = frameworkContract(projectPaths.frameworkRoot);
 const { RecordingPlatformUpdater } = require('../dist/core/coverage');
 const { FrameworkScanner } = require('../dist/core/workspace');

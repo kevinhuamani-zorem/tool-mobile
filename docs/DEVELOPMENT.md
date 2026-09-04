@@ -281,7 +281,8 @@ eso `npm test` ejecuta `build:main` primero. Cubre al menos:
   el caso B reutiliza y amplía de forma aditiva lo que el caso A dejó en el
   working tree del framework.
 
-Los tests que escriben en el destino usan `tests/helpers/isolatedFramework.js`:
+Los tests que leen o escriben el destino (`automationPipeline`, `phase43`,
+casos encadenados) usan `tests/helpers/isolatedFramework.js`:
 copia el estado commiteado del framework padre (`git archive HEAD`) a una
 carpeta temporal y reconfigura el workspace hacia ella, con su propio runtime
 y registro de archivos generados. Así no dependen de lo que el QA tenga sin
