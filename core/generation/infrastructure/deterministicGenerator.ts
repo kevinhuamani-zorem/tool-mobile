@@ -471,11 +471,58 @@ function assertCreateArtifacts(
     }
 }
 
+const STEP_DEFINITION_PATTERN = /(?:Given|When|Then)\(\/\^([^\n]+?)\$\//g;
+
+function stepDefinitionBlocks(source: string): Array<{ name: string; code: string }> {
+    // Cada definicion termina en `});` al inicio de linea. El baseline y lo
+    // generado por el recorder cumplen ese formato; no se interpreta codigo.
+    return [...source.matchAll(/^(?:Given|When|Then)\(\/\^([^\n]+?)\$\/[\s\S]*?^\}\);/gm)]
+        .map(match => ({ name: match[1], code: match[0] }));
+}
+
+/**
+ * Un Steps `update` conserva el archivo existente y solo suma definiciones.
+ *
+ * Es la casuistica de encadenar casos sin commitear: el caso B reutiliza el
+ * Steps que dejo el caso A, y el validador exige (`destructive-update`) que
+ * el archivo propuesto siga exponiendo cada definicion de A. Screen y Locators
+ * ya se fusionaban; Steps se proponia entero de nuevo y el caso quedaba
+ * bloqueado aunque todo estuviera verificado.
+ */
+export function mergeStepsUpdate(baseline: string, generated: string): string {
+    const existing = new Set([...baseline.matchAll(STEP_DEFINITION_PATTERN)].map(match => match[1]));
+    const additions = stepDefinitionBlocks(generated).filter(block => !existing.has(block.name));
+    const baselineImports = new Set([...baseline.matchAll(/^import .+;$/gm)].map(match => match[0]));
+    const missingImports = [...generated.matchAll(/^import .+;$/gm)]
+        .map(match => match[0])
+        .filter(line => !baselineImports.has(line) && /screen/i.test(line));
+    if (!additions.length && !missingImports.length) return baseline;
+    let output = baseline.replace(/\s+$/, '');
+    if (missingImports.length) {
+        const lastImport = [...output.matchAll(/^import .+;$/gm)].pop();
+        if (lastImport && lastImport.index !== undefined) {
+            const end = lastImport.index + lastImport[0].length;
+            output = `${output.slice(0, end)}\n${missingImports.join('\n')}${output.slice(end)}`;
+        } else {
+            output = `${missingImports.join('\n')}\n\n${output}`;
+        }
+    }
+    return `${output}\n\n${additions.map(block => block.code).join('\n\n')}\n`;
+}
+
 function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan): GeneratedPreview {
     let screenContent = preview.screenContent;
     let locatorContent = preview.locatorContent;
+    let stepContent = preview.stepContent;
     const screenPlan = plan.files.find(file => file.layer === 'screen' && file.operation === 'update');
     const locatorPlan = plan.files.find(file => file.layer === 'locators' && file.operation === 'update');
+    const stepsPlan = plan.files.find(file => file.layer === 'steps' && file.operation === 'update');
+    if (stepsPlan && stepContent) {
+        stepContent = mergeStepsUpdate(
+            readUtf8File(path.join(projectPaths.frameworkRoot, stepsPlan.path)),
+            stepContent,
+        );
+    }
     if (screenPlan && screenContent) {
         const replacementGetters = new Set(plan.resolutions
             .filter(item => item.locatorReplacement && item.locatorName)
@@ -494,7 +541,7 @@ function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan
             plan,
         );
     }
-    return { ...preview, screenContent, locatorContent };
+    return { ...preview, screenContent, locatorContent, stepContent };
 }
 
 function responseFromPreview(

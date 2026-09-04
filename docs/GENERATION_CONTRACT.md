@@ -172,6 +172,11 @@ Examples:
   código ajeno ni se decide reutilización automáticamente.
 - El Screen Object se importa con
   `@screenobjects/<squad>/<modulo>.screen.ts`; no se admiten rutas relativas.
+- Un Steps planificado como `update` (el caso reutiliza el Screen Object de
+  otro caso, típicamente uno generado antes y todavía sin commitear) parte del
+  archivo existente y solo suma definiciones: el camino determinista fusiona
+  el baseline (`mergeStepsUpdate`) igual que ya hacía con Screen y Locators, y
+  `destructive-update` rechaza cualquier propuesta que pierda una definición.
 
 ## Screen Object
 

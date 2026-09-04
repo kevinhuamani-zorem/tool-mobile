@@ -277,6 +277,16 @@ eso `npm test` ejecuta `build:main` primero. Cubre al menos:
 - token de preview, edición revisada y escritura atómica;
 - API IPC cuando se cambie el bridge.
 - límites de contexto/SLA, trazabilidad y promoción exclusiva de calidad 100.
+- casos encadenados sin commitear (`chainedGenerationWithoutCommit.test.js`):
+  el caso B reutiliza y amplía de forma aditiva lo que el caso A dejó en el
+  working tree del framework.
+
+Los tests que escriben en el destino usan `tests/helpers/isolatedFramework.js`:
+copia el estado commiteado del framework padre (`git archive HEAD`) a una
+carpeta temporal y reconfigura el workspace hacia ella, con su propio runtime
+y registro de archivos generados. Así no dependen de lo que el QA tenga sin
+commitear ni tocan el framework real. `tests/helpers/applyAutomationResponse.js`
+reproduce fuera de Electron el flujo de `generate-automation-response`.
 
 El procedimiento completo, umbrales y controles manuales están en
 [`GENERATION_QUALITY_ASSURANCE.md`](GENERATION_QUALITY_ASSURANCE.md).

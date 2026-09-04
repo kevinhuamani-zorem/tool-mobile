@@ -444,12 +444,25 @@ function selectorUsesFakeWildcard(selector = ''): boolean {
  * `similarity` a secas cuenta palabras como "por" o "del", suficientes para que
  * "compartir constancia por correo" pareciera "buscar yapero por numero".
  */
+/**
+ * Sustantivos de interfaz que aparecen en casi cualquier metodo o clave del
+ * framework. `TECHNICAL_STOP_WORDS` ya los descarta en espanol; la variante
+ * traducida los reintroducia (`historyButton`, `txttitle`) y bastaban dos
+ * coincidencias como `button` y `title` para que un Screen ajeno pareciera
+ * cubrir las intenciones de una pantalla nueva y el plan lo extendiera.
+ */
+const GENERIC_UI_TOKENS = new Set([
+    'button', 'btn', 'txt', 'text', 'title', 'label', 'icon', 'screen', 'element',
+    'option', 'item', 'field', 'input', 'tab', 'see', 'show', 'view', 'validate',
+    'verify', 'check', 'press', 'tap', 'click', 'user', 'page',
+]);
+
 function conceptSimilarity(left: string, right: string): number {
     const variants = (value: string) => [value, translateToEnglish(value).name]
         .filter(Boolean)
         .map(candidate => new Set([
             ...words(candidate)
-                .filter(word => !TECHNICAL_STOP_WORDS.has(word))
+                .filter(word => !TECHNICAL_STOP_WORDS.has(word) && !GENERIC_UI_TOKENS.has(word))
                 .map(word => word.length >= 4 && word.endsWith('s') ? word.slice(0, -1) : word),
             // `words` descarta numeros de un digito. En filtros 7/15/30/90
             // ese numero es justamente lo que distingue una opcion de otra.

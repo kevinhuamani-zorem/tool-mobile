@@ -269,3 +269,45 @@ test('reemplazo autorizado modifica solo la plataforma grabada del locator', () 
     assert.equal(merged.movementsAndroid.btntoday, 'new-verified-android');
     assert.equal(merged.movementsIos.btntoday, 'existing-ios');
 });
+
+// Encadenar casos sin commitear: B reutiliza el Steps de A. La fusion conserva
+// cada definicion de A, no duplica el import del Screen Object y solo suma lo
+// que A todavia no tenia.
+test('mergeStepsUpdate conserva las definiciones del baseline y agrega solo las nuevas', () => {
+    const { mergeStepsUpdate } = require('../dist/core/generation');
+    const baseline = [
+        '// Generado por Appium Recorder',
+        "import { Then, When } from '@wdio/cucumber-framework';",
+        "import historyScreen from '@screenobjects/payment/history.screen.ts';",
+        '',
+        'When(/^el usuario consulta el historial$/, async () => {',
+        '    await historyScreen.userViewHistory();',
+        '});',
+        '',
+        'Then(/^se muestra el titulo del historial$/, async () => {',
+        '    await historyScreen.showHistoryTitle();',
+        '});',
+        '',
+    ].join('\n');
+    const generated = [
+        '// Generado por Appium Recorder',
+        "import { Then, When } from '@wdio/cucumber-framework';",
+        "import historyScreen from '@screenobjects/payment/history.screen.ts';",
+        '',
+        'When(/^el usuario descarga el historial$/, async () => {',
+        '    await historyScreen.userDownloadHistory();',
+        '});',
+        '',
+        'Then(/^se muestra el titulo del historial$/, async () => {',
+        '    await historyScreen.showHistoryTitle();',
+        '});',
+        '',
+    ].join('\n');
+    const merged = mergeStepsUpdate(baseline, generated);
+    assert.match(merged, /el usuario consulta el historial/);
+    assert.match(merged, /el usuario descarga el historial/);
+    assert.equal([...merged.matchAll(/se muestra el titulo del historial/g)].length, 1, 'la definicion repetida no se duplica');
+    assert.equal([...merged.matchAll(/^import historyScreen/gm)].length, 1, 'el import no se duplica');
+    assert.ok(merged.startsWith(baseline.trimEnd()), 'el baseline se conserva byte a byte al inicio');
+    assert.equal(mergeStepsUpdate(baseline, baseline), baseline, 'sin novedades devuelve el baseline intacto');
+});

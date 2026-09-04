@@ -694,3 +694,45 @@ test('un objetivo procedimental no se usa y la fila queda marcada template', () 
     // Un criterio demasiado corto tampoco sirve como resultado esperado.
     assert.equal(rows.find(row => row.keyword === 'Then').wording, 'template');
 });
+
+// Una pantalla nueva no se "extiende" sobre un Screen ajeno solo porque ambos
+// hablen de botones y titulos: `button` y `title` aparecen en casi cualquier
+// metodo o clave del framework y no prueban relacion alguna. Antes bastaban
+// dos coincidencias asi para que el plan marcara `update` sobre otro modulo.
+test('sustantivos genericos de interfaz no convierten un Screen ajeno en objetivo de extension', () => {
+    const OTP_SCREEN = 'screenobjects/payment/yapear-otp.screen.ts';
+    const OTP_LOCATORS = 'resources/locators/payment/yapear-otp.locator.json';
+    const otpMethod = (name, signature, locatorKeys) => ({
+        name, file: OTP_SCREEN, squad: 'payment', locatorFiles: [OTP_LOCATORS], signature, locatorKeys, className: 'YapearOtpScreen',
+    });
+    const catalog = {
+        getCatalog: () => ({
+            squad: 'payment', featureScope: '', platform: 'android',
+            locators: [
+                { ...locator('txttitleYapeoAlto', '~Yapeo alto'), file: OTP_LOCATORS, module: 'yapear-otp' },
+                { ...locator('btnValidateCode', '~Validar codigo'), file: OTP_LOCATORS, module: 'yapear-otp' },
+            ],
+            stepDefinitions: [], features: [], scenarios: [],
+            screenMethods: [
+                otpMethod('validateConfirmaYapeoAltoScreen', 'validateConfirmaYapeoAltoScreen(): Promise<void>', ['txttitleYapeoAlto']),
+                otpMethod('pressButtonValideCode', 'pressButtonValideCode(): Promise<void>', ['btnValidateCode']),
+            ],
+            artifactBundles: [],
+        }),
+    };
+    const resolver = new DeterministicResolver(catalog);
+    const result = resolver.resolve({
+        ...scenario([
+            { action: 'CLICK', sequence: 1, selector: 'android=new UiSelector().text("Historial encadenado")', locatorType: 'ANDROID', locatorValue: 'new UiSelector().text("Historial encadenado")', selectorVerified: true, contextHint: 'boton de historial encadenado', platform: 'android' },
+            { action: 'CLICK', sequence: 2, selector: '~Ver detalle encadenado', locatorType: 'ID', locatorValue: 'Ver detalle encadenado', selectorVerified: true, contextHint: 'boton de ver detalle encadenado', platform: 'android' },
+            { action: 'VERIFICAR_EXISTE', sequence: 3, selector: '~Titulo historial encadenado', locatorType: 'ID', locatorValue: 'Titulo historial encadenado', selectorVerified: true, contextHint: 'titulo del historial encadenado', platform: 'android' },
+        ]),
+        objective: 'el usuario consulta el historial encadenado',
+        acceptanceCriteria: 'se muestra el titulo del historial encadenado',
+    });
+    const screen = result.plan.files.find(file => file.layer === 'screen');
+    assert.equal(screen.operation, 'create', `no debe extender ${screen.path}`);
+    assert.notEqual(screen.path, OTP_SCREEN);
+    assert.equal(result.unresolvedContext.gaps.some(gap => gap.id === 'gap-extend-existing-artifacts'), false);
+    assert.equal(result.plan.deterministicCoverage, 1);
+});
