@@ -64,7 +64,14 @@ permanecen en el proceso principal.
     propuesta de automatización.
   - `review/`: el wizard "Enlazar" (constructor de escenario Gherkin), el
     pipeline de automatización con agente (progreso, decisiones de QA) y la
-    revisión/revalidación de una propuesta antes de aplicarla.
+    revisión/revalidación de una propuesta antes de aplicarla. El progreso se
+    pinta por agente en `#automationAgentStages` (una fila por Lorem, Zorem y
+    Sumrak con estado, evidencia en KB, ejecución por caché/determinista,
+    `budgetWarnings` y corte por hang stop); Lorem y Zorem pueden estar en
+    curso a la vez y el resumen dice "trabajan en paralelo". El panel
+    `#qaObservationsPanel` muestra tanto erratas del texto de la app
+    (`ui-text-quality`) como verificaciones con XPath genérico
+    (`weak-assertion`), y el reporte copiable las incluye; ninguna bloquea.
   - `shared/domHelpers.js`: helpers de DOM genéricos (`disableBtn`,
     `enableBtn`, `updateDeviceScreen`, `escapeHtml`, `setLabelState`) sin
     estado propio, reutilizados por varias features en vez de duplicarlos.

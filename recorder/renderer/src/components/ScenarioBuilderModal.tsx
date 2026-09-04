@@ -116,6 +116,7 @@ export function ScenarioBuilderModal() {
               </div>
               <div id="automationPipelineStatus" className="generate-result" />
               <div id="automationPipelineSummary" className="wizard-help" />
+              <ul id="automationAgentStages" className="automation-agent-stages" aria-live="polite" style={{display: 'none'}} />
             </div>
             <div id="wizardGherkinHost" style={{display: 'none'}}>
               <div id="scenarioRows" className="scenario-rows wizard-gherkin-rows">

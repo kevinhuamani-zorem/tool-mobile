@@ -70,6 +70,7 @@ export function createReviewFeature(deps) {
     const automationPipelineStatus = document.getElementById('automationPipelineStatus');
     const automationPipelineSummary = document.getElementById('automationPipelineSummary');
     const automationPipelineStages = document.getElementById('automationPipelineStages');
+    const automationAgentStages = document.getElementById('automationAgentStages');
     const automationWorkingState = document.getElementById('automationWorkingState');
     const automationWorkingTitle = document.getElementById('automationWorkingTitle');
     const automationWorkingDetail = document.getElementById('automationWorkingDetail');
@@ -95,6 +96,8 @@ export function createReviewFeature(deps) {
     let automationPipelineRunning = false;
     let pendingQaDecisionPrompts = [];
     let qaObservations = [];
+    /** Estado por agente del pipeline por capas; Lorem y Zorem pueden coincidir en curso. */
+    const agentStages = new Map();
 
     // Estado del constructor de escenario
     let enlazarSteps   = [];   // copia de recordedSteps al abrir el modal
@@ -113,7 +116,14 @@ export function createReviewFeature(deps) {
     function hasInvalidAutomationDraft() { return Boolean(state.invalidAutomationDraft); }
 
     function qaReportText() {
-        return qaObservations.map(observation => [
+        return qaObservations.map(observation => observation.type === 'weak-assertion' ? [
+            'Título: Verificación con selector genérico',
+            `Plataforma: ${String(observation.platform || '').toUpperCase()}`,
+            `Selector: ${observation.selector}`,
+            `Evidencia: acción ${observation.actionSequence}`,
+            `Detalle: ${observation.message}`,
+            'Nota: el selector grabado se conserva; la automatización puede refinarlo en el Screen Object.',
+        ].join('\n') : [
             'Título: Texto incorrecto en la aplicación',
             `Plataforma: ${String(observation.platform || '').toUpperCase()}`,
             `Actual: “${observation.actual}”`,
@@ -124,16 +134,94 @@ export function createReviewFeature(deps) {
         ].join('\n')).join('\n\n---\n\n');
     }
 
+    const AGENT_LAYERS = {
+        Lorem: 'Feature y Steps',
+        Zorem: 'Screen Object y Locators',
+        Sumrak: 'Integración',
+    };
+
+    function formatKilobytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return '';
+        return `${(bytes / 1024).toFixed(1).replace('.', ',')} KB`;
+    }
+
+    function resetAgentStages() {
+        agentStages.clear();
+        renderAgentStages();
+    }
+
+    function renderAgentStages() {
+        if (!automationAgentStages) return;
+        if (!agentStages.size) {
+            automationAgentStages.style.display = 'none';
+            automationAgentStages.innerHTML = '';
+            return;
+        }
+        const running = [...agentStages.values()].filter(stage => stage.roleState === 'running').map(stage => stage.agentName);
+        automationAgentStages.style.display = '';
+        automationAgentStages.innerHTML = [...agentStages.values()].map(stage => {
+            const layers = AGENT_LAYERS[stage.agentName] || (stage.assignedLayers || []).join(', ');
+            const execution = stage.execution === 'cache'
+                ? 'reutilizó una salida verificada'
+                : stage.execution === 'deterministic'
+                    ? 'Derek lo resolvió sin Copilot'
+                    : stage.roleState === 'running'
+                        ? (running.length > 1 ? 'en curso, en paralelo' : 'en curso')
+                        : stage.roleState === 'repairing'
+                            ? 'reparando'
+                            : stage.roleState === 'failed'
+                                ? 'falló'
+                                : 'completado';
+            const context = formatKilobytes(stage.evidenceBytes ?? stage.contextBytes);
+            const details = [
+                execution,
+                context ? `${context} de evidencia` : '',
+                stage.timedOut ? 'se cortó por el hang stop' : '',
+            ].filter(Boolean).join(' · ');
+            const warnings = (stage.budgetWarnings || []).map(warning =>
+                `<span class="agent-budget-warning">⚠ ${escapeHtml(warning)}</span>`
+            ).join('');
+            const error = stage.error ? `<small>${escapeHtml(stage.error)}</small>` : '';
+            return `<li data-agent="${escapeHtml(stage.agentName)}" class="is-${escapeHtml(stage.roleState || 'running')}">` +
+                `<span></span><div><strong>${escapeHtml(stage.agentName)}</strong> · ${escapeHtml(layers)}` +
+                `<small>${escapeHtml(details)}</small>${warnings}${error}</div></li>`;
+        }).join('');
+    }
+
+    function trackAgentStage(progress) {
+        if (!progress?.agentName) return;
+        agentStages.set(progress.agentName, {
+            ...(agentStages.get(progress.agentName) || {}),
+            agentName: progress.agentName,
+            roleState: progress.roleState,
+            execution: progress.execution,
+            contextBytes: progress.contextBytes,
+            evidenceBytes: progress.evidenceBytes,
+            budgetWarnings: progress.budgetWarnings || [],
+            timedOut: Boolean(progress.timedOut),
+            assignedLayers: progress.assignedLayers || [],
+            error: progress.roleState === 'failed' ? (progress.error || progress.detail || '') : '',
+        });
+        renderAgentStages();
+    }
+
     function renderQaObservations(observations = []) {
         qaObservations = Array.isArray(observations) ? observations : [];
         if (!qaObservationsPanel || !qaObservationsList) return;
         qaObservationsPanel.style.display = qaObservations.length ? 'block' : 'none';
-        qaObservationsList.innerHTML = qaObservations.map(observation =>
-            `<li><strong>${escapeHtml(observation.actual)}</strong> debería decir ` +
-            `<strong>${escapeHtml(observation.expected)}</strong>` +
-            `<small>${escapeHtml(String(observation.platform || '').toUpperCase())} · acción ` +
-            `${escapeHtml(String(observation.actionSequence))}. El locator conserva el texto real.</small></li>`
-        ).join('');
+        qaObservationsList.innerHTML = qaObservations.map(observation => {
+            const where = `${escapeHtml(String(observation.platform || '').toUpperCase())} · acción ` +
+                `${escapeHtml(String(observation.actionSequence))}`;
+            if (observation.type === 'weak-assertion') {
+                return `<li><strong>Verificación con XPath genérico:</strong> ` +
+                    `<code>${escapeHtml(observation.selector || '')}</code>` +
+                    `<small>${where}. El selector se conserva tal cual; si buscas un elemento concreto, ` +
+                    'refínalo o pide al agente que lo haga en código.</small></li>';
+            }
+            return `<li><strong>${escapeHtml(observation.actual)}</strong> debería decir ` +
+                `<strong>${escapeHtml(observation.expected)}</strong>` +
+                `<small>${where}. El locator conserva el texto real.</small></li>`;
+        }).join('');
         if (qaReportCopyStatus) qaReportCopyStatus.textContent = '';
     }
 
@@ -649,6 +737,7 @@ export function createReviewFeature(deps) {
         let model;
         try { model = copilotModel.selected(); }
         catch (error) { setStatus(error.message, 'red'); return; }
+        resetAgentStages();
         const objective = txtAutomationObjective.value.trim();
         const acceptanceCriteria = txtAutomationAcceptance.value.trim();
         if (!objective || !acceptanceCriteria) {
@@ -822,12 +911,19 @@ export function createReviewFeature(deps) {
     function mount() {
         ipcUnsubscribers.push(api.onAutomationProgress?.(progress => {
             if (!progress || !progress.stage) return;
+            trackAgentStage(progress);
+            const running = [...agentStages.values()]
+                .filter(stage => stage.roleState === 'running')
+                .map(stage => stage.agentName);
+            const parallel = running.length > 1 && progress.roleState === 'running';
             const detail = progress.error
                 ? progress.error
                 : (progress.detail || (progress.total ? `${progress.completed}/${progress.total}` : ''));
             updateProductStage(
                 progress.stage,
-                progress.message || 'Actualizando progreso...',
+                parallel
+                    ? `${running.join(' y ')} trabajan en paralelo`
+                    : (progress.message || 'Actualizando progreso...'),
                 detail,
                 progress.stage === 'FAILED',
             );
@@ -845,6 +941,7 @@ export function createReviewFeature(deps) {
             state.invalidAutomationDraft = null;
             renderQaObservations([]);
             renderTestDesignSuggestions(null);
+            resetAgentStages();
             generation.invalidatePreview();
             if (automationPackageStatus) {
                 automationPackageStatus.textContent = '';

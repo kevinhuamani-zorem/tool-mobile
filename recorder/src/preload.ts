@@ -1,5 +1,31 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+/**
+ * Progreso del pipeline. Los campos por agente llegan del pipeline por capas:
+ * Lorem y Zorem pueden reportar `running` a la vez, y cada etapa trae su
+ * presupuesto (avisos que informan, nunca recortan) y su contexto real.
+ */
+interface AutomationProgressPayload {
+    stage: string;
+    message: string;
+    completed: number;
+    total: number;
+    detail?: string;
+    error?: string;
+    role?: string;
+    agentName?: string;
+    sessionName?: string;
+    roleState?: 'pending' | 'running' | 'repairing' | 'completed' | 'failed';
+    execution?: 'agent' | 'cache' | 'deterministic';
+    cacheHit?: boolean;
+    contextBytes?: number;
+    contextFiles?: number;
+    evidenceBytes?: number;
+    budgetWarnings?: string[];
+    timedOut?: boolean;
+    assignedLayers?: string[];
+}
+
 contextBridge.exposeInMainWorld('api', {
     // ── Framework ────────────────────────────────────────────────────────────
     scanFramework:       ()                     => ipcRenderer.invoke('scan-framework'),
@@ -64,22 +90,8 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('embedded-inspector-element-used', wrapped);
         return () => ipcRenderer.removeListener('embedded-inspector-element-used', wrapped);
     },
-    onAutomationProgress: (listener: (progress: {
-        stage: string;
-        message: string;
-        completed: number;
-        total: number;
-        detail?: string;
-        error?: string;
-    }) => void) => {
-        const wrapped = (_event: Electron.IpcRendererEvent, payload: {
-            stage: string;
-            message: string;
-            completed: number;
-            total: number;
-            detail?: string;
-            error?: string;
-        }) => listener(payload);
+    onAutomationProgress: (listener: (progress: AutomationProgressPayload) => void) => {
+        const wrapped = (_event: Electron.IpcRendererEvent, payload: AutomationProgressPayload) => listener(payload);
         ipcRenderer.on('automation-progress', wrapped);
         return () => ipcRenderer.removeListener('automation-progress', wrapped);
     },

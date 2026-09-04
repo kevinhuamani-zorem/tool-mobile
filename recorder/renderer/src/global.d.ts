@@ -30,6 +30,14 @@ declare global {
                     total: number;
                     detail?: string;
                     error?: string;
+                    agentName?: string;
+                    roleState?: 'pending' | 'running' | 'repairing' | 'completed' | 'failed';
+                    execution?: 'agent' | 'cache' | 'deterministic';
+                    contextBytes?: number;
+                    evidenceBytes?: number;
+                    budgetWarnings?: string[];
+                    timedOut?: boolean;
+                    assignedLayers?: string[];
                 }) => void,
             ): () => void;
             getAutomationQaDecisions(): Promise<any>;
