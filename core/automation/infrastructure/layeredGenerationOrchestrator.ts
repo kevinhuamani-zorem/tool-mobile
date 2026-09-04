@@ -158,7 +158,10 @@ function copyIfPresent(
         fs.copyFileSync(source, target);
         return;
     }
-    writeJsonUtf8(target, projectSharedJson(relativePath, readJsonUtf8<any>(source), judgment));
+    writeJsonUtf8(target, projectIntegrationJson(
+        relativePath,
+        projectSharedJson(relativePath, readJsonUtf8<any>(source), judgment),
+    ));
 }
 
 /**
@@ -201,10 +204,13 @@ function projectRoleJson(relativePath: string, value: any, role: AuthorRole): an
         };
     }
     if (relativePath === 'validation-contract.json') {
+        // Los autores no emiten resoluciones: las reglas de integracion son de
+        // Derek y Sumrak.
         const rules = (value.rules || []).filter((rule: any) =>
-            role === 'behavior-author'
+            !INTEGRATION_RULE_CODES.has(rule.code)
+            && (role === 'behavior-author'
                 ? !INTERACTION_RULE_CODES.has(rule.code)
-                : !BEHAVIOR_RULE_CODES.has(rule.code)
+                : !BEHAVIOR_RULE_CODES.has(rule.code))
         );
         return {
             ...value,
@@ -232,7 +238,16 @@ function projectRoleJson(relativePath: string, value: any, role: AuthorRole): an
             recordingId: value.recordingId,
             decision: value.decision,
             reuseTarget: value.reuseTarget,
-            elements: value.elements || [],
+            // El codigo de cada getter ya viaja integro en `baselines/`; aqui
+            // solo hace falta la identidad del elemento y sus locators.
+            elements: (value.elements || []).map((module: any) => ({
+                ...module,
+                elements: (module?.elements || []).map((element: any) => {
+                    const { getter, ...rest } = element || {};
+                    void getter;
+                    return rest;
+                }),
+            })),
             updateBaselines: (value.updateBaselines || []).filter((item: any) =>
                 item?.layer === 'screen' || item?.layer === 'locators'
             ),
@@ -701,6 +716,35 @@ function gapJudgment(packageDirectory: string, plan: GenerationPlan): GapJudgmen
 
 /** Campos del protocolo de queries: en el pipeline por capas no hay ronda de consultas. */
 const GAP_QUERY_FIELDS = ['allowedQueries', 'allowedQueryArgsSchemas', 'maxQueries', 'expectedAnswerSchema'];
+
+/**
+ * Sumrak decide resoluciones y trazabilidad; no escribe codigo. Recibe el
+ * catalogo de reglas de integracion y la reutilizacion sin el codigo de los
+ * elementos, que solo necesitan los autores.
+ */
+function projectIntegrationJson(relativePath: string, value: any): any {
+    if (relativePath === 'validation-contract.json') {
+        const rules = (value.rules || []).filter((rule: any) => INTEGRATION_RULE_CODES.has(rule.code));
+        return {
+            ...value,
+            totalRules: rules.length,
+            expressibleWithMinimalExampleCount: rules.filter((rule: any) => rule.minimalExample).length,
+            explanationOnlyCount: rules.filter((rule: any) => rule.needsExplanation).length,
+            rules,
+        };
+    }
+    if (relativePath === 'reuse-context.json') {
+        return {
+            schemaVersion: value.schemaVersion,
+            recordingId: value.recordingId,
+            decision: value.decision,
+            reuseTarget: value.reuseTarget,
+            candidates: value.candidates || [],
+            updateBaselines: value.updateBaselines || [],
+        };
+    }
+    return value;
+}
 
 /**
  * Proyeccion comun a todos los roles: los agentes reciben unicamente los gaps

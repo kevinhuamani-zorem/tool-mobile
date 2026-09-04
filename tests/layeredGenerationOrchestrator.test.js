@@ -192,7 +192,7 @@ test('separa la memoria del framework según el ownership de Lorem y Zorem', asy
         recordingId: 'rec-1',
         decision: 'extend-existing',
         candidates: [{ feature: 'Caso existente', file: 'features/payment/existing.feature' }],
-        elements: [{ module: 'payment/movements', elements: [{ name: 'btnFilter' }] }],
+        elements: [{ module: 'payment/movements', elements: [{ name: 'btnFilter', locators: { android: { value: '~filter' } }, getter: '    public get btnFilter() { return "..."; }' }] }],
         updateBaselines: [
             { layer: 'steps', reference: 'baselines/steps-existing.ts' },
             { layer: 'screen', reference: 'baselines/screen-existing.ts' },
@@ -214,6 +214,7 @@ test('separa la memoria del framework según el ownership de Lorem y Zorem', asy
             { code: 'assertion', minimalExample: 'Then resultado' },
             { code: 'create-locator-contract', minimalExample: 'get locator()' },
             { code: 'typescript-syntax', minimalExample: 'class Screen {}' },
+            { code: 'missing-gap-resolution', minimalExample: '{ "gapId": "gap-1", "decision": "create" }' },
         ],
     });
     const calls = [];
@@ -222,6 +223,13 @@ test('separa la memoria del framework según el ownership de Lorem y Zorem', asy
     const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
 
     assert.equal(result.success, true);
+    // Sumrak no escribe codigo: reglas de integracion y reutilizacion sin elementos.
+    const sumrakReuse = JSON.parse(fs.readFileSync(path.join(root, 'agents/sumrak/reuse-context.json')));
+    const sumrakValidation = JSON.parse(fs.readFileSync(path.join(root, 'agents/sumrak/validation-contract.json')));
+    assert.equal('elements' in sumrakReuse, false);
+    assert.equal(Array.isArray(sumrakReuse.candidates), true);
+    assert.deepEqual(sumrakValidation.rules.map(rule => rule.code), ['missing-gap-resolution']);
+    assert.equal(sumrakValidation.totalRules, 1);
     const loremReuse = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/reuse-context.json')));
     const zoremReuse = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/reuse-context.json')));
     const loremValidation = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/validation-contract.json')));
@@ -230,6 +238,10 @@ test('separa la memoria del framework según el ownership de Lorem y Zorem', asy
     assert.equal('elements' in loremReuse, false);
     assert.equal(Array.isArray(zoremReuse.elements), true);
     assert.equal('candidates' in zoremReuse, false);
+    // El codigo del getter ya viaja en baselines/: Zorem recibe identidad y locators.
+    assert.equal(zoremReuse.elements[0].elements[0].name, 'btnFilter');
+    assert.equal('locators' in zoremReuse.elements[0].elements[0], true);
+    assert.equal('getter' in zoremReuse.elements[0].elements[0], false);
     assert.equal(fs.existsSync(path.join(root, 'agents/zorem/resolved-context.json')), false);
     assert.equal(fs.existsSync(path.join(root, 'agents/lorem/unresolved-context.json')), false);
     assert.equal(fs.existsSync(path.join(root, 'agents/zorem/unresolved-context.json')), false);

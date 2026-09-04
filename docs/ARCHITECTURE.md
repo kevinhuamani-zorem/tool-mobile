@@ -285,7 +285,10 @@ XML, screenshots, source, capabilities ni credenciales.
    exigen juicio y sin `allowedQueries`/schemas (en este pipeline no hay ronda
    de consultas); su copia de `generation-plan.json` lleva `unresolvedGapIds`
    filtrado y `fixedGapResolutions`. El `gaps.json` del paquete no cambia: es
-   el que revisa el QA.
+   el que revisa el QA. Zorem recibe `reuse-context.elements` sin el código de
+   los getters (ya viaja íntegro en `baselines/`); Sumrak recibe solo las
+   reglas de integración del catálogo y la reutilización sin elementos, y los
+   autores no reciben reglas de integración.
    Cada rol usa una memoria aislada descrita por `agent-memory.json`. Lorem
    recibe únicamente evidencia funcional para `feature/steps`; Zorem recibe
    selectores, APIs y baselines de `screen/locators`; Sumrak recibe los dos
