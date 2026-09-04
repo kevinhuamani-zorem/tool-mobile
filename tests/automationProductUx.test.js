@@ -209,7 +209,7 @@ test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {
 
 test('el roast se genera en otra sesión y nunca bloquea el diagnóstico semántico', () => {
     const orchestrator = fs.readFileSync(path.join(
-        root, 'core/automation/infrastructure/agentOrchestrator.ts'
+        root, 'core/automation/infrastructure/agent/prompts.ts'
     ), 'utf8');
 
     assert.match(orchestrator, /No incluyas roast ni contenido humorístico/);
