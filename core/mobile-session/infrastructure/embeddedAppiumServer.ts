@@ -136,6 +136,20 @@ export class EmbeddedAppiumServer {
         throw new Error('No se pudo iniciar el servidor Appium integrado.');
     }
 
+    /**
+     * Puerto del servidor vivo; si el proceso murio o nunca arranco, lo
+     * relanza. Es lo que llama cada inicio de sesion: cerrar una sesion no
+     * apaga el servidor, pero un Appium caido no puede obligar a reiniciar
+     * la app.
+     */
+    async ensureRunning(): Promise<number> {
+        const alive = this.process !== null && this.process.exitCode === null;
+        if (alive && await statusReady(this.port)) return this.port;
+        if (!alive && await statusReady(this.port) && !this.owned) return this.port;
+        await this.stop();
+        return this.start();
+    }
+
     async stop(): Promise<void> {
         const child = this.process;
         this.process = null;

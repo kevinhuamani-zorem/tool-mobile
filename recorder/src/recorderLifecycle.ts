@@ -51,15 +51,42 @@ export class RecorderSessionOwnership {
     }
 }
 
+/**
+ * Dos alcances de limpieza. `closeSession()` libera lo que pertenece a la
+ * sesion de grabacion (Inspector embebido y sesion Appium del dispositivo)
+ * para que el QA elija otro caso sin salir de la app; el servidor Appium
+ * integrado sigue vivo. `cleanup()` es el cierre de la app: sesion y, despues,
+ * los recursos de proceso (servidor Appium). Antes cerrar sesion apagaba el
+ * servidor y la siguiente conexion fallaba con "Appium no responde".
+ */
 export class RecorderRuntimeLifecycle {
     private cleanupInProgress: Promise<void> | null = null;
+    private sessionCloseInProgress: Promise<void> | null = null;
 
-    constructor(private readonly tasks: RecorderCleanupTask[]) {}
+    constructor(
+        private readonly sessionTasks: RecorderCleanupTask[],
+        private readonly shutdownTasks: RecorderCleanupTask[] = [],
+    ) {}
+
+    closeSession(): Promise<void> {
+        if (this.cleanupInProgress) return this.cleanupInProgress;
+        if (this.sessionCloseInProgress) return this.sessionCloseInProgress;
+        const closing = Promise.resolve().then(() => this.runTasks(this.sessionTasks));
+        const tracked = closing.finally(() => {
+            if (this.sessionCloseInProgress === tracked) this.sessionCloseInProgress = null;
+        });
+        this.sessionCloseInProgress = tracked;
+        return tracked;
+    }
 
     cleanup(): Promise<void> {
         if (this.cleanupInProgress) return this.cleanupInProgress;
 
-        const cleanup = Promise.resolve().then(() => this.runTasks());
+        const cleanup = Promise.resolve().then(async () => {
+            const pendingSessionClose = this.sessionCloseInProgress;
+            if (pendingSessionClose) await pendingSessionClose.catch(() => undefined);
+            await this.runTasks([...this.sessionTasks, ...this.shutdownTasks]);
+        });
         const tracked = cleanup.finally(() => {
             if (this.cleanupInProgress === tracked) this.cleanupInProgress = null;
         });
@@ -67,9 +94,9 @@ export class RecorderRuntimeLifecycle {
         return tracked;
     }
 
-    private async runTasks(): Promise<void> {
+    private async runTasks(tasks: RecorderCleanupTask[]): Promise<void> {
         const failures: string[] = [];
-        for (const task of this.tasks) {
+        for (const task of tasks) {
             try {
                 await task();
             } catch (error) {

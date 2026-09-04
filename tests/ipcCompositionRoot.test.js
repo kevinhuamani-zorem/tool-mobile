@@ -181,4 +181,10 @@ test('la limpieza de ciclo de vida sigue siendo Inspector embebido primero y ses
         main,
         /const recorderLifecycle = new RecorderRuntimeLifecycle\(\[\s*\(\) => closeEmbeddedInspectorResources\([\s\S]*?\(\) => closeOwnedSession\(/,
     );
+    // El servidor Appium integrado es un recurso de proceso: se apaga solo
+    // al cerrar la app, nunca al cerrar una sesion para elegir otro caso.
+    assert.match(main, /\], \[[\s\S]*?\(\) => appiumServer\.stop\(\),\s*\]\);/);
+    assert.match(familySource.sessionHandlers, /ipcMain\.handle\('close-session'[\s\S]*?recorderLifecycle\.closeSession\(\)/);
+    assert.doesNotMatch(familySource.sessionHandlers, /ipcMain\.handle\('close-session'[\s\S]*?recorderLifecycle\.cleanup\(\)/);
+    assert.match(familySource.sessionHandlers, /appiumServer\.ensureRunning\(\)/);
 });

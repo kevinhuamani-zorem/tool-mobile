@@ -174,6 +174,9 @@ app.whenReady().then(async () => {
     const recorderLifecycle = new RecorderRuntimeLifecycle([
         () => closeEmbeddedInspectorResources(state, embeddedInspectorProxy),
         () => closeOwnedSession(state, dm, automationRecordingStore, sessionOwnership),
+    ], [
+        // Solo al cerrar la app: cerrar una sesion para elegir otro caso deja
+        // el servidor Appium integrado vivo.
         () => appiumServer.stop(),
     ]);
     activeRecorderLifecycle = recorderLifecycle;
@@ -194,6 +197,7 @@ app.whenReady().then(async () => {
         automationRecordingStore,
         sessionOwnership,
         recorderLifecycle,
+        appiumServer,
     });
     registerInspectorHandlers({ state, embeddedInspectorProxy });
     registerInteractionHandlers({ state, syncRecording });

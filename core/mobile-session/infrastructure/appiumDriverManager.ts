@@ -46,8 +46,14 @@ export class AppiumDriverManager {
     protected sessionProvider: AppiumSessionProvider = 'local';
     protected serverUrl: string;
 
-    constructor(protected readonly serverPort = 4723) {
+    constructor(protected serverPort = 4723) {
         this.serverUrl = `http://127.0.0.1:${serverPort}`;
+    }
+
+    /** El servidor integrado puede relanzarse en otro puerto libre. */
+    useServerPort(port: number): void {
+        this.serverPort = port;
+        this.serverUrl = `http://127.0.0.1:${port}`;
     }
 
     async startAppiumServer(): Promise<void> {

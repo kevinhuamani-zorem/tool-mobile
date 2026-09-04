@@ -90,3 +90,47 @@ test('closing during session acquisition cancels continuation and quits the acqu
     await ownership.close();
     assert.equal(manager.quitCalls, 1);
 });
+
+// Cerrar sesion es "elegir otro caso": suelta Inspector y sesion del
+// dispositivo pero deja vivo el servidor Appium integrado. Solo el cierre de
+// la app apaga los recursos de proceso, y en ese orden.
+test('closing the session keeps process resources alive; app cleanup releases everything once', async () => {
+    const calls = [];
+    const lifecycle = new RecorderRuntimeLifecycle([
+        () => { calls.push('inspector'); },
+        async () => { calls.push('session'); },
+    ], [
+        async () => { calls.push('appium-server'); },
+    ]);
+
+    await lifecycle.closeSession();
+    assert.deepEqual(calls, ['inspector', 'session']);
+
+    calls.length = 0;
+    const first = lifecycle.closeSession();
+    const second = lifecycle.closeSession();
+    assert.equal(first, second, 'dos cierres de sesion concurrentes son uno');
+    await first;
+    assert.deepEqual(calls, ['inspector', 'session']);
+
+    calls.length = 0;
+    await lifecycle.cleanup();
+    assert.deepEqual(calls, ['inspector', 'session', 'appium-server']);
+});
+
+test('app cleanup waits for a session close already in flight and then shuts down process resources', async () => {
+    const calls = [];
+    let releaseSession;
+    const sessionClosed = new Promise(resolve => { releaseSession = resolve; });
+    const lifecycle = new RecorderRuntimeLifecycle([
+        async () => { calls.push('session'); await sessionClosed; },
+    ], [
+        () => { calls.push('appium-server'); },
+    ]);
+    const closing = lifecycle.closeSession();
+    const cleanup = lifecycle.cleanup();
+    assert.notEqual(closing, cleanup);
+    releaseSession();
+    await Promise.all([closing, cleanup]);
+    assert.deepEqual(calls, ['session', 'session', 'appium-server']);
+});

@@ -6,6 +6,7 @@ import {
     AppiumDriverManager,
     BrowserStackDriverManager,
     BrowserStackConfig,
+    EmbeddedAppiumServer,
     LocatorManager,
     MobileStepExecutor,
 } from '../../../core/mobile-session';
@@ -68,10 +69,12 @@ export interface SessionHandlersContext {
     automationRecordingStore: AutomationRecordingStore;
     sessionOwnership: RecorderSessionOwnership;
     recorderLifecycle: RecorderRuntimeLifecycle;
+    /** Servidor Appium integrado; opcional para no romper composiciones de prueba. */
+    appiumServer?: Pick<EmbeddedAppiumServer, 'ensureRunning'>;
 }
 
 export function registerSessionHandlers(context: SessionHandlersContext): void {
-    const { state, dm, bsDm, automationRecordingStore, sessionOwnership, recorderLifecycle } = context;
+    const { state, dm, bsDm, automationRecordingStore, sessionOwnership, recorderLifecycle, appiumServer } = context;
 
     ipcMain.handle('get-devices', async () => {
         let devices;
@@ -141,6 +144,10 @@ export function registerSessionHandlers(context: SessionHandlersContext): void {
             state.activeSquad = config.squad || 'payment';
             state.activeEnvironment = config.environment || '';
             await sessionOwnership.acquire(dm, async () => {
+                // Si el servidor integrado murio (o lo mato una version
+                // anterior al cerrar sesion), se relanza en vez de pedirle al
+                // QA que reinicie el recorder.
+                if (appiumServer) dm.useServerPort(await appiumServer.ensureRunning());
                 await dm.startAppiumServer();
                 await dm.init({ ...config, platform: state.recordingPlatform });
             });
@@ -459,7 +466,9 @@ export function registerSessionHandlers(context: SessionHandlersContext): void {
     });
 
     ipcMain.handle('close-session', async () => {
-        await recorderLifecycle.cleanup();
+        // Cerrar sesion es "elegir otro caso": libera Inspector y sesion del
+        // dispositivo; el servidor Appium integrado solo se apaga con la app.
+        await recorderLifecycle.closeSession();
         return { success: true };
     });
 }
