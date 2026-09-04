@@ -103,7 +103,15 @@ test('recall parte el bloque en tramos memorizados (los mas largos) y tramos nue
         [['a', 0, 0], [undefined, 1, 3], ['d', 4, 4]],
     );
     assert.equal(recallInteractions(fragments, 'payment', ['x', 'y']), undefined, 'sin ningun tramo memorizado no hay nada que devolver');
-    assert.equal(recallInteractions(fragments, 'payment', ['z']), undefined, 'otro squad no se mezcla');
+    // Transversal a squads: otro squad ya redacto ese elemento; el propio gana a igual longitud.
+    assert.equal(recallInteractions(fragments, 'payment', ['z'])[0].fragment.text, 'otro squad');
+    const preferred = [
+        { ...fragments[1], text: 'de core', squad: 'core' },
+        { ...fragments[1], text: 'de payment', squad: 'payment' },
+    ];
+    assert.equal(recallInteractions(preferred, 'payment', ['a'])[0].fragment.text, 'de payment');
+    assert.equal(recallInteractions(preferred, 'core', ['a'])[0].fragment.text, 'de core');
+    assert.equal(recallInteractions(preferred, 'onboarding', ['a'])[0].fragment.text, 'de core', 'sin fragmento propio, cualquiera sirve');
     assert.equal(recallInteractions(fragments, 'payment', []), undefined);
 
     // La segunda pulsacion del mismo boton usa el wording que este caso aun

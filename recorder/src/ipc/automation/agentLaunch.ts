@@ -23,6 +23,7 @@ export interface LaunchAutomationAgentInput {
     mode?: string;
     autorun?: boolean;
     qaRoastMode?: boolean;
+    inheritDesignReview?: boolean;
     model?: string;
     pipeline?: 'layered' | 'deterministic';
 }
@@ -155,12 +156,17 @@ export class AutomationAgentLaunchService {
                     state.activeAutomationPackage,
                     {
                         model,
+                        inheritDesignReview: Boolean(input?.inheritDesignReview),
                         onStageChange(stage) {
                             const acceleratedDetail = stage.execution === 'cache'
                                 ? `${stage.agentName} reutilizó una salida verificada: los inputs no cambiaron.`
                                 : stage.execution === 'deterministic'
-                                    ? 'Derek ensambló y validó las capas sin otra llamada a Copilot.'
-                                    : undefined;
+                                    ? (stage.role === 'integration-reviewer'
+                                        ? 'Derek ensambló y validó las capas sin otra llamada a Copilot.'
+                                        : `${stage.agentName} no corrió: sus capas ya estaban validadas en memoria o en el framework.`)
+                                    : stage.execution === 'design-review'
+                                        ? 'Lorem no redacta: Feature y Steps vienen de memoria validada; solo revisa el diseño de este caso.'
+                                        : undefined;
                             const progress = stage.role === 'behavior-author'
                                 ? {
                                     productStage: 'RESOLVING_DECISIONS' as ProductStage,

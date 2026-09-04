@@ -1159,3 +1159,140 @@ test('un gap de aserción débil llega a los autores y Derek lo firma con la dec
     const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
     assert.deepEqual(response.resolutions.map(item => [item.gapId, item.decision]), [['gap-weak-assertion-2', 'create']]);
 });
+
+// Cuando todo el caso viene de memoria (o del framework) y no hay gaps
+// abiertos, Zorem no tiene nada que escribir y Lorem no redacta: solo revisa
+// el diseño de ESTE caso. La revisión es del caso, no de las interacciones,
+// asi que por defecto sigue habiendo una llamada a Lorem (pequeña).
+function memoryCase(root, { inherit = false } = {}) {
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.unresolvedGapIds = [];
+    writeJson(planFile, plan);
+    writeJson(path.join(root, 'scenario.json'), {
+        recordingId: 'rec-1',
+        objective: 'consultar movimientos',
+        acceptanceCriteria: 'se muestran los movimientos',
+        actions: [{ action: 'CLICK', selector: '~x', sequence: 1 }],
+        request: {
+            actions: [],
+            scenarioRows: [
+                { keyword: 'Given', text: 'el usuario <username> inicia sesión en Yape', status: 'reused', actions: [] },
+                { keyword: 'When', text: 'el usuario consulta todos sus movimientos', status: 'missing', wording: 'memory', methodName: 'viewAllMovements', memory: { caseId: 'TC-10140', screenMethod: 'viewAllMovements' }, actions: [{ sequence: 1 }] },
+            ],
+        },
+    });
+    return { inheritDesignReview: inherit };
+}
+
+function reviewingProvider(calls, { failReview = false } = {}) {
+    const base = provider(calls);
+    return {
+        ...base,
+        async execute(input) {
+            if (input.sessionName.endsWith('/design-review')) {
+                calls.push({ agentName: input.agentName, sessionName: input.sessionName, review: true, cwd: input.cwd });
+                if (failReview) return { success: false, durationMs: 1, errorMessage: 'sin sesión' };
+                writeJson(path.join(input.cwd, 'test-design-review.json'), {
+                    status: 'suggestion',
+                    summary: 'El criterio de aceptación no distingue el filtro aplicado.',
+                    issues: [{ code: 'missing-business-assertion', severity: 'warning', message: 'Falta validar el filtro.', actionSequences: [1], recommendation: 'Verifica el rango mostrado.' }],
+                });
+                return { success: true, durationMs: 5, modelUsage: { requestedModel: 'auto', actualModels: ['claude'] } };
+            }
+            const result = await base.execute(input);
+            if (input.agentName === 'Lorem') {
+                // Lorem respeta la interfaz del contrato: Zorem no se relanza.
+                const file = path.join(input.cwd, 'behavior-result.json');
+                const behavior = JSON.parse(fs.readFileSync(file, 'utf8'));
+                behavior.actionTrace = DRAFT_TRACE;
+                writeJson(file, behavior);
+            }
+            return result;
+        },
+    };
+}
+
+test('con todo el caso en memoria Zorem no corre y Lorem solo revisa el diseño', async () => {
+    const root = fixture();
+    const options = memoryCase(root);
+    const calls = [];
+    const fake = reviewingProvider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root, options);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => [call.agentName, Boolean(call.review)]), [['Lorem', true]], 'una sola llamada: la revisión de Lorem');
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.deepEqual(
+        report.stages.map(stage => [stage.agentName, stage.execution]),
+        [['Zorem', 'deterministic'], ['Lorem', 'design-review'], ['Sumrak', 'deterministic']],
+    );
+    const lorem = report.stages.find(stage => stage.execution === 'design-review');
+    assert.deepEqual(lorem.assignedLayers, []);
+    assert.equal(lorem.contextFiles, 3, 'scenario, plan y behavior-result: contexto mínimo');
+    const review = JSON.parse(fs.readFileSync(path.join(root, 'test-design-review.json'), 'utf8'));
+    assert.equal(review.status, 'suggestion');
+    assert.equal(review.source, 'agent');
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.deepEqual(response.files.map(file => file.layer).sort(), ['feature', 'locators', 'screen', 'steps']);
+    assert.equal(response.files.find(file => file.layer === 'feature').content, 'Feature: Draft');
+    assert.deepEqual(response.actionTrace, DRAFT_TRACE);
+    const behavior = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/behavior-result.json'), 'utf8'));
+    assert.match(behavior.assumptions[0], /TC-10140/);
+    // Y otro recording igual reutiliza la revisión desde el caché global.
+    const again = path.join(path.dirname(root), `${path.basename(root)}-again`);
+    fs.cpSync(root, again, { recursive: true });
+    fs.rmSync(path.join(again, 'agents'), { recursive: true, force: true });
+    fs.rmSync(path.join(again, 'agent-response.json'), { force: true });
+    fs.rmSync(path.join(again, 'test-design-review.json'), { force: true });
+    calls.length = 0;
+    const second = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(again, options);
+    assert.equal(second.success, true, second.error);
+    assert.deepEqual(calls, []);
+});
+
+test('heredar la revisión de diseño es una decisión explícita del QA y queda trazada', async () => {
+    const root = fixture();
+    const options = memoryCase(root, { inherit: true });
+    const calls = [];
+    const fake = reviewingProvider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root, options);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls, [], 'ningún agente corre');
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.deepEqual(report.stages.map(stage => stage.execution), ['deterministic', 'deterministic', 'deterministic']);
+    const review = JSON.parse(fs.readFileSync(path.join(root, 'test-design-review.json'), 'utf8'));
+    assert.equal(review.status, 'pass');
+    assert.equal(review.source, 'memory');
+    assert.match(review.summary, /TC-10140/);
+    assert.match(review.summary, /Nadie revisó/);
+});
+
+test('si la revisión de diseño falla, el caso vuelve al flujo normal con ambos autores', async () => {
+    const root = fixture();
+    const options = memoryCase(root);
+    const calls = [];
+    const fake = reviewingProvider(calls, { failReview: true });
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root, options);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => [call.agentName, Boolean(call.review)]), [['Lorem', true], ['Lorem', false], ['Zorem', false]]);
+});
+
+test('con un step nuevo o un gap abierto los autores corren como siempre', async () => {
+    const root = fixture();
+    memoryCase(root);
+    const scenarioFile = path.join(root, 'scenario.json');
+    const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'));
+    scenario.request.scenarioRows.push({ keyword: 'And', text: 'nuevo', status: 'missing', wording: 'qa', actions: [{ sequence: 2 }] });
+    writeJson(scenarioFile, scenario);
+    const calls = [];
+    const fake = reviewingProvider(calls);
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem']);
+});

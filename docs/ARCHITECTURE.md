@@ -268,8 +268,22 @@ XML, screenshots, source, capabilities ni credenciales.
    nace `status: resolved, resolvedBy: memory` sin abrir el paquete al
    agente. Un caso B = A + un paso hereda los steps de A y solo redacta el
    nuevo. La memoria no guarda selectores ni nombres lógicos (eso lo
-   reutiliza el índice del framework) y la versión más reciente de un
-   fragmento sustituye a la anterior.
+   reutiliza el índice del framework); wordings distintos de la misma
+   secuencia conviven (la segunda pulsación del mismo botón usa el que aún no
+   se gastó) y un texto idéntico se sustituye por el más reciente. La memoria
+   es transversal a squads: el elemento es el mismo lo grabe quien lo grabe;
+   al recordar se prefiere el fragmento del squad propio y el destino de los
+   archivos lo fija el plan.
+   Cuando todas las filas vienen de memoria o del framework y no hay gaps
+   abiertos (`layered/memoryReuse.authoringNeeds`), **Zorem no corre** (su
+   resultado se materializa desde el borrador) y **Lorem corre en modo
+   revisión** (`execution: design-review`): contexto mínimo (escenario, plan
+   y el behavior-result ya materializado), no redacta y solo escribe
+   `test-design-review.json`, cacheado por identidad de inputs. Si esa
+   revisión falla, el caso vuelve al flujo normal con ambos autores. Solo con
+   `inheritDesignReview` (preferencia explícita del QA en Ajustes) se hereda
+   la revisión de los casos de origen y ningún autor corre; el
+   `test-design-review.json` resultante lleva `source: memory` y lo dice.
 7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
    o ejecuta el orquestador automático. El flujo predeterminado tiene un owner
    explícito, **Derek**, que conserva el orden y los handoffs definidos por el

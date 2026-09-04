@@ -107,7 +107,7 @@ contextBridge.exposeInMainWorld('api', {
     prepareAutomationPackage: (input: any) => ipcRenderer.invoke('prepare-automation-package', input),
     prepareAutomationRegeneration: (input: any) => ipcRenderer.invoke('prepare-automation-regeneration', input),
     getAutomationModelUsage: () => ipcRenderer.invoke('get-automation-model-usage'),
-    launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean; model?: string; pipeline?: 'layered' | 'deterministic' }) =>
+    launchAutomationAgent: (input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; qaRoastMode?: boolean; inheritDesignReview?: boolean; model?: string; pipeline?: 'layered' | 'deterministic' }) =>
         ipcRenderer.invoke('launch-automation-agent', input),
     importAutomationResponse: (input?: { manualCorrection?: boolean; reviewOnly?: boolean }) =>
         ipcRenderer.invoke('import-automation-response', input),

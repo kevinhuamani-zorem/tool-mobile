@@ -16,6 +16,9 @@
  * proposito: el QA describe el mismo boton con palabras distintas en cada
  * grabacion y el selector grabado es la evidencia real.
  *
+ * La memoria es transversal a squads (el elemento es el mismo lo grabe quien
+ * lo grabe); al recordar se prefiere el fragmento del squad propio.
+ *
  * Que se guarda:
  * - interacciones: la secuencia de identidades que cubre un mismo step
  *   Gherkin en el actionTrace validado, con su texto, keyword, metodo del
@@ -219,7 +222,14 @@ export function recallInteractions(
     usedTexts: Set<string> = new Set(),
 ): InteractionRecall[] | undefined {
     if (!identities.length) return undefined;
-    const candidates = fragments.filter(fragment => fragment.squad === squad);
+    // La memoria es transversal a squads: el boton de filtrar movimientos es
+    // el mismo elemento lo grabe quien lo grabe, y un QA que cambia de squad
+    // no empieza de cero. El squad propio va primero: a igual longitud gana
+    // su wording; el destino (archivos del squad del caso) lo fija el plan.
+    const candidates = [
+        ...fragments.filter(fragment => fragment.squad === squad),
+        ...fragments.filter(fragment => fragment.squad !== squad),
+    ];
     const segments: InteractionRecall[] = [];
     const pick = (index: number, exclude: Set<string>): InteractionFragment | undefined => {
         let best: InteractionFragment | undefined;
@@ -259,8 +269,8 @@ export function recallGap(
     type: UnresolvedGap['type'],
     identity: string,
 ): GapFragment | undefined {
-    return fragments.find(fragment =>
-        fragment.squad === squad && fragment.type === type && fragment.identity === identity);
+    const matching = fragments.filter(fragment => fragment.type === type && fragment.identity === identity);
+    return matching.find(fragment => fragment.squad === squad) || matching[0];
 }
 
 /** Dos textos de step son el mismo si coinciden normalizados. */

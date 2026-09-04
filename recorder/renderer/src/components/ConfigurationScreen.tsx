@@ -183,6 +183,12 @@ export function ConfigurationScreen() {
               <small>Cuando el diseño del caso falle, el recorder te lo dirá sin anestesia. El diagnóstico técnico siempre se conserva.</small>
             </span>
           </label>
+          <label className="remember-config inherit-design-review-setting">
+            <input id="chkInheritDesignReview" type="checkbox" />
+            <span>🧠 Heredar revisión de diseño desde memoria
+              <small>Cuando todo el caso ya fue validado en otros casos, no se llama a ningún agente: se hereda su revisión de diseño. Desactivado, Lorem revisa igualmente el objetivo y el resultado esperado de cada caso.</small>
+            </span>
+          </label>
           <div id="lblFrameworkStatus" className="device-info">Escaneando framework...</div>
           <button id="btnSaveFrameworkConfig" className="btn btn-green btn-full">Guardar y continuar</button>
         </div>

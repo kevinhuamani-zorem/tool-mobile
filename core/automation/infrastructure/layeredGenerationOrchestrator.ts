@@ -67,6 +67,15 @@ import {
     writeAgentProfile,
 } from './layered/prompts';
 import {
+    AuthoringNeeds,
+    authoringNeeds,
+    designReviewErrors,
+    designReviewPrompt,
+    designReviewSchema,
+    inheritedDesignReview,
+    writeDeterministicAuthorResult,
+} from './layered/memoryReuse';
+import {
     actionInterfaceFingerprint,
     agentCacheRoot,
     artifact,
@@ -199,9 +208,32 @@ export class LayeredGenerationOrchestrator {
             const draftContract = options.parallelAuthors === false
                 ? undefined
                 : writeDraftBehaviorContract(root, agentsRoot, plan);
-            let behavior: string;
-            let interaction: string;
-            if (draftContract) {
+            let behavior: string | undefined;
+            let interaction: string | undefined;
+            // Todo el caso viene de memoria o del framework y no hay gaps
+            // abiertos: Zorem no tiene nada que escribir y Lorem no redacta.
+            // Lorem sí revisa el diseño del caso, salvo que el QA pida heredar
+            // esa revisión. Si la revisión falla, se vuelve al flujo normal.
+            const needs = authoringNeeds(root, plan, options);
+            if (needs.interaction === 'deterministic') {
+                interaction = writeDeterministicAuthorResult(root, agentsRoot, plan, 'interaction-author', needs.memoryCases);
+                this.pushDeterministicStage(stages, plan, 'interaction-author', needs, options);
+                behavior = writeDeterministicAuthorResult(root, agentsRoot, plan, 'behavior-author', needs.memoryCases);
+                if (needs.behavior === 'deterministic') {
+                    writeJsonUtf8(path.join(root, 'test-design-review.json'), inheritedDesignReview(needs.memoryCases));
+                    this.pushDeterministicStage(stages, plan, 'behavior-author', needs, options);
+                } else {
+                    try {
+                        await this.runDesignReview(root, agentsRoot, plan, options, stages, needs.memoryCases);
+                    } catch {
+                        behavior = undefined;
+                        interaction = undefined;
+                    }
+                }
+            }
+            if (behavior && interaction) {
+                // Nada que autorizar: ambos resultados ya están materializados.
+            } else if (draftContract) {
                 // Zorem no depende de la prosa de Lorem, solo de la interfaz
                 // screenMethod/locatorName, y esa ya la fija el borrador. Ambos
                 // arrancan a la vez; si Lorem se aparta del contrato, Zorem se
@@ -240,8 +272,8 @@ export class LayeredGenerationOrchestrator {
                         root,
                         agentsRoot,
                         plan,
-                        behavior,
-                        interaction,
+                        behavior!,
+                        interaction!,
                         options,
                         stages,
                         repairAttempts,
@@ -250,8 +282,8 @@ export class LayeredGenerationOrchestrator {
                     );
                     // Solo una respuesta completa validada promueve sus capas.
                     // Si hubo reparación, estas rutas apuntan al resultado final.
-                    promoteAuthorCache(behavior, behaviorCache);
-                    promoteAuthorCache(interaction, interactionCache);
+                    promoteAuthorCache(behavior!, behaviorCache);
+                    promoteAuthorCache(interaction!, interactionCache);
                     const response = readJsonUtf8<AutomationAgentResponse>(responseFile);
                     const reviewFile = path.join(root, 'test-design-review.json');
                     const completeEntry: PipelineCacheEntry = {
@@ -276,7 +308,7 @@ export class LayeredGenerationOrchestrator {
                     const feedback = error.feedback;
                     integrationFeedback = feedback;
                     const previousBehaviorInterface = feedback.behavior.length
-                        ? actionInterfaceFingerprint(behavior)
+                        ? actionInterfaceFingerprint(behavior!)
                         : undefined;
                     if (feedback.behavior.length) {
                         behavior = await this.runAuthor(
@@ -293,7 +325,7 @@ export class LayeredGenerationOrchestrator {
                         );
                     }
                     const behaviorInterfaceChanged = previousBehaviorInterface !== undefined
-                        && previousBehaviorInterface !== actionInterfaceFingerprint(behavior);
+                        && previousBehaviorInterface !== actionInterfaceFingerprint(behavior!);
                     // Un ajuste de redacción Gherkin no invalida Screen/Locators.
                     // Zorem se relanza solo con feedback propio o si Lorem cambió
                     // el contrato screenMethod/locatorName que debe implementar.
@@ -306,7 +338,7 @@ export class LayeredGenerationOrchestrator {
                             options,
                             stages,
                             repairAttempts,
-                            behavior,
+                            behavior!,
                             feedback.interaction.length
                                 ? feedback.interaction
                                 : ['Lorem cambió la interfaz actionTrace; sincroniza únicamente los métodos afectados.'],
@@ -336,6 +368,152 @@ export class LayeredGenerationOrchestrator {
         if ((plan.unresolvedGapIds || []).some(gapId => !resolved.has(gapId))) return false;
         const validation = this.responseValidator?.(packageDirectory, response);
         return validation ? validation.valid : true;
+    }
+
+    private pushDeterministicStage(
+        stages: LayeredGenerationStageReport[],
+        plan: GenerationPlan,
+        role: AuthorRole,
+        needs: AuthoringNeeds,
+        options: LayeredGenerationOptions,
+    ): void {
+        const identity = LAYERED_GENERATION_AGENTS[role];
+        const report: LayeredGenerationStageReport = {
+            role,
+            agentName: identity.name,
+            sessionName: `${sessionName(plan.recordingId, role)}/memory`,
+            attempt: 0,
+            state: 'completed',
+            durationMs: 0,
+            outputFile: `agents/${identity.directory}/${ROLE_OUTPUTS[role]}`,
+            execution: 'deterministic',
+            cacheHit: false,
+            contextBytes: 0,
+            contextFiles: 0,
+            assignedLayers: [...ROLE_LAYERS[role]],
+            budgetWarnings: [],
+        };
+        stages.push(report);
+        options.onStageChange?.({ ...report, error: undefined });
+        void needs;
+    }
+
+    /**
+     * Lorem en modo revisión: Feature y Steps ya están materializados desde
+     * memoria validada; solo evalúa el diseño de ESTE caso (objetivo y
+     * criterio contra lo grabado) con un contexto mínimo. El resultado se
+     * cachea por identidad de inputs sin ids del recording.
+     */
+    private async runDesignReview(
+        packageDirectory: string,
+        agentsRoot: string,
+        plan: GenerationPlan,
+        options: LayeredGenerationOptions,
+        stages: LayeredGenerationStageReport[],
+        memoryCases: string[],
+    ): Promise<void> {
+        const role: AuthorRole = 'behavior-author';
+        const identity = LAYERED_GENERATION_AGENTS[role];
+        const stageDirectory = path.join(agentsRoot, identity.directory);
+        const judgment = gapJudgment(packageDirectory, plan);
+        for (const file of ['scenario.json', 'generation-plan.json']) {
+            copyRoleInput(packageDirectory, stageDirectory, file, role, judgment);
+        }
+        const prompt = designReviewPrompt(memoryCases);
+        fs.writeFileSync(path.join(stageDirectory, 'agent-task.md'), prompt, 'utf8');
+        writeJsonUtf8(path.join(stageDirectory, 'result.schema.json'), designReviewSchema());
+        writeAgentProfile(stageDirectory, role, prompt);
+        const inputs = ['scenario.json', 'generation-plan.json', 'behavior-result.json']
+            .map(file => path.join(stageDirectory, file))
+            .filter(file => fs.existsSync(file));
+        const inputArtifacts = inputs.map(file => artifact(file, stageDirectory));
+        const cacheFingerprint = stableFingerprint({
+            schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
+            role: 'design-review',
+            model: options.model || 'auto',
+            prompt,
+            artifacts: inputs.map(file => ({
+                path: path.relative(stageDirectory, file),
+                sha256: memoryIdentity(file),
+            })),
+        });
+        const cacheFile = path.join(agentCacheRoot(), 'design-review', `${cacheFingerprint}.json`);
+        const outputFile = path.join(stageDirectory, 'test-design-review.json');
+        const namedSession = `${sessionName(plan.recordingId, role)}/design-review`;
+        const budget = stageBudget(plan, options);
+        const report: LayeredGenerationStageReport = {
+            role,
+            agentName: identity.name,
+            sessionName: namedSession,
+            attempt: 0,
+            state: 'running',
+            durationMs: 0,
+            outputFile: path.relative(packageDirectory, outputFile).replace(/\\/g, '/'),
+            execution: 'design-review',
+            fingerprint: cacheFingerprint,
+            cacheHit: false,
+            contextBytes: stageContextBytes(stageDirectory),
+            contextFiles: inputArtifacts.length,
+            evidenceBytes: inputArtifacts.reduce((total, item) => total + item.bytes, 0),
+            assignedLayers: [],
+            budget,
+        };
+        stages.push(report);
+        options.onStageChange?.({ ...report });
+        const accept = (review: unknown): boolean => {
+            const errors = designReviewErrors(review);
+            if (errors.length) return false;
+            writeJsonUtf8(path.join(packageDirectory, 'test-design-review.json'), { ...(review as object), source: 'agent' });
+            return true;
+        };
+        if (fs.existsSync(cacheFile)) {
+            try {
+                const cached = readJsonUtf8<unknown>(cacheFile);
+                if (accept(cached)) {
+                    writeJsonUtf8(outputFile, cached);
+                    report.state = 'completed';
+                    report.execution = 'cache';
+                    report.cacheHit = true;
+                    options.onStageChange?.({ ...report });
+                    return;
+                }
+            } catch {
+                // Un caché ilegible se ignora y se vuelve a revisar.
+            }
+        }
+        const run = await this.controlledProvider.execute({
+            cwd: stageDirectory,
+            prompt,
+            timeoutMs: budget.hangStopMs,
+            model: options.model,
+            agentName: identity.name,
+            allowValidationScripts: false,
+            sessionName: namedSession,
+            traceFile: './agent-execution.log',
+            traceLabel: 'design-review',
+            stopOnValidatedOutput: {
+                outputFile: './test-design-review.json',
+                schemaFile: './result.schema.json',
+            },
+        });
+        report.durationMs = run.durationMs;
+        report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
+        report.requestedModel = run.modelUsage?.requestedModel;
+        report.actualModels = run.modelUsage?.actualModels || [];
+        report.timedOut = Boolean(run.timedOut);
+        report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, run.durationMs);
+        const review = run.success && fs.existsSync(outputFile) ? readJsonUtf8<unknown>(outputFile) : undefined;
+        if (!review || !accept(review)) {
+            report.state = 'failed';
+            report.error = run.errorMessage
+                || (review ? designReviewErrors(review).join(' | ') : 'No se generó test-design-review.json.');
+            options.onStageChange?.({ ...report });
+            throw new Error(report.error);
+        }
+        fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+        writeJsonUtf8(cacheFile, review);
+        report.state = 'completed';
+        options.onStageChange?.({ ...report });
     }
 
     private async runAuthor(

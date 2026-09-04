@@ -643,6 +643,11 @@ export interface TestDesignReview {
     /** Compatibilidad/presentación: no forma parte del diagnóstico semántico. */
     roast?: string;
     issues: TestDesignIssue[];
+    /**
+     * `memory`: el QA pidió heredar la revisión de los casos de origen y
+     * ningún agente evaluó este caso. Ausente o `agent`: la evaluó Lorem.
+     */
+    source?: 'agent' | 'memory';
 }
 
 export interface QaRoastResponse {

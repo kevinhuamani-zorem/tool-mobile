@@ -9,7 +9,7 @@
 // feature); nunca copia ese estado.
 
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
-import { isQaRoastModeEnabled } from '../shared/recorderPreferences.js';
+import { isQaRoastModeEnabled, isInheritDesignReviewEnabled } from '../shared/recorderPreferences.js';
 import { createCopilotModelControls } from './copilotModelControls.js';
 
 const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
@@ -165,6 +165,8 @@ export function createReviewFeature(deps) {
                 ? 'reutilizó una salida verificada'
                 : stage.execution === 'deterministic'
                     ? 'Derek lo resolvió sin Copilot'
+                    : stage.execution === 'design-review'
+                        ? (stage.roleState === 'running' ? 'revisa el diseño del caso (sin redactar)' : 'revisó el diseño del caso')
                     : stage.roleState === 'running'
                         ? (running.length > 1 ? 'en curso, en paralelo' : 'en curso')
                         : stage.roleState === 'repairing'
@@ -801,7 +803,8 @@ export function createReviewFeature(deps) {
             const launched = await api.launchAutomationAgent({
                 mode: 'automatic',
                 model,
-                qaRoastMode: isQaRoastModeEnabled()
+                qaRoastMode: isQaRoastModeEnabled(),
+                inheritDesignReview: isInheritDesignReviewEnabled(),
             });
             await copilotModel.refresh();
             if (!launched.success) {

@@ -229,6 +229,10 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
   `plan.unresolvedGapIds`: ya se decidió sobre ese mismo elemento y no exige
   resolución. `AutomationPackageResult.memoryRecall` resume cuántos steps y
   decisiones se heredaron y de qué casos.
+- Si todo el caso viene de memoria o del framework y no hay gaps abiertos,
+  Zorem no corre y Lorem solo revisa el diseño (`test-design-review.json`
+  con `source: agent`); con la preferencia `inheritDesignReview` del QA no
+  corre ningún agente y la revisión heredada se marca `source: memory`.
 - Nada de esto toca selectores. Una errata en el texto de la app (`Útimos`) se
   conserva literal en el selector y en el nombre; el hallazgo va al QA en
   `qa-observations.json` (`ui-text-quality`), nunca se corrige en silencio.

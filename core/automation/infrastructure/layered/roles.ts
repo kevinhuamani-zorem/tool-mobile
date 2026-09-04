@@ -116,6 +116,13 @@ export interface LayeredGenerationOptions {
      * el borrador; `false` fuerza la secuencia Lorem -> Zorem.
      */
     parallelAuthors?: boolean;
+    /**
+     * Cuando todo el caso viene de memoria o del framework y no hay gaps
+     * abiertos, Zorem no corre y Lorem solo revisa el diseño. Con `true` el
+     * QA hereda además esa revisión de los casos de origen y ningún autor
+     * corre: la decisión es suya, nunca del recorder por defecto.
+     */
+    inheritDesignReview?: boolean;
     model?: string;
     timeoutMs?: number;
     forceRegenerate?: boolean;
