@@ -20,10 +20,16 @@ const generation = fs.readFileSync(
     path.join(root, 'recorder/renderer/src/features/generation/generationFeature.js'),
     'utf8',
 );
-const automationHandlers = fs.readFileSync(
+// El pipeline de automatización se registra en automationHandlers.ts y cada
+// paso vive en ipc/automation/*.ts; los contratos de texto se verifican sobre
+// el conjunto.
+const automationHandlers = [
     path.join(root, 'recorder/src/ipc/automationHandlers.ts'),
-    'utf8',
-);
+    ...fs.readdirSync(path.join(root, 'recorder/src/ipc/automation'))
+        .filter(name => name.endsWith('.ts'))
+        .sort()
+        .map(name => path.join(root, 'recorder/src/ipc/automation', name)),
+].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 
 test('wizard expone evidencia, análisis y revisión sin un paso bloqueante de generación', () => {
     assert.match(modal, /\['1', 'Evidencia'\]/);
@@ -120,7 +126,7 @@ test('controller corre pipeline automático con y sin resolución semántica', (
 });
 
 test('reimportar y revalidar rematerializan gap-resolutions cuando cambió', () => {
-    assert.match(automationHandlers, /function rematerializeGapResolutions\(/);
+    assert.match(automationHandlers, /rematerializeGapResolutions\(packageDirectory: string\): boolean/);
     assert.match(
         automationHandlers,
         /ipcMain\.handle\('import-automation-response',[\s\S]*?rematerializeGapResolutions\(state\.activeAutomationPackage\)/,
@@ -215,7 +221,7 @@ test('el roast se genera en otra sesión y nunca bloquea el diagnóstico semánt
     assert.match(contracts, /Critica el caso, nunca a la persona/);
 
     const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
-    const handlers = fs.readFileSync(path.join(root, 'recorder/src/ipc/automationHandlers.ts'), 'utf8');
+    const handlers = automationHandlers;
     assert.match(main, /new CopilotQaRoastGenerator\(copilotCliAdapter\)/);
     assert.match(handlers, /input\?\.qaRoastMode/);
     assert.match(handlers, /qaRoastGenerator\.generate/);

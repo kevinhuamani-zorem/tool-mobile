@@ -30,10 +30,16 @@ const interactionHandlers = fs.readFileSync(
     path.join(root, 'recorder/src/ipc/interactionHandlers.ts'),
     'utf8',
 );
-const automationHandlers = fs.readFileSync(
+// El pipeline de automatización se registra en automationHandlers.ts y cada
+// paso vive en ipc/automation/*.ts; los contratos de texto se verifican sobre
+// el conjunto.
+const automationHandlers = [
     path.join(root, 'recorder/src/ipc/automationHandlers.ts'),
-    'utf8',
-);
+    ...fs.readdirSync(path.join(root, 'recorder/src/ipc/automation'))
+        .filter(name => name.endsWith('.ts'))
+        .sort()
+        .map(name => path.join(root, 'recorder/src/ipc/automation', name)),
+].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const scenarioPackage = fs.readFileSync(
     path.join(root, 'core/automation/domain/automationScenarioPackage.ts'),
     'utf8',
