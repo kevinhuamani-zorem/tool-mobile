@@ -183,7 +183,7 @@ export function createReviewFeature(deps) {
             ).join('');
             const error = stage.error ? `<small>${escapeHtml(stage.error)}</small>` : '';
             return `<li data-agent="${escapeHtml(stage.agentName)}" class="is-${escapeHtml(stage.roleState || 'running')}">` +
-                `<span></span><div><strong>${escapeHtml(stage.agentName)}</strong> · ${escapeHtml(layers)}` +
+                `<div class="agent-stage-body"><strong>${escapeHtml(stage.agentName)}</strong> · ${escapeHtml(layers)}` +
                 `<small>${escapeHtml(details)}</small>${warnings}${error}</div></li>`;
         }).join('');
     }

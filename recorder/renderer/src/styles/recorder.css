@@ -2500,21 +2500,23 @@ body {
     gap: 6px;
 }
 .automation-agent-stages li {
-    display: grid;
-    grid-template-columns: 9px minmax(0, 1fr);
+    display: flex;
+    align-items: flex-start;
     gap: 10px;
-    align-items: start;
-    padding: 8px 10px;
+    padding: 8px 12px;
     border: 1px solid var(--border, rgba(255,255,255,.12));
     border-radius: 8px;
     color: var(--text2);
     font-size: 12px;
+    line-height: 1.4;
 }
 .automation-agent-stages li::before {
     content: '';
+    flex: 0 0 9px;
     width: 9px; height: 9px; margin-top: 4px; border-radius: 50%;
     background: var(--text3);
 }
+.automation-agent-stages .agent-stage-body { flex: 1 1 auto; min-width: 0; }
 .automation-agent-stages li.is-running::before { background: #4c9dff; box-shadow: 0 0 0 3px rgba(76,157,255,.25); }
 .automation-agent-stages li.is-repairing::before { background: #ffa200; }
 .automation-agent-stages li.is-completed::before { background: #46d369; }
