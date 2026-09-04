@@ -169,3 +169,10 @@ test('traduce verbos conjugados del criterio de aceptacion y los detecta como es
     assert.ok(spanishTokens('actualizando').length);
     assert.equal(translateToSlug('visualiza movimientos ultimos dias', 'x'), 'view-movements-last-days');
 });
+
+test('sustantivos del objetivo y del criterio no se pierden en el nombre del caso', () => {
+    const { dictionaryLookup } = require('../dist/core/shared');
+    assert.equal(dictionaryLookup('reporte'), 'report');
+    assert.equal(dictionaryLookup('confirmacion'), 'confirmation');
+    assert.equal(dictionaryLookup('envio'), 'send');
+});

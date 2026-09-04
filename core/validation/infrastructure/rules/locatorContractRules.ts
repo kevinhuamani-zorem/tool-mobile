@@ -18,7 +18,6 @@ import {
     AutomationAgentResponse,
     GenerationPlan,
     candidateAllowlist,
-    screenObjectNames,
     typeLocatorImportProblem,
 } from '../../../automation/contracts';
 import { frameworkContract, projectPaths } from '../../../workspace';
@@ -28,7 +27,7 @@ import {
     hasLocatorKeyForPlatform,
     responseLocatorValues,
 } from './locatorInspection';
-import { screenLocatorTypes, screenMethodGetterUsage } from './screenInspection';
+import { screenClassNameFor, screenLocatorTypes, screenMethodGetterUsage } from './screenInspection';
 import { ResponseRuleContext, RuleReport } from './ruleContext';
 
 export function locatorContractRules(context: ResponseRuleContext, report: RuleReport): void {
@@ -126,15 +125,13 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
         const contract = frameworkContract(projectPaths.frameworkRoot);
         const screenFile = response.files.find(file => file.layer === 'screen');
         const screenContent = screenFile?.content || '';
-        const referencedTypes = screenLocatorTypes(
-            screenContent,
-            contract,
-            screenFile ? screenObjectNames(screenFile.path).className : '',
-        );
-        const methodUsage = screenMethodGetterUsage(
-            screenContent,
-            screenFile ? screenObjectNames(screenFile.path).className : '',
-        );
+        // La clase real del archivo: un update sobre un Screen escrito a mano
+        // puede no seguir la convencion de nombre derivada de la ruta.
+        const screenClassName = screenFile
+            ? screenClassNameFor(screenContent, screenFile.path, contract.baseScreenClass)
+            : '';
+        const referencedTypes = screenLocatorTypes(screenContent, contract, screenClassName);
+        const methodUsage = screenMethodGetterUsage(screenContent, screenClassName);
         const currentLocators = responseLocatorValues(locatorFile.content);
         const locatorTypesFor = (
             getterName: string,
@@ -185,6 +182,11 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
                 file: locatorFile.path,
             });
         }
+        // Un create renombrado a ingles (gap-english-naming) y aceptado arriba
+        // por conservar su par primary se juzga por su nombre nuevo en todo
+        // el contrato: getter homonimo, clave del JSON y metodo que lo consume.
+        const aliasByExpected = new Map<string, string>();
+        for (const [alias, expected] of expectedGetterByAlias) aliasByExpected.set(expected, alias);
         const tracedGettersByMethod = new Map<string, Set<string>>();
         response.actionTrace.forEach(trace => {
             if (!trace.screenMethod) return;
@@ -192,9 +194,15 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
             const expectedName = adoptedBySequence.get(trace.sequence)
                 || completionBySequence.get(trace.sequence)?.name
                 || resolution?.locatorName;
-            if (!expectedName || trace.locatorName !== expectedName) return;
+            if (!expectedName) return;
+            const traced = trace.locatorName === expectedName
+                ? expectedName
+                : (trace.locatorName && expectedGetterByAlias.get(trace.locatorName) === expectedName
+                    ? trace.locatorName
+                    : undefined);
+            if (!traced) return;
             const getters = tracedGettersByMethod.get(trace.screenMethod) || new Set<string>();
-            getters.add(expectedName);
+            getters.add(traced);
             tracedGettersByMethod.set(trace.screenMethod, getters);
         });
         // Una accion que adopto un candidato del gap ya no crea nada: su par
@@ -208,7 +216,7 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
                 && !completionBySequence.has(resolution.sequence)
                 && !adoptedBySequence.has(resolution.sequence)
             )
-            .map(resolution => resolution.locatorName!));
+            .map(resolution => aliasByExpected.get(resolution.locatorName!) || resolution.locatorName!));
         for (const name of createNames) {
             const pairs = primaryByLocator.get(name) || new Set<string>();
             const entries = currentLocators.filter(entry =>
@@ -250,7 +258,10 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
             const trace = traces.length === 1 ? traces[0] : undefined;
             const completion = completionBySequence.get(resolution.sequence);
             const adopted = adoptedBySequence.get(resolution.sequence);
-            const expectedGetter = adopted || completion?.name || resolution.locatorName!;
+            const expectedGetter = adopted
+                || completion?.name
+                || aliasByExpected.get(resolution.locatorName!)
+                || resolution.locatorName!;
             const reusesIndexedMethod = Boolean(
                 adopted
                 && resolution.existingMethod

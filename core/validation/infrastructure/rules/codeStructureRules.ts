@@ -18,11 +18,11 @@ import {
 import { declaredIdentifiers, spanishTokens } from '../../../shared';
 import { frameworkContract, frameworkHelpersOf, projectPaths } from '../../../workspace';
 import { completionTarget } from './locatorInspection';
-import { emptyOnRecordedPlatform, importsFrom, plannedAlias } from './screenInspection';
+import { emptyOnRecordedPlatform, importsFrom, importsModuleLike, plannedAlias, screenClassNameFor } from './screenInspection';
 import { PreviewRuleContext, RuleReport } from './ruleContext';
 
 export function codeStructureRules(context: PreviewRuleContext, report: RuleReport): void {
-    const { scenario, plan, response, preview, reusesScreenWithoutChanges } = context;
+    const { scenario, plan, response, preview, reusesScreenWithoutChanges, updateBaselines } = context;
     const { errors, warnings } = report;
             const methods = [...(preview.screenContent || '').matchAll(
                 /public\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g
@@ -71,7 +71,20 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
             const screenPlan = plan.files.find(file => file.layer === 'screen');
             const stepsPlan = plan.files.find(file => file.layer === 'steps');
             if (screenPlan && stepsPlan && !reusesScreenWithoutChanges) {
-                const expected = screenObjectNames(screenPlan.path);
+                // Un `update` sobre un Screen escrito a mano por el equipo trae
+                // su propia clase, sus imports relativos y su deuda. Nada de eso
+                // es del agente ni puede corregirlo sin reescribir el baseline
+                // (prohibido): se juzga solo lo que agrega.
+                const screenBaseline = screenPlan.operation === 'update'
+                    ? updateBaselines.get('screen')
+                    : undefined;
+                const contract = frameworkContract(projectPaths.frameworkRoot);
+                const expected = {
+                    ...screenObjectNames(screenPlan.path),
+                    ...(screenBaseline
+                        ? { className: screenClassNameFor(screenBaseline, screenPlan.path, contract.baseScreenClass) }
+                        : {}),
+                };
                 const screenImports = [...(preview.stepContent || '').matchAll(
                     /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm
                 )];
@@ -105,7 +118,6 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                 // Los anclajes se leen del framework, no se asumen: comparar
                 // contra una constante propia hacia que un import obsoleto
                 // pasara la validacion y reventara recien en wdio.
-                const contract = frameworkContract(projectPaths.frameworkRoot);
                 const requiredSources = [
                     contract.baseScreenImport,
                     ...(expectedLocatorSource
@@ -130,6 +142,11 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                 }
                 for (const requiredSource of requiredSources) {
                     if (!importsFrom(screenContent, requiredSource)) {
+                        // El baseline ya importaba ese modulo por ruta relativa y
+                        // el agente lo conservo: no es un import que falte.
+                        if (screenBaseline
+                            && importsModuleLike(screenBaseline, requiredSource)
+                            && importsModuleLike(screenContent, requiredSource)) continue;
                         errors.push({
                             code: 'framework-import-alias',
                             message: `Screen Object debe importar ${requiredSource}.`,
@@ -149,7 +166,7 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                     expectedImports[fileName] = expectedLocatorSource;
                     expectedIdentifiers[fileName] = locatorImportIdentifier(locatorPlan!.path);
                 }
-                for (const problem of screenObjectProblems(screenContent, {
+                const screenRules = {
                     typeLocatorSymbol: contract.typeLocatorSymbol,
                     typeLocatorImport: contract.typeLocatorImport,
                     helpers: frameworkHelpersOf(projectPaths.frameworkRoot).map(helper => ({
@@ -167,7 +184,14 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                         importSource: expectedSource,
                         baseScreenClass: contract.baseScreenClass,
                     },
-                })) {
+                };
+                const inheritedProblems = new Set(
+                    (screenBaseline ? screenObjectProblems(screenBaseline, screenRules) : [])
+                        .filter(problem => problem.code !== 'screen-alias')
+                        .map(problem => `${problem.code}\u0000${problem.message}`),
+                );
+                for (const problem of screenObjectProblems(screenContent, screenRules)) {
+                    if (inheritedProblems.has(`${problem.code}\u0000${problem.message}`)) continue;
                     errors.push({
                         code: problem.code,
                         message: problem.message,

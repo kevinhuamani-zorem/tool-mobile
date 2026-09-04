@@ -861,3 +861,31 @@ test('avisa cuando el QA escribio a mano un nombre de archivo que no esta en ing
     assert.match(gap.description, /history-encadenado/);
     assert.match(gap.description, /no la cambies/);
 });
+
+// "mostrar movimientos, ver todos, enviar el reporte por correo" empieza
+// consultando movimientos pero no ES consultar movimientos: la frase de
+// dominio solo aplica si todo el bloque es de consulta.
+test('la frase de dominio de consulta no se adjudica a un bloque que termina en otra accion', () => {
+    const recorded = scenario([
+        action('CLICK', 'boton de movimientos', 'android=new UiSelector().text("Mostrar movimientos")', ''),
+        action('CLICK', 'ver todos los movimientos', 'android=new UiSelector().description("Ver todos")', ''),
+        action('CLICK', 'envio de reporte a correo de movimientos', '~Botón de enviar por correo', ''),
+        action('VERIFICAR_EXISTE', 've valida mensaje de correo enviado', '~Tu correo se estará enviando', ''),
+    ]);
+    recorded.objective = 'enviar un correo de reporte de movimientos';
+    recorded.acceptanceCriteria = 'confirmacion de envio de correo';
+    recorded.request = { ...recorded.request, featureName: 'Flujo mobile', fileName: 'flujo-mobile', locatorModule: 'nueva-pantalla' };
+    const result = new DeterministicResolver(emptyCatalog()).resolve(recorded);
+    const when = result.scenario.request.scenarioRows.find(row => row.keyword === 'When');
+    assert.notEqual(when.text, 'el usuario consulta todos sus movimientos');
+    assert.equal(when.wording, 'qa');
+    assert.match(result.plan.files[0].path, /confirmation-send-email-report\.feature$/);
+    assert.equal(result.plan.resolutions[2].locatorName, 'sendReportEmailMovements');
+
+    const onlyView = new DeterministicResolver(emptyCatalog()).resolve(scenario([
+        action('CLICK', 'boton de movimientos', 'android=new UiSelector().text("Mostrar movimientos")', ''),
+        action('CLICK', 'ver todos los movimientos', 'android=new UiSelector().description("Ver todos")', ''),
+        action('VERIFICAR_EXISTE', 'titulo movimientos', '~Movimientos', ''),
+    ]));
+    assert.equal(onlyView.scenario.request.scenarioRows.find(row => row.keyword === 'When').text, 'el usuario consulta todos sus movimientos');
+});

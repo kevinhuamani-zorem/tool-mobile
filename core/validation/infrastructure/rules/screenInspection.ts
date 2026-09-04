@@ -9,9 +9,38 @@
  */
 import ts from 'typescript';
 import { FrameworkContract } from '../../../workspace';
+import { screenObjectNames } from '../../../automation/contracts';
 
 export { screenLocatorTypes } from './screenLocatorTypes';
 export { screenMethodGetterUsage } from './screenMethodUsage';
+
+/**
+ * Nombre de la clase que declara un Screen Object. Un `update` sobre un
+ * archivo escrito a mano por el equipo (`class movementScreen extends
+ * BaseScreen`) no lleva el nombre que el recorder derivaria de la ruta
+ * (`MovementsScreen`), y las reglas que inspeccionan getters y metodos
+ * tienen que mirar la clase real, no la convencional: si no, ningun getter
+ * "existe" y todo el contrato de locators falla por un motivo ajeno al agente.
+ */
+export function declaredScreenClassName(content: string, baseScreenClass?: string): string | undefined {
+    const source = String(content || '');
+    const withBase = baseScreenClass
+        ? source.match(new RegExp(`class\\s+([A-Za-z_$][\\w$]*)\\s+extends\\s+${baseScreenClass}\\b`))
+        : undefined;
+    const any = withBase || source.match(/class\s+([A-Za-z_$][\w$]*)\s+extends\s+[A-Za-z_$][\w$]*/);
+    return any?.[1];
+}
+
+export function screenClassNameFor(content: string, filePath: string, baseScreenClass?: string): string {
+    return declaredScreenClassName(content, baseScreenClass) || screenObjectNames(filePath).className;
+}
+
+/** El archivo importa el modulo aunque sea por ruta relativa o con otra extension. */
+export function importsModuleLike(content: string, source: string): boolean {
+    const wanted = source.split('/').pop()!.replace(/\.(?:ts|js)$/, '');
+    return [...String(content || '').matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)]
+        .some(match => match[1].split('/').pop()!.replace(/\.(?:ts|js)$/, '') === wanted);
+}
 
 export function plannedAlias(file: string, root: string, alias: string): string | undefined {
     const normalized = file.replace(/\\/g, '/').replace(/^\.\//, '');

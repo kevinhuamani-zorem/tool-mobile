@@ -13,6 +13,7 @@ import {
 } from '../../contracts';
 import {
     TECHNICAL_STOP_WORDS,
+    dictionaryLookup,
     unknownTokens,
 } from '../../../shared';
 
@@ -108,6 +109,9 @@ export function compactTechnicalName(scenario: AutomationScenario): string {
             // `verify-tenga-filter-movements`. Se sigue con la siguiente
             // palabra util del criterio, las acciones o el objetivo.
             if (unknownTokens(word, NO_EXTRA_TOKENS).length) continue;
+            // "envio" y "enviar" son la misma palabra en ingles: no se repite.
+            const english = dictionaryLookup(word) || word;
+            if (meaningful.some(chosen => (dictionaryLookup(chosen) || chosen) === english)) continue;
             meaningful.push(word);
             if (meaningful.length === 4) break;
         }

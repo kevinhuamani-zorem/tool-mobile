@@ -114,6 +114,15 @@ const TRANSLATIONS: Record<string, string> = {
     finalizar: 'finish', terminar: 'finish', configurar: 'configure', subir: 'upload',
     realizar: 'perform', enviado: 'sent', recibido: 'received', obtener: 'get',
     intentar: 'try', intento: 'attempt', intentos: 'attempts', reintentar: 'retry',
+    // Sustantivos frecuentes del objetivo/criterio ("enviar un correo de
+    // reporte", "confirmacion de envio"): sin ellos el nombre del caso
+    // perdia justo la palabra que lo distingue.
+    reporte: 'report', reportes: 'reports', envio: 'send', envios: 'sends',
+    confirmacion: 'confirmation', notificacion: 'notification', notificaciones: 'notifications',
+    transaccion: 'transaction', transacciones: 'transactions', validacion: 'validation',
+    verificacion: 'verification', seleccion: 'selection', configuracion: 'settings',
+    descripcion: 'description', aplicacion: 'app', cancelacion: 'cancellation',
+    activacion: 'activation', afiliacion: 'affiliation', promocion: 'promotion', promociones: 'promotions',
 };
 
 /**

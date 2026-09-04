@@ -8,10 +8,20 @@
 import { PreviewRuleContext, RuleReport } from './ruleContext';
 
 export function outputRules(context: PreviewRuleContext, report: RuleReport): void {
-    const { scenario, plan, response, preview, outputValidator, reusesScreenWithoutChanges } = context;
+    const { scenario, plan, response, preview, outputValidator, reusesScreenWithoutChanges, updateBaselines } = context;
     const { errors, warnings } = report;
             const output = outputValidator.validate(preview, scenario.platform);
+            // Deuda que el Screen baseline ya tenia (imports relativos, browser
+            // sin importar...) no es del agente: solo cuenta lo que agrega.
+            const screenBaseline = plan.files.find(file => file.layer === 'screen')?.operation === 'update'
+                ? updateBaselines.get('screen')
+                : undefined;
+            const inherited = new Set(screenBaseline
+                ? outputValidator.validate({ ...preview, screenContent: screenBaseline }, scenario.platform).errors
+                    .filter(message => /^ScreenObject/.test(message))
+                : []);
             output.errors.forEach(message => {
+                if (inherited.has(message)) return;
                 const layer = /^(?:Feature|Scenario)/.test(message)
                     ? 'feature'
                     : /^Steps/.test(message)

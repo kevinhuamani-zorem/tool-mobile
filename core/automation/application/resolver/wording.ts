@@ -56,9 +56,15 @@ export function domainBehaviorText(
     const intent = intents[relevantIndex >= 0 ? relevantIndex : intents.length - 1] || titleFromSlug(technicalName).toLowerCase();
     const all = intents.join(' ');
     // Solo cuando la intencion es VER los movimientos: "boton filtros de
-    // movimientos" tambien menciona movimientos y no es consultarlos.
+    // movimientos" tambien menciona movimientos y no es consultarlos. Y solo
+    // si TODAS las acciones del bloque son de consulta: "mostrar movimientos,
+    // ver todos, enviar el reporte por correo" no es consultar movimientos,
+    // por mucho que empiece consultandolos.
+    const relevantIntents = intents.filter((_, index) =>
+        !['SCROLL_DOWN', 'SCROLL_UP', 'SWIPE'].includes(actions[index]?.action));
+    const otherDomain = /\b(?:filtr|cerrar|cierra|atr[aá]s|volver|envi|correo|email|pag|yape|descarg|compart|elimin|edit|registr)/i;
     if (/movimiento/i.test(all) && /\b(?:mostrar|muestra|ver|consulta|consultar|todos)\b/i.test(all)
-        && !/\b(?:filtr|cerrar|cierra|atr[aá]s|volver)/i.test(intent)) {
+        && !relevantIntents.some(candidate => otherDomain.test(candidate))) {
         return /todos/i.test(all)
             ? 'el usuario consulta todos sus movimientos'
             : 'el usuario consulta sus movimientos';

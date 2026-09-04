@@ -310,9 +310,18 @@ function frameworkApiDocument(
             .filter(file => file.layer === 'screen')
             .map(file => {
                 const names = screenObjectNames(file.path);
+                // Un update conserva la clase que ya declara el archivo del
+                // framework (puede no seguir la convencion derivada de la
+                // ruta); exigirle al agente otra seria pedirle que reescriba
+                // el baseline.
+                const absolute = path.join(projectPaths.frameworkRoot, file.path);
+                const declared = file.operation === 'update' && fs.existsSync(absolute)
+                    ? fs.readFileSync(absolute, 'utf-8')
+                        .match(/class\s+([A-Za-z_$][\w$]*)\s+extends\s+[A-Za-z_$][\w$]*/)?.[1]
+                    : undefined;
                 return {
                     path: file.path,
-                    className: names.className,
+                    className: declared || names.className,
                     instanceName: names.instanceName,
                     importSource: `@screenobjects/${file.path.replace(/^screenobjects\//, '')}`,
                 };

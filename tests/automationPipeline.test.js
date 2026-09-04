@@ -1021,6 +1021,139 @@ test('resolver reutiliza las cuatro capas cuando encuentra un caso equivalente d
     ]);
 });
 
+// Un `update` sobre un Screen escrito a mano por el equipo (clase
+// `movementScreen`, imports relativos) no obliga al agente a modernizarlo:
+// esa deuda no es suya y reescribir el baseline esta prohibido. Se juzga solo
+// lo que agrega, y un create renombrado a ingles (gap-english-naming) que
+// conserva su par primary se acepta en todo el contrato.
+test('validator juzga solo lo que se agrega a un Screen legacy y acepta el create renombrado a ingles', () => {
+    const screenPath = 'screenobjects/payment/movements.screen.ts';
+    const locatorPath = 'resources/locators/payment/movements.locator.json';
+    const legacyScreen = [
+        "import LocatorProvider from '@common/locators/locator-provider.js';",
+        'import BaseScreen from "../commons/base.screen.js";',
+        "import { $, expect } from '@wdio/globals';",
+        'import LocatorMovements from "../../resources/locators/payment/movements.locator.json" with { type: "json" };',
+        "import { TypeLocator } from '@common/enums/locator-type.enum.js';",
+        '',
+        'class movementScreen extends BaseScreen {',
+        '    public async showMovements() {',
+        '        const selector = LocatorProvider.getElement(TypeLocator.CLASSCHAIN, LocatorMovements.movementsIos.titleMovements, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.titleMovements);',
+        '        await $(selector).click();',
+        '    }',
+        '}',
+        'export default new movementScreen();',
+        '',
+    ].join('\n');
+    const legacyLocators = JSON.stringify({
+        movementsAndroid: { titleMovements: 'new UiSelector().text("Movimientos")' },
+        movementsIos: { titleMovements: 'Movimientos' },
+    }, null, 2);
+    const absoluteScreen = path.join(projectPaths.frameworkRoot, screenPath);
+    const absoluteLocators = path.join(projectPaths.frameworkRoot, locatorPath);
+    const originalScreen = fs.readFileSync(absoluteScreen, 'utf8');
+    const originalLocators = fs.readFileSync(absoluteLocators, 'utf8');
+    fs.writeFileSync(absoluteScreen, legacyScreen);
+    fs.writeFileSync(absoluteLocators, legacyLocators);
+    try {
+        const recorded = scenario([{
+            action: 'CLICK',
+            selector: 'android=new UiSelector().description("Botón de enviar por correo")',
+            selectorVerified: true,
+            contextHint: 'envio de reporte a correo',
+        }, {
+            action: 'VERIFICAR_EXISTE',
+            selector: 'android=new UiSelector().description("Tu correo se estará enviando")',
+            selectorVerified: true,
+            contextHint: 'valida mensaje de correo enviado',
+        }]);
+        const resolved = new DeterministicResolver(emptyCatalog).resolve(recorded);
+        const plan = {
+            ...resolved.plan,
+            unresolvedGapIds: [],
+            files: resolved.plan.files.map(file => {
+                if (file.layer === 'screen') return { ...file, path: screenPath, operation: 'update' };
+                if (file.layer === 'locators') return { ...file, path: locatorPath, operation: 'update' };
+                return file;
+            }),
+            resolutions: resolved.plan.resolutions.map(resolution => ({
+                ...resolution,
+                locatorName: resolution.sequence === 1 ? 'envioReporteCorreo' : 'emailSentMessage',
+            })),
+        };
+        const response = validResponse(plan);
+        response.files.find(file => file.layer === 'feature').content =
+            '@payment\nFeature: Envio de reporte\n\n@miflujo @android @ios\n' +
+            '  Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Envio de reporte\n' +
+            '    Given el usuario <username> inicia sesión en Yape\n' +
+            '    When el usuario envia el reporte por correo\n' +
+            '    Then se muestra la confirmacion del envio\n\n' +
+            '    Examples:\n      | username   |\n      | Usuario QA |\n';
+        response.files.find(file => file.layer === 'steps').content =
+            "import { Then, When } from '@wdio/cucumber-framework';\n" +
+            "import movementsScreen from '@screenobjects/payment/movements.screen.ts';\n" +
+            "When(/^el usuario envia el reporte por correo$/, async () => { " +
+            'await movementsScreen.sendReportByEmail(); });\n' +
+            "Then(/^se muestra la confirmacion del envio$/, async () => { " +
+            'await movementsScreen.validateEmailSentMessage(); });\n';
+        // El agente conserva el baseline byte a byte y solo agrega su getter y su metodo.
+        response.files.find(file => file.layer === 'screen').content = legacyScreen.replace(
+            '}\nexport default new movementScreen();',
+            '    public get sendReportEmail() {\n' +
+            '        const locator = LocatorProvider.getElement(TypeLocator.XPATH, LocatorMovements.movementsIos.sendReportEmail, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.sendReportEmail);\n' +
+            '        return $(locator);\n' +
+            '    }\n' +
+            '    public async sendReportByEmail(): Promise<void> {\n' +
+            '        await this.uiHelper.waitForElementExistByLocator(this.sendReportEmail, true);\n' +
+            '        await this.sendReportEmail.click();\n' +
+            '    }\n' +
+            '    public get emailSentMessage() {\n' +
+            '        const locator = LocatorProvider.getElement(TypeLocator.XPATH, LocatorMovements.movementsIos.emailSentMessage, TypeLocator.ANDROID, LocatorMovements.movementsAndroid.emailSentMessage);\n' +
+            '        return $(locator);\n' +
+            '    }\n' +
+            '    public async validateEmailSentMessage(): Promise<void> {\n' +
+            "        await this.uiHelper.waitForElementDisplayedAndExpect(this.emailSentMessage, 5000, 'No se muestra la confirmacion');\n" +
+            '    }\n' +
+            '}\nexport default new movementScreen();',
+        );
+        response.files.find(file => file.layer === 'locators').content = JSON.stringify({
+            movementsAndroid: {
+                titleMovements: 'new UiSelector().text("Movimientos")',
+                sendReportEmail: 'new UiSelector().description("Botón de enviar por correo")',
+                emailSentMessage: 'new UiSelector().description("Tu correo se estará enviando")',
+            },
+            movementsIos: { titleMovements: 'Movimientos', sendReportEmail: '', emailSentMessage: '' },
+        }, null, 2);
+        response.actionTrace = [{
+            sequence: 1,
+            gherkinStep: 'When el usuario envia el reporte por correo',
+            screenMethod: 'sendReportByEmail',
+            locatorName: 'sendReportEmail',
+        }, {
+            sequence: 2,
+            gherkinStep: 'Then se muestra la confirmacion del envio',
+            screenMethod: 'validateEmailSentMessage',
+            locatorName: 'emailSentMessage',
+        }];
+
+        const validation = new AutomationResponseValidator(undefined, emptyCatalog).validate(resolved.scenario, plan, response);
+
+        assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+        assert.equal(validation.qualityScore, 100);
+        assert.ok(validation.warnings.some(warning => /trace-locator relajado/.test(warning)));
+        // Y si el agente si mete deuda nueva (un import relativo propio), esa si es suya.
+        const dirty = JSON.parse(JSON.stringify(response));
+        dirty.files.find(file => file.layer === 'screen').content =
+            "import { ConstantsPayment } from '../../support/utils/payment.js';\n" +
+            dirty.files.find(file => file.layer === 'screen').content;
+        const dirtyValidation = new AutomationResponseValidator(undefined, emptyCatalog).validate(resolved.scenario, plan, dirty);
+        assert.ok(dirtyValidation.errors.some(error => /imports relativos no permitidos: \.\.\/\.\.\/support/.test(error.message)));
+    } finally {
+        fs.writeFileSync(absoluteScreen, originalScreen);
+        fs.writeFileSync(absoluteLocators, originalLocators);
+    }
+});
+
 function validResponse(plan, recordingId = 'rec-test') {
     const screenPath = plan.files.find(file => file.layer === 'screen').path;
     const locatorPath = plan.files.find(file => file.layer === 'locators').path;

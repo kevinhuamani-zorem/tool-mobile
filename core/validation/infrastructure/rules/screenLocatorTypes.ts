@@ -23,11 +23,17 @@ export function screenLocatorTypes(
         if (statement.importClause?.isTypeOnly) return;
         const specifier = statement.moduleSpecifier.text;
         const defaultIdentifier = statement.importClause?.name?.text;
+        // Alias del framework o, en un Screen escrito a mano que se
+        // actualiza, la ruta relativa que ya tenia el baseline: el modulo es
+        // el mismo y el getter que lo consume tiene que poder resolverse.
+        const relativeLocators = specifier.match(/(?:^|\/)(resources\/locators\/.+\.locator\.json)$/)?.[1];
         if (specifier.startsWith('@locators/') && specifier.endsWith('.locator.json') && defaultIdentifier) {
             locatorFilesByIdentifier.set(
                 defaultIdentifier,
                 specifier.replace(/^@locators\//, 'resources/locators/'),
             );
+        } else if (relativeLocators && defaultIdentifier) {
+            locatorFilesByIdentifier.set(defaultIdentifier, relativeLocators);
         }
         if (specifier === contract.locatorFactoryImport && defaultIdentifier) {
             locatorFactoryIdentifiers.add(defaultIdentifier);
