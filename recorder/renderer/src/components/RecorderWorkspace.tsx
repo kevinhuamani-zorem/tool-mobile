@@ -106,21 +106,23 @@ export function RecorderWorkspace() {
           <option value="ESPERAR">⏳ ESPERAR</option>
           <option value="SCREENSHOT">📸 SCREENSHOT</option>
           </select>
-          <label className="field-label">Valor:</label>
+          <label className="field-label" id="lblStepValue" htmlFor="txtValue">Valor:</label>
           <input type="text" id="txtValue" className="field-input" placeholder="texto, segundos..." />
           <div id="textAssertionEditor" hidden>
-            <label className="field-label" htmlFor="cmbTextSource">¿Qué texto se lee?</label>
-            <select id="cmbTextSource" className="field-select">
-              <option value="element">Texto del elemento seleccionado</option>
-              <option value="container">Contenido del contenedor y sus descendientes</option>
-            </select>
-            <small>El selector debe apuntar al elemento o contenedor elegido. No se buscará un padre automáticamente.</small>
             <label className="field-label" htmlFor="cmbTextOperator">Comparar con el valor esperado</label>
             <select id="cmbTextOperator" className="field-select">
               <option value="contains">Contiene</option>
               <option value="equals">Es igual a (texto completo)</option>
             </select>
-            <small>Comparación exacta de caracteres: conserva mayúsculas, tildes y espacios. El contenido une texto propio y descendientes con saltos de línea.</small>
+            <small>Compara el texto leído del elemento seleccionado, no el selector. Conserva mayúsculas, tildes y espacios.</small>
+            <details id="textAssertionAdvanced" style={{ marginBlock: 12 }}>
+              <summary>Opciones avanzadas</summary>
+              <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" id="chkTextDescendants" />
+                Incluir texto de descendientes
+              </label>
+              <small>Actívalo si necesitas leer el contenido de los hijos del elemento seleccionado. Une su texto y el de sus descendientes con saltos de línea. No cambia el selector ni busca un padre automáticamente.</small>
+            </details>
             <button className="btn btn-navy btn-full" id="btnPreviewTextAssertion">Leer y probar sin guardar</button>
             <pre id="textAssertionPreview" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 200, overflow: 'auto' }} aria-live="polite" />
             <button className="btn btn-blue btn-full" id="btnUpdateTextAssertion" hidden>Comprobar y actualizar acción seleccionada</button>

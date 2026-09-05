@@ -45,7 +45,9 @@ export function createRecordingFeature(deps) {
     const btnClear    = document.getElementById('btnClearSteps');
     const lblVerify   = document.getElementById('lblVerifyResult');
     const textEditor = document.getElementById('textAssertionEditor');
-    const textSource = document.getElementById('cmbTextSource');
+    const textDescendants = document.getElementById('chkTextDescendants');
+    const textAdvanced = document.getElementById('textAssertionAdvanced');
+    const valueLabel = document.getElementById('lblStepValue');
     const textOperator = document.getElementById('cmbTextOperator');
     const textPreview = document.getElementById('textAssertionPreview');
     const btnPreviewText = document.getElementById('btnPreviewTextAssertion');
@@ -54,7 +56,12 @@ export function createRecordingFeature(deps) {
     const btnCancelText = document.getElementById('btnCancelTextEdit');
     let editingTextIndex = -1;
 
-    const assertionDefinition = () => ({ version: 1, source: textSource?.value || 'element', operator: textOperator?.value || 'contains' });
+    const assertionDefinition = () => ({ version: 1, source: textDescendants?.checked ? 'container' : 'element', operator: textOperator?.value || 'contains' });
+    function resetTextOptions() {
+        if (textDescendants) textDescendants.checked = false;
+        if (textAdvanced) textAdvanced.open = false;
+        if (textOperator) textOperator.value = 'contains';
+    }
     function showTextResult(result) {
         if (!textPreview) return;
         const preview = result.textPreview;
@@ -186,12 +193,14 @@ export function createRecordingFeature(deps) {
         renderSelectedLocatorCoverage();
         if (txtValue)    txtValue.value    = '';
         if (txtDesc)     txtDesc.value     = '';
+        resetTextOptions();
         setVerify('— Ingresa un selector');
     }
 
     function mount() {
         const resetPreview = () => { if (textPreview) textPreview.textContent = ''; };
-        [txtSelector, txtValue, textSource, textOperator].forEach(input => on(input, 'input', resetPreview));
+        [txtSelector, txtValue, textOperator].forEach(input => on(input, 'input', resetPreview));
+        on(textDescendants, 'change', resetPreview);
         on(btnCancelText, 'click', () => { updateMoveButtons(); clearStepFields(); resetPreview(); });
         on(btnEditText, 'click', () => {
             const step = renderedSteps[selectedStepIndex];
@@ -202,12 +211,13 @@ export function createRecordingFeature(deps) {
             txtSelector.value = step.selector || '';
             txtValue.value = step.value || '';
             if (txtElementContext) txtElementContext.value = step.contextHint || step.description || '';
-            textSource.value = step.textAssertion?.source || 'element';
+            textDescendants.checked = step.textAssertion?.source === 'container';
+            textAdvanced.open = textDescendants.checked;
             textOperator.value = step.textAssertion?.operator || 'contains';
             btnUpdateText.hidden = false;
             btnCancelText.hidden = false;
             btnExecute.hidden = true;
-            textPreview.textContent = step.textAssertion ? 'Define los cambios y compruébalos en la pantalla actual.' : 'Grabación anterior sin intención explícita. Elige la fuente y comparación antes de actualizar; no cambiaremos el selector.';
+            textPreview.textContent = step.textAssertion ? 'Define los cambios y compruébalos en la pantalla actual.' : 'Grabación anterior sin intención explícita. Revisa la comparación y, si necesitas texto de descendientes, activa la opción avanzada. No cambiaremos el selector.';
             textEditor.scrollIntoView?.({ block: 'nearest' });
         });
         on(btnPreviewText, 'click', async () => {
@@ -228,6 +238,7 @@ export function createRecordingFeature(deps) {
                 showTextResult(result);
                 if (result.success) {
                     invalidatePreview();
+                    clearStepFields();
                     renderSteps(result.steps);
                     await refreshGherkinPreview();
                     setStatus('✓ Validación actualizada y comprobada', '#00CC00');
@@ -238,7 +249,8 @@ export function createRecordingFeature(deps) {
         on(cmbAction, 'change', () => {
             const action  = cmbAction.value;
             if (textEditor) textEditor.hidden = action !== 'VERIFICAR_TEXTO';
-            if (action !== 'VERIFICAR_TEXTO') updateMoveButtons();
+            if (valueLabel) valueLabel.textContent = action === 'VERIFICAR_TEXTO' ? 'Valor esperado:' : 'Valor:';
+            if (action !== 'VERIFICAR_TEXTO') { updateMoveButtons(); resetTextOptions(); resetPreview(); }
             const noSel   = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
             txtSelector.disabled = noSel.includes(action);
             txtVarName.disabled  = noSel.includes(action);

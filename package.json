@@ -38,6 +38,7 @@
     "productName": "Appium Recorder",
     "asar": false,
     "npmRebuild": false,
+    "afterPack": "scripts/check-packaged-typescript.js",
     "directories": {
       "output": "release"
     },
@@ -48,6 +49,11 @@
       "!node_modules/.cache/**/*"
     ],
     "extraResources": [
+      {
+        "from": "node_modules/typescript/lib",
+        "to": "app/node_modules/typescript/lib",
+        "filter": ["lib*.d.ts"]
+      },
       {
         "from": "build/runtime-origin.json",
         "to": "runtime-origin.json"

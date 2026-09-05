@@ -292,6 +292,8 @@ test('una espera fija se convierte en espera explicita sobre el elemento siguien
     assert.doesNotMatch(preview.screenContent, /browser\.pause|driver\.pause/,
         'una pausa por tiempo es un hallazgo High que bloquea el merge');
     assert.match(preview.screenContent, /waitForElementDisplayedAndExpect\(this\.continueButton, timeout/);
+    assert.match(preview.screenContent, /public async continueFlow\([^)]*\): Promise<void> \{\s+const timeout: number = getTimeoutFromEnv\(\);/);
+    assert.doesNotMatch(preview.screenContent, /^const timeout:/m, 'el timeout pertenece al método, no se pierde al fusionar el Screen');
 });
 
 test('un Unhappy Path va a regresion y el Feature lleva su tag de dominio', () => {

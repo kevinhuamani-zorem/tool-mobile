@@ -637,6 +637,8 @@ export class FwkMobileGenerator {
                 name: methodName,
                 content: [
                 `    public async ${methodName}(${args}): Promise<void> {`,
+                ...(hasTimeout && actions.some(line => /\btimeout\b/.test(line))
+                    ? [`        const timeout: number = ${contract.timeoutHelperSymbol}();`] : []),
                 ...actions.map(line => `        ${line}`),
                 `    }`
                 ].join('\n')
@@ -674,7 +676,6 @@ export class FwkMobileGenerator {
             ...(usesTimeout
                 ? [`import { ${contract.timeoutHelperSymbol} } from '${contract.timeoutHelperImport}';`]
                 : []),
-            ...(usesTimeout ? ['', `const timeout: number = ${contract.timeoutHelperSymbol}();`] : []),
             '',
             `class ${className} extends ${contract.baseScreenClass} {`,
             ...getters.flatMap(getter => ['', getter]),

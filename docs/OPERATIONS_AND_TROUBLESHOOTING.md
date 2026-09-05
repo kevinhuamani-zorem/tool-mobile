@@ -4,12 +4,16 @@
 
 1. Selecciona/verifica el locator del **contenedor** que contiene la información;
    el recorder no convierte automáticamente un selector de un hijo en su padre.
-2. Elige `VERIFICAR TEXTO`, introduce `Hoy` y selecciona
-   `Contenido del contenedor y sus descendientes` → `Contiene`.
+2. Elige `VERIFICAR TEXTO`, introduce `Hoy` como **Valor esperado** y selecciona
+   **Contiene**. Por defecto se lee el texto del elemento seleccionado. Si
+   necesitas también el texto de sus hijos, abre **Opciones avanzadas** y activa
+   **Incluir texto de descendientes** (desactivado para nuevas acciones).
 3. Pulsa **Leer y probar sin guardar** para revisar texto leído, esperado y resultado.
    Solo **Guardar paso y continuar** registra la comparación si pasa.
 4. Para una verificación anterior, selecciónala en la lista y pulsa **✎ Texto**.
-   Elige su fuente/operador y pulsa **Comprobar y actualizar acción seleccionada**.
+   Revisa la comparación y pulsa **Comprobar y actualizar acción seleccionada**.
+   Si ya incluía descendientes, la opción avanzada aparece abierta y activada;
+   no se reinterpreta la grabación anterior al abrirla.
    Debes estar en la pantalla correspondiente del dispositivo. Esta edición
    conserva el selector; para cambiarlo, registra una nueva acción.
 5. Regenera la automatización para que los agentes reciban la intención actualizada.
@@ -33,6 +37,20 @@ como agente. No requiere `.env`, `TARGET_PROJECT` ni selección de proveedor. La
 plataforma queda fija al crear la sesión.
 
 ## Aplicación macOS
+
+Si el preview informa `Cannot find name 'Promise'` y faltan `lib.es2021.d.ts`
+o `lib.dom.d.ts` dentro del `.app`, reconstruye con `npm run package:mac`.
+Las librerías estándar de TypeScript se incluyen explícitamente y el hook
+`afterPack` comprueba sus bytes y compila una prueba de `Promise` antes de
+entregar la aplicación. No cambies el `tsconfig` del framework para ocultarlo.
+
+Un `timeout` sin declarar es distinto: regenera la propuesta con esta versión.
+Los métodos del borrador declaran el timeout localmente desde el helper del
+framework; la fusión conserva sus imports y Zorem recibe esas dependencias.
+Si la respuesta ya contiene el import pero el preview indica que falta el helper,
+reimporta con la versión corregida: el patch aditivo del Screen también conserva
+imports auxiliares, incluso cuando solo se está corrigiendo un import sin añadir
+métodos. No hace falta volver a ejecutar al agente.
 
 Para construir un `.app` de pruebas en una Mac Apple Silicon:
 

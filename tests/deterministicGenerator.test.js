@@ -240,6 +240,17 @@ test('reemplazo autorizado actualiza getter y conserva APIs existentes', () => {
     assert.equal((merged.match(/public get btntoday\(/g) || []).length, 1);
 });
 
+test('Screen update conserva imports auxiliares y timeout local sin duplicarlos al refinar', () => {
+    const baseline = "import BaseScreen from '@screenobjects/commons/base.screen.ts';\nclass ExistingScreen extends BaseScreen {\n}\nexport default new ExistingScreen();\n";
+    const generated = "import BaseScreen from '@screenobjects/commons/base.screen.ts';\nimport { getTimeoutFromEnv } from '@common/utils/environment-config.js';\nclass ExistingScreen extends BaseScreen {\n    public async verify(): Promise<void> {\n        const timeout: number = getTimeoutFromEnv();\n        await this.uiHelper.waitForElementDisplayedAndExpect(this.title, timeout, 'missing');\n    }\n}\n";
+    const merged = mergeScreenUpdate(baseline, generated, 'screenobjects/payment/existing.screen.ts');
+    assert.match(merged, /import \{ getTimeoutFromEnv \}/);
+    assert.match(merged, /const timeout: number = getTimeoutFromEnv\(\)/);
+    const repeated = mergeScreenUpdate(merged, generated, 'screenobjects/payment/existing.screen.ts');
+    assert.equal((repeated.match(/import \{ getTimeoutFromEnv \}/g) || []).length, 1);
+    assert.equal((repeated.match(/public async verify/g) || []).length, 1);
+});
+
 test('reemplazo autorizado modifica solo la plataforma grabada del locator', () => {
     const plan = {
         resolutions: [{

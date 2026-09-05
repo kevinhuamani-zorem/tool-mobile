@@ -22,3 +22,4 @@ export * from './infrastructure/fwkMobileGenerator';
 export * from './infrastructure/deterministicGenerator';
 export * from './infrastructure/deterministicDraftBuilder';
 export * from './infrastructure/effectiveGenerationPlan';
+export { mergePatchImports, proposedImports } from './infrastructure/patchImports';

@@ -1202,13 +1202,14 @@ test('Zorem recibe el borrador de un archivo update como adiciones sobre el base
         'export default new CaseScreen();',
         '',
     ].join('\n');
-    const draftScreen = baselineScreen.replace(
+    const draftScreen = "import { getTimeoutFromEnv } from '@common/utils/environment-config.js';\n" + baselineScreen.replace(
         '    public async tapExisting',
         [
             '    private get newButton(): string {',
             '        return Locators["caseAndroid"].newButton;',
             '    }',
             '    public async tapNew(): Promise<void> {',
+            '        const timeout: number = getTimeoutFromEnv();',
             '        await this.uiHelper.waitForDisplayed(this.newButton);',
             '    }',
             '    public async tapExisting',
@@ -1248,6 +1249,9 @@ test('Zorem recibe el borrador de un archivo update como adiciones sobre el base
     assert.equal(screen.operation, 'update');
     assert.equal(screen.baseline, 'baselines/screen-case.screen.ts');
     assert.equal('content' in screen, false, 'el archivo completo no se repite: ya esta en baselines/');
+    assert.ok(Array.isArray(screen.additions.imports), 'Zorem recibe los imports necesarios junto a los métodos');
+    assert.ok(screen.additions.imports.some(line => line.includes('getTimeoutFromEnv')));
+    assert.match(screen.additions.methods[0].code, /const timeout: number = getTimeoutFromEnv\(\)/);
     assert.deepEqual(screen.additions.getters.map(item => item.name), ['newButton']);
     assert.deepEqual(screen.additions.methods.map(item => item.name), ['tapNew']);
     assert.match(screen.additions.methods[0].code, /waitForDisplayed\(this\.newButton\)/);

@@ -36,7 +36,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
         ].join(' ')
         : [
             'Genera únicamente Screen Object y Locators.',
-            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan. Un archivo del borrador con operation update trae solo sus adiciones (getters, métodos, claves) sobre el baseline de baselines/.',
+            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan. Un archivo del borrador con operation update trae sus imports necesarios y adiciones (getters, métodos, claves) sobre el baseline de baselines/. Integra additions.imports sin duplicar bindings. Si usas timeout, decláralo en el método desde el helper de framework-api.json e importa ese helper; no supongas variables globales.',
             'Lee behavior-result.json y lorem-handoff.json: implementa exactamente los screenMethod requeridos por Lorem.',
             'Lee screen-api.json: cada método identifica su módulo, posiciones/tipos de argumentos, uso del retorno y secuencias. Debes aceptar todas sus llamadas con firmas compatibles (incluidos opcionales/rest y sobrecargas). No cambies firmas heredadas; añade una API compatible si hace falta. No edites este contrato derivado.',
             'Para operation update parte de baselines y preserva byte a byte toda API, import y locator no afectado.',

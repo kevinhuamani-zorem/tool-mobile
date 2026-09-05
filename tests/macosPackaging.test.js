@@ -64,11 +64,26 @@ test('packaging config produces a mac app with the isolated mobile runtime', () 
     assert.equal(fs.existsSync(path.join(recorderRoot, 'scripts', 'prepare-macos-output.js')), true);
     assert.equal(packageJson.build.mac.icon, 'build/icon.png');
     assert.equal(packageJson.build.asar, false);
+    assert.equal(packageJson.build.afterPack, 'scripts/check-packaged-typescript.js');
+    assert.ok(packageJson.build.extraResources.some(resource =>
+        resource.from === 'node_modules/typescript/lib' && resource.filter.includes('lib*.d.ts')));
     assert.equal(packageJson.build.mac.identity, null);
     assert.ok(Number(packageJson.devDependencies.electron.match(/\d+/)[0]) >= 37);
     assert.ok(packageJson.build.extraResources.some(resource =>
         resource.to.includes('appium-inspector/eda9016ca23fb8b6f021063f560ba6724eae3716')));
     assert.ok(packageJson.build.extraResources.some(resource => resource.to === 'runtime-origin.json'));
+});
+
+test('packaged compiler requires its standard libraries and can resolve Promise', () => {
+    const { checkPackagedTypeScript } = require('../scripts/check-packaged-typescript');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-ts-package-'));
+    try {
+        const lib = path.join(root, 'node_modules/typescript/lib');
+        fs.cpSync(path.dirname(require.resolve('typescript')), lib, { recursive: true });
+        assert.doesNotThrow(() => checkPackagedTypeScript(root));
+        fs.unlinkSync(path.join(lib, 'lib.es2021.d.ts'));
+        assert.throws(() => checkPackagedTypeScript(root), /lib.es2021.d.ts ausente/);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('bundled Appium manifest points to both recorder-owned drivers', () => {

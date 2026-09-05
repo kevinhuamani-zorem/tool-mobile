@@ -3,6 +3,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { proposedImports } from '../../../generation';
 import {
     readJsonUtf8,
     writeJsonUtf8,
@@ -73,6 +74,7 @@ export function draftFileForInteraction(packageDirectory: string, file: any): an
                 operation: 'update',
                 baseline: baselineReference,
                 additions: {
+                    imports: proposedImports(String(content || '')),
                     getters: additions.getters.map(item => ({ name: item.name, code: item.code })),
                     methods: additions.methods.map(item => ({ name: item.name, code: item.code })),
                 },

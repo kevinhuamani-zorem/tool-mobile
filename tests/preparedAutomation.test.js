@@ -86,6 +86,26 @@ test('un cambio externo o creación concurrente invalida el preview antes de esc
     assert.equal(fs.readFileSync(p.preview.stepPath, 'utf8'), 'QA edit');
 });
 
+test('Screen update conserva imports auxiliares en preview, revalidación y commit', t => {
+    const f = fixture(t);
+    const baseline = 'class Screen {\n    public async old() {}\n}\n';
+    const target = 'features/test.screen.ts';
+    fs.writeFileSync(path.join(f.root, target), baseline);
+    f.plan.files.push({ layer: 'screen', path: target, operation: 'update' });
+    const content = "import {\n    getTimeoutFromEnv\n} from '@common/utils/env/environment-config.js';\n" + baseline.replace('    public async old()', '    public async verify() { const timeout = getTimeoutFromEnv(); return timeout; }\n    public async old()');
+    f.response.files.push({ layer: 'screen', path: target, content });
+    f.preview.screenPath = path.join(f.root, target);
+    f.preview.files.push(f.preview.screenPath);
+    const prepared = f.applier.prepare(f.scenario, f.plan, f.response, f.preview);
+    assert.match(prepared.preview.screenContent, /import \{\s*getTimeoutFromEnv\s*\} from/);
+    assert.match(prepared.preview.screenContent, /const timeout = getTimeoutFromEnv\(\)/);
+    assert.equal(fs.readFileSync(f.preview.screenPath, 'utf8'), baseline);
+    const repeated = f.applier.prepare(f.scenario, f.plan, prepared.response, prepared.preview);
+    assert.equal(repeated.preview.screenContent, prepared.preview.screenContent);
+    f.applier.commit(prepared, f.scenario, f.plan);
+    assert.equal(fs.readFileSync(f.preview.screenPath, 'utf8'), prepared.preview.screenContent);
+});
+
 test('fallo al escribir la segunda capa restaura la primera', t => {
     class Fails extends AutomationApplier {
         writeTarget(file, content) {

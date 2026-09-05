@@ -79,6 +79,36 @@ function fixture(t) {
 
 const BASE = { recordingId: 'rec-abc123', createdAt: '2026-08-21T17:00:00.000Z' };
 
+test('Screen reconoce alias y ruta relativa del mismo módulo sin sustituir el import original', t => {
+    const ctx = fixture(t);
+    fs.mkdirSync(path.join(ctx.root, 'screenobjects/commons'), { recursive: true });
+    fs.writeFileSync(path.join(ctx.root, 'screenobjects/commons/base.screen.ts'), 'export default class BaseScreen {}');
+    fs.writeFileSync(path.join(ctx.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
+        baseUrl: '.', paths: { '@screenobjects/*': ['screenobjects/*'] }, moduleResolution: 'node16', module: 'NodeNext',
+    } }));
+    const [outcome] = ctx.writer.prepare({ ...BASE, screen: { file: ctx.files.screen, getters: [], methods: [],
+        imports: ["import BaseScreen from '@screenobjects/commons/base.screen.ts';", "import { getTimeoutFromEnv } from '@common/env';"],
+    } }, ctx.root);
+    assert.match(outcome.content, /import BaseScreen from '\.\.\/commons\/base.screen.ts'/);
+    assert.equal((outcome.content.match(/import BaseScreen/g) || []).length, 1);
+    assert.match(outcome.content, /getTimeoutFromEnv/);
+    assert.equal(ctx.read('screen'), SCREEN);
+    assert.throws(() => ctx.writer.prepare({ ...BASE, screen: { file: ctx.files.screen, getters: [], methods: [],
+        imports: ["import BaseScreen from '@unrelated/base';"],
+    } }, ctx.root), /Import incompatible/);
+});
+
+test('corrección de import en Screen sin métodos nuevos es idempotente y rechaza conflictos', () => {
+    const writer = new AutomationPatchWriter();
+    const baseline = 'class Screen { verify() { return getTimeoutFromEnv(); } }';
+    const imports = ["import { getTimeoutFromEnv } from '@common/utils/env/environment-config.js';"];
+    const first = writer.patchScreen(baseline, [], [], BASE.recordingId, BASE.createdAt, imports);
+    assert.match(first.content, /import \{ getTimeoutFromEnv \}/);
+    assert.equal(writer.patchScreen(first.content, [], [], BASE.recordingId, BASE.createdAt, imports).content, first.content);
+    assert.throws(() => writer.patchScreen(first.content, [], [], BASE.recordingId, BASE.createdAt,
+        ["import { other as getTimeoutFromEnv } from '@other';"]), /Import incompatible/);
+});
+
 // El estandar del repo prohibe metadatos dentro del JSON de locators: la traza
 // de que grabacion aporto cada clave vive en el registro del recorder.
 test('agrega la clave nueva a ambos bloques sin ensuciar el JSON con _metadata', t => {

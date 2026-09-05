@@ -49,7 +49,7 @@ export interface PatchInput {
         additions: LocatorAddition[];
         completions?: LocatorCompletionEdit[];
     };
-    screen?: { file: string; getters: MemberAddition[]; methods: MemberAddition[] };
+    screen?: { file: string; getters: MemberAddition[]; methods: MemberAddition[]; imports?: string[] };
     steps?: { file: string; definitions: MemberAddition[]; screenImport?: string; imports?: string[] };
     feature?: { file: string; scenario: string };
 }
@@ -172,7 +172,8 @@ export class AutomationPatchWriter {
     }
 
     /** Getters tras el último getter existente; métodos antes del cierre de clase. */
-    patchScreen(content: string, getters: MemberAddition[], methods: MemberAddition[], recordingId: string, createdAt: string) {
+    patchScreen(content: string, getters: MemberAddition[], methods: MemberAddition[], recordingId: string, createdAt: string, imports: string[] = [], resolveModule?: (specifier: string) => string) {
+        content = mergePatchImports(content, imports, resolveModule);
         const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
         const declaration = source.statements.find(ts.isClassDeclaration);
         if (!declaration) throw new AdditivePatchError('El Screen Object no declara una clase');
@@ -267,8 +268,15 @@ export class AutomationPatchWriter {
                 ));
         }
         if (input.screen) {
+            const root = path.resolve(frameworkRoot);
+            const configFile = path.join(root, 'tsconfig.json');
+            const config = ts.readConfigFile(configFile, ts.sys.readFile);
+            const options = config.error ? {} : ts.parseJsonConfigFileContent(config.config,
+                { ...ts.sys, readDirectory: () => [] }, root, undefined, configFile).options;
+            const resolveModule = (specifier: string) => ts.resolveModuleName(specifier,
+                path.join(root, input.screen!.file), options, ts.sys).resolvedModule?.resolvedFileName || specifier;
             run('screen', input.screen.file, before =>
-                this.patchScreen(before, input.screen!.getters, input.screen!.methods, input.recordingId, input.createdAt));
+                this.patchScreen(before, input.screen!.getters, input.screen!.methods, input.recordingId, input.createdAt, input.screen!.imports, resolveModule));
         }
         if (input.steps) {
             run('steps', input.steps.file, before =>
@@ -336,14 +344,14 @@ export function locatorAdditions(current: string, proposed: string): LocatorAddi
         }));
 }
 
-export function screenAdditions(current: string, proposed: string): { getters: MemberAddition[]; methods: MemberAddition[] } {
+export function screenAdditions(current: string, proposed: string): { getters: MemberAddition[]; methods: MemberAddition[]; imports: string[] } {
     const parse = (content: string, name: string) =>
         ts.createSourceFile(name, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const currentSource = parse(current, 'current.ts');
     const proposedSource = parse(proposed, 'proposed.ts');
     const currentClass = currentSource.statements.find(ts.isClassDeclaration);
     const proposedClass = proposedSource.statements.find(ts.isClassDeclaration);
-    if (!proposedClass) return { getters: [], methods: [] };
+    if (!proposedClass) return { getters: [], methods: [], imports: [] };
     const existing = new Set((currentClass?.members || [])
         .filter(member => member.name && ts.isIdentifier(member.name))
         .map(member => (member.name as ts.Identifier).text));
@@ -357,7 +365,7 @@ export function screenAdditions(current: string, proposed: string): { getters: M
         if (ts.isGetAccessorDeclaration(member)) getters.push({ name, code: indent(code) });
         else if (ts.isMethodDeclaration(member)) methods.push({ name, code: indent(code) });
     }
-    return { getters, methods };
+    return { getters, methods, imports: proposedImports(proposed) };
 }
 
 function indent(code: string): string {

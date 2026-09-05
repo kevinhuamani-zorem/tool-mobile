@@ -22,6 +22,7 @@ import { aliasImport, frameworkContract, projectPaths } from '../../workspace';
 import { effectiveGenerationPlan } from './effectiveGenerationPlan';
 import { ReuseAnalyzer } from '../../indexing';
 import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from '../../shared';
+import { mergePatchImports, proposedImports } from './patchImports';
 
 function readJson<T>(file: string): T {
     return readJsonUtf8<T>(file);
@@ -434,6 +435,8 @@ export function mergeScreenUpdate(
     const getterAdditions = generatedGetters.filter(getter => !existingGetters.has(getter.name));
     const methodAdditions = extractAsyncMethods(generated).filter(method => !existingMethods.has(method.name));
     const additions = [...getterAdditions, ...methodAdditions];
+    if (!additions.length && !existingForReplacement.length) return baseline;
+    baseline = mergePatchImports(baseline, proposedImports(generated));
     if (!additions.length) return baseline;
     const exportIndex = baseline.lastIndexOf('\nexport default');
     const classEnd = baseline.lastIndexOf('\n}', exportIndex >= 0 ? exportIndex : baseline.length);
