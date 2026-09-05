@@ -3,6 +3,7 @@ import path from 'path';
 import ts from 'typescript';
 import { GENERATED_FILE_AUTHOR, GENERATED_FILE_GENERATOR } from '../../generation';
 import { normalizeUnicodeText, writeUtf8FileAtomic } from '../../shared';
+import { mergePatchImports, proposedImports } from './patchImports';
 
 /**
  * Escritura aditiva sobre archivos existentes del framework.
@@ -49,7 +50,7 @@ export interface PatchInput {
         completions?: LocatorCompletionEdit[];
     };
     screen?: { file: string; getters: MemberAddition[]; methods: MemberAddition[] };
-    steps?: { file: string; definitions: MemberAddition[]; screenImport?: string };
+    steps?: { file: string; definitions: MemberAddition[]; screenImport?: string; imports?: string[] };
     feature?: { file: string; scenario: string };
 }
 
@@ -59,6 +60,8 @@ export interface PatchOutcome {
     added: string[];
     skipped: string[];
 }
+
+export interface PreparedPatch extends PatchOutcome { before: string; content: string }
 
 export class AdditivePatchError extends Error {}
 
@@ -209,7 +212,7 @@ export class AutomationPatchWriter {
     }
 
     /** Definiciones al final del archivo, añadiendo el import del Screen si falta. */
-    patchSteps(content: string, definitions: MemberAddition[], screenImport: string | undefined, recordingId: string, createdAt: string) {
+    patchSteps(content: string, definitions: MemberAddition[], screenImport: string | string[] | undefined, recordingId: string, createdAt: string) {
         const existing = new Set(symbolsOf('steps', content));
         const added: string[] = [];
         const skipped: string[] = [];
@@ -219,13 +222,8 @@ export class AutomationPatchWriter {
             return true;
         });
         if (!pending.length) return { content, added, skipped };
-        let output = content.replace(/\s*$/, '\n');
-        if (screenImport && !output.includes(screenImport)) {
-            const imports = [...output.matchAll(/^import .+;$/gm)];
-            const last = imports[imports.length - 1];
-            const at = last ? last.index! + last[0].length : 0;
-            output = output.slice(0, at) + `\n${screenImport}` + output.slice(at);
-        }
+        let output = mergePatchImports(content, typeof screenImport === 'string'
+            ? [screenImport] : screenImport || []).replace(/\s*$/, '\n');
         const header = provenance('//', recordingId, createdAt);
         output += '\n' + pending.map(item => header + item.code.replace(/\n?$/, '\n')).join('\n');
         return { content: output, added, skipped };
@@ -234,15 +232,16 @@ export class AutomationPatchWriter {
     /** Escenario al final del Feature, sin tocar los existentes. */
     patchFeature(content: string, scenario: string, recordingId: string, createdAt: string) {
         const existing = new Set(symbolsOf('feature', content));
-        const name = (scenario.match(/^\s*Scenario(?: Outline)?:\s*(.+?)\s*$/m) || [])[1];
-        if (name && existing.has(name)) return { content, added: [], skipped: [name] };
+        const names = symbolsOf('feature', scenario);
+        const pending = featureAdditions(content, scenario);
+        if (!pending) return { content, added: [], skipped: names };
         const header = provenance('#', recordingId, createdAt, '  ');
-        const output = content.replace(/\s*$/, '\n') + '\n' + header + scenario.replace(/\n?$/, '\n');
-        return { content: output, added: name ? [name] : [], skipped: [] };
+        const output = content.replace(/\s*$/, '\n') + '\n' + header + pending.split(header).join('');
+        return { content: output, added: names.filter(name => !existing.has(name)), skipped: names.filter(name => existing.has(name)) };
     }
 
-    apply(input: PatchInput, frameworkRoot: string): PatchOutcome[] {
-        const outcomes: PatchOutcome[] = [];
+    prepare(input: PatchInput, frameworkRoot: string, baselines = new Map<string, string>()): PreparedPatch[] {
+        const outcomes: PreparedPatch[] = [];
         const run = (
             layer: PatchOutcome['layer'],
             relative: string,
@@ -254,10 +253,10 @@ export class AutomationPatchWriter {
             }
             if (!fs.existsSync(absolute)) throw new AdditivePatchError(`No existe el archivo a parchar: ${relative}`);
             const before = fs.readFileSync(absolute, 'utf-8');
-            const result = transform(before);
-            assertAdditive(layer, before, result.content, relative);
-            if (result.content !== before) atomicWrite(absolute, result.content);
-            outcomes.push({ file: relative, layer, added: result.added, skipped: result.skipped });
+            const baseline = baselines.get(relative) ?? before;
+            const result = transform(baseline);
+            assertAdditive(layer, baseline, result.content, relative);
+            outcomes.push({ file: relative, layer, before, content: result.content, added: result.added, skipped: result.skipped });
         };
 
         if (input.locators) {
@@ -273,13 +272,29 @@ export class AutomationPatchWriter {
         }
         if (input.steps) {
             run('steps', input.steps.file, before =>
-                this.patchSteps(before, input.steps!.definitions, input.steps!.screenImport, input.recordingId, input.createdAt));
+                this.patchSteps(before, input.steps!.definitions, input.steps!.imports || input.steps!.screenImport, input.recordingId, input.createdAt));
         }
         if (input.feature) {
             run('feature', input.feature.file, before =>
                 this.patchFeature(before, input.feature!.scenario, input.recordingId, input.createdAt));
         }
         return outcomes;
+    }
+
+    apply(input: PatchInput, frameworkRoot: string): PatchOutcome[] {
+        const patches = this.prepare(input, frameworkRoot);
+        const written: PreparedPatch[] = [];
+        try {
+            for (const patch of patches) {
+                if (patch.content === patch.before) continue;
+                atomicWrite(path.resolve(frameworkRoot, patch.file), patch.content);
+                written.push(patch);
+            }
+        } catch (error) {
+            for (const patch of written.reverse()) atomicWrite(path.resolve(frameworkRoot, patch.file), patch.before);
+            throw error;
+        }
+        return patches.map(({ before, content, ...outcome }) => outcome);
     }
 }
 
@@ -346,8 +361,9 @@ export function screenAdditions(current: string, proposed: string): { getters: M
 }
 
 function indent(code: string): string {
-    return code.startsWith(' ') ? code : code.split('\n').map((line, index) =>
-        index === 0 ? `    ${line}` : (line.trim() ? `    ${line}` : line)).join('\n');
+    // getText removes only the first line's leading trivia; subsequent lines
+    // already have their indentation. Re-indenting them drifts on reimport.
+    return code.startsWith(' ') ? code : `    ${code}`;
 }
 
 export function stepsAdditions(current: string, proposed: string): { definitions: MemberAddition[]; imports: string[] } {
@@ -363,29 +379,27 @@ export function stepsAdditions(current: string, proposed: string): { definitions
         if (!name || existing.has(name)) continue;
         definitions.push({ name, code: text });
     }
-    const currentImports = new Set([...current.matchAll(/^import .+;$/gm)].map(match => match[0]));
-    const imports = [...proposed.matchAll(/^import .+;$/gm)]
-        .map(match => match[0])
-        .filter(line => !currentImports.has(line) && /screen/i.test(line));
+    const imports = proposedImports(proposed);
     return { definitions, imports };
 }
 
 export function featureAdditions(current: string, proposed: string): string | undefined {
     const existing = new Set(symbolsOf('feature', current));
     const lines = proposed.split(/\r?\n/);
-    // Un Feature puede traer varios escenarios: interesa el primero que no exista.
+    // Preserve every new scenario, including multi-line tags and Examples.
     const starts = lines.flatMap((line, index) =>
         /^\s*Scenario(?: Outline)?:/.test(line) ? [index] : []);
-    const start = starts.find(index => {
+    const isNew = (index: number) => {
         const name = (lines[index].match(/^\s*Scenario(?: Outline)?:\s*(.+?)\s*$/) || [])[1];
         return Boolean(name) && !existing.has(name);
-    });
-    if (start === undefined) return undefined;
-    // Se conserva el @tag inmediatamente anterior al Scenario.
-    const tag = start > 0 && /^\s*@[-\w]+\s*$/.test(lines[start - 1]) ? start - 1 : start;
-    const next = starts.find(index => index > start);
-    const end = next === undefined
-        ? lines.length
-        : (/^\s*@[-\w]+\s*$/.test(lines[next - 1]) ? next - 1 : next);
-    return lines.slice(tag, end).join('\n').replace(/\s*$/, '\n');
+    };
+    const headerStart = (index: number) => {
+        while (index > 0 && /^\s*(?:@\S+(?:\s+@\S+)*\s*|#.*)?$/.test(lines[index - 1])) index--;
+        return index;
+    };
+    const blocks = starts.flatMap((start, index) => isNew(start)
+        ? [lines.slice(headerStart(start), index + 1 < starts.length ? headerStart(starts[index + 1]) : lines.length)
+            .join('\n').trimEnd()]
+        : []);
+    return blocks.length ? blocks.join('\n\n').replace(/^\n+/, '') + '\n' : undefined;
 }

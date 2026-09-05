@@ -11,3 +11,4 @@ export * from './domain/selectorNormalization';
 export * from './domain/semanticNaming';
 export * from './domain/featureScope';
 export * from './infrastructure/utf8Text';
+export * from './infrastructure/fileRollback';

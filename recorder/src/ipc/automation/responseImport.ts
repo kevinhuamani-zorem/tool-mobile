@@ -20,6 +20,9 @@ import {
     requireUnchangedAppliedFiles,
     QaObservationsArtifact,
     analyzeScenarioUiTextQuality,
+    AutomationApplier,
+    PreparedAutomation,
+    loadUpdateBaselinesForCorrection,
 } from '../../../../core/automation';
 import { AutomationResponseValidator } from '../../../../core/validation';
 import { DeterministicGenerator } from '../../../../core/generation';
@@ -49,6 +52,7 @@ export interface AutomationResponseImporterDependencies {
     automationResponseValidator: AutomationResponseValidator;
     generatedFileRegistry: GeneratedFileRegistry;
     deterministicGenerator: DeterministicGenerator;
+    automationApplier?: AutomationApplier;
     emitProgress: AutomationProgressEmitter;
 }
 
@@ -191,8 +195,25 @@ export class AutomationResponseImporter {
             ? status.lastInvalidResponseHash
             : '';
         const validatorStarted = process.hrtime.bigint();
+        let prepared: PreparedAutomation | undefined;
+        let preparationError: string | undefined;
+        let correctionBaselines = new Map<string, string>();
+        try {
+            if (applicationReceipt) correctionBaselines = loadUpdateBaselinesForCorrection(packageDirectory, projectPaths.frameworkRoot, plan);
+            prepared = (this.deps.automationApplier || new AutomationApplier()).prepare(
+                scenario, plan, response, automationResponseValidator.toPreview(response), correctionBaselines,
+            );
+            response = prepared.response;
+        } catch (error: any) {
+            preparationError = error.message;
+        }
         emitAutomationProgress('VALIDATING', 'Validando resultado', 5, 6);
         const validation = automationResponseValidator.validate(scenario, plan, response, repairAttempts);
+        if (preparationError) {
+            validation.valid = false;
+            validation.qualityScore = 0;
+            validation.errors.push({ code: 'application-preview', message: preparationError });
+        }
         if (Object.keys(normalized.renamed).length > 0 || normalized.skipped.length > 0) {
             validation.warnings.push(
                 `Normalización de identificadores ES→EN aplicada: ${Object.keys(normalized.renamed).length}; ` +
@@ -221,7 +242,7 @@ export class AutomationResponseImporter {
                 typeof file.path === 'string' &&
                 typeof file.content === 'string'
             )
-            ? automationResponseValidator.toPreview(response)
+            ? prepared?.preview || automationResponseValidator.toPreview(response)
             : null;
         const draftPayload = draftPreview
             ? { draft: { preview: draftPreview, validation } }
@@ -331,7 +352,7 @@ export class AutomationResponseImporter {
                 ...draftPayload,
             };
         }
-        const preview = automationResponseValidator.toPreview(response);
+        const preview = prepared!.preview;
         const observationsFile = path.join(packageDirectory, 'qa-observations.json');
         const observationsArtifact = fs.existsSync(observationsFile)
             ? readJsonUtf8<QaObservationsArtifact>(observationsFile)
@@ -342,7 +363,7 @@ export class AutomationResponseImporter {
         const qaObservations = observationsArtifact.observations;
         const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
         const token = crypto.randomUUID();
-        state.automationPreview = { token, scenario, plan, response };
+        state.automationPreview = { token, scenario, plan, response, prepared, correctionBaselines };
         runStore.mark('ready-for-review');
         emitAutomationProgress('READY_FOR_REVIEW', 'Validación completa', 6, 6);
         return {

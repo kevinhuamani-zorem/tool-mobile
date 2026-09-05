@@ -192,6 +192,18 @@ Examples:
   el baseline (`mergeStepsUpdate`) igual que ya hacía con Screen y Locators, y
   `destructive-update` rechaza cualquier propuesta que pierda una definición.
 
+La aplicación aditiva extrae los imports con el AST de TypeScript, incluyendo
+imports multilínea, aliases y tipos. Fusiona bindings compatibles y conserva
+todos los imports de la propuesta, no solo el primer Screen Object. Si una
+propuesta reutiliza un nombre local para otro módulo/símbolo, el patch reporta
+el conflicto en vez de sustituir el binding heredado. Reaplicar el mismo patch
+no duplica imports ni definiciones.
+
+Al ampliar un Feature se conservan las líneas de tags (varios tags por línea
+o en líneas sucesivas), comentarios asociados y Examples de los escenarios
+nuevos. Si la propuesta contiene varios escenarios nuevos, se agregan todos y
+se registran sus nombres; los existentes no se reescriben.
+
 ### Redacción de las filas del borrador
 
 Orden de preferencia para el texto de cada fila: frase de dominio redactada a
@@ -403,6 +415,27 @@ Al añadir una acción:
 5. verifica local y BrowserStack si usa un comando móvil.
 
 ## Preview, edición y commit
+
+La aplicación con agente prepara ahora `PreparedAutomation` en memoria antes de
+entregar el token. Contiene los bytes finales (también los comentarios de
+procedencia del patch), el contenido previo de cada destino y una huella de
+integridad. El visor muestra esos bytes y permite desplegar sus diferencias
+respecto al framework. Los completions sobre módulos externos aparecen como
+archivos adicionales de solo lectura: su valor sigue viniendo de la grabación.
+
+Aplicar verifica que ningún destino haya cambiado desde ese preview, incluyendo
+archivos nuevos que alguien haya creado entretanto. Una corrección usa las
+baselines originales en memoria; nunca las restaura temporalmente sobre el
+framework. Una edición que el merge aditivo no pueda conservar exige revalidar
+y revisar el resultado, no se descarta en silencio.
+
+La escritura usa una transacción recuperable para los archivos creados y
+actualizados, el registro, el recibo y el estado del paquete. Ante una excepción
+se restauran los anteriores y se retiran únicamente los archivos nuevos de esa
+operación. La memoria tiene rollback propio y promociona la respuesta exacta
+aplicada, después de escribir y registrar el resultado. La recuperación cubre
+fallos capturados durante el proceso; no es un journal persistente contra un
+apagado abrupto del sistema.
 
 El preview es la unidad de autorización:
 

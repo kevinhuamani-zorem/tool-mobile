@@ -8,6 +8,7 @@ import {
     AutomationAgentResponse,
     AutomationScenario,
     GenerationPlan,
+    PreparedAutomation,
 } from '../../../core/automation';
 import { MobileInspector } from '../mobileInspector';
 import { EmbeddedInspectorHandshake } from '../embeddedInspectorProtocol';
@@ -22,6 +23,8 @@ export interface AutomationPreviewState {
     scenario: AutomationScenario;
     plan: GenerationPlan;
     response: AutomationAgentResponse;
+    prepared?: PreparedAutomation;
+    correctionBaselines?: Map<string, string>;
 }
 
 /** Candidatos de selector ya verificados contra la sesión activa por el Inspector embebido. */

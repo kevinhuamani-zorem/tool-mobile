@@ -23,6 +23,7 @@ import {
     learnTranslationsFromRenames,
     readJsonUtf8,
     writeJsonUtf8,
+    withFileRollback,
 } from '../../shared';
 
 interface MemoryEntry {
@@ -122,7 +123,6 @@ export class AutomationMemory implements MemoryFragmentsPort {
     /** Carga el vocabulario aprendido en el diccionario del proceso. */
     loadLearnedVocabulary(): Record<string, string> {
         const learned = this.learnedVocabulary();
-        extendTranslations(learned);
         return learned;
     }
 
@@ -178,6 +178,7 @@ export class AutomationMemory implements MemoryFragmentsPort {
         response: AutomationAgentResponse,
         validation: AutomationValidation,
         gaps?: UnresolvedGap[],
+        onPromoted?: (entry: MemoryEntry) => void,
     ): MemoryEntry {
         if (!validation.valid || validation.qualityScore !== 100) {
             throw new Error('Solo se versionan automatizaciones validadas al 100%');
@@ -188,11 +189,15 @@ export class AutomationMemory implements MemoryFragmentsPort {
             .map(entry => entry.version)) + 1;
         const directory = path.join('cases', scenario.fingerprint, `v${version}`);
         const absolute = path.join(this.root, directory);
+        const files = ['scenario.json', 'generation-plan.json', 'agent-response.json', 'validation.json']
+            .map(file => path.join(absolute, file))
+            .concat([this.indexFile(), this.vocabularyFile(), this.fragmentsFile()]);
+        return withFileRollback(files, () => {
         writeJsonAtomic(path.join(absolute, 'scenario.json'), scenario);
         writeJsonAtomic(path.join(absolute, 'generation-plan.json'), plan);
         writeJsonAtomic(path.join(absolute, 'agent-response.json'), response);
         writeJsonAtomic(path.join(absolute, 'validation.json'), validation);
-        this.learnVocabulary(plan, response);
+        const learned = this.learnVocabulary(plan, response);
         const promotedAt = new Date().toISOString();
         this.learnFragments(scenario, response, gaps, promotedAt);
         const entry: MemoryEntry = {
@@ -204,7 +209,10 @@ export class AutomationMemory implements MemoryFragmentsPort {
         };
         index.entries.push(entry);
         writeJsonAtomic(this.indexFile(), index);
+        onPromoted?.(entry);
+        extendTranslations(learned);
         return entry;
+        });
     }
 
     stats(): { successfulCases: number; versions: number; interactions: number; gapDecisions: number } {

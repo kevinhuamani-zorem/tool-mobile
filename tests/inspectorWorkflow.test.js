@@ -164,8 +164,8 @@ test('aplica completions externos aunque el plan no tenga capas update', () => {
     const additiveUpdates = between(applier, 'applyAdditiveUpdates(', '    apply(');
     assert.doesNotMatch(additiveUpdates, /if \(!updates\.size\) return/);
     assert.match(additiveUpdates, /for \(const \[file, completions\] of completionsByFile\)/);
-    assert.match(additiveUpdates, /this\.patchWriter\.apply\([\s\S]*additions: \[\], completions/);
+    assert.match(additiveUpdates, /this\.patchWriter\.prepare\([\s\S]*additions: \[\], completions/);
     assert.match(additiveUpdates, /No existe el archivo externo autorizado para completion/);
-    assert.match(automationHandlers, /automationApplier\.apply\(scenario, plan, response, preview\)/);
+    assert.match(automationHandlers, /automationApplier\.commit\(prepared, scenario, plan/);
     assert.doesNotMatch(automationHandlers, /function applyAdditiveUpdates\(/);
 });

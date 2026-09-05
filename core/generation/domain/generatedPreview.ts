@@ -16,4 +16,6 @@ export interface GeneratedPreview {
     screenPath?: string;
     screenContent?: string;
     files: string[];
+    additionalFiles?: Array<{ path: string; content: string; before: string }>;
+    beforeContents?: Record<string, string | null>;
 }

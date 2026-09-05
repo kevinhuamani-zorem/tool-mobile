@@ -270,6 +270,70 @@ test('deriva el escenario nuevo con su tag y descarta el existente', () => {
 
 const { GeneratedFileRegistry } = require('../dist/core/automation');
 
+test('update fusiona imports multilinea, aliases, tipos y varios screens sin duplicar bindings', t => {
+    const ctx = fixture(t);
+    const proposed = STEPS.replace("import { When } from '@wdio/cucumber-framework';", [
+        "import { When,\n Then, type DataTable } from '@wdio/cucumber-framework';",
+        "import { expect as check } from '@wdio/globals';",
+        "import firstScreen from '@screenobjects/payment/first.screen.ts';",
+        "import secondScreen from '@screenobjects/payment/second.screen.ts';",
+    ].join('\n')) + '\nThen(/^nuevo$/, async (data: DataTable) => { await firstScreen.run(); await secondScreen.run(); check(data).toBeDefined(); });\n';
+    const additions = stepsAdditions(STEPS, proposed);
+    ctx.writer.apply({ ...BASE, steps: { file: ctx.files.steps, ...additions } }, ctx.root);
+    const result = ctx.read('steps');
+    assert.match(result, /When, Then, type DataTable/);
+    assert.match(result, /expect as check/);
+    assert.match(result, /import firstScreen/);
+    assert.match(result, /import secondScreen/);
+    assert.equal((result.match(/from ['"]@wdio\/cucumber-framework['"]/g) || []).length, 1);
+    assert.ok(result.includes(STEPS.slice(STEPS.indexOf('When(')).trim()));
+    ctx.writer.apply({ ...BASE, steps: { file: ctx.files.steps, ...additions } }, ctx.root);
+    assert.equal(ctx.read('steps'), result, 'reaplicar no duplica imports ni definitions');
+});
+
+test('un binding importado incompatible no cambia el archivo existente', t => {
+    const ctx = fixture(t);
+    assert.throws(() => ctx.writer.apply({ ...BASE, steps: {
+        file: ctx.files.steps,
+        imports: ["import { When } from 'otro-modulo';"],
+        definitions: [{ name: 'nuevo', code: 'When(/^nuevo$/, async () => {});' }],
+    } }, ctx.root), /Import incompatible/);
+    assert.equal(ctx.read('steps'), STEPS);
+});
+
+test('AutomationApplier entrega todos los imports al patch de Steps', t => {
+    const ctx = fixture(t);
+    const { AutomationApplier } = require('../dist/core/automation');
+    const proposed = STEPS + "\nimport { Then } from '@wdio/cucumber-framework';\n"
+        + "import { expect } from '@wdio/globals';\n"
+        + "import oneScreen from '@screenobjects/payment/one.screen.ts';\n"
+        + "import twoScreen from '@screenobjects/payment/two.screen.ts';\n"
+        + 'Then(/^otro$/, async () => { await oneScreen.run(); await twoScreen.run(); expect(true).toBe(true); });\n';
+    const applier = new AutomationApplier(ctx.writer, undefined, undefined, ctx.root);
+    applier.applyAdditiveUpdates({ recordingId: BASE.recordingId, actions: [] }, { resolutions: [] }, {
+        files: [{ layer: 'steps', path: ctx.files.steps, content: proposed }],
+    }, new Map([['steps', ctx.files.steps]]));
+    assert.match(ctx.read('steps'), /When, Then/);
+    for (const name of ['expect', 'oneScreen', 'twoScreen']) assert.match(ctx.read('steps'), new RegExp('import[^;]*\\b' + name + '\\b'));
+});
+
+test('update conserva varios tags, comentarios, Examples y todos los escenarios nuevos', t => {
+    const ctx = fixture(t);
+    const first = '  @payment @smoke_mobile @android\n  # motivo del caso\n  @filters\n  Scenario Outline: Nuevo\n    Then resultado <periodo>\n\n    Examples:\n      | periodo |\n      | hoy |\n';
+    const second = '  @payment @regression_mobile @ios\n  Scenario: Otro\n    Then otro resultado\n';
+    const block = featureAdditions(FEATURE, FEATURE + '\n' + first + '\n' + second);
+    assert.ok(block.includes(first.trimEnd()));
+    assert.ok(block.includes(second.trimEnd()));
+    const [outcome] = ctx.writer.apply({ ...BASE, feature: { file: ctx.files.feature, scenario: block } }, ctx.root);
+    assert.deepEqual(outcome.added, ['Nuevo', 'Otro']);
+    assert.ok(ctx.read('feature').startsWith(FEATURE.trimEnd()));
+    assert.ok(ctx.read('feature').includes('@payment @smoke_mobile @android'));
+    assert.ok(ctx.read('feature').includes('@payment @regression_mobile @ios'));
+    const result = ctx.read('feature');
+    ctx.writer.apply({ ...BASE, feature: { file: ctx.files.feature, scenario: block } }, ctx.root);
+    assert.equal(ctx.read('feature'), result);
+});
+
 test('register no adopta un archivo ajeno que solo se amplió', t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'avr-registry-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));

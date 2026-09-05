@@ -77,6 +77,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
 
     const emitAutomationProgress = createAutomationProgressEmitter(state);
     const responseImporter = new AutomationResponseImporter({
+        automationApplier,
         state,
         automationPackageBuilder,
         automationResponseValidator,

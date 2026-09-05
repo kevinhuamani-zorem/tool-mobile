@@ -51,6 +51,8 @@ export function createGenerationFeature(deps) {
     const btnCopyCode = document.getElementById('btnCopyCode');
     const btnCopyCodePath = document.getElementById('btnCopyCodePath');
     const btnResetCode = document.getElementById('btnResetCode');
+    const preparedDiffPanel = document.getElementById('preparedDiffPanel');
+    const preparedDiffContent = document.getElementById('preparedDiffContent');
     const lblGenerationFileCount = document.getElementById('lblGenerationFileCount');
     const reviewValidationIcon = document.getElementById('reviewValidationIcon');
     const reviewValidationTitle = document.getElementById('reviewValidationTitle');
@@ -172,6 +174,20 @@ export function createGenerationFeature(deps) {
         if (!document) return;
         const modified = document.content !== document.originalContent;
         const validation = validatePreviewDocument(document);
+        if (preparedDiffPanel && preparedDiffContent) {
+            preparedDiffPanel.style.display = document.before !== undefined ? 'block' : 'none';
+            const before = (document.before || '').split('\n');
+            const after = document.content.split('\n');
+            let start = 0;
+            while (start < before.length && start < after.length && before[start] === after[start]) start++;
+            let endBefore = before.length, endAfter = after.length;
+            while (endBefore > start && endAfter > start && before[endBefore - 1] === after[endAfter - 1]) { endBefore--; endAfter--; }
+            preparedDiffContent.textContent = start === before.length && start === after.length
+                ? 'Sin cambios respecto al framework.'
+                : [`@@ -${start + 1},${endBefore - start} +${start + 1},${endAfter - start} @@`,
+                    ...before.slice(start, endBefore).map(line => '- ' + line),
+                    ...after.slice(start, endAfter).map(line => '+ ' + line)].join('\n');
+        }
         lblCodeFileState.textContent = modified
             ? '✎ Editado'
             : document.generated ? '✓ Generado' : '● Nuevo';
@@ -233,6 +249,7 @@ export function createGenerationFeature(deps) {
         state.activePreviewDocumentIndex = index;
         cmbPreviewFile.value = String(index);
         txtGherkin.value = document.content;
+        txtGherkin.readOnly = Boolean(document.readOnly);
         lblCodeFileName.textContent = document.path.split(/[\\/]/).pop() || document.path;
         lblCodeFilePath.textContent = document.path;
         lblCodeFilePath.title = document.path;
@@ -319,10 +336,12 @@ export function createGenerationFeature(deps) {
             { path: result.preview.featurePath, content: result.preview.featureContent },
             ...(result.preview.locatorPath ? [{ path: result.preview.locatorPath, content: result.preview.locatorContent }] : []),
             ...(result.preview.stepPath ? [{ path: result.preview.stepPath, content: result.preview.stepContent }] : []),
-            ...(result.preview.screenPath ? [{ path: result.preview.screenPath, content: result.preview.screenContent }] : [])
+            ...(result.preview.screenPath ? [{ path: result.preview.screenPath, content: result.preview.screenContent }] : []),
+            ...(result.preview.additionalFiles || []).map(file => ({ ...file, readOnly: true }))
         ];
         state.previewDocuments = proposedDocuments.map(document => ({
             ...document,
+            before: result.preview.beforeContents?.[document.path],
             originalContent: document.content,
             content: reviewedByPath.get(document.path) ?? document.content
         }));

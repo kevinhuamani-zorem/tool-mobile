@@ -37,6 +37,7 @@ export interface ManagedFileAssessment {
 
 export class GeneratedFileRegistry {
     private readonly manifestPath = path.join(projectPaths.toolConfig, 'generated-files.json');
+    storagePath(): string { return this.manifestPath; }
 
     assess(
         preview: GeneratedPreview,
@@ -48,7 +49,6 @@ export class GeneratedFileRegistry {
             !fs.existsSync(path.resolve(projectPaths.frameworkRoot, relative))
         );
         for (const relative of removedEntries) delete manifest.files[relative];
-        if (removedEntries.length > 0) this.write(manifest);
         const writable = new Set<string>();
         const conflicts: string[] = [];
         for (const file of preview.files) {

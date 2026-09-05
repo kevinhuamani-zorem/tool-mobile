@@ -12,6 +12,21 @@ export function restoreUpdateBaselinesForCorrection(
     frameworkRoot: string,
     plan: GenerationPlan,
 ): Map<string, string> {
+    const replacements = loadUpdateBaselinesForCorrection(packageDirectory, frameworkRoot, plan);
+    const backups = new Map([...replacements].map(([relative]) => {
+        const target = path.resolve(frameworkRoot, relative);
+        return [target, readUtf8File(target)] as const;
+    }));
+    for (const [relative, content] of replacements) writeUtf8FileAtomic(path.resolve(frameworkRoot, relative), content);
+    return backups;
+}
+
+/** Loads correction baselines without temporarily modifying the user's project. */
+export function loadUpdateBaselinesForCorrection(
+    packageDirectory: string,
+    frameworkRoot: string,
+    plan: GenerationPlan,
+): Map<string, string> {
     const updates = plan.files.filter(file => file.operation === 'update');
     if (!updates.length) return new Map();
     const contextFile = path.join(packageDirectory, 'reuse-context.json');
@@ -22,7 +37,6 @@ export function restoreUpdateBaselinesForCorrection(
         updateBaselines?: Array<{ path: string; reference: string }>;
     }>(contextFile);
     const baselines = new Map((context.updateBaselines || []).map(item => [item.path, item.reference]));
-    const backups = new Map<string, string>();
     const replacements = new Map<string, string>();
     for (const update of updates) {
         const reference = baselines.get(update.path);
@@ -45,11 +59,9 @@ export function restoreUpdateBaselinesForCorrection(
         if (!fs.existsSync(target) || !fs.existsSync(baseline)) {
             throw new Error(`No se pudo reconstruir la baseline de ${update.path}.`);
         }
-        backups.set(target, readUtf8File(target));
-        replacements.set(target, readUtf8File(baseline));
+        replacements.set(update.path, readUtf8File(baseline));
     }
-    for (const [target, content] of replacements) writeUtf8FileAtomic(target, content);
-    return backups;
+    return replacements;
 }
 
 export function rollbackCorrectionBaselines(backups: Map<string, string>): void {

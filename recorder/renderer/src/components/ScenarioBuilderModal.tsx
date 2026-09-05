@@ -216,6 +216,10 @@ export function ScenarioBuilderModal() {
                 </header>
                 <textarea id="txtGherkin" className="gherkin-preview wizard-preview code-editor"
                   spellCheck={false} aria-label="Contenido del archivo seleccionado" />
+                <details id="preparedDiffPanel" style={{ display: 'none', minWidth: 0, padding: '8px 16px' }}>
+                  <summary>Ver cambios respecto al framework</summary>
+                  <pre id="preparedDiffContent" style={{ maxHeight: '240px', overflow: 'auto', whiteSpace: 'pre-wrap' }} />
+                </details>
                 <footer className="code-editor-toolbar">
                   <span id="lblCodeValidation">Selecciona un archivo para revisarlo.</span>
                   <div>

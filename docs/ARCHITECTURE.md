@@ -170,7 +170,7 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationContextProjections`, `automationPackageBuilder` | Recording, plan, hints/gaps derivados y contexto mínimo |
 | IA acotada | `agentOrchestrator`, `copilotCliAdapter`, `automationAgentLauncher`, `automationContracts` | Modo `manual` (handoff en Terminal) o `automatic` (dos pasadas controladas por contratos y budgets) |
 | Validación/memoria | `automationResponseValidator` + `rules/` (familias), `automationMemory` | Validar, reparar una vez y versionar score 100 |
-| Aplicación | `automationApplier` | Ampliar `update` con patch aditivo, escribir `create`, registrar; el handler IPC solo lo invoca |
+| Aplicación | `automationApplier` | Preparar bytes finales y snapshots antes del preview; commit recuperable de `create`/`update`, completions externos y registro |
 | Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
 | Análisis | `reuseAnalyzer`, `scenarioCoverageAnalyzer` | Impacto de steps y cobertura Android/iOS |
@@ -432,7 +432,13 @@ XML, screenshots, source, capabilities ni credenciales.
    Los completions externos se aplican incluso cuando las cuatro capas del caso
    son `create`; no dependen de que exista un `update` en el plan.
 9. Puede emitirse una sola reparación dirigida a archivos afectados.
-10. El usuario revisa el preview, genera y recién entonces se promociona memoria.
+10. El importador prepara el resultado final del patch sin escribir y valida
+    esa respuesta. El usuario revisa esos mismos bytes y su diff; el token
+    conserva snapshots de todos los destinos. Aplicar comprueba que sigan
+    intactos, escribe el resultado exacto y registra/promueve memoria dentro de
+    una operación recuperable. Las correcciones cargan baselines en memoria,
+    sin restaurarlas temporalmente sobre el framework. Los completions externos
+    se muestran como archivos adicionales de solo lectura y entran al recibo.
 
 La generación determinista es el modo predeterminado. `legacy` permanece
 únicamente como opt-in técnico mediante `RECORDER_GENERATION_MODE=legacy`.
