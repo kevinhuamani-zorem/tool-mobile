@@ -108,6 +108,24 @@ export function RecorderWorkspace() {
           </select>
           <label className="field-label">Valor:</label>
           <input type="text" id="txtValue" className="field-input" placeholder="texto, segundos..." />
+          <div id="textAssertionEditor" hidden>
+            <label className="field-label" htmlFor="cmbTextSource">¿Qué texto se lee?</label>
+            <select id="cmbTextSource" className="field-select">
+              <option value="element">Texto del elemento seleccionado</option>
+              <option value="container">Contenido del contenedor y sus descendientes</option>
+            </select>
+            <small>El selector debe apuntar al elemento o contenedor elegido. No se buscará un padre automáticamente.</small>
+            <label className="field-label" htmlFor="cmbTextOperator">Comparar con el valor esperado</label>
+            <select id="cmbTextOperator" className="field-select">
+              <option value="contains">Contiene</option>
+              <option value="equals">Es igual a (texto completo)</option>
+            </select>
+            <small>Comparación exacta de caracteres: conserva mayúsculas, tildes y espacios. El contenido une texto propio y descendientes con saltos de línea.</small>
+            <button className="btn btn-navy btn-full" id="btnPreviewTextAssertion">Leer y probar sin guardar</button>
+            <pre id="textAssertionPreview" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 200, overflow: 'auto' }} aria-live="polite" />
+            <button className="btn btn-blue btn-full" id="btnUpdateTextAssertion" hidden>Comprobar y actualizar acción seleccionada</button>
+            <button className="btn btn-dark-sm" id="btnCancelTextEdit" hidden>Cancelar edición</button>
+          </div>
           <label className="field-label">Descripcion (opcional):</label>
           <input type="text" id="txtDesc" className="field-input" placeholder="describe el step..." />
           <button className="btn btn-green btn-full btn-execute" id="btnExecute">Guardar paso y continuar →</button>
@@ -135,6 +153,7 @@ export function RecorderWorkspace() {
         <div className="steps-header">
           <span className="section-title">PASOS DEL ESCENARIO</span>
           <div className="steps-actions">
+            <button className="btn btn-dark-sm" id="btnEditTextAssertion" title="Editar fuente y comparación de la verificación de texto seleccionada" disabled>✎ Texto</button>
             <button className="btn btn-dark-sm" id="btnMoveStepUp" title="Subir acción" aria-label="Subir acción seleccionada" disabled>↑</button>
             <button className="btn btn-dark-sm" id="btnMoveStepDown" title="Bajar acción" aria-label="Bajar acción seleccionada" disabled>↓</button>
             <button className="btn btn-red-sm" id="btnDeleteStep" title="Eliminar acción" aria-label="Eliminar acción seleccionada">🗑️</button>

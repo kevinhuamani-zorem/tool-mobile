@@ -15,6 +15,7 @@ import {
 import {
     AuthorRole,
 } from './roles';
+import { screenApiInputErrors } from './screenApi';
 
 export function partialPrompt(role: AuthorRole, outputFile: string, repair = false): string {
     const identity = LAYERED_GENERATION_AGENTS[role];
@@ -28,6 +29,8 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
             'Steps solo puede invocar métodos del Screen Object: prohíbe XPath, UiSelector, accessibility id y selectores literales.',
             'En Steps importa el Screen Object exactamente con el importSource e instanceName de framework-api.json.screenObjects (el importSource termina en .ts; sin la extensión el validador lo rechaza) e importa Given/When/Then desde @wdio/cucumber-framework.',
             'Declara en actionTrace el screenMethod requerido para que Zorem implemente exactamente esa interfaz.',
+            'Lee screen-api.json si existe: es la interfaz provisional de llamadas del borrador. Conserva importSource, método y tipos de argumentos salvo necesidad del caso. Derek deriva la interfaz final de tus Steps, no de una lista que tú afirmes.',
+            'Anota explícitamente los tipos de parámetros de callbacks y variables enviadas al Screen, incluyendo string[] para datos tabulares. No uses any/unknown ni spread dinámico en esas llamadas. Si consumes un retorno, declara el tipo esperado de la variable.',
             'Conserva los screenMethod y locatorName de deterministic-draft.json: Zorem ya trabaja sobre esa interfaz en paralelo; cámbiala solo si el plan lo exige.',
             'Evalúa el diseño funcional como pass o suggestion; una sugerencia nunca bloquea la generación.',
         ].join(' ')
@@ -35,6 +38,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
             'Genera únicamente Screen Object y Locators.',
             'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan. Un archivo del borrador con operation update trae solo sus adiciones (getters, métodos, claves) sobre el baseline de baselines/.',
             'Lee behavior-result.json y lorem-handoff.json: implementa exactamente los screenMethod requeridos por Lorem.',
+            'Lee screen-api.json: cada método identifica su módulo, posiciones/tipos de argumentos, uso del retorno y secuencias. Debes aceptar todas sus llamadas con firmas compatibles (incluidos opcionales/rest y sobrecargas). No cambies firmas heredadas; añade una API compatible si hace falta. No edites este contrato derivado.',
             'Para operation update parte de baselines y preserva byte a byte toda API, import y locator no afectado.',
             'La operación y decisión del plan mandan: si indica create, crea la key y getter homónimos con el primary exacto aunque exista un elemento semánticamente parecido; reutiliza solo cuando el plan lo autorice.',
             'No construyas locators dentro de métodos de acción: cada screenMethod debe consumir un único getter y ningún selector literal.',
@@ -48,6 +52,8 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
         'Lee primero agent-memory.json: respeta su ownership y usa solo los archivos enumerados en input-manifest.json.',
         ...(repair ? ['Lee repair-feedback.json y corrige únicamente los errores asignados a tu capa.'] : []),
         ownership,
+        'En VERIFICAR_TEXTO con textAssertion explícito, value es el esperado, source indica element (getText) o container (texto propio y descendientes en orden, unidos por salto de línea), y operator es contains o equals. El XPath SOLO localiza: jamás infieras de él el esperado, la comparación ni un contenedor padre. Conserva mayúsculas, tildes y espacios. No sustituyas la comparación por existencia.',
+        'Para estas aserciones conserva el helper readRecordedText del deterministic-draft y la lectura/comparación vinculada al getter trazado: contains usa toContain y equals usa toBe. No cambies el helper ni su límite de lectura. Lorem debe expresar el resultado de negocio con esa misma fuente y operador; Zorem implementa esa evidencia, no otra.',
         `Escribe solo ${outputFile} y cumple result.schema.json.`,
         ...(repair ? [
             'Después de escribir el resultado, vuelve a leer repair-feedback.json: Derek puede actualizarlo con status correction-required.',
@@ -82,6 +88,7 @@ export function authorContractErrors(
     const errors = validateLayeredAgentResult(result, role, plan.recordingId, plan.planId);
     if (errors.length) return errors;
     const typed = result as LayeredAgentResult;
+    if (role === 'behavior-author') errors.push(...screenApiInputErrors(typed));
     const expectedLayers = role === 'behavior-author'
         ? new Set(['feature', 'steps'])
         : new Set(['screen', 'locators']);

@@ -1,6 +1,6 @@
 import { AppiumDriverManager } from './appiumDriverManager';
 import { LocatorManager } from './locatorManager';
-import { RecordedStep, ExecutionResult } from '../../automation/contracts';
+import { RecordedStep, ExecutionResult, parseTextAssertion } from '../../automation/contracts';
 import { projectPaths } from '../../workspace';
 import path from 'path';
 
@@ -25,7 +25,9 @@ export class MobileStepExecutor {
                 case 'SCROLL_HASTA': return await this.scrollHasta(selector);
                 case 'SWIPE':        return await this.swipe(step.value || 'left');
                 case 'PRESION_LARGA':return await this.presionLarga(selector);
-                case 'VERIFICAR_TEXTO':    return await this.verificarTexto(selector, step.value!);
+                case 'VERIFICAR_TEXTO':    return step.textAssertion
+                    ? await this.previewTextAssertion({ ...step, selector })
+                    : await this.verificarTexto(selector, step.value!);
                 case 'VERIFICAR_EXISTE':   return await this.verificarExiste(selector);
                 case 'VERIFICAR_NO_EXISTE':return await this.verificarNoExiste(selector);
                 case 'VOLVER':       return await this.volver();
@@ -45,6 +47,31 @@ export class MobileStepExecutor {
             return this.lm.resolve(selector);
         }
         return selector;
+    }
+
+    async previewTextAssertion(step: RecordedStep): Promise<ExecutionResult> {
+        const assertion = parseTextAssertion(step.textAssertion, step.action, step.value);
+        if (!assertion) throw new Error('Selecciona una definición explícita de validación de texto.');
+        const element = await this.dm.findElement(this.resolveSelector(step.selector || ''));
+        const parts: string[] = [];
+        const append = (text: string): void => {
+            if (text.length > 0) parts.push(text);
+            if (parts.join('\n').length > 32768) throw new Error('El contenido excede 32768 caracteres; selecciona un contenedor más específico.');
+        };
+        append(await element.getText());
+        if (assertion.source === 'container') {
+            const children = await element.$$('.//*');
+            if (await children.length > 200) throw new Error('El contenedor excede 200 descendientes; selecciona uno más específico.');
+            for await (const child of children) append(await child.getText());
+        }
+        const actual = parts.join('\n');
+        const expected = step.value!;
+        const matched = assertion.operator === 'contains' ? actual.includes(expected) : actual === expected;
+        return {
+            success: matched,
+            message: matched ? 'Comparación de texto correcta' : 'El texto leído no cumple la comparación esperada',
+            textPreview: { actual, expected, source: assertion.source, operator: assertion.operator, matched },
+        };
     }
 
     private async abrirApp(packageName: string): Promise<ExecutionResult> {

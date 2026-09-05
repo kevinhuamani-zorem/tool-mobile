@@ -33,6 +33,8 @@ export {
 export type {
     TypeScriptSyntaxDiagnostic,
 } from './infrastructure/typescriptSyntaxValidator';
+export { FrameworkCompilationValidator, includeFrameworkCompilation } from './infrastructure/frameworkCompilationValidator';
+export type { CompilationFile, CompilationDiagnostic, FrameworkCompilationReport } from './infrastructure/frameworkCompilationValidator';
 export {
     buildValidationRuleContractFromFile,
     defaultValidatorSourcePath,

@@ -20,6 +20,7 @@ export { envelopeRules } from './envelopeRules';
 export { syntaxRules } from './syntaxRules';
 export { completionRules } from './completionRules';
 export { layerRules } from './layerRules';
+export { textAssertionRules } from './textAssertionRules';
 export { gapRules } from './gapRules';
 export { locatorContractRules } from './locatorContractRules';
 export { existingAutomationRules } from './existingAutomationRules';

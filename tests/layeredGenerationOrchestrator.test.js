@@ -455,6 +455,41 @@ test('Derek devuelve una observación de locator solo a Zorem y reintenta Sumrak
     assert.equal(report.stages.at(-1).state, 'completed');
 });
 
+test('una incompatibilidad tipada repara solo Zorem y se valida en vivo aunque el validador general apruebe', async () => {
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    let liveChecks = 0;
+    const fake = {
+        ...base,
+        async execute(input) {
+            const result = await base.execute(input);
+            if (input.agentName === 'Lorem') {
+                const file = path.join(input.cwd, 'behavior-result.json');
+                const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+                output.files.find(entry => entry.layer === 'steps').content = "import caseScreen from '@screenobjects/payment/case.screen.ts';\nasync function run() { await caseScreen.executeAction(7); }";
+                writeJson(file, output);
+            } else if (input.agentName === 'Zorem') {
+                const file = path.join(input.cwd, 'interaction-result.json');
+                const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+                output.files.find(entry => entry.layer === 'screen').content = 'class CaseScreen { async executeAction(value: string) {} } export default new CaseScreen();';
+                if (/repair-1$/.test(input.sessionName)) {
+                    assert.equal(input.stopOnValidatedOutput.acceptOutput(output), false);
+                    output.files.find(entry => entry.layer === 'screen').content = 'class CaseScreen { async executeAction(value: number) {} } export default new CaseScreen();';
+                    assert.equal(input.stopOnValidatedOutput.acceptOutput(output), true);
+                    liveChecks += 2;
+                }
+                writeJson(file, output);
+            }
+            return result;
+        },
+    };
+    const result = await new LayeredGenerationOrchestrator(fake, fake, () => ({ valid: true, errors: [] })).run(root);
+    assert.equal(result.success, true, result.error);
+    assert.equal(liveChecks, 2);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Zorem', 'Sumrak']);
+});
+
 test('Derek valida la reparación de Zorem en vivo y mantiene la misma sesión hasta aceptarla', async () => {
     const root = fixture();
     const calls = [];
@@ -914,6 +949,13 @@ test('Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir
                         ? { ...entry, content: '@android @ventas\nFeature: Caso\n\n  Scenario Outline: [TC-1][HP][AUTO-FRONT] Caso\n    When acción\n' }
                         : entry);
                 writeJson(file, behavior);
+            } else if (input.agentName === 'Zorem') {
+                const file = path.join(input.cwd, 'interaction-result.json');
+                const interaction = JSON.parse(fs.readFileSync(file, 'utf8'));
+                interaction.files = interaction.files.map(entry => entry.layer === 'screen'
+                    ? { ...entry, content: 'class CaseScreen { async executeAction() {} } export default new CaseScreen();' }
+                    : entry);
+                writeJson(file, interaction);
             }
             return result;
         },
@@ -996,7 +1038,7 @@ test('un timeoutMs explícito en las opciones sigue mandando como hang stop', as
     assert.deepEqual([...new Set(calls.map(call => call.timeoutMs))], [42_000]);
 });
 
-function draftBuilderWith(actionTrace) {
+function draftBuilderWith(actionTrace, stepsContent = 'export {}') {
     return {
         build(packageDirectory) {
             const draft = {
@@ -1006,7 +1048,7 @@ function draftBuilderWith(actionTrace) {
                 planFingerprint: 'fp-1',
                 files: [
                     { layer: 'feature', path: 'features/payment/case.feature', content: 'Feature: Draft' },
-                    { layer: 'steps', path: 'features/steps/payment/case.steps.ts', content: 'export {}' },
+                    { layer: 'steps', path: 'features/steps/payment/case.steps.ts', content: stepsContent },
                     { layer: 'screen', path: 'screenobjects/payment/case.screen.ts', content: 'export class Draft {}' },
                     { layer: 'locators', path: 'resources/locators/payment/case.locator.json', content: '{}' },
                 ],
@@ -1044,6 +1086,46 @@ function timedProvider(calls, loremActionTrace, delayMs = 30) {
 
 const DRAFT_TRACE = [{ sequence: 1, gherkinStep: 'When acción', screenMethod: 'executeAction', locatorName: 'primaryButton' }];
 
+for (const changedType of [false, true]) {
+    test(`contrato tipado: ${changedType ? 'cambiar argumentos sin cambiar actionTrace resincroniza Zorem' : 'cambiar solo Gherkin conserva el trabajo paralelo'}`, async () => {
+        const root = fixture();
+        const calls = [];
+        const base = provider(calls);
+        const steps = value => `import caseScreen from '@screenobjects/payment/case.screen.ts';\nasync function run() { await caseScreen.executeAction(${value}); }`;
+        const seenTypes = [];
+        const fake = {
+            ...base,
+            async execute(input) {
+                const result = await base.execute(input);
+                if (input.agentName === 'Lorem') {
+                    const file = path.join(input.cwd, 'behavior-result.json');
+                    const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+                    output.actionTrace = DRAFT_TRACE.map(trace => ({ ...trace, gherkinStep: 'When el usuario consulta movimientos' }));
+                    output.files.find(entry => entry.layer === 'steps').content = steps(changedType ? '7' : '"ayer"');
+                    writeJson(file, output);
+                } else if (input.agentName === 'Zorem') {
+                    const api = JSON.parse(fs.readFileSync(path.join(input.cwd, 'screen-api.json'), 'utf8'));
+                    const type = api.methods[0].arguments[0].type;
+                    seenTypes.push(type);
+                    const file = path.join(input.cwd, 'interaction-result.json');
+                    const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+                    output.files.find(entry => entry.layer === 'screen').content = `class CaseScreen { async executeAction(value: ${type}) {} } export default new CaseScreen();`;
+                    writeJson(file, output);
+                }
+                return result;
+            },
+        };
+        const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE, steps('"hoy"'))).run(root);
+        assert.equal(result.success, true, result.error);
+        assert.deepEqual(seenTypes, changedType ? ['string', 'number'] : ['string']);
+        assert.equal(calls.filter(call => call.agentName === 'Lorem').length, 1);
+        const api = JSON.parse(fs.readFileSync(path.join(root, 'agents/sumrak/screen-api.json'), 'utf8'));
+        assert.equal(api.methods[0].arguments[0].type, changedType ? 'number' : 'string');
+        const handoff = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/lorem-handoff.json'), 'utf8'));
+        assert.ok(handoff.artifacts.some(item => item.path === 'screen-api.json'));
+    });
+}
+
 test('Lorem y Zorem corren en paralelo sobre el contrato del borrador y Zorem no se relanza si la interfaz coincide', async () => {
     const root = fixture();
     const calls = [];
@@ -1079,7 +1161,7 @@ test('si Lorem cambia la interfaz del contrato, Zorem se sincroniza con el resul
     const handoff = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/lorem-handoff.json'), 'utf8'));
     assert.equal(handoff.from, 'behavior-author', 'la segunda pasada de Zorem parte del resultado real de Lorem');
     const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
-    assert.match(feedback.errors.join(' '), /interfaz actionTrace distinta del contrato provisional/);
+    assert.match(feedback.errors.join(' '), /interfaz actionTrace\/screen-api distinta del contrato provisional/);
 });
 
 test('parallelAuthors:false conserva la secuencia Lorem -> Zorem aunque exista borrador', async () => {

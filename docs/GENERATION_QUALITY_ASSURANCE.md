@@ -53,6 +53,44 @@ La puerta exige:
 
 ## Control manual
 
+### Comprobación semántica (fase 3)
+
+`tests/frameworkCompilation.test.js` cubre overlay sin escrituras, aliases,
+configuración heredada, NodeNext, imports JSON, métodos y argumentos inválidos,
+claves ausentes, deuda preexistente, cambios de dependencias y estados no
+comprobables. `tests/preparedAutomation.test.js` comprueba además que el handler
+no escribe ni promueve memoria cuando el código pasa sintaxis pero falla tipos.
+
+En la app, importar un caso, introducir una llamada a un método inexistente y
+revalidar: debe conservar los archivos para edición, indicar código TypeScript,
+ruta y posición, y no permitir la aplicación. Corregir y revalidar vuelve a
+comprobar los contenidos finales. Repetir después de cambiar una firma de una
+dependencia fuera del recorder para confirmar que aplicar no usa un aprobado viejo.
+
+El informe `framework-compilation.json` no equivale a un test ejecutado en el
+dispositivo ni a un build completo del framework. `unavailable` nunca se acepta
+como éxito; errores heredados quedan separados de regresiones del preview.
+
+### Interfaz entre autores (fase 4)
+
+`tests/screenApiContract.test.js` comprueba extracción tipada, estabilidad ante
+cambios de redacción, tipos desconocidos, caché, Screens homónimos, shadowing,
+export por defecto, métodos/argumentos/retornos incompatibles y firmas
+opcionales/rest/overloads válidas. `tests/layeredGenerationOrchestrator.test.js`
+ejecuta además el pipeline con proveedores simulados: cambiar solo Gherkin
+conserva una ejecución de cada autor; cambiar el tipo de un argumento sin
+cambiar `actionTrace` resincroniza únicamente Zorem. El handoff y la integración
+deben incluir `screen-api.json` con los tipos definitivos.
+
+Para prueba manual con Copilot, inspeccionar ese artefacto en
+`agents/zorem` y `agents/sumrak`; ante una firma incompatible en la salida de
+Zorem, la integración y su reparación deben mostrar un diagnóstico
+`screen-api-mismatch` atribuido a Screen sin perder el borrador.
+La revalidación del preview usa la compilación de fase 3. No interpretar una interfaz compatible como
+una ejecución exitosa en el dispositivo.
+
+### Recorrido manual general
+
 1. Grabar al menos una acción de click, escritura y validación.
 2. Definir objetivo y resultado esperado; preparar el paquete mínimo.
 3. Confirmar que selectores verificados y reuse squad/Home quedaron resueltos

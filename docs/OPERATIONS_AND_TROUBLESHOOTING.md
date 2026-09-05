@@ -1,5 +1,25 @@
 # Operación y troubleshooting
 
+## Validar texto de un contenedor (por ejemplo, «contiene Hoy»)
+
+1. Selecciona/verifica el locator del **contenedor** que contiene la información;
+   el recorder no convierte automáticamente un selector de un hijo en su padre.
+2. Elige `VERIFICAR TEXTO`, introduce `Hoy` y selecciona
+   `Contenido del contenedor y sus descendientes` → `Contiene`.
+3. Pulsa **Leer y probar sin guardar** para revisar texto leído, esperado y resultado.
+   Solo **Guardar paso y continuar** registra la comparación si pasa.
+4. Para una verificación anterior, selecciónala en la lista y pulsa **✎ Texto**.
+   Elige su fuente/operador y pulsa **Comprobar y actualizar acción seleccionada**.
+   Debes estar en la pantalla correspondiente del dispositivo. Esta edición
+   conserva el selector; para cambiarlo, registra una nueva acción.
+5. Regenera la automatización para que los agentes reciban la intención actualizada.
+
+`Es igual a` compara todo el texto, incluidos espacios y saltos de línea;
+`Contiene` busca el fragmento exacto. En contenedores se une texto propio y de
+descendientes con saltos de línea; no se eliminan repeticiones. La lectura tiene
+límites explícitos: si el contenedor es demasiado grande, selecciona uno más
+específico. No se guarda el contenido leído del dispositivo.
+
 ## Inicio rápido
 
 ```bash

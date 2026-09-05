@@ -44,6 +44,24 @@ export function createRecordingFeature(deps) {
     const btnMoveDown = document.getElementById('btnMoveStepDown');
     const btnClear    = document.getElementById('btnClearSteps');
     const lblVerify   = document.getElementById('lblVerifyResult');
+    const textEditor = document.getElementById('textAssertionEditor');
+    const textSource = document.getElementById('cmbTextSource');
+    const textOperator = document.getElementById('cmbTextOperator');
+    const textPreview = document.getElementById('textAssertionPreview');
+    const btnPreviewText = document.getElementById('btnPreviewTextAssertion');
+    const btnEditText = document.getElementById('btnEditTextAssertion');
+    const btnUpdateText = document.getElementById('btnUpdateTextAssertion');
+    const btnCancelText = document.getElementById('btnCancelTextEdit');
+    let editingTextIndex = -1;
+
+    const assertionDefinition = () => ({ version: 1, source: textSource?.value || 'element', operator: textOperator?.value || 'contains' });
+    function showTextResult(result) {
+        if (!textPreview) return;
+        const preview = result.textPreview;
+        textPreview.textContent = preview
+            ? `${preview.matched ? '✓ Coincide' : '✗ No coincide'} · ${preview.source === 'container' ? 'Contenedor' : 'Elemento'} · ${preview.operator === 'contains' ? 'Contiene' : 'Igual a'}\nEsperado: ${preview.expected}\nLeído:\n${preview.actual || '(vacío)'}`
+            : result.message || 'No se pudo leer el texto';
+    }
 
     let selectedStepIndex = -1;
     let renderedSteps = [];
@@ -84,6 +102,9 @@ export function createRecordingFeature(deps) {
             ESPERAR:             '⏳ ESPERAR ' + step.value + 's',
             SCREENSHOT:          '📸 SCREENSHOT',
         };
+        if (step.action === 'VERIFICAR_TEXTO' && step.textAssertion) {
+            return `✅ ${step.textAssertion.source === 'container' ? 'CONTENIDO' : 'TEXTO'} ${step.textAssertion.operator === 'contains' ? 'CONTIENE' : 'IGUAL A'} "${step.value}" → ${loc}`;
+        }
         return map[step.action] || step.description || step.action;
     }
 
@@ -117,6 +138,11 @@ export function createRecordingFeature(deps) {
     }
 
     function updateMoveButtons() {
+        if (btnEditText) btnEditText.disabled = renderedSteps[selectedStepIndex]?.action !== 'VERIFICAR_TEXTO';
+        editingTextIndex = -1;
+        if (btnUpdateText) btnUpdateText.hidden = true;
+        if (btnCancelText) btnCancelText.hidden = true;
+        if (btnExecute) btnExecute.hidden = false;
         if (btnMoveUp) btnMoveUp.disabled = selectedStepIndex <= 0;
         if (btnMoveDown) {
             btnMoveDown.disabled = selectedStepIndex < 0 || selectedStepIndex >= renderedSteps.length - 1;
@@ -164,8 +190,55 @@ export function createRecordingFeature(deps) {
     }
 
     function mount() {
+        const resetPreview = () => { if (textPreview) textPreview.textContent = ''; };
+        [txtSelector, txtValue, textSource, textOperator].forEach(input => on(input, 'input', resetPreview));
+        on(btnCancelText, 'click', () => { updateMoveButtons(); clearStepFields(); resetPreview(); });
+        on(btnEditText, 'click', () => {
+            const step = renderedSteps[selectedStepIndex];
+            if (step?.action !== 'VERIFICAR_TEXTO') return;
+            editingTextIndex = selectedStepIndex;
+            cmbAction.value = 'VERIFICAR_TEXTO';
+            cmbAction.dispatchEvent(new Event('change'));
+            txtSelector.value = step.selector || '';
+            txtValue.value = step.value || '';
+            if (txtElementContext) txtElementContext.value = step.contextHint || step.description || '';
+            textSource.value = step.textAssertion?.source || 'element';
+            textOperator.value = step.textAssertion?.operator || 'contains';
+            btnUpdateText.hidden = false;
+            btnCancelText.hidden = false;
+            btnExecute.hidden = true;
+            textPreview.textContent = step.textAssertion ? 'Define los cambios y compruébalos en la pantalla actual.' : 'Grabación anterior sin intención explícita. Elige la fuente y comparación antes de actualizar; no cambiaremos el selector.';
+            textEditor.scrollIntoView?.({ block: 'nearest' });
+        });
+        on(btnPreviewText, 'click', async () => {
+            disableBtn(btnPreviewText, 'Leyendo...');
+            try {
+                showTextResult(await api.previewTextAssertion({ action: 'VERIFICAR_TEXTO', selector: txtSelector.value.trim(), value: txtValue.value, textAssertion: assertionDefinition() }));
+            } catch (error) { showTextResult({ message: error.message }); }
+            finally { enableBtn(btnPreviewText); }
+        });
+        on(btnUpdateText, 'click', async () => {
+            const original = renderedSteps[editingTextIndex];
+            if (!original || txtSelector.value.trim() !== original.selector) {
+                setStatus('Esta edición conserva el selector. Para cambiar el objetivo, graba una nueva acción.', '#FF6600'); return;
+            }
+            disableBtn(btnUpdateText, 'Comprobando...');
+            try {
+                const result = await api.updateTextAssertion(editingTextIndex, { value: txtValue.value, textAssertion: assertionDefinition() });
+                showTextResult(result);
+                if (result.success) {
+                    invalidatePreview();
+                    renderSteps(result.steps);
+                    await refreshGherkinPreview();
+                    setStatus('✓ Validación actualizada y comprobada', '#00CC00');
+                }
+            } catch (error) { showTextResult({ message: error.message }); }
+            finally { enableBtn(btnUpdateText); }
+        });
         on(cmbAction, 'change', () => {
             const action  = cmbAction.value;
+            if (textEditor) textEditor.hidden = action !== 'VERIFICAR_TEXTO';
+            if (action !== 'VERIFICAR_TEXTO') updateMoveButtons();
             const noSel   = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
             txtSelector.disabled = noSel.includes(action);
             txtVarName.disabled  = noSel.includes(action);
@@ -183,7 +256,7 @@ export function createRecordingFeature(deps) {
             const selector = txtSelector.value.trim();
             const varName  = state.currentAssignment?.name || state.selectedCatalogLocator?.name || '';
             const contextHint = txtElementContext?.value.trim() || '';
-            const value    = txtValue.value.trim();
+            const value    = action === 'VERIFICAR_TEXTO' ? txtValue.value : txtValue.value.trim();
             const desc     = txtDesc.value.trim();
             const noSel    = ['ABRIR_APP','SCROLL_DOWN','SCROLL_UP','VOLVER','ESPERAR','SCREENSHOT'];
 
@@ -204,6 +277,7 @@ export function createRecordingFeature(deps) {
                 selectorVerified: state.verifiedSelector === selector,
                 selectorCandidateToken: state.selectorCandidateToken,
                 value,
+                ...(action === 'VERIFICAR_TEXTO' ? { textAssertion: assertionDefinition() } : {}),
                 description: desc,
                 ...(state.selectedCatalogLocator ? {
                     locatorSource: {
@@ -219,6 +293,7 @@ export function createRecordingFeature(deps) {
 
             try {
                 const result = await api.executeStep(step);
+                if (action === 'VERIFICAR_TEXTO') showTextResult(result);
                 if (result.success) {
                     if (result.screenshot) updateDeviceScreen(result.screenshot);
                     setStatus('✓ Step ' + result.totalSteps + ' guardado', '#00CC00');

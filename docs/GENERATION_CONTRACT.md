@@ -1,5 +1,38 @@
 # Contrato de generación
 
+## Intención explícita de las verificaciones de texto
+
+Las nuevas acciones `VERIFICAR_TEXTO` guardan `textAssertion: { version: 1,
+source: "element" | "container", operator: "contains" | "equals" }`.
+`value` conserva el esperado y `selector` solo identifica el objetivo. No se
+infiere una aserción a partir de un predicado XPath, ni se asciende al padre.
+
+- `element`: lee `getText()` del elemento elegido.
+- `container`: lee su texto propio y los descendientes `.//*`, en orden,
+  omitiendo textos vacíos y uniéndolos con `\n`. Conserva duplicados.
+- `contains` compara mediante `includes` / `toContain`; `equals` mediante
+  igualdad exacta / `toBe`. Conserva mayúsculas, espacios y tildes.
+- Máximo 200 descendientes y 32768 caracteres leídos; excederlo falla
+  explícitamente, sin truncar y aprobar accidentalmente.
+
+El borrador genera el helper autocontenido `readRecordedText` dentro del Screen,
+sin instalar dependencias ni modificar helpers del framework. Su contenido es
+parte del contrato. Lorem conserva la intención en Feature/Steps; Zorem conserva
+fuente, operador y esperado en Screen; Derek valida el AST con la regla
+`recorded-text-assertion` y dirige las observaciones a Zorem. La política existente
+de revisión/aplicación del QA no cambia.
+
+El fingerprint y la memoria de interacciones incluyen esta definición y el valor
+exacto. Cambiarla invalida la reutilización de una comparación distinta. Las
+grabaciones anteriores no se reinterpretan: siguen sin `textAssertion` hasta que
+el QA las edite explícitamente. La edición conserva el locator y solo se guarda
+después de comprobar la comparación en el dispositivo.
+
+La previsualización muestra el texto realmente leído solo en memoria de la UI;
+no se persiste en el recording ni se envía a agentes. El agente recibe únicamente
+la intención y el valor esperado de la acción. La comprobación estática no prueba
+que el dispositivo siga mostrando el mismo contenido en otra ejecución.
+
 ## Telemetría local
 
 Cada intento mantiene `agent-run.json` junto al paquete de automatización. El
@@ -416,6 +449,47 @@ Al añadir una acción:
 
 ## Preview, edición y commit
 
+### Fase 3: compilación semántica del preview
+
+Al importar/revalidar y justo antes de aplicar, `FrameworkCompilationValidator`
+comprueba los bytes finales preparados con un `CompilerHost` virtual de TypeScript.
+Lee el `tsconfig.json` del framework seleccionado (incluyendo `extends`, aliases,
+tipos, resolución NodeNext y JSON) y resuelve sus dependencias desde ese proyecto.
+Usa el compilador incluido en el recorder, cuya versión queda en el informe;
+no carga el JavaScript de un compilador/plugin del target, ni ejecuta scripts,
+Appium o Copilot. No emite `.js`, `.d.ts`, `.tsbuildinfo` ni escribe en el framework.
+
+La comprobación cubre los archivos TypeScript del preview y sus dependencias
+transitivas, con los JSON propuestos superpuestos en memoria. No recorre suites
+ajenas ni todos los consumidores inversos; no sustituye el build completo del PR.
+Detecta, entre otros, imports ausentes, métodos inexistentes, argumentos
+incompatibles y claves JSON inexistentes. Respeta las opciones del target: una
+API declarada como `any` no ofrece las garantías de una API tipada.
+
+Se compara contra una segunda compilación de los contenidos previos, incluyendo
+las dependencias que el caso empieza a reutilizar. Errores que ya existían se
+reportan aparte; un desplazamiento de líneas no los convierte en errores nuevos.
+Las ocurrencias adicionales sí cuentan. Cada ejecución vuelve a leer configuración
+y dependencias: no se reutiliza un aprobado obsoleto al aplicar una edición.
+
+`framework-compilation.json` conserva estado, versión del compilador, diagnósticos
+con código/ruta/línea/columna y métricas de duración/lecturas. No guarda snippets,
+prompts, XML o capturas. Sus estados son:
+
+- `passed`: sin errores en el alcance comprobado.
+- `preexisting-errors`: sin errores nuevos, con deuda previa visible al QA.
+- `failed`: errores nuevos; conserva el borrador editable pero impide aplicar y
+  promover memoria hasta corregir/revalidar.
+- `unavailable`: faltan configuración, módulos/tipos o no se puede comprobar;
+  no equivale a aprobado. `noCheck` y proyectos con `references` también se
+  reportan como no comprobados; estos últimos aún no están soportados.
+
+El diagnóstico se integra con `validation.json` y la reparación por archivo;
+no cambia la política no bloqueante de sugerencias sobre diseño del test.
+Regenerar limpia este informe, y refinar conserva el anterior en el histórico.
+Una compilación correcta **no garantiza** ejecución funcional, disponibilidad
+actual del selector ni cumplimiento completo de un PR.
+
 La aplicación con agente prepara ahora `PreparedAutomation` en memoria antes de
 entregar el token. Contiene los bytes finales (también los comentarios de
 procedencia del patch), el contenido previo de cada destino y una huella de
@@ -528,7 +602,38 @@ reutilización autorizada. Sumrak no lo recibe. Tampoco se copia
 `unresolved-context.json` a ningún agente, pues pertenece al contrato histórico
 anterior a `gaps.json` y la query layer.
 
-Lorem publica `actionTrace` como contrato directo para Zorem. Durante una
+### Fase 4: interfaz tipada entre autores
+
+Lorem publica Steps y `actionTrace`; Derek deriva `screen-api.json` de ese código,
+no de una lista de firmas inventada por el agente. Cada llamada identifica:
+
+- `importSource` y `method`, para distinguir Screens con métodos homónimos;
+- argumentos por posición con tipo inferido y marca `unresolved`;
+- `returnUsage` y `expectedReturnType` cuando existe una anotación explícita;
+- secuencias relacionadas de la grabación.
+
+El contrato provisional se obtiene del borrador; el definitivo para Zorem se
+deriva del resultado firmado de Lorem. Se incluye en sus inputs y handoffs,
+así como en los inputs de integración. No contiene archivos completos ni los
+valores de argumentos string/number ordinarios. Los Steps deben tipar sus
+variables de entrada; `any`, `unknown` y spread dinámico requieren corrección
+del autor antes de declarar una interfaz verificable.
+
+Se conserva la ejecución paralela: un cambio de redacción Gherkin o del valor
+de un string no repite Zorem. Cambiar dueño, método, tipos/cantidad de argumentos,
+uso del retorno o trazabilidad sí resincroniza su contrato. No se exige que la
+firma del Screen sea idéntica: parámetros opcionales, rest y overloads son
+válidos si TypeScript admite las llamadas reales de Steps.
+
+Derek comprueba esas llamadas contra el Screen exportado, incluso durante
+reparaciones y antes de reutilizar respuestas completas del caché. Los errores
+`screen-api-mismatch` se asignan al archivo Screen de Zorem. El análisis local
+cubre imports default y llamadas con notación de punto (convención del
+framework); no sustituye la compilación semántica de fase 3 para dependencias,
+APIs heredadas externas ni otros patrones TypeScript. El borrador con errores
+sigue disponible para revisión: esta comprobación no ejecuta pruebas móviles.
+
+Durante una
 reparación, Derek valida cada resultado parcial con el validador oficial y
 actualiza `repair-feedback.json` con `awaiting-output`, `correction-required` o
 `accepted`. Si el proceso termina antes de alcanzar `accepted`, solo ese autor

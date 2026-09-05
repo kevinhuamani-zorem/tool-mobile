@@ -97,6 +97,8 @@ contextBridge.exposeInMainWorld('api', {
     },
     verifySelector:      (sel: string)          => ipcRenderer.invoke('verify-selector', sel),
     executeStep:         (step: any)            => ipcRenderer.invoke('execute-step', step),
+    previewTextAssertion: (step: any)           => ipcRenderer.invoke('preview-text-assertion', step),
+    updateTextAssertion: (index: number, input: any) => ipcRenderer.invoke('update-text-assertion', index, input),
     deleteStep:          (idx: number)          => ipcRenderer.invoke('delete-step', idx),
     moveStep:            (from: number, to: number) => ipcRenderer.invoke('move-step', from, to),
     clearSteps:          ()                     => ipcRenderer.invoke('clear-steps'),

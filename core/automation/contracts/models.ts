@@ -1,4 +1,5 @@
 import type { LocatorTypeName } from '../../indexing';
+import type { TextAssertion } from './textAssertion';
 
 export type Action =
     | 'ABRIR_APP'
@@ -61,6 +62,8 @@ export interface RecordedStep {
     locatorWarning?: string;
     platform?: 'android' | 'ios';
     value?: string;
+    /** value es el esperado; source/operator son explícitos, nunca inferidos del XPath. */
+    textAssertion?: TextAssertion;
     description?: string;
     locatorSource?: {
         file: string;
@@ -89,6 +92,8 @@ export interface VerificationResult {
 export interface ExecutionResult {
     success: boolean;
     message: string;
+    /** Solo UI en memoria. No se persiste el texto leído del dispositivo. */
+    textPreview?: { actual: string; expected: string; source: 'element' | 'container'; operator: 'contains' | 'equals'; matched: boolean };
 }
 
 export interface DeviceConfig {
@@ -130,6 +135,7 @@ export function toGherkinLine(step: RecordedStep, index: number): string {
         case 'PRESION_LARGA':
             return `${keyword} el usuario hace presion larga en "${locator}"`;
         case 'VERIFICAR_TEXTO':
+            if (step.textAssertion) return `Then el ${step.textAssertion.source === 'container' ? 'contenido' : 'texto'} de "${locator}" ${step.textAssertion.operator === 'contains' ? 'contiene' : 'es igual a'} "${step.value}"`;
             return `Then el usuario verifica el texto "${step.value}" en "${locator}"`;
         case 'VERIFICAR_EXISTE':
             return `Then el elemento "${locator}" es visible`;

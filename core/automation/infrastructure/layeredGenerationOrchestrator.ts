@@ -99,6 +99,7 @@ import {
     stageBudget,
     stageContextBytes,
 } from './layered/budget';
+import { buildScreenApi, screenApiInputErrors, validateScreenApi } from './layered/screenApi';
 
 export type {
     LayeredGenerationOptions,
@@ -247,7 +248,7 @@ export class LayeredGenerationOrchestrator {
                 // Nada que autorizar: ambos resultados ya están materializados.
             } else if (draftContract) {
                 // Zorem no depende de la prosa de Lorem, solo de la interfaz
-                // screenMethod/locatorName, y esa ya la fija el borrador. Ambos
+                // screenMethod/locatorName y tipos de screen-api, fijados por el borrador. Ambos
                 // arrancan a la vez; si Lorem se aparta del contrato, Zorem se
                 // sincroniza con el resultado real como en una reparación.
                 [behavior, interaction] = await Promise.all([
@@ -263,7 +264,7 @@ export class LayeredGenerationOrchestrator {
                 if (actionInterfaceFingerprint(behavior) !== actionInterfaceFingerprint(draftContract)) {
                     interaction = await this.runAuthor(
                         root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
-                        ['Lorem entregó una interfaz actionTrace distinta del contrato provisional; sincroniza únicamente los métodos afectados.'],
+                        ['Lorem entregó una interfaz actionTrace/screen-api distinta del contrato provisional; sincroniza únicamente los métodos y firmas afectados.'],
                         interactionCache,
                     );
                 }
@@ -378,6 +379,7 @@ export class LayeredGenerationOrchestrator {
         if ([...expected].some(([layer, file]) => actual.get(layer) !== file)) return false;
         const resolved = new Set((response.resolutions || []).map(item => item.gapId));
         if ((plan.unresolvedGapIds || []).some(gapId => !resolved.has(gapId))) return false;
+        if (screenApiInputErrors(response).length || validateScreenApi(response, response).length) return false;
         const validation = this.responseValidator?.(packageDirectory, response);
         return validation ? validation.valid : true;
     }
@@ -550,8 +552,13 @@ export class LayeredGenerationOrchestrator {
             copyRoleInput(packageDirectory, stageDirectory, file, role, judgment);
         }
         copyRoleBaselines(packageDirectory, stageDirectory, role);
+        const apiSource = dependencyFile || path.join(packageDirectory, 'deterministic-draft.json');
+        const screenApiFile = path.join(stageDirectory, 'screen-api.json');
+        if (fs.existsSync(apiSource)) {
+            if (dependencyFile) verifyOutputHandoff(dependencyFile);
+            writeJsonUtf8(screenApiFile, buildScreenApi(readJsonUtf8<LayeredAgentResult>(apiSource)));
+        }
         if (dependencyFile) {
-            verifyOutputHandoff(dependencyFile);
             const dependencyCopy = path.join(stageDirectory, path.basename(dependencyFile));
             fs.copyFileSync(dependencyFile, dependencyCopy);
             writeHandoff(path.join(stageDirectory, 'lorem-handoff.json'), {
@@ -565,7 +572,7 @@ export class LayeredGenerationOrchestrator {
                 planId: plan.planId,
                 stage: dependencyOrigin === 'recorder' ? 'draft-contract-to-interaction' : 'behavior-to-interaction',
                 status: 'ready',
-                artifacts: [artifact(dependencyCopy, stageDirectory)],
+                artifacts: [artifact(dependencyCopy, stageDirectory), artifact(screenApiFile, stageDirectory)],
                 instructions: [dependencyOrigin === 'recorder'
                     ? 'Implementar exactamente los screenMethod del contrato provisional de Derek; Lorem redacta en paralelo sobre esa misma interfaz.'
                     : 'Implementar exactamente los screenMethod requeridos por Lorem.'],
@@ -586,6 +593,7 @@ export class LayeredGenerationOrchestrator {
             .map(file => path.join(stageDirectory, file))
             .filter(file => fs.existsSync(file)),
             ...filesInside(path.join(stageDirectory, 'baselines')),
+            ...(fs.existsSync(screenApiFile) ? [screenApiFile] : []),
             ...(dependencyFile ? [path.join(stageDirectory, path.basename(dependencyFile))] : []),
             ...(dependencyFile ? [path.join(stageDirectory, 'lorem-handoff.json')] : []),
             ...(repairErrors.length ? [path.join(stageDirectory, 'repair-feedback.json')] : []),
@@ -762,8 +770,14 @@ export class LayeredGenerationOrchestrator {
                                 files,
                             };
                             const validation = this.responseValidator!(packageDirectory, provisionalResponse);
-                            if (!validation.valid) {
-                                const classified = classifyValidationErrors(validation.errors, plan);
+                            const apiErrors = validateScreenApi(
+                                { files: provisionalResponse.files, actionTrace: provisionalResponse.actionTrace },
+                                { files: provisionalResponse.files, actionTrace: provisionalResponse.actionTrace },
+                            );
+                            if (!validation.valid || apiErrors.length) {
+                                const classified = classifyValidationErrors([
+                                    ...(validation.valid ? [] : validation.errors), ...apiErrors,
+                                ], plan);
                                 candidateErrors.push(...classified[role === 'behavior-author'
                                     ? 'behavior'
                                     : 'interaction']);
@@ -911,6 +925,7 @@ export class LayeredGenerationOrchestrator {
                 path.join(stageDirectory, `${path.basename(path.dirname(source))}-handoff.json`),
             );
         }
+        writeJsonUtf8(path.join(stageDirectory, 'screen-api.json'), buildScreenApi(readJsonUtf8<LayeredAgentResult>(behaviorFile)));
         if (repairFeedback) {
             writeJsonUtf8(path.join(stageDirectory, 'integration-feedback.json'), {
                 schemaVersion: 1,
@@ -928,6 +943,7 @@ export class LayeredGenerationOrchestrator {
             ...INTEGRATION_INPUT_FILES.map(file => path.join(stageDirectory, file)),
             path.join(stageDirectory, path.basename(behaviorFile)),
             path.join(stageDirectory, path.basename(interactionFile)),
+            path.join(stageDirectory, 'screen-api.json'),
             ...(repairFeedback ? [path.join(stageDirectory, 'integration-feedback.json')] : []),
         ].filter(file => fs.existsSync(file)).map(file => artifact(file, stageDirectory));
         const contextBytes = integrationArtifacts.reduce((total, item) => total + item.bytes, 0);
@@ -1051,6 +1067,7 @@ export class LayeredGenerationOrchestrator {
                     message: `La capa ${layer} debe conservar la ruta ${expectedPath}.`,
                 }]
         );
+        fileContractErrors.push(...validateScreenApi(behavior, interaction));
         if (response.files.length !== integratedFiles.size) {
             fileContractErrors.push({ code: 'duplicate-layer', message: 'La respuesta integrada contiene capas duplicadas.' });
         }

@@ -9,6 +9,15 @@ enlazado a una raíz local válida de `fwk-mobile-test`.
 
 ## Vista de componentes
 
+La semántica de texto pertenece a `automation/contracts/textAssertion.ts`:
+fuente y operador viajan junto a la acción, separados del locator y del esperado
+(`value`). `MobileStepExecutor` lee/compara sin persistir contenido observado;
+`FwkMobileGenerator` materializa el lector autocontenido en Screen;
+`textAssertionRules` verifica el vínculo AST entre getter, lectura y comparación.
+La feature recording ofrece preview y edición explícita mediante los canales
+`preview-text-assertion` / `update-text-assertion`. Las lecturas no escriben;
+la edición sincroniza la grabación con rollback ante errores de persistencia.
+
 ```mermaid
 flowchart LR
     UI[React components] --> RC[recorderController]
@@ -335,7 +344,13 @@ XML, screenshots, source, capabilities ni credenciales.
    recorder impone byte por byte los cuatro contenidos publicados por Lorem y
    Zorem: Sumrak solo aporta resoluciones y trazabilidad. La respuesta final pasa por
    `AutomationResponseValidator` antes de aplicarse.
-   Lorem entrega además su interfaz de `screenMethod` directamente a Zorem.
+   Derek deriva de los Steps de Lorem `screen-api.json`: módulo importado,
+   método, tipos de argumentos por posición, uso/tipo esperado del retorno y
+   secuencias. El contrato de dominio está en `screenApiContract.ts`; el adaptador
+   `layered/screenApi.ts` usa AST y tipos de TypeScript, sin leer el framework.
+   Zorem recibe esa interfaz junto con el handoff. Derek comprueba las llamadas
+   contra el Screen realmente exportado y atribuye incompatibilidades a Zorem.
+   Los imports/dependencias externos quedan para la compilación de fase 3.
    Ante un fallo, Derek clasifica el feedback por propietario y reejecuta solo
    la capa afectada. Durante una reparación, cada escritura se valida en vivo;
    si Copilot cierra con feedback pendiente, Derek relanza únicamente ese autor
@@ -361,14 +376,18 @@ XML, screenshots, source, capabilities ni credenciales.
    provisional (`agents/derek/behavior-result.json`, con handoff verificado) y
    Zorem implementa esa interfaz mientras Lorem redacta; Lorem tiene la
    instrucción de conservar esa interfaz. Al terminar ambos, si la huella
-   `screenMethod`/`locatorName` de Lorem difiere del contrato, Zorem se
+   `screenMethod`/`locatorName` o la API tipada de Lorem difiere del contrato, Zorem se
    sincroniza con el resultado real (`parallelAuthors: false` fuerza la
    secuencia). El adaptador de Copilot mantiene varias sesiones vivas y
    `cancel()` las corta todas. Zorem recibe el borrador de un archivo `update`
    como sus adiciones sobre `baseline` (getters, métodos, claves), no como el
    archivo completo que ya está en `baselines/`.
    Una corrección de Gherkin solo invalida Zorem cuando cambia la interfaz
-   `screenMethod`/`locatorName` de `actionTrace`. Cuando todos los gaps abiertos
+   `screenMethod`/`locatorName` de `actionTrace` o las firmas de `screen-api`.
+   El contrato derivado forma parte de los inputs firmados y del caché de autor;
+   la versión 3 del caché invalida respuestas anteriores a esta comprobación.
+   La extracción reutiliza hasta 16 contratos en memoria por contenido y traza.
+   Cuando todos los gaps abiertos
    ya tienen decisión fijada por el plan (`create`/`reuse` por secuencia, o
    `gap-extend-existing-artifacts`), Derek firma esas resoluciones, ensambla la
    respuesta directamente y ejecuta el mismo validador oficial sin abrir sesión
@@ -439,6 +458,12 @@ XML, screenshots, source, capabilities ni credenciales.
     una operación recuperable. Las correcciones cargan baselines en memoria,
     sin restaurarlas temporalmente sobre el framework. Los completions externos
     se muestran como archivos adicionales de solo lectura y entran al recibo.
+    `FrameworkCompilationValidator` comprueba ese overlay con el `tsconfig` y
+    las dependencias reales del workspace antes de entregar el preview y de
+    nuevo antes del commit. Vive en `validation/infrastructure`, no en agentes
+    ni renderer. Compara diagnósticos con los contenidos previos, separa deuda
+    heredada y publica `framework-compilation.json`; no ejecuta código del
+    target ni necesita escribir archivos temporales de compilación.
 
 La generación determinista es el modo predeterminado. `legacy` permanece
 únicamente como opt-in técnico mediante `RECORDER_GENERATION_MODE=legacy`.

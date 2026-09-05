@@ -83,7 +83,9 @@ export function actionIdentity(step: RecordedStep, platform: 'android' | 'ios'):
     const value = VALUE_SENSITIVE_ACTIONS.has(step.action)
         ? String(step.value || '').trim().toLowerCase()
         : '';
-    return `${step.platform || platform}|${step.action}|${selector}|${value}`;
+    const assertion = step.textAssertion
+        ? `|${JSON.stringify([step.textAssertion, step.value])}` : '';
+    return `${step.platform || platform}|${step.action}|${selector}|${value}${assertion}`;
 }
 
 /** Los gaps por elemento que la memoria puede cerrar sin agente. */

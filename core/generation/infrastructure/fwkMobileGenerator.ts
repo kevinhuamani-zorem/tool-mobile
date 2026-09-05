@@ -16,6 +16,8 @@ import {
     normalizeFeatureScope,
     detectRepetition,
     locatorImportIdentifier,
+    RECORDED_TEXT_READER,
+    parseTextAssertion,
 } from '../../automation/contracts';
 
 export type {
@@ -677,6 +679,7 @@ export class FwkMobileGenerator {
             `class ${className} extends ${contract.baseScreenClass} {`,
             ...getters.flatMap(getter => ['', getter]),
             ...methods.flatMap(method => ['', method.content]),
+            ...(body.includes('this.readRecordedText(') ? ['', RECORDED_TEXT_READER] : []),
             `}`,
             '',
             `export default new ${className}();`,
@@ -728,6 +731,14 @@ export class FwkMobileGenerator {
             case 'LIMPIAR':
                 return locator ? [ready(locator), `await ${locator}.clearValue();`] : [];
             case 'VERIFICAR_TEXTO':
+                if (action.textAssertion && locator) {
+                    const assertion = parseTextAssertion(action.textAssertion, action.action, action.value)!;
+                    return [
+                        ...displayed(locator, 'The element to validate was not displayed'),
+                        `const actualText${actionIndex + 1} = await this.readRecordedText(await ${locator}, '${assertion.source}');`,
+                        `await expect(actualText${actionIndex + 1}).${assertion.operator === 'contains' ? 'toContain' : 'toBe'}(${value});`,
+                    ];
+                }
                 return locator
                     ? [
                         ...displayed(locator, 'The element to validate was not displayed'),
@@ -898,7 +909,9 @@ export class FwkMobileGenerator {
             existingMethods: Map<number, { name: string; args?: string[] }>;
         }
     ): string[] {
-        if (!options.dataTableBinding || !options.repetitionExecution) {
+        // La intención explícita se materializa por acción: no comprimir comparaciones
+        // distintas ni heredar una implementación cuya semántica no está probada.
+        if (!options.dataTableBinding || !options.repetitionExecution || rowActions.some(action => action.textAssertion)) {
             return rowActions.flatMap((action, actionIndex) =>
                 this.existingMethodLines(action, options.existingMethods) || this.actionLines(action, options.parameters, actionIndex, {
                     hasTimeout: options.hasTimeout,
@@ -943,6 +956,7 @@ export class FwkMobileGenerator {
         action: RecordedStep,
         methods: Map<number, { name: string; args?: string[] }>,
     ): string[] | undefined {
+        if (action.textAssertion) return undefined;
         const method = methods.get(Number(action.sequence));
         if (!method) return undefined;
         return [`await this.${method.name}(${(method.args || []).join(', ')});`];

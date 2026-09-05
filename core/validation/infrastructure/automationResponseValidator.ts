@@ -36,6 +36,7 @@ import {
     gherkinQualityRules,
     groupRepairErrors,
     layerRules,
+    textAssertionRules,
     locatorContractRules,
     outputRules,
     stepDefinitionExpressions,
@@ -107,6 +108,7 @@ export class AutomationResponseValidator {
         // se valida la API indexada por el plan y las capas que sí se crean.
         const reusesScreenWithoutChanges = Boolean(baselineScreen) && !screenAddsSymbols;
         layerRules(context, report);
+        textAssertionRules(context, report);
         gapRules(context, report);
         locatorContractRules(context, report);
         const existingAutomationWithoutNewLocators = existingAutomationRules(context, report);

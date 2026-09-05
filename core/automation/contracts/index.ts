@@ -23,6 +23,7 @@ export type { AutomationScenario } from './automationScenario';
  * `automation/domain` ni `automation/application`).
  */
 export * from './models';
+export * from './textAssertion';
 export * from './gherkinContract';
 export * from './screenObjectContract';
 export * from './selectorCandidates';

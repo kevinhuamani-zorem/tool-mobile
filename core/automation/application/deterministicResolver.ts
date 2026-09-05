@@ -314,6 +314,7 @@ export class DeterministicResolver {
 
         rawScenario.actions.forEach((step, index) => {
             if (!/^VERIFICAR_/.test(step.action)) return;
+            if (step.textAssertion) return; // El QA ya definió fuente y operador; no sustituirlos por inferencias.
             const pinned = selectorPinsAssertedValue(step);
             if (!likelyDynamicText(step.value) && !pinned) return;
             // La misma verificacion sobre el mismo elemento ya se decidio en
@@ -344,6 +345,7 @@ export class DeterministicResolver {
 
         rawScenario.actions.forEach((step, index) => {
             if (!/^VERIFICAR_/.test(step.action)) return;
+            if (step.textAssertion) return;
             if (!selectorCannotIdentifyElement(step.selector)) return;
             gaps.push({
                 id: `gap-weak-assertion-${index + 1}`,

@@ -146,6 +146,8 @@ test('memoria revierte una promoción parcial si falla el índice', t => {
 
 test('handler aplica el preview final y entrega esos mismos bytes a memoria y recibo', async t => {
     const f = fixture(t);
+    fs.writeFileSync(path.join(f.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [], strict: true } }));
+    f.response.files[1].content = 'export const verified: number = 1;';
     const { projectPaths } = require('../dist/core/workspace');
     const originalRoot = projectPaths.frameworkRoot;
     projectPaths.frameworkRoot = f.root;
@@ -172,4 +174,33 @@ test('handler aplica el preview final y entrega esos mismos bytes a memoria y re
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'agent-response.json'))), memorized);
     assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'status.json'))).memoryVersion, 1);
     assert.equal(state.automationPreview, null);
+});
+
+test('handler rechaza errores semánticos antes de escribir o promover memoria', async t => {
+    const f = fixture(t);
+    const { projectPaths } = require('../dist/core/workspace');
+    const originalRoot = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.root;
+    t.after(() => { projectPaths.frameworkRoot = originalRoot; });
+    fs.writeFileSync(path.join(f.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [], strict: true } }));
+    f.response.files[1].content = 'export const broken: number = "wrong";';
+    const prepared = f.applier.prepare(f.scenario, f.plan, f.response, f.preview);
+    const packageDirectory = path.join(f.root, 'package');
+    fs.mkdirSync(packageDirectory);
+    const state = { activeAutomationPackage: packageDirectory, automationPreview: {
+        token: 'token', scenario: f.scenario, plan: f.plan, response: prepared.response, prepared,
+    } };
+    const { applyReviewedAutomation } = require('../dist/recorder/src/ipc/automation/applyAutomation');
+    const result = await applyReviewedAutomation({ state, automationApplier: f.applier,
+        automationResponseValidator: { validate: () => ({ valid: true, qualityScore: 100, errors: [], warnings: [] }), toPreview: () => f.preview },
+        automationMemory: { promote: () => assert.fail('must not learn invalid code') },
+        emitProgress: () => {},
+    }, 'token');
+    assert.equal(result.success, false);
+    assert.match(result.error, /TS2322/);
+    assert.equal(fs.readFileSync(prepared.preview.featurePath, 'utf8'), f.original);
+    assert.equal(fs.existsSync(prepared.preview.stepPath), false);
+    assert.equal(fs.readFileSync(f.registryFile, 'utf8'), 'original registry');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'framework-compilation.json'))).status, 'failed');
+    assert.ok(state.automationPreview, 'QA retains editable preview');
 });

@@ -37,6 +37,36 @@ export function reorderRecordedSteps(
 export function registerInteractionHandlers(context: InteractionHandlersContext): void {
     const { state, syncRecording } = context;
 
+    ipcMain.handle('preview-text-assertion', async (_, input: RecordedStep) => {
+        if (!state.sessionActive || !state.executor) return { success: false, message: 'Sin sesión activa' };
+        try {
+            const step = prepareRecordedStep(input, 1, state.recordingPlatform === 'ios' ? 'ios' : 'android');
+            if (step.action !== 'VERIFICAR_TEXTO' || !step.selector) throw new Error('Selecciona el elemento o contenedor que quieres leer.');
+            return await state.executor.previewTextAssertion(step);
+        } catch (error) {
+            return { success: false, message: error instanceof Error ? error.message : String(error) };
+        }
+    });
+
+    // Edición explícita de semántica: conserva locator y evidencia, comprueba en el dispositivo.
+    ipcMain.handle('update-text-assertion', async (_, index: number, input: Pick<RecordedStep, 'value' | 'textAssertion'>) => {
+        if (!state.sessionActive || !state.executor) return { success: false, message: 'Sin sesión activa' };
+        try {
+            const original = Number.isInteger(index) ? state.recordedSteps[index] : undefined;
+            if (!original || original.action !== 'VERIFICAR_TEXTO') throw new Error('Selecciona una verificación de texto.');
+            const step = prepareRecordedStep({ ...original, value: input.value, textAssertion: input.textAssertion }, index + 1,
+                state.recordingPlatform === 'ios' ? 'ios' : 'android');
+            const result = await state.executor.previewTextAssertion(step);
+            if (!result.success) return result;
+            if (state.recordedSteps[index] !== original) throw new Error('La grabación cambió durante la comprobación; selecciona la acción de nuevo.');
+            state.recordedSteps[index] = step;
+            try { syncRecording(); } catch (error) { state.recordedSteps[index] = original; throw error; }
+            return { ...result, steps: state.recordedSteps };
+        } catch (error) {
+            return { success: false, message: error instanceof Error ? error.message : String(error) };
+        }
+    });
+
     ipcMain.handle('get-screenshot', async () => {
         if (!state.inspector) return { success: false, error: 'Sin sesion' };
         try {

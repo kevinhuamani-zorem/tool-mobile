@@ -173,6 +173,7 @@ function compactScenario(
             action: action.action,
             description: safeText(action.description || action.contextHint || action.elementIntent, 120),
             hasSelector: Boolean(action.selector || action.locatorValue),
+            ...(action.textAssertion ? { textAssertion: action.textAssertion, expected: action.value } : {}),
         }));
     const compactRows = scenarioRows
         .filter((row: Record<string, unknown>) => {

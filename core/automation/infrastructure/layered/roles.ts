@@ -84,7 +84,7 @@ export const MAX_LAYERED_REPAIR_ATTEMPTS = 1;
 
 export const MAX_LIVE_FEEDBACK_ROUNDS = 2;
 
-export const LAYERED_CACHE_SCHEMA_VERSION = 2;
+export const LAYERED_CACHE_SCHEMA_VERSION = 3;
 
 export type AuthorRole = LayeredAgentResult['role'];
 

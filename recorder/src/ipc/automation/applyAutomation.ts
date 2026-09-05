@@ -13,7 +13,7 @@ import {
     createAutomationApplicationReceipt,
     requireUnchangedAppliedFiles,
 } from '../../../../core/automation';
-import { AutomationResponseValidator } from '../../../../core/validation';
+import { AutomationResponseValidator, FrameworkCompilationValidator, includeFrameworkCompilation } from '../../../../core/validation';
 import { normalizeJsonUnicode, readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
 import { RecorderRuntimeState } from '../runtimeState';
 import { AutomationProgressEmitter } from './progress';
@@ -81,6 +81,10 @@ export async function applyReviewedAutomation(
         response = prepared.response;
         const validatorStarted = process.hrtime.bigint();
         const validation = automationResponseValidator.validate(scenario, plan, response);
+        const compilation = new FrameworkCompilationValidator().validate(projectPaths.frameworkRoot, prepared.files);
+        includeFrameworkCompilation(validation, compilation);
+        writeJsonUtf8(path.join(state.activeAutomationPackage, 'framework-compilation.json'), compilation);
+        writeJsonUtf8(path.join(state.activeAutomationPackage, 'validation.json'), validation);
         runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
         runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
         if (!validation.valid) throw new Error(validation.errors.map(item => item.message).join(' | '));

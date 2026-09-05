@@ -24,7 +24,7 @@ import {
     PreparedAutomation,
     loadUpdateBaselinesForCorrection,
 } from '../../../../core/automation';
-import { AutomationResponseValidator } from '../../../../core/validation';
+import { AutomationResponseValidator, FrameworkCompilationValidator, includeFrameworkCompilation } from '../../../../core/validation';
 import { DeterministicGenerator } from '../../../../core/generation';
 import { normalizeJsonUnicode, readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
 import { RecorderRuntimeState } from '../runtimeState';
@@ -209,6 +209,11 @@ export class AutomationResponseImporter {
         }
         emitAutomationProgress('VALIDATING', 'Validando resultado', 5, 6);
         const validation = automationResponseValidator.validate(scenario, plan, response, repairAttempts);
+        if (prepared) {
+            const compilation = new FrameworkCompilationValidator().validate(projectPaths.frameworkRoot, prepared.files);
+            includeFrameworkCompilation(validation, compilation);
+            writeJsonUtf8(path.join(packageDirectory, 'framework-compilation.json'), compilation);
+        }
         if (preparationError) {
             validation.valid = false;
             validation.qualityScore = 0;

@@ -155,6 +155,7 @@ export const BEHAVIOR_RULE_CODES = new Set([
 ]);
 
 export const INTERACTION_RULE_CODES = new Set([
+    'recorded-text-assertion',
     'completion-duplicate', 'completion-file', 'completion-key', 'completion-occupied',
     'completion-platform', 'completion-sequence', 'completion-shape',
     'completion-unauthorized', 'create-locator-contract', 'destructive-update',

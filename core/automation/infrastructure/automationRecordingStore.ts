@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERSION } from '../contracts';
 import { GenerationRequest, MobilePlatform } from '../contracts';
-import { RecordedStep, recordedStepContext } from '../contracts';
+import { RecordedStep, recordedStepContext, parseTextAssertion } from '../contracts';
 import { projectPaths } from '../../workspace';
 import { frameworkLocator, roundTrip } from '../../indexing';
 import {
@@ -124,6 +124,7 @@ export function prepareRecordedStep(
         }
     }
     const sensitive = isSensitiveInput(step);
+    const textAssertion = parseTextAssertion(step.textAssertion, step.action, step.value);
     const selectorVerified = step.selectorVerified === undefined
         ? Boolean(step.selector)
         : step.selectorVerified === true;
@@ -141,6 +142,7 @@ export function prepareRecordedStep(
     return {
         action: step.action,
         sequence,
+        ...(textAssertion ? { textAssertion } : {}),
         platform,
         variableName: step.variableName,
         contextHint: step.contextHint,
@@ -174,6 +176,7 @@ export function scenarioFingerprint(input: {
     const canonical = input.actions.map(step => ({
         action: step.action,
         contextHint: recordedStepContext(step).toLowerCase(),
+        ...(step.textAssertion ? { textAssertion: step.textAssertion, expected: step.value } : {}),
         selector: String(step.selector || '').trim().replace(/\s+/g, ' '),
     }));
     return crypto.createHash('sha256').update(JSON.stringify({

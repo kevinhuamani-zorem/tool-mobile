@@ -33,6 +33,7 @@ import {
     integrationPrompt,
     partialPrompt,
 } from './prompts';
+import { buildScreenApi } from './screenApi';
 
 export function artifact(file: string, root: string) {
     const content = readUtf8File(file);
@@ -274,7 +275,8 @@ export function normalizeAutomationResponse(response: AutomationAgentResponse): 
 }
 
 export function actionInterfaceFingerprint(resultFile: string): string {
-    return interfaceFingerprint(readJsonUtf8<LayeredAgentResult>(resultFile).actionTrace);
+    const result = readJsonUtf8<LayeredAgentResult>(resultFile);
+    return stableFingerprint({ trace: interfaceFingerprint(result.actionTrace), api: buildScreenApi(result) });
 }
 
 export function pipelineFingerprint(packageDirectory: string, model: string): string {

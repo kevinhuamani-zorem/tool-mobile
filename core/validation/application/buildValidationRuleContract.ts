@@ -420,6 +420,10 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
             'await confirmacionEnvioEmailMovementsScreen.tapSeeAllMovements();',
     },
+    'recorded-text-assertion': {
+        requirement: 'Para textAssertion explícito se debe conservar el helper readRecordedText del borrador, la fuente, el getter trazado y el esperado. contains usa toContain; equals usa toBe. XPath solo localiza.',
+        minimalExample: "const actual = await this.readRecordedText(await this.movementsContent, 'container');\nawait expect(actual).toContain(\"Hoy\");",
+    },
     'trace-shape': {
         requirement: 'Cada entrada de actionTrace debe cumplir el schema sin campos extra.',
         minimalExample:

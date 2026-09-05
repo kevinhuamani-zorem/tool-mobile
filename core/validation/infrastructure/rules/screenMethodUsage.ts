@@ -103,6 +103,12 @@ export function screenMethodGetterUsage(
         ]);
         const readOrigins = (expression: ts.Expression): Set<string> => {
             expression = unwrap(expression);
+            // La familia textAssertionRules comprueba además el cuerpo exacto del lector.
+            if (ts.isCallExpression(expression)
+                && ts.isPropertyAccessExpression(expression.expression)
+                && expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword
+                && expression.expression.name.text === 'readRecordedText'
+                && expression.arguments[0]) return elementOrigins(expression.arguments[0]);
             if (
                 ts.isCallExpression(expression)
                 && ts.isPropertyAccessExpression(expression.expression)
