@@ -39,7 +39,7 @@ export class AutomationAgentLauncher {
         if (args.some(value => value === '--model' || value === '-m' || value.startsWith('--model='))) {
             return args;
         }
-        return [...args, '--model', process.env.RECORDER_COPILOT_MODEL || 'auto'];
+        return [...args, '--model', normalizeAgentModel(process.env.RECORDER_COPILOT_MODEL)];
     }
 
     initialPrompt(packageDirectory: string): string {

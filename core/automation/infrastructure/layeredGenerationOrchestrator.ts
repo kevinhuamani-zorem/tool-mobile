@@ -7,6 +7,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { DEFAULT_AGENT_MODEL } from '../domain/agentModel';
 import {
     AutomationAgentResponse,
     GenerationPlan,
@@ -152,7 +153,7 @@ export class LayeredGenerationOrchestrator {
 
         let repairAttempts = 0;
         try {
-            const completeFingerprint = pipelineFingerprint(root, options.model || 'auto');
+            const completeFingerprint = pipelineFingerprint(root, options.model || DEFAULT_AGENT_MODEL);
             const completeCacheFile = pipelineCacheFile(completeFingerprint);
             if (!options.forceRegenerate) {
                 let cachedEntry: PipelineCacheEntry | undefined;
@@ -444,7 +445,7 @@ export class LayeredGenerationOrchestrator {
         const cacheFingerprint = stableFingerprint({
             schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
             role: 'design-review',
-            model: options.model || 'auto',
+            model: options.model || DEFAULT_AGENT_MODEL,
             prompt,
             artifacts: inputs.map(file => ({
                 path: path.relative(stageDirectory, file),
@@ -653,7 +654,7 @@ export class LayeredGenerationOrchestrator {
         const cacheFingerprint = stableFingerprint({
             schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
             role,
-            model: options.model || 'auto',
+            model: options.model || DEFAULT_AGENT_MODEL,
             prompt,
             artifacts: inputArtifacts
                 // Los handoffs contienen createdAt; su identidad real ya está

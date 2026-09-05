@@ -70,7 +70,7 @@ test('adapter devuelve éxito cuando el proceso termina en 0', async () => {
     assert.equal(capturedArgs[0], '-p');
     assert.equal(capturedArgs[1], 'hola');
     assert.equal(capturedArgs.includes('--model'), true);
-    assert.equal(capturedArgs.includes('auto'), true);
+    assert.equal(capturedArgs.includes('claude-sonnet-5'), true);
 });
 
 test('adapter selecciona el custom agent y nombra la sesión de Copilot', async () => {

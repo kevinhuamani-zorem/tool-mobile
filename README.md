@@ -397,9 +397,13 @@ alteran sesiones de Copilot que ya estaban abiertas.
 
 ### Selección de modelo
 
-En el constructor del caso, **Modelo de Copilot** comienza en **Auto**.
-Puedes elegir **Otro modelo** e introducir el ID disponible en `/model` de tu
-Copilot. La elección se recuerda en esa instalación y se envía con `--model`
+En el constructor del caso, **Modelo de Copilot** comienza en **Claude Sonnet 5**
+si no hay una preferencia guardada. El selector ofrece también **Auto**,
+**GPT-5.6 Terra**, **Claude Opus 5** y **GPT-5.6 Sol**. Se envían los IDs
+`gpt-5.6-terra`, `auto`, `claude-sonnet-5`, `claude-opus-5` y `gpt-5.6-sol`.
+Su disponibilidad depende del CLI y de tu cuenta. Puedes elegir **Otro modelo**
+e introducir un ID disponible en `/model`. Las preferencias anteriores,
+incluido Auto, se conservan. La elección se recuerda y se envía con `--model`
 en la siguiente generación o corrección; no cambia una sesión ya abierta.
 Un modelo fijo reduce variaciones, pero no garantiza respuestas idénticas.
 

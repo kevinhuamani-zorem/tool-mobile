@@ -6,8 +6,9 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { normalizeAgentModel, modelFromCopilotEvent, CopilotModelEvents, AgentRunStore, AutomationAgentLauncher } = require('../dist/core/automation');
 
-test('modelo auto predeterminado e IDs inválidos rechazados antes de lanzar CLI', () => {
-    assert.equal(normalizeAgentModel(), 'auto');
+test('modelo Sonnet predeterminado e IDs inválidos rechazados antes de lanzar CLI', () => {
+    assert.equal(normalizeAgentModel(), 'claude-sonnet-5');
+    assert.equal(normalizeAgentModel('auto'), 'auto');
     assert.equal(normalizeAgentModel(' gpt-5.6-terra '), 'gpt-5.6-terra');
     for (const value of ['--allow-all', 'model; touch x', 'x\n-y', {}, 42]) assert.throws(() => normalizeAgentModel(value));
     assert.equal(modelFromCopilotEvent({ type: 'assistant.message', data: { content: 'model: fake' } }), null);
@@ -86,7 +87,18 @@ test('UI recuerda modelo, bloquea cambios durante ejecución y muestra datos rea
     };
     const api = { getAutomationModelUsage: async () => ({ requestedModel: 'auto', actualModels: ['model-a'] }) };
     const control = createCopilotModelControls(doc, api, storage);
-    assert.equal(control.selected(), 'auto');
+    assert.equal(control.selected(), 'claude-sonnet-5');
+    const jsx = fs.readFileSync(path.resolve(__dirname, '../recorder/renderer/src/components/ScenarioBuilderModal.tsx'), 'utf8');
+    for (const model of ['auto', 'claude-sonnet-5', 'claude-opus-5', 'gpt-5.6-sol', 'gpt-5.6-terra']) {
+        assert.ok(jsx.includes(`value="${model}"`));
+        elements.cmbCopilotModel.value = model;
+        elements.cmbCopilotModel.handlers.change();
+        assert.equal(control.selected(), model);
+        assert.equal(elements.txtCopilotModel.hidden, true);
+        const restored = createCopilotModelControls(doc, api, storage);
+        assert.equal(restored.selected(), model);
+        assert.equal(elements.cmbCopilotModel.value, model);
+    }
     elements.cmbCopilotModel.value = 'custom';
     elements.cmbCopilotModel.handlers.change();
     assert.equal(elements.txtCopilotModel.hidden, false);

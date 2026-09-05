@@ -13,6 +13,7 @@ import {
 } from '../ports/agentProvider';
 import { readJsonUtf8, readUtf8File } from '../../shared';
 import { copilotPermissionArgs } from './copilotPermissions';
+import { DEFAULT_AGENT_MODEL, modelFromCopilotEvent, normalizeAgentModel } from '../domain/agentModel';
 
 type SpawnFn = typeof spawn;
 
@@ -22,7 +23,7 @@ function splitArgs(value: string | undefined): string[] {
 }
 
 const DEFAULT_COPILOT_CLI_ARGS = '-p --output-format json';
-const DEFAULT_COPILOT_MODEL = 'auto';
+const DEFAULT_COPILOT_MODEL = DEFAULT_AGENT_MODEL;
 
 function hasModelArg(args: string[]): boolean {
     return args.some(value =>
@@ -578,4 +579,3 @@ export class CopilotCliAdapter implements AgentProvider {
         });
     }
 }
-import { modelFromCopilotEvent, normalizeAgentModel } from '../domain/agentModel';

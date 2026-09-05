@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'appiumRecorder.copilotModel.v1';
+const DEFAULT_MODEL = 'claude-sonnet-5';
+const PRESET_MODELS = new Set(['auto', 'gpt-5.6-terra', 'claude-opus-5', 'gpt-5.6-sol', DEFAULT_MODEL]);
 
 export function modelUsageLabel(usage) {
     if (!usage) return 'Modelo usado: sin invocación registrada.';
@@ -11,12 +13,12 @@ export function createCopilotModelControls(doc, api, storage = globalThis.localS
     const custom = doc.getElementById('txtCopilotModel');
     const statuses = [...(doc.querySelectorAll?.('[data-copilot-model-usage]') || [])];
     const show = text => statuses.forEach(status => { status.textContent = text; });
-    let saved = 'auto';
-    try { saved = storage?.getItem(STORAGE_KEY) || 'auto'; } catch { /* Optional preference. */ }
-    if (select) select.value = saved === 'auto' ? 'auto' : 'custom';
-    if (custom) { custom.value = saved === 'auto' ? '' : saved; custom.hidden = saved === 'auto'; }
+    let saved = DEFAULT_MODEL;
+    try { saved = storage?.getItem(STORAGE_KEY) || DEFAULT_MODEL; } catch { /* Optional preference. */ }
+    if (select) select.value = PRESET_MODELS.has(saved) ? saved : 'custom';
+    if (custom) { custom.value = PRESET_MODELS.has(saved) ? '' : saved; custom.hidden = PRESET_MODELS.has(saved); }
 
-    const value = () => select?.value === 'custom' ? custom?.value.trim() || '' : 'auto';
+    const value = () => select?.value === 'custom' ? custom?.value.trim() || '' : select?.value || DEFAULT_MODEL;
     const persist = () => {
         if (custom) custom.hidden = select?.value !== 'custom';
         try { storage?.setItem(STORAGE_KEY, value()); } catch { /* Optional preference. */ }

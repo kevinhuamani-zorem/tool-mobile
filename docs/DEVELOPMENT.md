@@ -84,12 +84,14 @@ Flags útiles del pipeline agentic:
 - `RECORDER_COPILOT_CLI_COMMAND` y `RECORDER_COPILOT_CLI_ARGS` para adaptar
   el comando del provider sin tocar código.
 - `RECORDER_COPILOT_MODEL` para definir el modelo del provider cuando
-  `RECORDER_COPILOT_CLI_ARGS` no incluye `--model` (default `auto`).
+  `RECORDER_COPILOT_CLI_ARGS` no incluye `--model` (default `claude-sonnet-5`).
   La selección explícita del wizard prevalece sobre ambos para esa ejecución,
   sin modificar variables de entorno. El modo troll mantiene su configuración
-  independiente. La UI permite Auto u otro ID de `/model`, sin catálogo estático.
+  independiente. La UI ofrece Sonnet 5 por defecto, Auto, Terra, Opus 5,
+  Sol y otro ID de `/model`. Conserva elecciones guardadas; no garantiza que
+  todos los modelos estén habilitados para cada cuenta.
   Por defecto el adapter usa:
-  `copilot -p "<prompt>" --output-format json --model auto` más `--agent`
+  `copilot -p "<prompt>" --output-format json --model claude-sonnet-5` más `--agent`
   y `--name Derek/<recordingId>/<agente>` para cada sesión, y los permisos
   de `copilotPermissions.ts`: `--add-dir <paquete>`,
   `--allow-tool=read`, `--allow-tool=write`, `--allow-tool=shell(node)`,

@@ -76,8 +76,12 @@ export function ScenarioBuilderModal() {
             <div className="copilot-model-settings">
               <div className="copilot-model-field">
                 <label className="field-label" htmlFor="cmbCopilotModel">Modelo de Copilot</label>
-                <select id="cmbCopilotModel" className="field-select" defaultValue="auto">
-                  <option value="auto">Auto (predeterminado)</option>
+                <select id="cmbCopilotModel" className="field-select" defaultValue="claude-sonnet-5">
+                  <option value="claude-sonnet-5">Claude Sonnet 5 (predeterminado)</option>
+                  <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+                  <option value="auto">Auto</option>
+                  <option value="claude-opus-5">Claude Opus 5</option>
+                  <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
                   <option value="custom">Otro modelo…</option>
                 </select>
                 <input id="txtCopilotModel" className="field-input" hidden maxLength={100}

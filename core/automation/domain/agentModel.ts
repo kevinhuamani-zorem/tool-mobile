@@ -1,3 +1,5 @@
+export const DEFAULT_AGENT_MODEL = 'claude-sonnet-5';
+
 export interface AgentModelUsage {
     requestedModel: string;
     actualModels: string[];
@@ -5,7 +7,7 @@ export interface AgentModelUsage {
 
 export function normalizeAgentModel(value?: string): string {
     if (value !== undefined && typeof value !== 'string') throw new Error('Modelo de Copilot inválido.');
-    const model = value?.trim() || 'auto';
+    const model = value?.trim() || DEFAULT_AGENT_MODEL;
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,99}$/.test(model)) {
         throw new Error('Modelo de Copilot inválido. Usa el identificador mostrado por /model.');
     }
