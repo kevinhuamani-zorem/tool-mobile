@@ -8,7 +8,7 @@ export interface AgentPlatformTagEnforcementResult {
 }
 
 function hasPlatformTag(content: string, platform: Platform): boolean {
-    return new RegExp(`^\\s*@[^\\n]*@${platform}(?:\\s|$)`, 'mi').test(content);
+    return new RegExp(`^\\s*(?:@[^\\s@]+\\s+)*@${platform}(?:\\s|$)`, 'mi').test(content);
 }
 
 function completeLocatorPlatforms(content: string): Platform[] {

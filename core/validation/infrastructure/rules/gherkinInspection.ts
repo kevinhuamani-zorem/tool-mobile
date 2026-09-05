@@ -70,5 +70,7 @@ export function genericTemplateGherkinSteps(content: string): string[] {
 }
 
 export function hasPlatformTag(content: string, platform: 'android' | 'ios'): boolean {
-    return new RegExp(`^\\s*@[^\\n]*@${platform}(?:\\s|$)`, 'mi').test(content);
+    // `@android @ventas` (el tag de plataforma primero) tambien cuenta: la
+    // version anterior exigia algo antes de `@android` y lo daba por ausente.
+    return new RegExp(`^\\s*(?:@[^\\s@]+\\s+)*@${platform}(?:\\s|$)`, 'mi').test(content);
 }

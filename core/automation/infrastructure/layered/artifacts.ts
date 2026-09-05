@@ -199,10 +199,28 @@ export function normalizeScreenImport(
  * `actionTrace` y, en Steps, keywords de Cucumber e import del Screen Object.
  * Lo semantico (trazabilidad, contenido de las capas) sigue siendo del agente.
  */
+/**
+ * Prefijo del Scenario con los datos del caso (`[TC-x][Happy Path][AUTO-FRONT]`):
+ * los modelos lo abrevian (`[HP]`), lo omiten o cambian el orden. Los datos
+ * son del formulario del QA, no del agente, asi que se imponen.
+ */
+export function normalizeScenarioHeading(
+    content: string,
+    naming: { caseId: string; pathType: string },
+): string {
+    if (!/^TC-\d+$/.test(naming.caseId) || !/^(?:Happy|Unhappy) Path$/.test(naming.pathType)) return content;
+    const prefix = `[${naming.caseId}][${naming.pathType}][AUTO-FRONT]`;
+    return content.replace(
+        /^(\s*Scenario(?: Outline)?:\s*)(?:\[[^\]\n]*\]\s*){0,3}(.*)$/m,
+        (_match, keyword: string, title: string) => `${keyword}${prefix} ${title.trim()}`.replace(/\s+$/, ''),
+    );
+}
+
 export function normalizeAuthorResult(
     result: LayeredAgentResult,
     role: 'behavior-author' | 'interaction-author',
     plan: Pick<GenerationPlan, 'recordingId' | 'planId' | 'files'>,
+    naming?: { caseId: string; pathType: string },
 ): boolean {
     if (!result || typeof result !== 'object') return false;
     let changed = false;
@@ -227,7 +245,13 @@ export function normalizeAuthorResult(
     if (role === 'behavior-author' && Array.isArray(result.files)) {
         const screenPath = plan.files.find(file => file.layer === 'screen')?.path;
         for (const file of result.files) {
-            if (file.layer !== 'steps' || typeof file.content !== 'string') continue;
+            if (typeof file.content !== 'string') continue;
+            if (file.layer === 'feature' && naming) {
+                const content = normalizeScenarioHeading(file.content, naming);
+                if (content !== file.content) { file.content = content; changed = true; }
+                continue;
+            }
+            if (file.layer !== 'steps') continue;
             let content = normalizeCucumberStepDefinitions(file.content);
             if (screenPath) content = normalizeScreenImport(content, screenPath);
             if (content !== file.content) { file.content = content; changed = true; }

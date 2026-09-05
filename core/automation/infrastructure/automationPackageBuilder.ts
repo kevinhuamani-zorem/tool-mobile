@@ -642,7 +642,7 @@ for(const baseline of reuse.updateBaselines||[]){const proposed=(response.files|
 if(!/^\s*@[-A-Za-z0-9_]+/m.test(feature))errors.push('Feature sin tag válido');
 const requiredPlatforms=new Set([scenario.platform]);
 try{const document=JSON.parse(locator);for(const platform of ['android','ios']){const values=Object.entries(document).filter(([name,value])=>name.toLowerCase().endsWith(platform)&&value&&typeof value==='object'&&!Array.isArray(value)).flatMap(([,value])=>Object.values(value));if(values.length&&values.every(value=>typeof value==='string'&&value.trim()))requiredPlatforms.add(platform)}}catch(e){}
-for(const platform of requiredPlatforms){if(!new RegExp('^\\s*@[^\\n]*@'+platform+'(?:\\s|$)','mi').test(feature))errors.push('Falta tag @'+platform)}
+for(const platform of requiredPlatforms){if(!new RegExp('^\\s*(?:@[^\\s@]+\\s+)*@'+platform+'(?:\\s|$)','mi').test(feature))errors.push('Falta tag @'+platform)}
 if(!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.test(feature))errors.push('Formato Scenario inválido');
 if(!/^\s*Then\s+\S+/m.test(feature))errors.push('Scenario sin Then');
 const normStep=v=>String(v||'').replace(/\s+/g,' ').trim();

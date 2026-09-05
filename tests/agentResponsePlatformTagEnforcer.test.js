@@ -65,3 +65,20 @@ test('agrega @ios cuando locators tienen cobertura iOS completa', () => {
     assert.match(feature.content, /^@ios$/m);
 });
 
+
+// `@android @ventas` (plataforma primero) es tan valido como `@ventas @android`.
+// La expresion anterior exigia algo antes de `@android` y lo daba por ausente:
+// el validador pedia un tag que ya estaba y Lorem quemaba rondas sin nada que
+// corregir (TC-10239, gpt-5.5 + sonnet, 456 s).
+test('reconoce el tag de plataforma aunque sea el primero de la linea', () => {
+    const { hasPlatformTag } = require('../dist/core/validation/infrastructure/rules/gherkinInspection.js');
+    assert.equal(hasPlatformTag('@android @ventas\nFeature: x', 'android'), true);
+    assert.equal(hasPlatformTag('@ventas @android\nFeature: x', 'android'), true);
+    assert.equal(hasPlatformTag('  @payment @android\n  Scenario: x', 'android'), true);
+    assert.equal(hasPlatformTag('@androidx @ventas\nFeature: x', 'android'), false);
+    assert.equal(hasPlatformTag('@ventas\nFeature: x', 'android'), false);
+    const response = sampleResponse();
+    response.files.find(file => file.layer === 'feature').content = '@android @ventas\nFeature: Demo\n\n  Scenario: caso demo\n';
+    const result = enforceAgentResponsePlatformTags(response, 'android');
+    assert.deepEqual(result.added, [], 'no duplica un tag que ya esta');
+});

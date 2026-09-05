@@ -41,7 +41,7 @@ function fixture() {
         unresolvedGapIds: ['gap-1'],
         budgets: {},
     });
-    writeJson(path.join(root, 'scenario.json'), { recordingId: 'rec-1', request: { actions: [] } });
+    writeJson(path.join(root, 'scenario.json'), { recordingId: 'rec-1', request: { actions: [], caseId: 'TC-1', pathType: 'Happy Path' } });
     writeJson(path.join(root, 'gaps.json'), { gaps: [] });
     writeJson(path.join(root, 'agent-response.schema.json'), {
         type: 'object',
@@ -909,7 +909,10 @@ test('Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir
                 behavior.actionTrace = [{ sequence: 1, action: 'CLICK', stepDefinition: 'x', gherkinStep: 'When acción', screenMethod: 'executeAction', locatorName: 'primaryButton' }];
                 behavior.files = behavior.files.map(entry => entry.layer === 'steps'
                     ? { ...entry, content: "import { When } from '@cucumber/cucumber';\nimport screen from '@screenobjects/payment/case.screen';\nWhen(/^acción$/, async () => { await screen.executeAction(); });\n" }
-                    : entry);
+                    : entry.layer === 'feature'
+                        // gpt-5.5 abrevio el path: [HP] en vez de [Happy Path].
+                        ? { ...entry, content: '@android @ventas\nFeature: Caso\n\n  Scenario Outline: [TC-1][HP][AUTO-FRONT] Caso\n    When acción\n' }
+                        : entry);
                 writeJson(file, behavior);
             }
             return result;
@@ -929,6 +932,8 @@ test('Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir
     assert.match(steps, /import caseScreen from '@screenobjects\/payment\/case\.screen\.ts';/);
     assert.match(steps, /await caseScreen\.executeAction\(\)/);
     assert.doesNotMatch(steps, /await screen\./);
+    const feature = behavior.files.find(entry => entry.layer === 'feature').content;
+    assert.match(feature, /Scenario Outline: \[TC-1\]\[Happy Path\]\[AUTO-FRONT\] Caso/);
 });
 
 // Solo Zorem ejecuta algo (screen-object-contract.js). Con `shell(node)` abierto,

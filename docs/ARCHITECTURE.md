@@ -311,10 +311,11 @@ XML, screenshots, source, capabilities ni credenciales.
    `stepReuse`, `selectorHeuristics`, `artifactPlanning`).
    Antes de juzgar la salida de un autor, Derek corrige lo mecánico
    (`normalizeAuthorResult`): sobre del contrato (`schemaVersion`, `role`,
-   ids del paquete), campos de más en `actionTrace` y, en Steps, keywords
-   desde `@wdio/cucumber-framework` e import del Screen Object con el alias
-   e `importSource` exactos (con `.ts`). Ningún modelo paga una ronda por
-   eso; lo semántico sigue siendo del agente.
+   ids del paquete), campos de más en `actionTrace`, en Feature el prefijo
+   del Scenario con los datos del formulario (`[TC-x][Happy Path][AUTO-FRONT]`)
+   y, en Steps, keywords desde `@wdio/cucumber-framework` e import del
+   Screen Object con el alias e `importSource` exactos (con `.ts`). Ningún
+   modelo paga una ronda por eso; lo semántico sigue siendo del agente.
    Presupuesto por etapa: cada `LayeredGenerationStageReport` lleva `budget`
    (`maxDurationMs`, `maxContextBytes`, `hangStopMs`), `contextBytes` (todo lo
    que hay en la carpeta del agente), `evidenceBytes` (solo evidencia del
