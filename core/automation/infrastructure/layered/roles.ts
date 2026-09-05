@@ -139,11 +139,13 @@ export interface LayeredGenerationResult {
 export type LayeredResponseValidator = (
     packageDirectory: string,
     response: AutomationAgentResponse,
-) => { valid: boolean; errors: Array<{ code?: string; message: string }> };
+) => { valid: boolean; errors: Array<{ code?: string; message: string; file?: string }> };
 
 export interface RepairIssue {
     code?: string;
     message: string;
+    /** Archivo del plan al que apunta el error (ruta relativa al framework). */
+    file?: string;
 }
 
 export interface PipelineCacheEntry {

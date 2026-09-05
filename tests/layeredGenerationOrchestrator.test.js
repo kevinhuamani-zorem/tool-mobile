@@ -878,6 +878,8 @@ test('un import o alias de Screen Object inválido en Steps vuelve a Lorem, no a
             ? { valid: false, errors: [
                 { code: 'screen-import-alias', message: 'Import de Screen Object inválido: ausente. Esperado: @screenobjects/payment/sales.screen.ts.' },
                 { code: 'screen-alias', message: 'Alias Screen Object inválido: ausente. Esperado: salesScreen.' },
+                // Una regla futura que nadie clasifico: el archivo al que apunta decide.
+                { code: 'rule-of-tomorrow', message: 'El Screen Object y el locator no cuadran en este step.', file: 'features/steps/payment/case.steps.ts' },
             ] }
             : { valid: true, errors: [] };
     }).run(root);

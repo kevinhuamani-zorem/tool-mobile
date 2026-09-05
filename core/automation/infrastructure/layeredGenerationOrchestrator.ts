@@ -752,7 +752,7 @@ export class LayeredGenerationOrchestrator {
                             };
                             const validation = this.responseValidator!(packageDirectory, provisionalResponse);
                             if (!validation.valid) {
-                                const classified = classifyValidationErrors(validation.errors);
+                                const classified = classifyValidationErrors(validation.errors, plan);
                                 candidateErrors.push(...classified[role === 'behavior-author'
                                     ? 'behavior'
                                     : 'interaction']);
@@ -1069,13 +1069,13 @@ export class LayeredGenerationOrchestrator {
         }
         const officialValidation = this.responseValidator?.(packageDirectory, response);
         if (officialValidation && !officialValidation.valid) {
-            fileContractErrors.push(...officialValidation.errors.map(error => ({ code: error.code, message: error.message })));
+            fileContractErrors.push(...officialValidation.errors.map(error => ({ code: error.code, message: error.message, file: error.file })));
         }
         if (fileContractErrors.length) {
             report.state = allowRepair ? 'repairing' : 'failed';
             report.error = fileContractErrors.map(issue => issue.message).join(' | ');
             options.onStageChange?.({ ...report });
-            throw new LayeredValidationError(classifyValidationErrors(fileContractErrors));
+            throw new LayeredValidationError(classifyValidationErrors(fileContractErrors, plan));
         }
         report.state = 'completed';
         options.onStageChange?.({ ...report });

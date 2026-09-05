@@ -333,9 +333,12 @@ XML, screenshots, source, capabilities ni credenciales.
    la capa afectada. Durante una reparación, cada escritura se valida en vivo;
    si Copilot cierra con feedback pendiente, Derek relanza únicamente ese autor
    en una ronda `feedback-N`. Derek dirige cada error por el `code` de la regla
-   (la misma tabla por capa con la que proyecta `validation-contract.json`);
-   solo un error sin código se clasifica por su texto, y uno que nadie
-   reconoce llega a los tres. Sumrak debe conservar las decisiones deterministas
+   (la misma tabla por capa con la que proyecta `validation-contract.json`),
+   pero antes que la tabla decide el archivo al que apunta el error: un
+   error emitido sobre Steps es de Lorem aunque hable de Screen Object, y
+   una regla nueva o mal clasificada nunca manda a un autor a corregir una
+   capa ajena. Solo un error sin archivo ni código se clasifica por su
+   texto, y uno que nadie reconoce llega a los tres. Sumrak debe conservar las decisiones deterministas
    del plan: no puede convertir `create` en `reuse` por similitud de nombre.
    Para evitar repetir minutos de inferencia, Lorem, Zorem y el pipeline
    completo mantienen un caché en la memoria del recorder

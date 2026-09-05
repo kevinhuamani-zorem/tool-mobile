@@ -11,6 +11,7 @@ import {
     readJsonUtf8,
 } from '../../../shared';
 import {
+    AuthorRole,
     LayeredRepairFeedback,
     RepairIssue,
 } from './roles';
@@ -178,8 +179,24 @@ export const INTEGRATION_RULE_CODES = new Set([
  * orquestador o mensajes de `output`/`preview`) se clasifican por su texto, y
  * un error que nadie reconoce llega a los tres para no perderse.
  */
-export function classifyValidationErrors(issues: Array<RepairIssue | string>): LayeredRepairFeedback {
+/** Capa dueña de cada archivo del plan, para enrutar por el archivo del error. */
+export function layerOwnersOf(plan?: Pick<GenerationPlan, 'files'>): Map<string, AuthorRole | 'integration-reviewer'> {
+    const owners = new Map<string, AuthorRole | 'integration-reviewer'>();
+    for (const file of plan?.files || []) {
+        const normalized = String(file.path || '').replace(/\\/g, '/');
+        owners.set(normalized, file.layer === 'feature' || file.layer === 'steps'
+            ? 'behavior-author'
+            : 'interaction-author');
+    }
+    return owners;
+}
+
+export function classifyValidationErrors(
+    issues: Array<RepairIssue | string>,
+    plan?: Pick<GenerationPlan, 'files'>,
+): LayeredRepairFeedback {
     const normalized = issues.map(issue => typeof issue === 'string' ? { message: issue } : issue);
+    const owners = layerOwnersOf(plan);
     const feedback: LayeredRepairFeedback = {
         all: [...new Set(normalized.map(issue => issue.message).filter(Boolean))],
         behavior: [],
@@ -193,7 +210,14 @@ export function classifyValidationErrors(issues: Array<RepairIssue | string>): L
         let behavior = false;
         let interaction = false;
         let integration = false;
-        if (issue.code && BEHAVIOR_RULE_CODES.has(issue.code)) behavior = true;
+        // El archivo al que apunta el error decide antes que cualquier tabla:
+        // un error sobre Steps es de Lorem aunque hable de Screen Object, y
+        // una regla nueva o mal clasificada no puede mandar a un autor a
+        // corregir una capa que no es suya.
+        const owner = issue.file ? owners.get(String(issue.file).replace(/\\/g, '/')) : undefined;
+        if (owner === 'behavior-author') behavior = true;
+        else if (owner === 'interaction-author') interaction = true;
+        else if (issue.code && BEHAVIOR_RULE_CODES.has(issue.code)) behavior = true;
         else if (issue.code && INTERACTION_RULE_CODES.has(issue.code)) interaction = true;
         else if (issue.code && INTEGRATION_RULE_CODES.has(issue.code)) integration = true;
         else {
