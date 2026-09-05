@@ -7,6 +7,7 @@ import {
     AgentGeneratedFile,
     AutomationAgentResponse,
     GenerationPlan,
+    screenObjectNames,
 } from '../../contracts';
 import {
     GenerationAgentRole,
@@ -125,7 +126,11 @@ export function normalizeCucumberStepDefinitions(content: string): string {
                     .map(item => item.trim())
                     .filter(Boolean)
                     .filter(item => !/^(?:And|But)(?:\s+as\s+\w+)?$/.test(item));
-                return `import { ${supported.join(', ')} } from ${quote}${source}${quote};`;
+                // El framework importa los keywords desde @wdio/cucumber-framework
+                // (72 de 72 archivos de steps); @cucumber/cucumber es el
+                // desliz habitual de cualquier modelo.
+                void source;
+                return `import { ${supported.join(', ')} } from ${quote}@wdio/cucumber-framework${quote};`;
             },
         );
         const declaration = normalized.match(/^(\s*)(Given|When|Then|And|But)(\s*\()/);
@@ -152,6 +157,80 @@ export function normalizeBehaviorResult(result: LayeredAgentResult): boolean {
         if (normalized !== file.content) {
             file.content = normalized;
             changed = true;
+        }
+    }
+    return changed;
+}
+
+const TRACE_FIELDS = ['sequence', 'gherkinStep', 'screenMethod', 'locatorName'] as const;
+
+/**
+ * Import del Screen Object en Steps con la forma exacta del framework:
+ * alias `@screenobjects/...screen.ts` (con extension) y el identificador que
+ * espera el plan. Deslices mecanicos de cualquier modelo (`.screen` sin
+ * extension, ruta relativa, alias `screen`) que no merecen una ronda de
+ * agente.
+ */
+export function normalizeScreenImport(
+    content: string,
+    screenPath: string,
+): string {
+    const names = screenObjectNames(screenPath);
+    const expectedSource = `@screenobjects/${screenPath.replace(/^screenobjects\//, '')}`;
+    const moduleName = screenPath.split('/').pop()!.replace(/\.screen\.(?:ts|js)$/, '');
+    const importPattern = new RegExp(
+        `import\\s+([A-Za-z_$][\\w$]*)\\s+from\\s+(['"])([^'"]*\\b${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.screen(?:\\.(?:ts|js))?)\\2;?`,
+    );
+    const match = content.match(importPattern);
+    if (!match) return content;
+    const [statement, alias, quote] = match;
+    let normalized = content.replace(statement, `import ${names.instanceName} from ${quote}${expectedSource}${quote};`);
+    if (alias !== names.instanceName) {
+        // Solo el identificador usado como objeto (`alias.metodo()`), nunca un
+        // segmento de ruta o de propiedad (`sales.screen.ts`, `x.screen.y`).
+        normalized = normalized.replace(new RegExp(`(?<![.\\w$/'"])${alias}(?=\\s*\\.)`, 'g'), names.instanceName);
+    }
+    return normalized;
+}
+
+/**
+ * Deslices mecanicos del contrato que ningun agente deberia pagar con una
+ * ronda: sobre (`schemaVersion`, `role`, ids del paquete), campos de mas en
+ * `actionTrace` y, en Steps, keywords de Cucumber e import del Screen Object.
+ * Lo semantico (trazabilidad, contenido de las capas) sigue siendo del agente.
+ */
+export function normalizeAuthorResult(
+    result: LayeredAgentResult,
+    role: 'behavior-author' | 'interaction-author',
+    plan: Pick<GenerationPlan, 'recordingId' | 'planId' | 'files'>,
+): boolean {
+    if (!result || typeof result !== 'object') return false;
+    let changed = false;
+    const envelope = result as unknown as Record<string, unknown>;
+    if (envelope.schemaVersion !== 1) { envelope.schemaVersion = 1; changed = true; }
+    if (envelope.role !== role) { envelope.role = role; changed = true; }
+    if (envelope.recordingId !== plan.recordingId) { envelope.recordingId = plan.recordingId; changed = true; }
+    if (envelope.planId !== plan.planId) { envelope.planId = plan.planId; changed = true; }
+    if (Array.isArray(result.actionTrace)) {
+        result.actionTrace = result.actionTrace.map(trace => {
+            if (!trace || typeof trace !== 'object') return trace;
+            const extras = Object.keys(trace).filter(key => !(TRACE_FIELDS as readonly string[]).includes(key));
+            if (!extras.length) return trace;
+            changed = true;
+            const clean: Record<string, unknown> = {};
+            for (const field of TRACE_FIELDS) {
+                if ((trace as Record<string, unknown>)[field] !== undefined) clean[field] = (trace as Record<string, unknown>)[field];
+            }
+            return clean as unknown as typeof trace;
+        });
+    }
+    if (role === 'behavior-author' && Array.isArray(result.files)) {
+        const screenPath = plan.files.find(file => file.layer === 'screen')?.path;
+        for (const file of result.files) {
+            if (file.layer !== 'steps' || typeof file.content !== 'string') continue;
+            let content = normalizeCucumberStepDefinitions(file.content);
+            if (screenPath) content = normalizeScreenImport(content, screenPath);
+            if (content !== file.content) { file.content = content; changed = true; }
         }
     }
     return changed;

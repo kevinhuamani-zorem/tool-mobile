@@ -889,6 +889,48 @@ test('un import o alias de Screen Object inválido en Steps vuelve a Lorem, no a
     assert.equal(fs.existsSync(path.join(root, 'agents/zorem/repair-feedback.json')), false, 'Zorem no recibe errores de Steps');
 });
 
+// Deslices mecanicos del contrato (sobre incompleto, campos de mas en
+// actionTrace, import del Screen Object sin `.ts` o con otro alias) los
+// corrige Derek antes de juzgar: ningun modelo deberia pagar una ronda por
+// eso. gpt-5.5 entrego un behavior-result sin `role` y la corrida murio.
+test('Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir una ronda', async () => {
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    const sloppy = {
+        ...base,
+        async execute(input) {
+            const result = await base.execute(input);
+            if (input.agentName === 'Lorem') {
+                const file = path.join(input.cwd, 'behavior-result.json');
+                const behavior = JSON.parse(fs.readFileSync(file, 'utf8'));
+                delete behavior.role;
+                delete behavior.schemaVersion;
+                behavior.actionTrace = [{ sequence: 1, action: 'CLICK', stepDefinition: 'x', gherkinStep: 'When acción', screenMethod: 'executeAction', locatorName: 'primaryButton' }];
+                behavior.files = behavior.files.map(entry => entry.layer === 'steps'
+                    ? { ...entry, content: "import { When } from '@cucumber/cucumber';\nimport screen from '@screenobjects/payment/case.screen';\nWhen(/^acción$/, async () => { await screen.executeAction(); });\n" }
+                    : entry);
+                writeJson(file, behavior);
+            }
+            return result;
+        },
+    };
+
+    const result = await new LayeredGenerationOrchestrator(sloppy, sloppy).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    const behavior = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/behavior-result.json'), 'utf8'));
+    assert.equal(behavior.role, 'behavior-author');
+    assert.equal(behavior.schemaVersion, 1);
+    assert.deepEqual(Object.keys(behavior.actionTrace[0]).sort(), ['gherkinStep', 'locatorName', 'screenMethod', 'sequence']);
+    const steps = behavior.files.find(entry => entry.layer === 'steps').content;
+    assert.match(steps, /import \{ When \} from '@wdio\/cucumber-framework';/);
+    assert.match(steps, /import caseScreen from '@screenobjects\/payment\/case\.screen\.ts';/);
+    assert.match(steps, /await caseScreen\.executeAction\(\)/);
+    assert.doesNotMatch(steps, /await screen\./);
+});
+
 // Solo Zorem ejecuta algo (screen-object-contract.js). Con `shell(node)` abierto,
 // la prohibicion de explorar el framework era solo de prompt.
 test('solo Zorem recibe permiso de ejecutar scripts de validación', async () => {

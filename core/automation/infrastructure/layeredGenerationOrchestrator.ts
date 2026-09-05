@@ -83,7 +83,7 @@ import {
     rebindCachedResult,
     filesInside,
     normalizeAutomationResponse,
-    normalizeBehaviorResult,
+    normalizeAuthorResult,
     pipelineCacheFile,
     pipelineFingerprint,
     promoteAuthorCache,
@@ -675,12 +675,7 @@ export class LayeredGenerationOrchestrator {
                 const cached = readJsonUtf8<unknown>(outputFile);
                 if (typeof cached === 'object' && cached !== null) {
                     rebindCachedResult(cached as { recordingId?: string; planId?: string }, plan);
-                    writeJsonUtf8(outputFile, cached);
-                }
-                if (role === 'behavior-author'
-                    && typeof cached === 'object'
-                    && cached !== null
-                    && normalizeBehaviorResult(cached as LayeredAgentResult)) {
+                    normalizeAuthorResult(cached as LayeredAgentResult, role, plan);
                     writeJsonUtf8(outputFile, cached);
                 }
                 const cacheErrors = authorContractErrors(cached, role, plan);
@@ -716,6 +711,10 @@ export class LayeredGenerationOrchestrator {
         const acceptOutput = repairErrors.length > 0
             && this.responseValidator
             ? (output: unknown): boolean => {
+                if (typeof output === 'object' && output !== null
+                    && normalizeAuthorResult(output as LayeredAgentResult, role, plan)) {
+                    writeJsonUtf8(outputFile, output);
+                }
                 const candidateErrors = authorContractErrors(output, role, plan);
                 if (!candidateErrors.length) {
                     try {
@@ -833,10 +832,10 @@ export class LayeredGenerationOrchestrator {
             throw new Error(report.error);
         }
         const result = readJsonUtf8<unknown>(outputFile);
-        if (role === 'behavior-author'
-            && typeof result === 'object'
-            && result !== null
-            && normalizeBehaviorResult(result as LayeredAgentResult)) {
+        // Derek corrige lo mecanico antes de juzgar: sobre del contrato,
+        // campos de mas en actionTrace, keywords e import del Screen Object.
+        if (typeof result === 'object' && result !== null
+            && normalizeAuthorResult(result as LayeredAgentResult, role, plan)) {
             writeJsonUtf8(outputFile, result);
         }
         const errors = authorContractErrors(result, role, plan);
