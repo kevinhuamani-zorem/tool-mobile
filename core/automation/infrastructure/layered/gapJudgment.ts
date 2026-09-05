@@ -147,6 +147,10 @@ export const BEHAVIOR_RULE_CODES = new Set([
     'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
     'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
     'verbatim-context-hint', 'platform-tag', 'behavior-path',
+    // El import del Screen Object y su alias viven en Steps: los escribe
+    // Lorem. Zorem no puede corregirlos y encadenaba rondas de feedback (15
+    // min en TC-10239) por un import sin `.ts` que no era suyo.
+    'screen-import-alias', 'screen-alias', 'screen-alias-usage',
 ]);
 
 export const INTERACTION_RULE_CODES = new Set([
@@ -155,7 +159,7 @@ export const INTERACTION_RULE_CODES = new Set([
     'completion-unauthorized', 'create-locator-contract', 'destructive-update',
     'duplicate-screen-method', 'framework-locator-collision', 'invalid-locator-access',
     'invented-selector', 'locator-type-mismatch', 'platform-coverage',
-    'screen-alias-usage', 'screen-import-alias', 'trace-locator', 'trace-screen-method',
+    'trace-locator', 'trace-screen-method',
     'framework-symbol', 'framework-import-alias', 'missing-update-target', 'interaction-path',
 ]);
 

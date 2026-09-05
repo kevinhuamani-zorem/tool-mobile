@@ -864,6 +864,29 @@ test('un error de Gherkin con código de comportamiento vuelve solo a Lorem', as
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Lorem', 'Sumrak']);
 });
 
+// El import del Screen Object y su alias estan en Steps: los escribe Lorem.
+// Antes iban a Zorem, que no puede tocar Steps, y encadenaba rondas de
+// feedback hasta agotarlas (15 min en TC-10239 por un import sin `.ts`).
+test('un import o alias de Screen Object inválido en Steps vuelve a Lorem, no a Zorem', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    let validations = 0;
+    const result = await new LayeredGenerationOrchestrator(fake, fake, () => {
+        validations += 1;
+        return validations === 1
+            ? { valid: false, errors: [
+                { code: 'screen-import-alias', message: 'Import de Screen Object inválido: ausente. Esperado: @screenobjects/payment/sales.screen.ts.' },
+                { code: 'screen-alias', message: 'Alias Screen Object inválido: ausente. Esperado: salesScreen.' },
+            ] }
+            : { valid: true, errors: [] };
+    }).run(root);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Lorem', 'Sumrak']);
+    assert.equal(fs.existsSync(path.join(root, 'agents/zorem/repair-feedback.json')), false, 'Zorem no recibe errores de Steps');
+});
+
 // Solo Zorem ejecuta algo (screen-object-contract.js). Con `shell(node)` abierto,
 // la prohibicion de explorar el framework era solo de prompt.
 test('solo Zorem recibe permiso de ejecutar scripts de validación', async () => {

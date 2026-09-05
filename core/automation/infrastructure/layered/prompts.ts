@@ -26,6 +26,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
             'Si el Feature o los Steps tienen operation update, parte del archivo de baselines/ y solo añade tu Scenario o tus definiciones: los Scenarios y definiciones existentes se conservan byte a byte.',
             'En el archivo Feature puedes usar And/But; en TypeScript importa e invoca únicamente Given, When y Then porque Cucumber no exporta And/But como funciones.',
             'Steps solo puede invocar métodos del Screen Object: prohíbe XPath, UiSelector, accessibility id y selectores literales.',
+            'En Steps importa el Screen Object exactamente con el importSource e instanceName de framework-api.json.screenObjects (el importSource termina en .ts; sin la extensión el validador lo rechaza) e importa Given/When/Then desde @wdio/cucumber-framework.',
             'Declara en actionTrace el screenMethod requerido para que Zorem implemente exactamente esa interfaz.',
             'Conserva los screenMethod y locatorName de deterministic-draft.json: Zorem ya trabaja sobre esa interfaz en paralelo; cámbiala solo si el plan lo exige.',
             'Evalúa el diseño funcional como pass o suggestion; una sugerencia nunca bloquea la generación.',
