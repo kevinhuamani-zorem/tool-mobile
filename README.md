@@ -52,7 +52,8 @@ autorizar búsquedas acotadas al índice incremental del framework.
 Requisitos generales:
 
 - checkout local de `fwk-mobile-test`;
-- Node.js 24+ y npm 11+, alineados con `engines` de `fwk-mobile-test`;
+- Node.js 22+ y npm 10+ para el recorder (`package.json`); respeta además los
+  requisitos de la versión del framework elegido;
 - Git con acceso SSH al repositorio privado del recorder;
 - GitHub Copilot CLI instalado y autenticado para la generación automática;
 - Appium 3, UiAutomator2 y XCUITest se instalan dentro del recorder con
@@ -77,14 +78,14 @@ adb devices
 
 ## Inicio rápido: generar la aplicación macOS
 
-Esta es la forma recomendada de probar la rama
-`feature/recorder-macos-app`. El recorder puede clonarse en cualquier carpeta;
+Esta es la forma recomendada de instalar la versión estable de `main`.
+El recorder puede clonarse en cualquier carpeta;
 no tiene que vivir dentro de `fwk-mobile-test` porque la aplicación permite
 elegir el framework desde su interfaz.
 
 ```bash
 git clone --depth 1 \
-  --branch feature/recorder-macos-app \
+  --branch main \
   --single-branch --recurse-submodules \
   git@github.com:kevinhuamani-zorem/tool-mobile.git visual-recorder
 
@@ -127,7 +128,7 @@ parte de esta rama.
 ### Actualizar el clon y volver a generar el `.app`
 
 ```bash
-git pull --ff-only origin feature/recorder-macos-app
+git pull --ff-only origin main
 git submodule update --init --recursive
 npm ci
 npm run inspector:build
@@ -137,6 +138,12 @@ npm run package:mac
 `npm ci` es necesario cuando cambia el lockfile o se desea garantizar una
 instalación reproducible. No uses `--ignore-scripts`: Electron necesita su
 binario nativo para construir y abrir la aplicación.
+
+Para probar desarrollo, sustituye `main` por
+`feature/multi-agent-generation-pipeline` tanto en el clon como en el pull.
+Ejecuta el pull desde esa misma rama; no mezcles ramas al actualizar.
+Cierra el `.app` anterior antes de reconstruir y abre el nuevo al terminar.
+No se usan `install.sh` ni `run.sh`.
 
 ## Ejecución local para desarrollo
 
@@ -172,7 +179,7 @@ permanecen en el proceso principal. El renderer solo recibe el nombre de las
 variables y su estado de configuración. El recorder no utiliza un `.env` propio.
 
 Desde **Ajustes** también puede activarse **🧌 QA Roast Mode**. Cuando la
-revisión funcional rechaza una grabación, una segunda sesión headless y aislada
+revisión funcional detecta oportunidades de mejora, una segunda sesión headless y aislada
 de Copilot redacta un mensaje sarcástico desde los hallazgos reales del caso.
 El análisis técnico no genera ni valida el chiste, por lo que el modo troll nunca
 puede invalidar la resolución del caso. No se selecciona desde un diccionario fijo.
@@ -191,9 +198,12 @@ corrección.
 5. Elige la acción y registra el valor funcional cuando aplique.
 6. Guarda el paso y continúa hasta completar el flujo.
 7. Define objetivo, criterio de aceptación e ID `TC-<número>`.
-8. Prepara el paquete mínimo para el agente.
-9. Importa y valida `agent-response.json`.
-10. Revisa el preview y genera las cuatro capas.
+8. Pulsa **Iniciar generación**: el recorder prepara el paquete y ejecuta el pipeline.
+9. El resultado se importa automáticamente en **Revisión**, con sus diagnósticos.
+10. Revisa o edita el preview, revalida y aplica los archivos al framework.
+
+El wizard tiene tres pasos: **Evidencia → Análisis → Revisión**. La generación
+ocurre dentro del flujo, no en un cuarto paso independiente.
 
 El campo **¿Qué función cumple este elemento?** es una pista de contexto. No se
 copia como Step ni obliga al agente a redactar el Gherkin con ese texto.
@@ -359,18 +369,21 @@ estructura. El paquete se guarda dentro de:
 runtime/recordings/<recording>/generation/automation/
 ```
 
-En el flujo normal, el recorder abre Copilot en una Terminal con el prompt
-acotado, espera el artefacto de respuesta, lo valida y lleva automáticamente el
-resultado válido a Revisión. La apertura manual, el prompt y la reimportación
-se conservan en **Opciones avanzadas / diagnóstico** para corregir una
-propuesta que no superó el contrato.
+En el flujo normal, Derek coordina sesiones headless de Lorem (Feature/Steps),
+Zorem (Screen/Locators) y Sumrak (integración). Lorem y Zorem pueden trabajar
+en paralelo; el caché puede evitar ejecuciones cuando sus entradas no cambiaron.
+El recorder valida e importa la propuesta en Revisión sin abrir Terminal.
+El QA puede editar el borrador o usar **Corregir con Copilot** y
+**Reimportar corrección del agente**. Los modos manual y determinista anteriores
+se conservan para diagnóstico, no son el flujo predeterminado.
 
 ### Permisos de Copilot
 
-El recorder añade `--add-dir <paquete>`, `--allow-tool=read`,
-`--allow-tool=write`, `--allow-tool=shell(node)`,
-`--allow-tool=shell(python)` y `--allow-tool=shell(python3)` tanto al
-lanzamiento visible como al headless de automatización. No activa
+El recorder limita cada sesión a su paquete mediante `--add-dir <paquete>`
+y permisos de lectura/escritura. En el pipeline por capas, únicamente Zorem
+recibe `--allow-tool=shell(node)`, `--allow-tool=shell(python)` y
+`--allow-tool=shell(python3)` para validaciones; Lorem y Sumrak no reciben shell.
+El lanzamiento manual/heredado tiene su propia política de scripts. No activa
 `--allow-all`, `--allow-all-paths` ni `--allow-all-urls`.
 Los prompts permiten los intérpretes para validaciones del paquete, no para
 explorar o modificar el framework. La sesión del modo troll no recibe estos
@@ -407,9 +420,12 @@ El paquete contiene como máximo el contexto mínimo necesario:
 - `agent-run.json` con métricas locales de duración, cache, lecturas y tamaños;
   nunca contiene prompts, XML, capturas ni secretos.
 
-El agente escribe `agent-response.json`. El recorder lo importa y aplica un
-validador determinista. Solo una respuesta con score 100 puede llegar al
-preview y promocionarse a memoria reutilizable.
+Cada autor escribe su resultado de capa y el recorder reconstruye
+`agent-response.json` con esos contenidos. El borrador puede llegar al preview
+con diagnósticos para corregirlo; verlo no significa que esté aprobado.
+Las sugerencias de diseño no bloquean. Aplicar exige superar las comprobaciones
+técnicas y de integridad; la promoción a memoria tiene controles adicionales
+de calidad. Consulta el contrato de generación para los estados exactos.
 
 El acceso al framework usa un único CodeGraph incremental. La capa
 `FrameworkQueryService` permite consultar escenarios, Screen Objects, Steps,

@@ -1,7 +1,7 @@
 # Control de calidad de la generación local
 
 El recorder resuelve localmente las decisiones repetibles y, cuando existen
-gaps, puede invocar Copilot o Claude con un paquete mínimo y sin secretos. La
+gaps, puede invocar Copilot CLI con paquetes por rol y sin secretos. La
 respuesta no se escribe hasta superar validación determinista y revisión.
 
 ## Puerta automática
@@ -28,7 +28,9 @@ La puerta exige:
 - build completo de Electron y React;
 - reducción de contexto mínima para los grafos locales.
 - cuatro rutas exactas, traza completa y score 100 para promover memoria;
-- contexto máximo de 20 KB, timeout de 5 minutos y una sola reparación.
+- medición de objetivos de 120 000 bytes y 300 000 ms por etapa (avisos, no
+  cortes); hang stop independiente de una hora por defecto y reparación acotada
+  según el plan;
 - detección de casos equivalentes sin invocar al agente;
 - bloqueo de expresiones Gherkin, escenarios y selectores duplicados contra
   squad/Home;

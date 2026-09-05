@@ -54,7 +54,8 @@ generadores, validadores o plantillas.
 4. **El target es siempre un fwk-mobile validado.** En desarrollo se resuelve
    el framework padre de `tools/visual-recorder`; el `.app` permite seleccionar
    y persistir otra raíz válida. Nada se genera fuera del framework seleccionado
-   y el runtime del `.app` vive en su directorio `userData` escribible.
+   y el runtime del `.app` se resuelve fuera del bundle: puede reutilizar el
+   origen del clon registrado durante el build o usar `userData` como fallback.
 5. **Preview antes de escritura.** Generar requiere el token del preview exacto.
    Si cambian acciones, Gherkin, metadatos, rutas o contenido revisado, el token
    debe invalidarse.
@@ -88,11 +89,11 @@ generadores, validadores o plantillas.
 10. **IA opt-in y contexto mínimo.** Copilot solo se ejecuta por una
     decisión explícita del usuario. Reciben el paquete confinado bajo
     `runtime/recordings`, sin secretos, y no deben explorar el target ni leer
-    XML/capturas salvo que un gap puntual lo exija. En macOS la pasada que
-    genera la salida se muestra con `copilot -i` y el prompt exacto del
-    recorder; el backend espera un artefacto nuevo válido por schema antes de
-    importarlo y avanzar a Revisión. No uses el monitor de logs como sustituto
-    de esa sesión visible.
+    XML/capturas salvo que un gap puntual lo exija. El pipeline predeterminado
+    ejecuta los tres delegados headless y entrega el borrador a Revisión con
+    sus diagnósticos. La sesión visible `copilot -i` pertenece al camino manual
+    o heredado; no es un requisito del pipeline por capas. Ver un borrador no
+    equivale a aprobar su aplicación al framework.
 11. **No borres datos funcionales de entrada.** Teléfonos, montos, correos y
     textos usados por el caso permanecen en el recording local para convertirlos
     en parámetros/Examples. Solo contraseña, clave, PIN, OTP, token y secretos

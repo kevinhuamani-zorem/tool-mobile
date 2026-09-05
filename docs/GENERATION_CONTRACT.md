@@ -39,8 +39,8 @@ Cada intento mantiene `agent-run.json` junto al paquete de automatización. El
 archivo contiene únicamente contadores, tamaños, duraciones, timestamps,
 identificadores técnicos y estado final. No forma parte del contexto entregado
 al agente y no puede contener prompts, XML, screenshots, secretos ni datos del
-caso. Los tokens son anulables porque el agente se inicia manualmente y el CLI
-actual no garantiza métricas de consumo.
+caso. Los tokens son anulables cuando el CLI no expone métricas de consumo,
+tanto en sesiones headless como manuales.
 
 En modo automático también registra `pass1ContextBytes` y `pass2ContextBytes`,
 además de un desglose por componente (`pass1ContextBreakdown` y

@@ -177,8 +177,8 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 | Sesión | `appiumDriverManager`, `browserStackDriverManager`, `mobileStepExecutor` | Conectar, capturar, tocar, gestos y ejecutar acciones |
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver la raíz padre y el catálogo del framework |
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationContextProjections`, `automationPackageBuilder` | Recording, plan, hints/gaps derivados y contexto mínimo |
-| IA acotada | `agentOrchestrator`, `copilotCliAdapter`, `automationAgentLauncher`, `automationContracts` | Modo `manual` (handoff en Terminal) o `automatic` (dos pasadas controladas por contratos y budgets) |
-| Validación/memoria | `automationResponseValidator` + `rules/` (familias), `automationMemory` | Validar, reparar una vez y versionar score 100 |
+| IA acotada | `LayeredGenerationOrchestrator`, `copilotCliAdapter`, `automationAgentLauncher` | Pipeline layered automático/headless por defecto; manual y determinista conservados para diagnóstico |
+| Validación/memoria | `automationResponseValidator` + `rules/` (familias), `automationMemory` | Validar, dirigir reparación acotada a la capa afectada y promocionar solo resultados aprobados |
 | Aplicación | `automationApplier` | Preparar bytes finales y snapshots antes del preview; commit recuperable de `create`/`update`, completions externos y registro |
 | Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |

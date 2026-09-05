@@ -93,13 +93,12 @@ credenciales; estas nunca se exponen al bundle.
 
 Ejecución del agente de automatización:
 
-- `RECORDER_AGENT_EXECUTION_MODE=manual` (default): abre Terminal para handoff.
-- `RECORDER_AGENT_EXECUTION_MODE=automatic`: ejecuta dos pasadas controladas
-  (query-requests/query-results y luego agent-response) con budgets y policy de
-  fallback. En macOS, PASS 2 abre la interfaz de Copilot en Terminal con el
-  prompt generado; el recorder observa el artefacto validado e importa la
-  propuesta automáticamente. La Terminal puede permanecer abierta para revisar
-  la conversación sin bloquear el wizard.
+- `RECORDER_AGENT_EXECUTION_MODE=automatic` (default) y
+  `RECORDER_AGENT_PIPELINE=layered` (default): Derek coordina Lorem, Zorem y
+  Sumrak en headless, sin Terminal. El resultado se importa en Revisión.
+- `RECORDER_AGENT_EXECUTION_MODE=manual`: handoff explícito en Terminal.
+- `RECORDER_AGENT_PIPELINE=deterministic`: conserva el pipeline anterior de
+  pasadas semánticas para diagnóstico; no describe el flujo normal por capas.
 
 El botón **Inspector** del header abre o focaliza la misma ventana embebida. Una
 selección ordinaria permanece dentro de Appium Inspector; el recorder solo
@@ -250,32 +249,32 @@ descarta ese historial.
 
 ### El agente consume demasiado contexto o excede cinco minutos
 
-Comprueba que Terminal se abrió en `generation/automation`, que se usó el prompt
-mostrado, que `instructions.md` prohíbe explorar el target y que los contextos
-suman como máximo 20 KB. El recorder no inicia ni termina el CLI: el usuario
-controla la sesión manual. No amplíes el paquete; corrige el resolver para
-convertir información repetible en decisiones del plan.
+Revisa `layered-generation-run.json`: duración, `contextBytes`, `cacheHit` y
+`budgetWarnings` por etapa. Los objetivos predeterminados son 120 000 bytes y
+300 000 ms por etapa; excederlos informa al QA, no cancela el trabajo ni recorta
+evidencia. El recorder controla las sesiones headless y aplica un hang stop
+independiente de una hora (`RECORDER_AGENT_HANG_STOP_MS`). Comprueba los paquetes
+`agents/<rol>` y la proyección de memoria antes de aumentar contexto.
 
 ### La propuesta falla validación
 
-Importar crea `repair-context.json` con errores concretos. Usa “Abrir Terminal
-del agente” y pega el prompt actualizado; solo puede corregir archivos afectados y dispone de un intento.
-Después debe volver a ejecutarse la importación. Un fallo no entra a memoria.
+El borrador permanece disponible para editarlo. Usa **Corregir con Copilot** o
+corrige manualmente y **Reimportar corrección del agente**. En layered, Derek
+dirige `repair-feedback.json` al autor de la capa afectada. **Revalidar** comprueba
+el preview conforme al modo de revisión. Las sugerencias funcionales no bloquean;
+errores técnicos nuevos de compilación o de integridad deben resolverse antes
+de aplicar. Una propuesta fallida no se promociona a memoria.
 
 ### Falló la ejecución automática del agente
 
-Si el modo es `automatic`, revisa `agent-run.json` y `status.json` del package.
-Solo errores del provider `AGENT_NOT_INSTALLED` y `AGENT_UNAVAILABLE` habilitan
-fallback automático a handoff manual; errores de contrato/presupuesto se
-detienen sin fallback.
+Revisa `layered-generation-run.json`, los resultados/feedback por rol y
+`agent-run.json`. Comprueba instalación y autenticación de Copilot y el modelo
+solicitado. No interpretes un aviso de presupuesto como fallo de proveedor.
 
-`bash` permanece denegado de forma permanente en el flujo agentic. No se
-habilita como vía temporal ni de desbloqueo: el agente debe operar únicamente
-con los artefactos del paquete y rutas relativas.
-
-Si falla antes de invocar Copilot por `CONTEXT_BUDGET_EXCEEDED`, `status.json`
-queda en `failed` con `errorCode` explícito y `agent-run.json` conserva el
-desglose por pasada (`pass1ContextBreakdown`, `pass2ContextBreakdown`).
+En layered solo Zorem recibe permisos de scripts Node/Python para validar;
+Lorem y Sumrak no reciben shell. No hay un `--deny-tool=bash` global añadido
+al lanzamiento, ni permisos `--allow-all`. Los intérpretes autorizados no son
+un sandbox del sistema operativo: trabaja únicamente con paquetes confiables.
 
 ## Logs y secretos
 

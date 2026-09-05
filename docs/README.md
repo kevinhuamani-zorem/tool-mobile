@@ -10,8 +10,6 @@
   sesiones, diagnósticos y fallos frecuentes.
 - [Aseguramiento de calidad](GENERATION_QUALITY_ASSURANCE.md): métricas,
   pruebas unitarias y controles manuales.
-- [Algoritmos](ALGORITHMS.md): grafos, índices, similitud, hits y gaps; qué
-  decide cada uno y con qué costo medido.
 - [ADR-0001: Arquitectura modular](adr/0001-modular-core-architecture.md):
   módulos, APIs públicas, dependencias y secuencia de migración.
 

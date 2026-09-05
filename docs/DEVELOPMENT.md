@@ -2,7 +2,8 @@
 
 ## Requisitos
 
-- Node.js 24+ y npm 11+, siguiendo `engines` de `fwk-mobile-test`.
+- Node.js 22+ y npm 10+, según `engines` del recorder. El framework elegido
+  puede exigir versiones superiores.
 - El runtime Appium 3, `@appium/base-driver` y los drivers
   UiAutomator2/XCUITest pertenecen al recorder, están fijados por
   su lockfile y no dependen del árbol npm del framework padre.
@@ -59,7 +60,8 @@ Flags útiles del pipeline agentic:
 
 - `RECORDER_AGENT_EXECUTION_MODE=manual|automatic` (default `automatic`).
 - `RECORDER_AGENT_PIPELINE=layered|deterministic` (default `layered`). El modo
-  `layered` ejecuta Derek → Lorem → Zorem → Sumrak;
+  `layered` usa Derek como coordinador, Lorem/Zorem como autores que pueden
+  ejecutarse en paralelo y Sumrak como integrador;
   `deterministic` conserva temporalmente el orquestador anterior.
 - `RECORDER_GENERATION_MODE=deterministic|legacy` (default `deterministic`).
   `legacy` se conserva solo para diagnóstico; solicita al agente las cuatro
@@ -89,10 +91,12 @@ Flags útiles del pipeline agentic:
   Por defecto el adapter usa:
   `copilot -p "<prompt>" --output-format json --model auto` más `--agent`
   y `--name Derek/<recordingId>/<agente>` para cada sesión, y los permisos
-  compartidos de `copilotPermissions.ts`: `--add-dir <paquete>`,
+  de `copilotPermissions.ts`: `--add-dir <paquete>`,
   `--allow-tool=read`, `--allow-tool=write`, `--allow-tool=shell(node)`,
   `--allow-tool=shell(python)`, `--allow-tool=shell(python3)` y
-  `--no-custom-instructions`. La terminal visible usa la misma política;
+  `--no-custom-instructions`. En layered solo Zorem recibe los permisos de
+  scripts anteriores; Lorem y Sumrak se lanzan con `allowValidationScripts: false`.
+  El modo manual/heredado permite scripts según su configuración;
   no se añade `--deny-tool=bash`, que interfería con los comandos auxiliares.
   `allowValidationScripts: false` conserva lectura/escritura y deniega shell
   para la sesión de presentación del roast. Los overrides explícitos del
@@ -120,8 +124,7 @@ En el modo predeterminado `layered`, el flujo visible de finalización es:
 
 1. Evidencia
 2. Análisis
-3. Generación
-4. Revisión
+3. Revisión
 
 La ejecución es automática (sin paso "Agente" en el happy path): análisis,
 coordinación de Derek, autoría de Feature/Steps por Lorem, autoría de
@@ -158,8 +161,8 @@ candidatos autorizados y validadores siguen siendo la autoridad. Los paquetes
 de agentes ya no reciben `unresolved-context.json`; su contenido histórico está
 cubierto por `gaps.json`, `query-results.json` y los contextos proyectados.
 
-QA Roast Mode no altera esa pasada. Cuando `testDesignReview` termina en
-`qa-required` y la preferencia está activa, el renderer envía `qaRoastMode` por
+QA Roast Mode no altera esa pasada. Cuando `testDesignReview` contiene
+sugerencias y la preferencia está activa, el renderer envía `qaRoastMode` por
 IPC y el proceso principal ejecuta una segunda llamada headless mediante el
 adapter controlado. Esta llamada solo puede crear `qa-roast-response.json`; si
 falla, el wizard presenta el diagnóstico técnico sin roast.
@@ -173,9 +176,9 @@ Cuando aparece `WAITING_FOR_QA`, la decisión humana se confirma en el mismo
 wizard (`get-automation-qa-decisions` + `resolve-automation-qa-decisions`) y el
 pipeline continúa sin salir del flujo principal.
 
-Las herramientas técnicas (carpeta runtime, prompt, import manual, terminal) se
-mantienen en **Opciones avanzadas / diagnóstico** y no forman parte del flujo
-principal de QA.
+La revisión ofrece edición del borrador y acciones de corrección/reimportación.
+Los artefactos técnicos permanecen en el runtime del paquete; no es necesario
+abrir un panel de diagnóstico para ejecutar el flujo normal.
 
 Para una propuesta ya válida, **Revalidar** y **Reimportar corrección del
 agente** vuelven a leer `agent-response.json` y reemplazan el preview actual.
@@ -253,8 +256,10 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
 
 1. Mantén los contratos JSON versionados en `automationContracts.ts`.
 2. Resuelve localmente selector, reuse, rutas y trazabilidad antes del agente.
-3. No aumentes los presupuestos de 20 KB, 5 minutos y una reparación sin una
-   decisión explícita y métricas comparables.
+3. Mide los objetivos de 120 000 bytes y 300 000 ms por etapa; excederlos
+   produce avisos, no cancela la sesión. El hang stop independiente es de una
+   hora por defecto (`RECORDER_AGENT_HANG_STOP_MS`). Conserva los límites de
+   reparación del plan; no los amplíes sin decisión explícita y métricas.
 4. Añade pruebas de resolver, paquete, validator y memoria.
 5. Un resultado solo entra a memoria después de escritura revisada y score 100.
 
