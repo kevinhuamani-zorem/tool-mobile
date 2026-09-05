@@ -13,6 +13,7 @@ import {
     parseGapResolutions,
     AgentRunStore,
     normalizeAgentResponseEnglishIdentifiers,
+    inheritedIdentifiersOf,
     enforceAgentResponsePlatformTags,
     AutomationApplicationReceipt,
     planAgainstApplicationReceipt,
@@ -131,10 +132,42 @@ export class AutomationResponseImporter {
             };
         }
         response = normalizeJsonUnicode(response);
-        const normalized = normalizeAgentResponseEnglishIdentifiers(response);
+        const asDelivered = response;
+        // Los identificadores que ya viven en el framework (baselines de los
+        // archivos update) no se traducen: renombrar `titleVentas` a
+        // `salesTitle` destruia una clave existente y el validador lo
+        // rechazaba como API eliminada + selector inventado.
+        const inheritedIdentifiers = inheritedIdentifiersOf(
+            plan.files
+                .filter(file => file.operation === 'update')
+                .map(file => ({ layer: file.layer, absolute: path.join(projectPaths.frameworkRoot, file.path) }))
+                .filter(file => fs.existsSync(file.absolute))
+                .map(file => ({ layer: file.layer, content: fs.readFileSync(file.absolute, 'utf-8') })),
+        );
+        const normalized = normalizeAgentResponseEnglishIdentifiers(response, { inheritedIdentifiers });
         response = withGeneratedResponseMetadata(normalized.response, scenario.createdAt);
         const tagged = enforceAgentResponsePlatformTags(response, scenario.platform);
         response = withGeneratedResponseMetadata(tagged.response, scenario.createdAt);
+        // Red de seguridad general: el importador nunca convierte una
+        // respuesta valida en invalida. Si tras normalizar (ES→EN, tags) el
+        // validador rechaza lo que tal cual llego si pasaba, se conserva lo
+        // entregado y se deja constancia de que fue la normalizacion.
+        let normalizationReverted: string | undefined;
+        if (Object.keys(normalized.renamed).length || tagged.added.length) {
+            const afterNormalization = automationResponseValidator.validate(scenario, plan, response, 0);
+            if (!afterNormalization.valid) {
+                const delivered = withGeneratedResponseMetadata(asDelivered, scenario.createdAt);
+                const beforeNormalization = automationResponseValidator.validate(scenario, plan, delivered, 0);
+                if (beforeNormalization.valid) {
+                    normalizationReverted = 'La normalización del importador (ES→EN: '
+                        + `${Object.keys(normalized.renamed).join(', ') || 'ninguno'}; tags: `
+                        + `${tagged.added.map(platform => `@${platform}`).join(', ') || 'ninguno'}) invalidaba una `
+                        + 'respuesta correcta y se descartó. Revisa el normalizador: '
+                        + afterNormalization.errors.map(error => error.message).join(' | ');
+                    response = delivered;
+                }
+            }
+        }
         runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
         writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), response);
         const statusFile = path.join(packageDirectory, 'status.json');
@@ -170,6 +203,10 @@ export class AutomationResponseImporter {
             validation.warnings.push(
                 `Tags de plataforma autoagregados en Feature: ${tagged.added.map(platform => `@${platform}`).join(', ')}.`
             );
+        }
+        if (normalizationReverted) {
+            validation.warnings.push(normalizationReverted);
+            runStore.recordMissingContextRequest({ source: 'importer', detail: normalizationReverted });
         }
         runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
         writeJsonUtf8(path.join(packageDirectory, 'validation.json'), validation);

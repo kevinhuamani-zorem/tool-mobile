@@ -140,9 +140,36 @@ export function scenarioEnglishVocabulary(scenario: AutomationScenario): Record<
     return Object.fromEntries([...map.entries()].sort((a, b) => a[0].localeCompare(b[0])));
 }
 
+export interface AgentEnglishNormalizationOptions {
+    /**
+     * Identificadores que ya existen en el framework (declarados en los
+     * baselines de los archivos `update`). Renombrarlos no es traducir el
+     * codigo del agente: es destruir una API que otros casos ya usan. Se
+     * conservan tal cual aunque esten en espanol (`titleVentas`).
+     */
+    inheritedIdentifiers?: Iterable<string>;
+}
+
+/** Identificadores declarados en los baselines de los archivos `update`. */
+export function inheritedIdentifiersOf(
+    baselines: Array<{ layer: AutomationAgentResponse['files'][number]['layer']; content: string }>,
+): Set<string> {
+    const inherited = new Set<string>();
+    for (const baseline of baselines) {
+        declaredIdentifiers({
+            steps: baseline.layer === 'steps' ? baseline.content : '',
+            screen: baseline.layer === 'screen' ? baseline.content : '',
+            locators: baseline.layer === 'locators' ? baseline.content : '',
+        }).forEach(symbol => inherited.add(symbol.name));
+    }
+    return inherited;
+}
+
 export function normalizeAgentResponseEnglishIdentifiers(
-    response: AutomationAgentResponse
+    response: AutomationAgentResponse,
+    options: AgentEnglishNormalizationOptions = {},
 ): AgentEnglishNormalizationResult {
+    const inherited = new Set(options.inheritedIdentifiers || []);
     const feature = response.files.find(file => file.layer === 'feature');
     const steps = response.files.find(file => file.layer === 'steps');
     const screen = response.files.find(file => file.layer === 'screen');
@@ -171,6 +198,10 @@ export function normalizeAgentResponseEnglishIdentifiers(
     const sortedIdentifiers = [...identifierSet].sort((a, b) => a.localeCompare(b));
     for (const identifier of sortedIdentifiers) {
         if (!spanishTokens(identifier).length) continue;
+        if (inherited.has(identifier)) {
+            skipped.push({ identifier, reason: 'inherited' });
+            continue;
+        }
         const translation = translateToEnglish(identifier).name;
         if (!translation || translation === identifier || spanishTokens(translation).length) {
             skipped.push({

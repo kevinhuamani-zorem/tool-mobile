@@ -108,3 +108,21 @@ test('skips rename entirely when english target already exists', () => {
     assert.equal(result.renamed.filtro, undefined);
     assert.ok(result.skipped.some(entry => entry.identifier === 'filtro' && entry.reason === 'collision'));
 });
+
+// Un identificador que ya existe en el framework (baseline de un archivo
+// update) no se traduce: renombrar `titleVentas` a `salesTitle` destruia una
+// clave existente (TC-10239: "elimina APIs existentes" + "selector inventado"
+// sobre una salida correcta de Zorem).
+test('no renombra identificadores heredados del baseline de un update', () => {
+    const { inheritedIdentifiersOf } = require('../dist/core/automation');
+    const inherited = inheritedIdentifiersOf([
+        { layer: 'locators', content: JSON.stringify({ demoAndroid: { filtro: 'id=filtro', titleVentas: 'x' }, demoIos: {} }) },
+    ]);
+    assert.ok(inherited.has('filtro'));
+    assert.ok(inherited.has('titleVentas'));
+    const result = normalizeAgentResponseEnglishIdentifiers(sampleResponse(), { inheritedIdentifiers: inherited });
+    assert.equal(result.renamed.filtro, undefined);
+    assert.ok(result.skipped.some(item => item.identifier === 'filtro' && item.reason === 'inherited'));
+    const locators = result.response.files.find(file => file.layer === 'locators');
+    assert.match(locators.content, /"filtro"/);
+});

@@ -233,6 +233,13 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
   Zorem no corre y Lorem solo revisa el diseño (`test-design-review.json`
   con `source: agent`); con la preferencia `inheritDesignReview` del QA no
   corre ningún agente y la revisión heredada se marca `source: memory`.
+- La normalización nunca renombra identificadores heredados del framework (los
+  declarados en el baseline de un archivo `update`, como `titleVentas`):
+  traducirlos destruiría una API existente. Y el importador nunca convierte una
+  respuesta válida en inválida: si tras normalizar el validador rechaza lo que
+  llegó tal cual y eso sí pasaba, conserva lo entregado y lo avisa en
+  `validation.warnings` y en `agent-run.json` (`missingContextRequests`,
+  source `importer`).
 - Nada de esto toca selectores. Una errata en el texto de la app (`Útimos`) se
   conserva literal en el selector y en el nombre; el hallazgo va al QA en
   `qa-observations.json` (`ui-text-quality`), nunca se corrige en silencio.

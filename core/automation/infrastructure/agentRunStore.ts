@@ -63,7 +63,7 @@ export interface AgentRunArtifact {
     deniedPathInsideCwdCount: number;
     deniedPathOutsideCwdCount: number;
     missingContextRequests: Array<{
-        source: 'pass2-needs' | 'denied-tool';
+        source: 'pass2-needs' | 'denied-tool' | 'importer';
         gapId?: string;
         query?: string;
         detail: string;
@@ -322,7 +322,7 @@ export class AgentRunStore {
         }));
     }
     recordMissingContextRequest(request: {
-        source: 'pass2-needs' | 'denied-tool';
+        source: 'pass2-needs' | 'denied-tool' | 'importer';
         gapId?: string;
         query?: string;
         detail: string;
