@@ -121,8 +121,13 @@ generadores, validadores o plantillas.
 16. **El presupuesto informa; la completitud manda.** `maxContextBytes` y
     `maxDurationMs` del plan son objetivos de coste que se miden y se reportan
     por etapa (`budgetWarnings`); nunca recortan evidencia ni cortan una
-    sesión. La sesión solo la corta el hang stop
-    (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto). El objetivo por defecto es
+    sesión. La sesión solo la cortan el hang stop
+    (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto), el silencio total de
+    eventos (`RECORDER_AGENT_IDLE_STOP_MS`, 10 min) o una ronda de feedback que
+    no entrega corrección en el plazo (`RECORDER_AGENT_FEEDBACK_IDLE_MS`, 5 min;
+    Derek relanza al autor con el feedback y, agotadas las rondas, falla con el
+    detalle). Ninguno de los tres es un presupuesto: detectan sesiones que no
+    avanzan. El objetivo por defecto es
     120 000 bytes por etapa: un autor recibe legítimamente 40–110 KB. La reutilización completa
     la garantiza el resolver, que indexa todo el framework antes de que exista
     un agente: lo que un agente deja de recibir es siempre lo que ya está
@@ -136,6 +141,15 @@ generadores, validadores o plantillas.
     Gherkin -> import de Screen Object -> import de Locator. Si el plan marca
     `update`, conserva la ruta y el baseline, y añade únicamente APIs faltantes.
     No borres ni renombres definitions, methods o locators existentes.
+18. **Las sesiones headless se aíslan de la configuración personal.** Lorem,
+    Zorem y Sumrak trabajan solo con view/edit/create/bash sobre su paquete;
+    los MCP (builtin de GitHub, plugins como `workiq`) y las skills personales
+    del QA no forman parte del contrato y cuestan arranque, contexto y ruido.
+    El adapter añade `--disable-builtin-mcps` y `--disable-mcp-server=<nombre>`
+    únicamente cuando `copilot --help` los anuncia (`copilotIsolation.ts`) y
+    aprende los servidores del evento `session.mcp_servers_loaded`. Nunca
+    escribas un flag del CLI sin comprobar que la versión instalada lo soporta
+    ni cambies `COPILOT_HOME`: mueve la sesión autenticada del QA.
 
 ## Convenciones de generación
 

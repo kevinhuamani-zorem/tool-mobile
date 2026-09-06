@@ -13,6 +13,16 @@ import {
 } from '../ports/agentProvider';
 import { readJsonUtf8, readUtf8File } from '../../shared';
 import { copilotPermissionArgs } from './copilotPermissions';
+import {
+    copilotIsolationArgs,
+    copilotIsolationEnabled,
+    describeCopilotIsolation,
+    mcpServersFromCopilotEvent,
+    nonBuiltinMcpServers,
+    readRememberedMcpServers,
+    rememberMcpServers,
+} from './copilotIsolation';
+import { resolveAgentFeedbackIdleMs, resolveAgentIdleStopMs } from './agentRuntimeGuards';
 import { DEFAULT_AGENT_MODEL, modelFromCopilotEvent, normalizeAgentModel } from '../domain/agentModel';
 
 type SpawnFn = typeof spawn;
@@ -24,6 +34,24 @@ function splitArgs(value: string | undefined): string[] {
 
 const DEFAULT_COPILOT_CLI_ARGS = '-p --output-format json';
 const DEFAULT_COPILOT_MODEL = DEFAULT_AGENT_MODEL;
+/** `copilot --help` es un binario Node: tarda ~1 s; mas alla se asume sin ayuda. */
+const HELP_PROBE_TIMEOUT_MS = 15_000;
+
+export interface CopilotCliAdapterOptions {
+    /**
+     * Aislar las sesiones de los MCP personales: sondea `copilot --help` una
+     * vez y anade solo los flags que el CLI instalado anuncia. Desactivado
+     * por defecto porque la sonda espera al binario real; main.ts lo activa.
+     */
+    isolateMcp?: boolean;
+    /**
+     * Donde recordar los MCP no builtin que el CLI anuncia en cada sesion,
+     * para desactivarlos desde la primera sesion del siguiente arranque.
+     * Sin archivo, el aprendizaje vive solo en memoria.
+     */
+    mcpServersFile?: string;
+    helpProbeTimeoutMs?: number;
+}
 
 function hasModelArg(args: string[]): boolean {
     return args.some(value =>
@@ -192,6 +220,10 @@ export class CopilotCliAdapter implements AgentProvider {
     readonly name = 'copilot';
     /** Sesiones vivas. Lorem y Zorem pueden correr a la vez: cancelar corta todas. */
     private readonly active = new Set<ChildProcess>();
+    /** Salida de `copilot --help`, consultada una vez por proceso. */
+    private helpProbe?: Promise<string | null>;
+    /** MCP no builtin vistos en `session.mcp_servers_loaded` (env aparte). */
+    private readonly learnedMcpServers: Set<string>;
 
     constructor(
         private readonly runner: SpawnFn = spawn,
@@ -199,7 +231,73 @@ export class CopilotCliAdapter implements AgentProvider {
         private readonly args = splitArgs(process.env.RECORDER_COPILOT_CLI_ARGS || DEFAULT_COPILOT_CLI_ARGS),
         private readonly model = process.env.RECORDER_COPILOT_MODEL || DEFAULT_COPILOT_MODEL,
         private readonly killGraceMs = 5_000,
-    ) {}
+        private readonly options: CopilotCliAdapterOptions = {},
+    ) {
+        this.learnedMcpServers = new Set(readRememberedMcpServers(options.mcpServersFile));
+    }
+
+    /** MCP no builtin conocidos (recordados + vistos en esta ejecucion). */
+    knownMcpServers(): string[] {
+        return [...this.learnedMcpServers].sort();
+    }
+
+    private rememberMcpServers(servers: string[]): void {
+        const fresh = servers.filter(server => !this.learnedMcpServers.has(server));
+        if (fresh.length === 0) return;
+        for (const server of fresh) this.learnedMcpServers.add(server);
+        try {
+            rememberMcpServers(this.options.mcpServersFile, this.learnedMcpServers);
+        } catch {
+            // La memoria de servidores es una optimizacion: no debe tumbar la sesion.
+        }
+    }
+
+    /**
+     * Texto de ayuda del CLI instalado. Decide que flags de aislamiento se
+     * pueden pasar sin romper una version anterior; null si no se obtuvo.
+     */
+    copilotHelp(): Promise<string | null> {
+        if (!this.helpProbe) {
+            this.helpProbe = new Promise<string | null>(resolve => {
+                let output = '';
+                let settled = false;
+                const done = (value: string | null) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(value);
+                };
+                const timer = setTimeout(
+                    () => done(output.trim() ? output : null),
+                    Math.max(1, this.options.helpProbeTimeoutMs ?? HELP_PROBE_TIMEOUT_MS),
+                );
+                timer.unref?.();
+                let child: ChildProcess;
+                try {
+                    child = this.runner(this.command, ['--help'], {
+                        cwd: this.resolveCwd(process.cwd()),
+                        stdio: ['ignore', 'pipe', 'pipe'],
+                        env: {
+                            ...process.env,
+                            LANG: process.env.LANG || 'en_US.UTF-8',
+                            LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
+                        },
+                    });
+                } catch {
+                    done(null);
+                    return;
+                }
+                child.stdout?.setEncoding?.('utf8');
+                child.stdout?.on('data', chunk => { output += String(chunk || ''); });
+                // Algunas versiones imprimen la ayuda por stderr.
+                child.stderr?.setEncoding?.('utf8');
+                child.stderr?.on('data', chunk => { output += String(chunk || ''); });
+                child.on('error', () => done(null));
+                child.on('close', () => done(output.trim() ? output : null));
+            });
+        }
+        return this.helpProbe;
+    }
 
     private resolveCwd(cwd: string): string {
         try {
@@ -250,6 +348,18 @@ export class CopilotCliAdapter implements AgentProvider {
     }
 
     async execute(input: AgentProviderRunInput): Promise<AgentProviderRunResult> {
+        const isolate = Boolean(this.options.isolateMcp) && copilotIsolationEnabled();
+        const help = isolate ? await this.copilotHelp() : null;
+        const isolationArgs = isolate
+            ? copilotIsolationArgs({ help, servers: this.learnedMcpServers }).filter(arg => !this.args.includes(arg))
+            : [];
+        const isolationSummary = !isolate
+            ? (this.options.isolateMcp ? 'off-by-env' : 'disabled')
+            : isolationArgs.length > 0
+                ? describeCopilotIsolation(isolationArgs)
+                : help
+                    ? 'unsupported'
+                    : 'no-help';
         const modelArgs = input.model === undefined ? this.args : this.args.filter((arg, i, all) =>
             arg !== '--model' && arg !== '-m' && !arg.startsWith('--model=')
             && all[i - 1] !== '--model' && all[i - 1] !== '-m');
@@ -273,6 +383,10 @@ export class CopilotCliAdapter implements AgentProvider {
             let timeoutTimer: NodeJS.Timeout | undefined;
             let killEscalationTimer: NodeJS.Timeout | undefined;
             let outputWatchTimer: NodeJS.Timeout | undefined;
+            let idleTimer: NodeJS.Timeout | undefined;
+            /** Instante del ultimo `output-rejected` sin salida nueva desde entonces. */
+            let rejectedAt: number | undefined;
+            let rejectedRounds = 0;
             const deniedPathStats: AgentDeniedPathStats = {
                 insideCwdCount: 0,
                 outsideCwdCount: 0,
@@ -305,6 +419,7 @@ export class CopilotCliAdapter implements AgentProvider {
                 } catch { /* A final JSONL event need not have a trailing newline. */ }
                 if (timeoutTimer) clearTimeout(timeoutTimer);
                 if (outputWatchTimer) clearInterval(outputWatchTimer);
+                if (idleTimer) clearTimeout(idleTimer);
                 this.active.delete(child);
                 appendTrace(
                     'result',
@@ -331,6 +446,7 @@ export class CopilotCliAdapter implements AgentProvider {
             const args = withPromptArg([
                 ...withAgentIdentityArgs(effectiveArgs, input.agentName, input.sessionName),
                 ...copilotPermissionArgs(effectiveCwd, input.allowValidationScripts !== false),
+                ...isolationArgs,
             ], input.prompt);
             const child = this.runner(this.command, args, {
                 cwd: effectiveCwd,
@@ -347,18 +463,37 @@ export class CopilotCliAdapter implements AgentProvider {
             // conserva esos bytes hasta completar el carácter.
             child.stdout?.setEncoding?.('utf8');
             child.stderr?.setEncoding?.('utf8');
-            appendTrace('start', `command=${this.command} timeoutMs=${timeoutMs}`);
+            appendTrace('start', `command=${this.command} timeoutMs=${timeoutMs} idleStopMs=${input.idleStopMs === undefined ? resolveAgentIdleStopMs() : Math.max(0, Math.floor(input.idleStopMs))} feedbackIdleMs=${input.stopOnValidatedOutput?.feedbackIdleMs === undefined ? resolveAgentFeedbackIdleMs() : Math.max(0, Math.floor(input.stopOnValidatedOutput.feedbackIdleMs))} mcpIsolation=${isolationSummary}`);
             this.active.add(child);
             const stopOnValidatedOutput = input.stopOnValidatedOutput;
             if (stopOnValidatedOutput?.outputFile && stopOnValidatedOutput?.schemaFile) {
                 const outputPath = path.resolve(effectiveCwd, stopOnValidatedOutput.outputFile);
                 const schemaPath = path.resolve(effectiveCwd, stopOnValidatedOutput.schemaFile);
                 const pollIntervalMs = Math.max(50, Number(stopOnValidatedOutput.pollIntervalMs || 250));
+                const feedbackIdleMs = stopOnValidatedOutput.feedbackIdleMs === undefined
+                    ? resolveAgentFeedbackIdleMs()
+                    : Math.max(0, Math.floor(stopOnValidatedOutput.feedbackIdleMs));
                 let lastEvaluatedOutput: string | null = fs.existsSync(outputPath)
                     ? readUtf8File(outputPath)
                     : null;
                 outputWatchTimer = setInterval(() => {
                     if (settled || timedOut) return;
+                    // Ronda de correccion sin salida nueva en el plazo: la sesion no
+                    // esta colgada (sigue emitiendo eventos) pero no cierra; se corta
+                    // y el orquestador decide relanzar con el feedback o fallar.
+                    if (rejectedAt !== undefined && feedbackIdleMs > 0 && Date.now() - rejectedAt >= feedbackIdleMs) {
+                        const seconds = Math.round(feedbackIdleMs / 1000);
+                        appendTrace('feedback-idle', `Sin corrección ${seconds} s después del feedback (ronda ${rejectedRounds}).`);
+                        const pid = child.pid;
+                        this.killPidTree(pid, 'SIGTERM');
+                        killEscalationTimer = setTimeout(() => {
+                            this.killPidTree(pid, 'SIGKILL');
+                        }, Math.max(1, this.killGraceMs));
+                        killEscalationTimer.unref?.();
+                        finish(false, null, 'AGENT_FEEDBACK_IDLE',
+                            `La sesión no entregó una corrección en ${seconds} s tras el feedback dirigido.`);
+                        return;
+                    }
                     if (!fs.existsSync(outputPath) || !fs.existsSync(schemaPath)) return;
                     try {
                         const raw = readUtf8File(outputPath);
@@ -366,9 +501,12 @@ export class CopilotCliAdapter implements AgentProvider {
                         const output = readJsonUtf8<unknown>(outputPath);
                         const schema = readJsonUtf8<unknown>(schemaPath);
                         lastEvaluatedOutput = raw;
+                        rejectedAt = undefined;
                         const schemaValid = validateWithSchema(output, schema);
                         if (stopOnValidatedOutput.acceptOutput) {
                             if (!stopOnValidatedOutput.acceptOutput(output)) {
+                                rejectedAt = Date.now();
+                                rejectedRounds += 1;
                                 appendTrace(
                                     schemaValid ? 'output-rejected' : 'schema-rejected',
                                     'El recorder solicitó una corrección automática.',
@@ -376,6 +514,8 @@ export class CopilotCliAdapter implements AgentProvider {
                                 return;
                             }
                         } else if (!schemaValid) {
+                            rejectedAt = Date.now();
+                            rejectedRounds += 1;
                             appendTrace('schema-rejected', 'La salida no cumple el schema esperado.');
                             return;
                         }
@@ -514,6 +654,13 @@ export class CopilotCliAdapter implements AgentProvider {
                         if (actualModel) actualModels.add(actualModel);
                         const credits = findCreditsCost(parsed);
                         if (credits !== undefined) creditsCost = credits;
+                        const mcpServers = mcpServersFromCopilotEvent(parsed);
+                        if (mcpServers.length > 0) {
+                            appendTrace('mcp', mcpServers
+                                .map(server => `${server.name}(${server.source},${server.status})`)
+                                .join(' '));
+                            this.rememberMcpServers(nonBuiltinMcpServers(mcpServers));
+                        }
                     } catch {
                         // ignore non-JSON lines
                     }
@@ -543,8 +690,35 @@ export class CopilotCliAdapter implements AgentProvider {
                     index = stdoutBuffer.indexOf('\n');
                 }
             };
-            child.stdout?.on('data', processStdoutChunk);
+            // Silencio total de la sesion: ni eventos ni errores durante el plazo.
+            const idleStopMs = input.idleStopMs === undefined
+                ? resolveAgentIdleStopMs()
+                : Math.max(0, Math.floor(input.idleStopMs));
+            const armIdleTimer = (): void => {
+                if (idleStopMs <= 0 || settled) return;
+                if (idleTimer) clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => {
+                    if (settled || timedOut) return;
+                    const seconds = Math.round(idleStopMs / 1000);
+                    appendTrace('idle', `Sin eventos durante ${seconds} s.`);
+                    const pid = child.pid;
+                    this.killPidTree(pid, 'SIGTERM');
+                    killEscalationTimer = setTimeout(() => {
+                        this.killPidTree(pid, 'SIGKILL');
+                    }, Math.max(1, this.killGraceMs));
+                    killEscalationTimer.unref?.();
+                    finish(false, null, 'AGENT_IDLE', `La sesión dejó de emitir eventos durante ${seconds} s.`);
+                }, idleStopMs);
+                // Sin unref a proposito: se limpia en finish() y, con un hijo que
+                // no mantiene vivo el loop (tests), debe poder disparar.
+            };
+            armIdleTimer();
+            child.stdout?.on('data', chunk => {
+                armIdleTimer();
+                processStdoutChunk(chunk);
+            });
             child.stderr?.on('data', chunk => {
+                armIdleTimer();
                 const text = String(chunk || '');
                 stderr += text;
                 appendTrace('stderr', text);

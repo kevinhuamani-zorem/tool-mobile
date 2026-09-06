@@ -38,6 +38,10 @@ export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
         'validation-contract.json',
         'deterministic-draft.json',
     ],
+    // `screen-object-contract.js` ya no es lectura de Zorem: sus once reglas
+    // viajan en validation-contract.json y el codigo se ejecuta desde
+    // tools/check.js (ver checkScript.ts). Leer 16 KB de fuente costaba
+    // ~4k tokens por corrida sin aportar nada que el catalogo no diga.
     'interaction-author': [
         'scenario.json',
         'generation-plan.json',
@@ -47,7 +51,6 @@ export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
         'framework-api.json',
         'english-vocabulary.json',
         'validation-contract.json',
-        'screen-object-contract.js',
         'deterministic-draft.json',
     ],
 };
@@ -127,6 +130,12 @@ export interface LayeredGenerationOptions {
     timeoutMs?: number;
     forceRegenerate?: boolean;
     onStageChange?: (stage: LayeredGenerationStageReport) => void;
+    /**
+     * El borrador determinista no pudo generarse: Lorem y Zorem correrán en
+     * secuencia sin contrato de interfaz y sin el helper de aserciones. El
+     * motivo se persiste en el reporte y se ofrece aquí para mostrarlo al QA.
+     */
+    onDraftUnavailable?: (reason: string) => void;
 }
 
 export interface LayeredGenerationResult {

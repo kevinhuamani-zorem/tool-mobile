@@ -7,8 +7,17 @@ import { validateTypeScriptSyntax } from './typescriptSyntaxValidator';
 
 type LocatorPlatform = 'android' | 'ios';
 
+/**
+ * Baselines de un `update` (contenido actual del framework): lo que ya venia
+ * en ellos no es deuda del agente. Hoy se usa para no cobrarle los imports
+ * relativos heredados de un Screen o Steps legacy.
+ */
+export interface OutputValidationOptions {
+    baselines?: Partial<Record<'screen' | 'steps', string>>;
+}
+
 export class OutputValidator {
-    validate(preview: GeneratedPreview, platform?: LocatorPlatform): OutputValidation {
+    validate(preview: GeneratedPreview, platform?: LocatorPlatform, options: OutputValidationOptions = {}): OutputValidation {
         const errors: string[] = [];
         const warnings: string[] = [];
         const conflicts = preview.files
@@ -20,11 +29,11 @@ export class OutputValidator {
         if (preview.locatorContent) this.validateJson(preview.locatorContent, errors, warnings, platform);
         if (preview.stepContent) {
             this.validateTypeScript(preview.stepContent, 'Steps', errors);
-            this.validateImports(preview.stepContent, 'Steps', errors);
+            this.validateImports(preview.stepContent, 'Steps', errors, relativeImportsOf(options.baselines?.steps));
         }
         if (preview.screenContent) {
             this.validateTypeScript(preview.screenContent, 'ScreenObject', errors);
-            this.validateImports(preview.screenContent, 'ScreenObject', errors);
+            this.validateImports(preview.screenContent, 'ScreenObject', errors, relativeImportsOf(options.baselines?.screen));
         }
 
         return {
@@ -132,10 +141,14 @@ export class OutputValidator {
         }
     }
 
-    private validateImports(content: string, label: string, errors: string[]): void {
+    private validateImports(content: string, label: string, errors: string[], inherited: Set<string> = new Set()): void {
         const imports = [...content.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)]
             .map(match => match[1]);
-        const relative = imports.filter(source => source.startsWith('.'));
+        // Un update conserva byte a byte lo que no toca; un import relativo que
+        // ya estaba en el archivo del framework no lo escribio el agente
+        // (TC-10239: `../../support/utils/payment.js` volvia como error suyo
+        // ronda tras ronda). Solo los imports nuevos deben usar alias.
+        const relative = imports.filter(source => source.startsWith('.') && !inherited.has(source));
         if (relative.length > 0) {
             errors.push(
                 `${label} usa imports relativos no permitidos: ${relative.join(', ')}. ` +
@@ -163,4 +176,12 @@ export class OutputValidator {
             }
         }
     }
+}
+
+/** Specifiers relativos que un baseline ya importa; vacio sin baseline. */
+function relativeImportsOf(baseline?: string): Set<string> {
+    if (!baseline) return new Set();
+    return new Set([...baseline.matchAll(/(?:from\s+|import\s+)['"]([^'"]+)['"]/g)]
+        .map(match => match[1])
+        .filter(source => source.startsWith('.')));
 }

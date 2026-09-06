@@ -157,6 +157,21 @@ export class AutomationAgentLaunchService {
                     {
                         model,
                         inheritDesignReview: Boolean(input?.inheritDesignReview),
+                        onDraftUnavailable(reason) {
+                            // Sin borrador no hay contrato paralelo ni helper de
+                            // aserciones para Zorem: el QA debe verlo antes de que
+                            // el síntoma sea "Zorem tarda" o una ronda que no cierra.
+                            emitAutomationProgress(
+                                'ANALYZING',
+                                'Derek coordina la generación',
+                                2,
+                                6,
+                                {
+                                    detail: `Borrador determinista no disponible: ${reason} `
+                                        + 'Lorem y Zorem trabajarán en secuencia sin contrato de interfaz previo.',
+                                },
+                            );
+                        },
                         onStageChange(stage) {
                             const acceleratedDetail = stage.execution === 'cache'
                                 ? `${stage.agentName} reutilizó una salida verificada: los inputs no cambiaron.`

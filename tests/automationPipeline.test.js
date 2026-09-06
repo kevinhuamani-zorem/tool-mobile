@@ -1180,6 +1180,23 @@ test('validator juzga solo lo que se agrega a un Screen legacy y acepta el creat
             dirty.files.find(file => file.layer === 'screen').content;
         const dirtyValidation = new AutomationResponseValidator(undefined, emptyCatalog).validate(resolved.scenario, plan, dirty);
         assert.ok(dirtyValidation.errors.some(error => /imports relativos no permitidos: \.\.\/\.\.\/support/.test(error.message)));
+        // Y el import propio se reporta solo: los heredados no se le cobran ni
+        // se mezclan en el mismo mensaje.
+        assert.ok(dirtyValidation.errors.some(error =>
+            /imports relativos no permitidos: \.\.\/\.\.\/support\/utils\/payment\.js\. Usa/.test(error.message)));
+        // Si el agente aliasa parte de los imports legacy y conserva otro tal
+        // cual (TC-10239: `../../support/utils/payment.js`), el que conserva
+        // sigue siendo deuda del baseline, no suya.
+        const partiallyAliased = JSON.parse(JSON.stringify(response));
+        partiallyAliased.files.find(file => file.layer === 'screen').content =
+            partiallyAliased.files.find(file => file.layer === 'screen').content
+                .replace('import BaseScreen from "../commons/base.screen.js";', "import BaseScreen from '@screenobjects/commons/base.screen.ts';");
+        const partialValidation = new AutomationResponseValidator(undefined, emptyCatalog).validate(resolved.scenario, plan, partiallyAliased);
+        assert.equal(
+            partialValidation.errors.some(error => /imports relativos/.test(error.message)),
+            false,
+            JSON.stringify(partialValidation.errors.filter(error => /imports relativos/.test(error.message))),
+        );
     } finally {
         fs.writeFileSync(absoluteScreen, originalScreen);
         fs.writeFileSync(absoluteLocators, originalLocators);
@@ -2419,6 +2436,13 @@ test('package builder limita el contexto y deja verificador autocontenido', () =
         `@locators/${locatorModule.path.replace(/^resources\/locators\//, '')}`);
     assert.match(frameworkApi.locatorContract.accessPattern.validExample,
         /LocatorMovements\.movementsAndroid\.showMovements/);
+    // El helper de aserciones de texto viaja completo y aparte del borrador:
+    // sin borrador, Zorem lo reescribia de memoria y la regla fallaba siempre.
+    const { RECORDED_TEXT_READER } = require('../dist/core/automation/contracts');
+    assert.equal(frameworkApi.textAssertion.helper, RECORDED_TEXT_READER);
+    assert.equal(frameworkApi.textAssertion.helperName, 'readRecordedText');
+    assert.equal(frameworkApi.textAssertion.rule, 'recorded-text-assertion');
+    assert.ok(frameworkApi.textAssertion.usage.some(line => /this\.readRecordedText\(this\.<locatorName>/.test(line)));
     const agentInstructions = fs.readFileSync(
         path.join(result.packageDirectory, 'instructions.md'), 'utf8'
     );

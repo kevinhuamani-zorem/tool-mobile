@@ -27,7 +27,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
             'Si el Feature o los Steps tienen operation update, parte del archivo de baselines/ y solo añade tu Scenario o tus definiciones: los Scenarios y definiciones existentes se conservan byte a byte.',
             'En el archivo Feature puedes usar And/But; en TypeScript importa e invoca únicamente Given, When y Then porque Cucumber no exporta And/But como funciones.',
             'Steps solo puede invocar métodos del Screen Object: prohíbe XPath, UiSelector, accessibility id y selectores literales.',
-            'En Steps importa el Screen Object exactamente con el importSource e instanceName de framework-api.json.screenObjects (el importSource termina en .ts; sin la extensión el validador lo rechaza) e importa Given/When/Then desde @wdio/cucumber-framework.',
+            'En Steps importa el Screen Object exactamente con el importSource e instanceName de framework-api.json.screenObjects (el importSource termina en .ts; sin la extensión el validador lo rechaza) e importa Given/When/Then desde @wdio/cucumber-framework. Si esa entrada trae existingImport, el Steps baseline ya importa el Screen: usa ese instanceName en tus definiciones y no lo importes de nuevo.',
             'Declara en actionTrace el screenMethod requerido para que Zorem implemente exactamente esa interfaz.',
             'Lee screen-api.json si existe: es la interfaz provisional de llamadas del borrador. Conserva importSource, método y tipos de argumentos salvo necesidad del caso. Derek deriva la interfaz final de tus Steps, no de una lista que tú afirmes.',
             'Anota explícitamente los tipos de parámetros de callbacks y variables enviadas al Screen, incluyendo string[] para datos tabulares. No uses any/unknown ni spread dinámico en esas llamadas. Si consumes un retorno, declara el tipo esperado de la variable.',
@@ -36,7 +36,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
         ].join(' ')
         : [
             'Genera únicamente Screen Object y Locators.',
-            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan. Un archivo del borrador con operation update trae sus imports necesarios y adiciones (getters, métodos, claves) sobre el baseline de baselines/. Integra additions.imports sin duplicar bindings. Si usas timeout, decláralo en el método desde el helper de framework-api.json e importa ese helper; no supongas variables globales.',
+            'Usa deterministic-draft.json como referencia de forma y trazabilidad, no como autoridad sobre reuse; el plan y los candidatos autorizados mandan. Un archivo del borrador con operation update trae solo los imports NUEVOS y las adiciones (getters, métodos, claves) sobre el baseline de baselines/. Integra additions.imports sin duplicar bindings y conserva los imports del baseline tal cual, aunque sean relativos o la clase no siga la convención: un update nunca moderniza un Screen escrito a mano. Si usas timeout, decláralo en el método desde el helper de framework-api.json e importa ese helper; no supongas variables globales.',
             'Lee behavior-result.json y lorem-handoff.json: implementa exactamente los screenMethod requeridos por Lorem.',
             'Lee screen-api.json: cada método identifica su módulo, posiciones/tipos de argumentos, uso del retorno y secuencias. Debes aceptar todas sus llamadas con firmas compatibles (incluidos opcionales/rest y sobrecargas). No cambies firmas heredadas; añade una API compatible si hace falta. No edites este contrato derivado.',
             'Para operation update parte de baselines y preserva byte a byte toda API, import y locator no afectado.',
@@ -45,7 +45,8 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
             'Conserva exactamente el nombre de clase, singleton exportado, APIs e imports del baseline salvo el cambio explícitamente requerido.',
             'Reutiliza solo candidatos autorizados. No inventes selectores ni copies selectores Android al bloque iOS.',
             'Cada getter debe usar el TypeLocator y valor primary de la plataforma grabada; la otra plataforma conserva su valor existente o una clave vacía.',
-            'Usa aliases del framework y nunca imports relativos.',
+            'Usa aliases del framework y nunca imports relativos en lo que TÚ agregas; los imports heredados del baseline no se tocan.',
+            'Para comprobar tu resultado ejecuta `node tools/check.js` en esta carpeta: aplica las mismas reglas mecánicas del validador (las de validation-contract.json) y la sintaxis TypeScript sobre interaction-result.json, y te dice qué corregir. Es la única verificación que necesitas: no busques tsc, babel ni node_modules, no uses /tmp y no leas agent-execution.log; si necesitas un archivo temporal, créalo en esta carpeta.',
         ].join(' ');
     return [
         `Eres ${identity.name}, responsable de ${role} bajo la coordinación de Derek.`,
@@ -53,7 +54,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
         ...(repair ? ['Lee repair-feedback.json y corrige únicamente los errores asignados a tu capa.'] : []),
         ownership,
         'En VERIFICAR_TEXTO con textAssertion explícito, value es el esperado, source indica element (getText) o container (texto propio y descendientes en orden, unidos por salto de línea), y operator es contains o equals. El XPath SOLO localiza: jamás infieras de él el esperado, la comparación ni un contenedor padre. Conserva mayúsculas, tildes y espacios. No sustituyas la comparación por existencia.',
-        'Para estas aserciones conserva el helper readRecordedText del deterministic-draft y la lectura/comparación vinculada al getter trazado: contains usa toContain y equals usa toBe. No cambies el helper ni su límite de lectura. Lorem debe expresar el resultado de negocio con esa misma fuente y operador; Zorem implementa esa evidencia, no otra.',
+        'Para estas aserciones el Screen es un Page Object puro y la expectativa vive en el Step. Zorem: copia el helper readRecordedText exactamente como lo entrega framework-api.json.textAssertion.helper (coincide con el del deterministic-draft cuando existe) y, en el método trazado, lee desde el getter y devuelve la lectura: `const actual = await this.readRecordedText(this.<locatorName>, source); return actual;` (Promise<string>), sin comparar. Lorem: el Step recibe ese texto y compara con el valor grabado: `const actualText: string = await <screen>.<screenMethod>(); expect(actualText).toContain(<valor>)`, importando expect desde @wdio/globals; contains usa toContain y equals usa toBe. No cambies el helper ni su límite de lectura; ninguno de los dos infiere el esperado del XPath.',
         `Escribe solo ${outputFile} y cumple result.schema.json.`,
         ...(repair ? [
             'Después de escribir el resultado, vuelve a leer repair-feedback.json: Derek puede actualizarlo con status correction-required.',

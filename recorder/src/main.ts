@@ -26,6 +26,7 @@ import {
     AutomationPatchWriter,
     AutomationApplier,
     CopilotCliAdapter,
+    COPILOT_MCP_SERVERS_FILE,
     VisibleCopilotProvider,
     AgentOrchestrator,
     LayeredGenerationOrchestrator,
@@ -135,11 +136,17 @@ app.whenReady().then(async () => {
         fwkMobileGenerator,
         automationResponseValidator,
     );
-    const automationAgentLauncher = new AutomationAgentLauncher();
+    const copilotMcpServersFile = path.join(projectPaths.toolConfig, COPILOT_MCP_SERVERS_FILE);
+    const automationAgentLauncher = new AutomationAgentLauncher(undefined, { mcpServersFile: copilotMcpServersFile });
     const recordingCoverageAnalyzer = new RecordingCoverageAnalyzer();
     const recordingPlatformUpdater = new RecordingPlatformUpdater();
     const frameworkQueryService = new FrameworkQueryService(new CodeGraph());
-    const copilotCliAdapter = new CopilotCliAdapter();
+    // Recuerda los MCP personales que Copilot anuncia para desactivarlos en
+    // las sesiones headless desde el primer arranque siguiente.
+    const copilotCliAdapter = new CopilotCliAdapter(undefined, undefined, undefined, undefined, undefined, {
+        isolateMcp: true,
+        mcpServersFile: copilotMcpServersFile,
+    });
     const visibleCopilotProvider = new VisibleCopilotProvider(copilotCliAdapter, automationAgentLauncher);
     const qaRoastGenerator = new CopilotQaRoastGenerator(copilotCliAdapter);
     const deterministicGenerator = new DeterministicGenerator();

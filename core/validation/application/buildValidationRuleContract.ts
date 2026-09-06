@@ -2,6 +2,7 @@ import type {
     ValidationRuleContract,
     ValidationRuleContractEntry,
 } from '../domain/validationRule';
+import { RECORDED_TEXT_READER, SCREEN_OBJECT_CONTRACT_RULE_CODES } from '../../automation/contracts';
 
 function normalizeWhitespace(value: string): string {
     return value
@@ -254,7 +255,7 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'LocatorMovements.movementsIos.showMovements',
     },
     'locator-import-identifier': {
-        requirement: 'El identificador importado debe derivarse del archivo: movements.locator.json se importa como LocatorMovements.',
+        requirement: 'El identificador importado debe derivarse del archivo: movements.locator.json se importa como LocatorMovements, salvo que el Screen existente ya lo importe con otro nombre (framework-api.json.locatorContract.modules[].identifier).',
         minimalExample:
             'screenobjects/payment/movements.screen.ts\n' +
             "import LocatorMovements from '@locators/payment/movements.locator.json' with { type: 'json' };",
@@ -420,9 +421,83 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
             'await confirmacionEnvioEmailMovementsScreen.tapSeeAllMovements();',
     },
+    'json-import-attribute': {
+        requirement: 'Todo import de un .locator.json debe llevar el atributo de tipo `with { type: \'json\' }`; sin él Node lanza al cargar el módulo.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            "import LocatorMovements from '@locators/payment/movements.locator.json' with { type: 'json' };",
+    },
+    'locator-import-alias': {
+        requirement: 'Un .locator.json nuevo debe importarse por su alias `@locators/<squad>/<archivo>.locator.json`, nunca por ruta relativa (los imports heredados del baseline se conservan tal cual).',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            "import LocatorMovements from '@locators/payment/movements.locator.json' with { type: 'json' };",
+    },
+    'getElement-arity': {
+        requirement: 'Cada `getElement` debe recibir exactamente cuatro argumentos: TypeLocator y valor por plataforma, en el orden de la firma (framework-api.json.locatorContract.getElement).',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'const locator = LocatorProvider.getElement(\n' +
+            '    TypeLocator.XPATH, LocatorMovements.movementsIos.showMovements,\n' +
+            '    TypeLocator.ANDROID, LocatorMovements.movementsAndroid.showMovements\n' +
+            ');',
+    },
+    'getElement-order': {
+        requirement: 'Las posiciones 1 y 3 de `getElement` deben ser miembros de TypeLocator y las plataformas deben seguir el orden que declara la firma (iOS antes que Android en este framework).',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'LocatorProvider.getElement(TypeLocator.XPATH, <ios>, TypeLocator.ANDROID, <android>)',
+    },
+    'type-locator-import': {
+        requirement: 'El enum de estrategias debe importarse con el símbolo y la ruta del framework (framework-api.json.locatorContract.typeLocator).',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            "import { TypeLocator } from '@common/enums/locator-type.enum.js';",
+    },
+    'helper-method': {
+        requirement: 'Solo deben invocarse métodos que existen en los helpers de BaseScreen (framework-api.json.helpers): `scrollDown` está en gestureHelper, no en uiHelper. Lo que ningún helper cubre debe escribirse como método del propio Screen Object.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'await this.gestureHelper.verticalScrollingToEnd();',
+    },
+    'screen-class-name': {
+        requirement: 'La clase del Screen Object debe ser la esperada para su ruta (o la que ya declara el archivo en un update) y debe extender BaseScreen.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'class MovementsScreen extends BaseScreen {',
+    },
+    'screen-singleton-name': {
+        requirement: 'El archivo debe exportar por defecto una instancia de su clase: `export default new <Clase>();`.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'export default new MovementsScreen();',
+    },
+    'screen-alias': {
+        requirement: 'Steps debe importar el Screen Object con el instanceName esperado (framework-api.json.screenObjects[].instanceName, o el binding que el Steps existente ya usa) e invocarlo por ese alias.',
+        minimalExample:
+            'features/yape-steps-definitions/payment/movements.steps.ts\n' +
+            "import movementsScreen from '@screenobjects/payment/movements.screen.ts';\n" +
+            'await movementsScreen.showMovements();',
+    },
     'recorded-text-assertion': {
-        requirement: 'Para textAssertion explícito se debe conservar el helper readRecordedText del borrador, la fuente, el getter trazado y el esperado. contains usa toContain; equals usa toBe. XPath solo localiza.',
-        minimalExample: "const actual = await this.readRecordedText(await this.movementsContent, 'container');\nawait expect(actual).toContain(\"Hoy\");",
+        requirement: 'Para textAssertion explícito el método trazado del Screen debe (1) declarar en su clase el helper readRecordedText idéntico al de framework-api.json.textAssertion.helper, (2) leer con `const actual = await this.readRecordedText(this.<locatorName>, source)` desde el getter trazado con la fuente grabada (element|container) y (3) devolver esa lectura (`return actual;`, Promise<string>) para que el Step la compare; también se acepta la forma heredada con la comparación dentro del método. contains usa toContain; equals usa toBe. XPath solo localiza. El mensaje de error indica cuál parte falta.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            `${RECORDED_TEXT_READER}\n` +
+            'public async getMovementsTodayText(): Promise<string> {\n' +
+            "    const actual = await this.readRecordedText(this.movementsContent, 'container');\n" +
+            '    return actual;\n' +
+            '}',
+    },
+    'recorded-text-assertion-steps': {
+        requirement: 'Cuando el método trazado devuelve la lectura del texto grabado, el Step que lo invoca debe compararla con el operador y el valor grabados: contains usa toContain; equals usa toBe (o el parámetro <param> del Examples). Es responsabilidad de Lorem.',
+        minimalExample:
+            'features/yape-steps-definitions/payment/movements.steps.ts\n' +
+            "import { expect } from '@wdio/globals';\n" +
+            'Then(/^se muestran los movimientos de hoy$/, async () => {\n' +
+            '    const actualText: string = await movementsScreen.getMovementsTodayText();\n' +
+            '    expect(actualText).toContain("Hoy");\n' +
+            '});',
     },
     'trace-shape': {
         requirement: 'Cada entrada de actionTrace debe cumplir el schema sin campos extra.',
@@ -469,6 +544,13 @@ export function validatorRuleCodesFromSource(source: string): string[] {
     while ((match = pattern.exec(source))) codes.add(match[1]);
     if (source.includes('non-english-identifier:')) {
         codes.add('non-english-identifier');
+    }
+    // `codeStructureRules` reemite los codigos de `screenObjectProblems` con
+    // `code: problem.code`: sin esto las once reglas mecanicas del Screen
+    // Object no llegaban al catalogo y el agente solo podia aprenderlas
+    // leyendo 16 KB de codigo fuente (screen-object-contract.js).
+    if (source.includes('screenObjectProblems(')) {
+        for (const code of SCREEN_OBJECT_CONTRACT_RULE_CODES) codes.add(code);
     }
     return [...codes].sort();
 }

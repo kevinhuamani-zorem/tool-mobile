@@ -85,17 +85,31 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                         ? { className: screenClassNameFor(screenBaseline, screenPlan.path, contract.baseScreenClass) }
                         : {}),
                 };
-                const screenImports = [...(preview.stepContent || '').matchAll(
-                    /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm
-                )];
+                const screenImportPattern = /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm;
+                const screenImports = [...(preview.stepContent || '').matchAll(screenImportPattern)];
                 const expectedSource = plannedAlias(
                     screenPlan.path,
                     'screenobjects',
                     '@screenobjects'
                 );
-                const screenImport = screenImports.find(match => match[2] === expectedSource);
+                // Un Steps `update` escrito a mano ya importa ese Screen, quiza
+                // por ruta relativa y con otro nombre (`yapearOTPScreen`). Las
+                // definiciones nuevas deben usar ese binding, no importar el
+                // mismo modulo dos veces: ese import y ese alias son validos.
+                const stepsBaseline = stepsPlan.operation === 'update' ? updateBaselines.get('steps') : undefined;
+                const screenModule = screenPlan.path.split('/').pop()!.replace(/\.(?:ts|js)$/, '');
+                const inheritedScreenImport = stepsBaseline
+                    ? [...stepsBaseline.matchAll(screenImportPattern)]
+                        .find(match => match[2].split('/').pop()!.replace(/\.(?:ts|js)$/, '') === screenModule)
+                    : undefined;
+                const screenImport = screenImports.find(match => match[2] === expectedSource)
+                    || (inheritedScreenImport
+                        ? screenImports.find(match => match[2] === inheritedScreenImport[2] && match[1] === inheritedScreenImport[1])
+                        : undefined);
                 const alias = screenImport?.[1];
                 const source = screenImport?.[2];
+                const inheritsScreenImport = Boolean(inheritedScreenImport && screenImport && screenImport[2] === inheritedScreenImport[2]);
+                if (inheritsScreenImport && alias) expected.instanceName = alias;
                 if (alias && !(preview.stepContent || '').includes(`${alias}.`)) {
                     errors.push({
                         code: 'screen-alias-usage',
@@ -103,7 +117,7 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                         file: stepsPlan.path,
                     });
                 }
-                if (!expectedSource || source !== expectedSource) {
+                if (!inheritsScreenImport && (!expectedSource || source !== expectedSource)) {
                     errors.push({
                         code: 'screen-import-alias',
                         message: `Import de Screen Object inválido: ${source || 'ausente'}. Esperado: ${expectedSource || '@screenobjects/<squad>/<archivo>.screen.ts'}.`,
@@ -181,7 +195,7 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                     expectedNames: {
                         className: expected.className,
                         instanceName: expected.instanceName,
-                        importSource: expectedSource,
+                        importSource: inheritsScreenImport ? source : expectedSource,
                         baseScreenClass: contract.baseScreenClass,
                     },
                 };

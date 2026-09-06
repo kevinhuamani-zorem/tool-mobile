@@ -17,10 +17,32 @@ infiere una aserción a partir de un predicado XPath, ni se asciende al padre.
 
 El borrador genera el helper autocontenido `readRecordedText` dentro del Screen,
 sin instalar dependencias ni modificar helpers del framework. Su contenido es
-parte del contrato. Lorem conserva la intención en Feature/Steps; Zorem conserva
-fuente, operador y esperado en Screen; Derek valida el AST con la regla
-`recorded-text-assertion` y dirige las observaciones a Zorem. La política existente
-de revisión/aplicación del QA no cambia.
+parte del contrato y viaja siempre en el paquete de Zorem como
+`framework-api.json.textAssertion.helper` (con el uso esperado en `usage`),
+de modo que no depende de que el borrador se haya generado.
+
+Reparto de responsabilidades (Page Object puro, decidido el 05-09-2026): el
+método trazado del Screen lee el texto grabado desde su getter y **devuelve la
+lectura** (`const actual = await this.readRecordedText(this.<getter>, '<fuente>');
+return actual;`, `Promise<string>`); el Step recibe ese texto y afirma el
+resultado de negocio junto al Gherkin (`const actualText: string = await
+<screen>.<metodo>(); expect(actualText).toContain(<valor>)`, `toBe` para
+`equals`, con `expect` importado de `@wdio/globals`). Zorem conserva fuente y
+getter en el Screen; Lorem conserva operador y esperado en Steps. El generador
+determinista emite esa forma cuando la fila termina en su única aserción de
+texto; si una fila tiene dos aserciones o acciones después de la lectura, la
+comparación se queda dentro del método del Screen (forma heredada), que el
+validador sigue aceptando para no invalidar casos ya promovidos.
+
+Derek restaura mecánicamente el helper si difiere del contrato o falta en una
+clase que lo invoca (`normalizeAuthorResult`) y valida el AST con dos reglas:
+`recorded-text-assertion` (Screen, va a Zorem: helper ausente o distinto,
+lectura que no parte de `this.<getter>` con la fuente grabada, lectura no
+devuelta, o comparación heredada con otro operador/valor) y
+`recorded-text-assertion-steps` (Steps, va a Lorem: ningún Step invoca el
+método, no compara el texto devuelto, o compara con otro operador/valor). Cada
+mensaje nombra la parte que falla y muestra la línea esperada. La política
+existente de revisión/aplicación del QA no cambia.
 
 El fingerprint y la memoria de interacciones incluyen esta definición y el valor
 exacto. Cambiarla invalida la reutilización de una comparación distinta. Las
@@ -278,6 +300,10 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
   Zorem no corre y Lorem solo revisa el diseño (`test-design-review.json`
   con `source: agent`); con la preferencia `inheritDesignReview` del QA no
   corre ningún agente y la revisión heredada se marca `source: memory`.
+  "Abiertos" son los gaps que aún exigen juicio (`gapJudgment().open`), no
+  todo `plan.unresolvedGapIds`: los que Derek firma sin abrir sesión, como
+  `gap-extend-existing-artifacts` (presente en todo `update`) o
+  `gap-english-naming`, no obligan a lanzar a Zorem.
 - La normalización nunca renombra identificadores heredados del framework (los
   declarados en el baseline de un archivo `update`, como `titleVentas`):
   traducirlos destruiría una API existente. Y el importador nunca convierte una
@@ -579,7 +605,21 @@ El contrato final sigue siendo un solo `agent-response.json` con:
 En el pipeline por capas Derek coordina tres artefactos intermedios controlados:
 
 - `deterministic-draft.json`: referencia local de las cuatro capas antes de
-  invocar agentes; nunca es una respuesta oficial ni se aplica directamente;
+  invocar agentes; nunca es una respuesta oficial ni se aplica directamente.
+  Sobre un módulo `update` respeta lo que ya existe: extiende los bloques de
+  plataforma del JSON de locators con su nombre real (`yapearAndroid`/`yapearIos`,
+  reconocidos por sufijo sin distinguir mayúsculas, no por la convención
+  `<camel>Android|Ios`), reutiliza el identificador con el que el Screen ya
+  importa ese JSON y el binding con el que el Steps ya importa el Screen
+  (`yapearOTPScreen`, aunque sea por ruta relativa), y conserva el baseline
+  byte a byte: clase, `BaseScreen` e imports relativos no se "modernizan"; solo
+  se añaden los bindings nuevos (`missingImports`, con alias y ruta relativa
+  reconocidos como el mismo módulo por `frameworkModuleResolver`). Lo único que
+  se asegura es `browser` en `@wdio/globals` cuando el baseline lo usa sin
+  importarlo. La proyección a Zorem (`additions.imports`) lleva únicamente esos
+  imports nuevos. Si el borrador no puede generarse, la corrida sigue sin él y
+  el motivo queda en `layered-generation-run.json.draft`, en
+  `agents/derek/orchestration.json.draft` y en el progreso que ve el QA;
 - `agents/derek/orchestration.json`: owner, orden y delegaciones autorizadas;
 - `agents/lorem/behavior-result.json`: Lorem produce solo Feature y Steps;
 - `agents/zorem/interaction-result.json`: Zorem produce solo Screen y Locators;
@@ -733,10 +773,19 @@ El generador cumple el estándar que aplica el reviewer de `fwk-mobile-test`:
 
 `core/automation/contracts/screenObjectContract.ts` (público vía
 `core/automation`) reúne las reglas mecánicas que el agente rompía y
-nadie comprobaba. Corre en dos sitios con una sola implementación: el validador
-al importar la propuesta, y `verify-package.js` dentro del sandbox — que carga
-`screen-object-contract.js`, copiado al paquete, para que el agente se
-autocorrija antes de devolver nada.
+nadie comprobaba. Corre en tres sitios con una sola implementación: el validador
+al importar la propuesta, `verify-package.js` dentro del sandbox del flujo de
+un solo agente, y `tools/check.js` en el paquete de Zorem del pipeline por
+capas — que carga `tools/screen-object-contract.js`, comprueba el JSON de
+locators y la sintaxis TypeScript con el `typescript` instalado en el
+framework, y termina con código 1 y el código de regla de cada problema. Las
+once reglas viajan además como texto en `validation-contract.json` (requisito
+más ejemplo mínimo; el catálogo las descubre aunque `codeStructureRules` las
+emita dinámicamente), así que el código fuente del contrato ya no forma parte
+de la lectura de Zorem ni de `input-manifest.json`: es herramienta, no
+evidencia. El prompt le indica que `node tools/check.js` es su única
+verificación y que no busque `tsc`, babel ni `node_modules`, no use `/tmp` ni
+lea `agent-execution.log`.
 
 | Regla | Evidencia en el framework |
 |---|---|

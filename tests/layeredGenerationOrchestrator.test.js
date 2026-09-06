@@ -574,6 +574,56 @@ test('Derek relanza solo el autor con feedback pendiente cuando Copilot cerró a
     assert.equal(feedback.status, 'accepted');
 });
 
+// Una ronda de feedback que no cierra ya no espera al hang stop de una hora:
+// el adapter la corta por inactividad (AGENT_FEEDBACK_IDLE) y Derek relanza al
+// autor con el feedback escrito; agotadas las rondas, falla con el detalle.
+test('una ronda cortada por inactividad se relanza con el feedback y, agotadas las rondas, falla con detalle', async () => {
+    const validator = (_packageDirectory, response) => {
+        const feature = response.files.find(file => file.layer === 'feature')?.content || '';
+        return feature.includes('Scenario: [TC-1][Happy Path][AUTO-FRONT]')
+            ? { valid: true, errors: [] }
+            : { valid: false, errors: [{ message: 'Scenario sin formato [TC-1][Path][AUTO-FRONT]' }] };
+    };
+    const idleProvider = (calls, { fixOnRound } = {}) => {
+        const base = provider(calls);
+        return {
+            ...base,
+            async execute(input) {
+                const result = await base.execute(input);
+                const round = /feedback-(\d+)$/.exec(input.sessionName)?.[1];
+                if (input.agentName !== 'Lorem' || !/repair-1/.test(input.sessionName)) return result;
+                if (fixOnRound !== undefined && Number(round) === fixOnRound) {
+                    const outputFile = path.join(input.cwd, 'behavior-result.json');
+                    const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
+                    candidate.files.find(file => file.layer === 'feature').content = 'Feature: Caso\nScenario: [TC-1][Happy Path][AUTO-FRONT] Caso válido';
+                    writeJson(outputFile, candidate);
+                    return result;
+                }
+                // La salida rechazada sigue en disco y la sesión se cortó por inactividad.
+                return { ...result, success: false, errorCode: 'AGENT_FEEDBACK_IDLE', errorMessage: 'La sesión no entregó una corrección en 1 s tras el feedback dirigido.' };
+            },
+        };
+    };
+
+    const recovered = fixture();
+    const recoveredCalls = [];
+    const recoveredProvider = idleProvider(recoveredCalls, { fixOnRound: 1 });
+    const result = await new LayeredGenerationOrchestrator(recoveredProvider, recoveredProvider, validator).run(recovered);
+    assert.equal(result.success, true, result.error);
+    assert.equal(recoveredCalls.some(call => call.sessionName.endsWith('/Lorem/repair-1/feedback-1')), true, 'se relanzó con el feedback');
+
+    const exhausted = fixture();
+    const exhaustedCalls = [];
+    const exhaustedProvider = idleProvider(exhaustedCalls);
+    const failed = await new LayeredGenerationOrchestrator(exhaustedProvider, exhaustedProvider, validator).run(exhausted);
+    assert.equal(failed.success, false);
+    assert.match(failed.error, /Lorem no corrigió su capa tras 3 rondas de feedback dirigido; la última se cortó por inactividad/);
+    assert.match(failed.error, /Scenario sin formato/);
+    assert.equal(exhaustedCalls.filter(call => /Lorem\/repair-1/.test(call.sessionName)).length, 3, 'una sesión inicial y dos rondas de feedback');
+    const report = JSON.parse(fs.readFileSync(failed.reportFile, 'utf8'));
+    assert.equal(report.state, 'failed');
+});
+
 test('Sumrak no puede omitir gaps abiertos aunque el JSON cumpla el schema', async () => {
     const root = fixture();
     const calls = [];
@@ -1441,6 +1491,59 @@ test('si la revisión de diseño falla, el caso vuelve al flujo normal con ambos
     assert.deepEqual(calls.map(call => [call.agentName, Boolean(call.review)]), [['Lorem', true], ['Lorem', false], ['Zorem', false]]);
 });
 
+// Todo caso `update` (encadenar casos sin commitear) lleva
+// `gap-extend-existing-artifacts`, que Derek firma sin abrir sesión. Con el
+// plan crudo ese gap bloqueaba el atajo y Zorem corría ~100 s para reescribir
+// cinco imports que ni siquiera debía tocar (df0669f9, 05-09-2026).
+test('un gap que Derek ya firma no impide que Zorem se ahorre cuando todo viene de memoria', async () => {
+    const root = fixture();
+    const options = memoryCase(root);
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.unresolvedGapIds = ['gap-extend-existing-artifacts', 'gap-english-naming'];
+    plan.files = plan.files.map(file => file.layer === 'screen' || file.layer === 'locators'
+        ? { ...file, operation: 'update' }
+        : file);
+    writeJson(planFile, plan);
+    writeJson(path.join(root, 'gaps.json'), { gaps: [
+        { id: 'gap-extend-existing-artifacts', type: 'semantic-naming', description: 'extender artefactos existentes' },
+        { id: 'gap-english-naming', type: 'naming', description: 'nombres en inglés' },
+    ] });
+    const calls = [];
+    const fake = reviewingProvider(calls);
+
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root, options);
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => [call.agentName, Boolean(call.review)]), [['Lorem', true]], 'Zorem no corre; Lorem solo revisa');
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.deepEqual(
+        report.stages.map(stage => [stage.agentName, stage.execution]),
+        [['Zorem', 'deterministic'], ['Lorem', 'design-review'], ['Sumrak', 'deterministic']],
+    );
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.deepEqual(
+        response.resolutions.map(item => [item.gapId, item.decision]).sort(),
+        [['gap-english-naming', 'renamed-by-authors'], ['gap-extend-existing-artifacts', 'extend-existing']],
+        'Derek firma los dos gaps sin abrir sesión',
+    );
+    // Un gap que sí exige juicio sigue llevando a los autores al flujo normal.
+    const judged = fixture();
+    memoryCase(judged);
+    const judgedPlanFile = path.join(judged, 'generation-plan.json');
+    const judgedPlan = JSON.parse(fs.readFileSync(judgedPlanFile, 'utf8'));
+    judgedPlan.unresolvedGapIds = ['gap-extend-existing-artifacts', 'gap-1'];
+    writeJson(judgedPlanFile, judgedPlan);
+    writeJson(path.join(judged, 'gaps.json'), { gaps: [
+        { id: 'gap-extend-existing-artifacts', type: 'semantic-naming', description: 'extender' },
+        { id: 'gap-1', type: 'duplicate', description: 'elemento duplicado sin decisión fijada' },
+    ] });
+    calls.length = 0;
+    const judgedResult = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(judged);
+    assert.equal(judgedResult.success, true, judgedResult.error);
+    assert.deepEqual(calls.map(call => call.agentName).slice(0, 2), ['Lorem', 'Zorem']);
+});
+
 test('con un step nuevo o un gap abierto los autores corren como siempre', async () => {
     const root = fixture();
     memoryCase(root);
@@ -1453,4 +1556,141 @@ test('con un step nuevo o un gap abierto los autores corren como siempre', async
     const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
     assert.equal(result.success, true, result.error);
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem']);
+});
+
+// El borrador determinista puede no generarse (locators legacy, paquete
+// incompleto). Nunca bloquea la generacion, pero tragar el error dejaba al
+// QA viendo solo "Zorem tarda": sin borrador no hay contrato paralelo ni
+// helper de aserciones. El motivo viaja al reporte, al manifiesto de Derek
+// (que existe aunque la corrida se corte) y al callback de la UI.
+test('registra el motivo cuando el borrador determinista no se genera', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    const failingBuilder = {
+        build() {
+            fs.writeFileSync(path.join(root, 'deterministic-draft.json'), '{"parcial":true}');
+            throw new Error('GENERATION_MATERIALIZATION_ERROR: no se materializó de forma atómica locator/getter para emailButton.');
+        },
+    };
+    const notices = [];
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, failingBuilder)
+        .run(root, { onDraftUnavailable: reason => notices.push(reason) });
+
+    assert.equal(result.success, true, result.error);
+    assert.equal(fs.existsSync(path.join(root, 'deterministic-draft.json')), false, 'no conserva un borrador parcial');
+    assert.deepEqual(notices, ['GENERATION_MATERIALIZATION_ERROR: no se materializó de forma atómica locator/getter para emailButton.']);
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.deepEqual(report.draft, { available: false, reason: notices[0] });
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'agents', 'derek', 'orchestration.json'), 'utf8'));
+    assert.deepEqual(manifest.draft, { available: false, reason: notices[0] });
+    // Sin borrador no hay contrato paralelo: Zorem espera a Lorem.
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+});
+
+test('el reporte declara el borrador disponible cuando sí se generó', async () => {
+    const root = fixture();
+    const calls = [];
+    const fake = provider(calls);
+    const builder = {
+        build() {
+            const draft = {
+                schemaVersion: 1,
+                recordingId: 'rec-1',
+                planId: 'plan-1',
+                planFingerprint: 'fp-1',
+                files: [
+                    { layer: 'feature', path: 'features/payment/case.feature', content: 'Feature: Caso' },
+                    { layer: 'steps', path: 'features/steps/payment/case.steps.ts', content: 'export {}' },
+                    { layer: 'screen', path: 'screenobjects/payment/case.screen.ts', content: 'export class CaseScreen {}' },
+                    { layer: 'locators', path: 'resources/locators/payment/case.locator.json', content: '{}' },
+                ],
+                actionTrace: [{ sequence: 1, gherkinStep: 'When acción', screenMethod: 'act', locatorName: 'btn' }],
+                assumptions: [],
+            };
+            writeJson(path.join(root, 'deterministic-draft.json'), draft);
+            return draft;
+        },
+    };
+    const notices = [];
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, builder)
+        .run(root, { onDraftUnavailable: reason => notices.push(reason) });
+
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(notices, []);
+    const report = JSON.parse(fs.readFileSync(result.reportFile, 'utf8'));
+    assert.deepEqual(report.draft, { available: true });
+});
+
+// Zorem verifica su Screen Object con `node tools/check.js` en vez de buscar
+// tsc, babel o node_modules. Las herramientas no son evidencia: no se listan en
+// input-manifest.json y el contrato compilado deja de ser lectura del autor.
+test('Zorem recibe tools/check.js y las once reglas en su catálogo; Lorem no', async () => {
+    const { execFileSync } = require('node:child_process');
+    const root = fixture();
+    fs.copyFileSync(
+        path.join(__dirname, '..', 'dist', 'core', 'automation', 'contracts', 'screenObjectContract.js'),
+        path.join(root, 'screen-object-contract.js'),
+    );
+    const { buildValidationRuleContractFromFile, defaultValidatorSourcePath } = require('../dist/core/validation');
+    writeJson(path.join(root, 'validation-contract.json'), buildValidationRuleContractFromFile(defaultValidatorSourcePath()));
+    writeJson(path.join(root, 'framework-api.json'), {
+        helpers: [{ property: 'uiHelper', methods: [{ name: 'waitForDisplayed' }] }],
+        baseScreen: { className: 'BaseScreen', import: '@screenobjects/commons/base.screen.ts' },
+        screenObjects: [{ path: 'screenobjects/payment/case.screen.ts', className: 'CaseScreen', instanceName: 'caseScreen', importSource: '@screenobjects/payment/case.screen.ts' }],
+        locatorContract: {
+            modules: [],
+            typeLocator: { symbol: 'TypeLocator', import: '@utils/Enums.ts' },
+            getElement: { platformOrder: ['ios', 'android'], parameterCount: 4 },
+        },
+    });
+    const calls = [];
+    const fake = provider(calls);
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+    assert.equal(result.success, true, result.error);
+
+    const zorem = path.join(root, 'agents', 'zorem');
+    assert.ok(fs.existsSync(path.join(zorem, 'tools', 'check.js')));
+    assert.ok(fs.existsSync(path.join(zorem, 'tools', 'screen-object-contract.js')));
+    assert.equal(fs.existsSync(path.join(zorem, 'screen-object-contract.js')), false, 'el contrato ya no es lectura de Zorem');
+    const manifest = JSON.parse(fs.readFileSync(path.join(zorem, 'input-manifest.json'), 'utf8'));
+    assert.equal(manifest.artifacts.some(item => /check\.js|screen-object-contract/.test(item.path)), false, 'las herramientas no son evidencia');
+    assert.equal(fs.existsSync(path.join(root, 'agents', 'lorem', 'tools')), false);
+    assert.match(fs.readFileSync(path.join(zorem, 'agent-task.md'), 'utf8'), /node tools\/check\.js/);
+    assert.match(fs.readFileSync(path.join(zorem, 'agent-task.md'), 'utf8'), /no busques tsc, babel ni node_modules/);
+
+    const zoremRules = JSON.parse(fs.readFileSync(path.join(zorem, 'validation-contract.json'), 'utf8')).rules.map(rule => rule.code);
+    const loremRules = JSON.parse(fs.readFileSync(path.join(root, 'agents', 'lorem', 'validation-contract.json'), 'utf8')).rules.map(rule => rule.code);
+    for (const code of ['getElement-arity', 'getElement-order', 'json-import-attribute', 'helper-method', 'screen-class-name', 'screen-singleton-name', 'locator-bracket-notation']) {
+        assert.ok(zoremRules.includes(code), `Zorem sin ${code}`);
+        assert.equal(loremRules.includes(code), false, `Lorem con ${code}`);
+    }
+    assert.ok(loremRules.includes('screen-alias'), 'el alias del Steps es de Lorem');
+    assert.equal(zoremRules.includes('screen-alias'), false);
+
+    // El verificador corre sin dependencias del paquete y explica el fallo con el codigo de la regla.
+    let output;
+    try {
+        output = execFileSync(process.execPath, ['tools/check.js'], { cwd: zorem, encoding: 'utf8' });
+        assert.fail(`el Screen falso debía fallar: ${output}`);
+    } catch (error) {
+        assert.equal(error.status, 1);
+        output = String(error.stdout);
+    }
+    assert.match(output, /\[screen-class-name\]/);
+    assert.match(output, /\[screen-singleton-name\]/);
+    assert.match(output, /problema\(s\)/);
+    // Y con un resultado correcto termina en 0.
+    const fixed = JSON.parse(fs.readFileSync(path.join(zorem, 'interaction-result.json'), 'utf8'));
+    fixed.files.find(file => file.layer === 'screen').content = [
+        "import BaseScreen from '@screenobjects/commons/base.screen.ts';",
+        'class CaseScreen extends BaseScreen {',
+        '    public async open(): Promise<void> { await this.uiHelper.waitForDisplayed(this.title); }',
+        '}',
+        'export default new CaseScreen();',
+    ].join('\n');
+    fixed.files.find(file => file.layer === 'locators').content = JSON.stringify({ caseAndroid: {}, caseIos: {} });
+    writeJson(path.join(zorem, 'fixed.json'), fixed);
+    const ok = execFileSync(process.execPath, ['tools/check.js', 'fixed.json'], { cwd: zorem, encoding: 'utf8' });
+    assert.match(ok, /^OK: /m);
 });

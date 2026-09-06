@@ -3,7 +3,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { proposedImports } from '../../../generation';
+import { frameworkModuleResolver, missingImports } from '../../../generation';
 import {
     readJsonUtf8,
     writeJsonUtf8,
@@ -74,7 +74,9 @@ export function draftFileForInteraction(packageDirectory: string, file: any): an
                 operation: 'update',
                 baseline: baselineReference,
                 additions: {
-                    imports: proposedImports(String(content || '')),
+                    // Solo los imports que aportan un binding nuevo: los que el
+                    // baseline ya tiene (aunque por ruta relativa) no se piden.
+                    imports: missingImports(baseline, String(content || ''), frameworkModuleResolver(String(file.path || ''))),
                     getters: additions.getters.map(item => ({ name: item.name, code: item.code })),
                     methods: additions.methods.map(item => ({ name: item.name, code: item.code })),
                 },

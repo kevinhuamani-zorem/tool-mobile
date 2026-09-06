@@ -7,7 +7,9 @@ import {
     GenerationPlan,
 } from '../../contracts';
 import {
+    resolveAgentFeedbackIdleMs,
     resolveAgentHangStopMs,
+    resolveAgentIdleStopMs,
 } from '../agentRuntimeGuards';
 import {
     LayeredGenerationOptions,
@@ -50,7 +52,8 @@ export function budgetWarnings(
     if (durationMs !== undefined && durationMs > budget.maxDurationMs) {
         warnings.push(
             `${agentName} tardó ${Math.round(durationMs)} ms; el objetivo es ${budget.maxDurationMs} ms. `
-            + `La sesión solo se corta al hang stop de ${budget.hangStopMs} ms.`,
+            + `La sesión solo se corta al hang stop de ${budget.hangStopMs} ms, por silencio de `
+            + `${resolveAgentIdleStopMs()} ms o si una corrección no llega en ${resolveAgentFeedbackIdleMs()} ms tras el feedback.`,
         );
     }
     return warnings;

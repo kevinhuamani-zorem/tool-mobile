@@ -110,12 +110,24 @@ export interface LayeredGenerationOwnerReport {
     }>;
 }
 
+/**
+ * Disponibilidad del borrador determinista con el que Derek fija el contrato
+ * de interfaz entre Lorem y Zorem. Cuando falta, los autores corren en
+ * secuencia y Zorem no recibe el helper de aserciones de texto: el motivo
+ * tiene que quedar a la vista del QA, no en un catch vacío.
+ */
+export interface LayeredDraftReport {
+    available: boolean;
+    reason?: string;
+}
+
 export interface LayeredGenerationRunReport {
     schemaVersion: 1;
     recordingId: string;
     planId: string;
     state: 'completed' | 'failed';
     owner: LayeredGenerationOwnerReport;
+    draft?: LayeredDraftReport;
     stages: LayeredGenerationStageReport[];
     repairAttempts: number;
     startedAt: string;

@@ -12,7 +12,9 @@ import {
     AutomationAgentResponse,
     GenerationPlan,
 } from '../contracts';
+import { writeInteractionTools } from './layered/checkScript';
 import {
+    LayeredDraftReport,
     GenerationAgentRole,
     LAYERED_GENERATION_AGENTS,
     LayeredAgentResult,
@@ -139,17 +141,23 @@ export class LayeredGenerationOrchestrator {
         const reportFile = path.join(root, 'layered-generation-run.json');
         const ownerDirectory = path.join(agentsRoot, LAYERED_GENERATION_AGENTS.owner.directory);
         fs.rmSync(ownerDirectory, { recursive: true, force: true });
-        writeOwnerManifest(agentsRoot, plan, 'running');
 
         // El borrador acelera la comprensión del caso, pero nunca bloquea la
         // generación: paquetes históricos o incompletos siguen por el flujo
-        // de agentes sin conservar un draft obsoleto de otra ejecución.
+        // de agentes sin conservar un draft obsoleto de otra ejecución. Lo que
+        // sí bloquea es no saber por qué faltó: sin borrador no hay contrato
+        // paralelo ni helper de aserciones para Zorem, y el QA solo veía
+        // "Zorem tarda" (TC-10239). El motivo se registra y se avisa.
         const draftFile = path.join(root, 'deterministic-draft.json');
+        let draft: LayeredDraftReport = { available: true };
         try {
             this.draftBuilder.build(root);
-        } catch {
+        } catch (error: any) {
             fs.rmSync(draftFile, { force: true });
+            draft = { available: false, reason: error?.message || String(error) };
+            options.onDraftUnavailable?.(draft.reason!);
         }
+        writeOwnerManifest(agentsRoot, plan, 'running', draft);
 
         let repairAttempts = 0;
         try {
@@ -212,8 +220,8 @@ export class LayeredGenerationOrchestrator {
                         stages.push(stage);
                         options.onStageChange?.({ ...stage });
                     }
-                    writeOwnerManifest(agentsRoot, plan, 'completed');
-                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, 0);
+                    writeOwnerManifest(agentsRoot, plan, 'completed', draft);
+                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, 0, draft);
                     return { success: true, responseFile, reportFile };
                 }
             }
@@ -310,8 +318,8 @@ export class LayeredGenerationOrchestrator {
                     };
                     fs.mkdirSync(path.dirname(completeCacheFile), { recursive: true });
                     writeJsonUtf8(completeCacheFile, completeEntry);
-                    writeOwnerManifest(agentsRoot, plan, 'completed');
-                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, repairAttempts);
+                    writeOwnerManifest(agentsRoot, plan, 'completed', draft);
+                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, repairAttempts, draft);
                     return { success: true, responseFile, reportFile };
                 } catch (error) {
                     if (!(error instanceof LayeredValidationError)
@@ -362,8 +370,8 @@ export class LayeredGenerationOrchestrator {
                 }
             }
         } catch (error: any) {
-            writeOwnerManifest(agentsRoot, plan, 'failed');
-            this.writeReport(reportFile, plan, startedAt, 'failed', stages, repairAttempts);
+            writeOwnerManifest(agentsRoot, plan, 'failed', draft);
+            this.writeReport(reportFile, plan, startedAt, 'failed', stages, repairAttempts, draft);
             return { success: false, reportFile, error: error?.message || String(error) };
         }
     }
@@ -553,6 +561,9 @@ export class LayeredGenerationOrchestrator {
             copyRoleInput(packageDirectory, stageDirectory, file, role, judgment);
         }
         copyRoleBaselines(packageDirectory, stageDirectory, role);
+        // Herramientas del autor (no evidencia): el verificador local con el
+        // que Zorem comprueba su Screen Object sin buscar tsc ni node_modules.
+        if (role === 'interaction-author') writeInteractionTools(packageDirectory, stageDirectory);
         const apiSource = dependencyFile || path.join(packageDirectory, 'deterministic-draft.json');
         const screenApiFile = path.join(stageDirectory, 'screen-api.json');
         if (fs.existsSync(apiSource)) {
@@ -829,7 +840,12 @@ export class LayeredGenerationOrchestrator {
             });
             totalDurationMs += run.durationMs;
             for (const model of run.modelUsage?.actualModels || []) actualModels.add(model);
-            if (!run.success || !fs.existsSync(outputFile) || !acceptOutput) break;
+            // Una ronda cortada por inactividad tras el feedback se trata como
+            // "Copilot cerró antes de corregir": el feedback ya está escrito y
+            // una sesión nueva lo lee desde cero. Con las rondas agotadas, falla
+            // con el detalle en vez de esperar al hang stop (TC-10239: 12 min).
+            const feedbackIdle = run.errorCode === 'AGENT_FEEDBACK_IDLE';
+            if ((!run.success && !feedbackIdle) || !fs.existsSync(outputFile) || !acceptOutput) break;
             const accepted = acceptOutput(readJsonUtf8<unknown>(outputFile));
             if (accepted) break;
             feedbackRound += 1;
@@ -842,7 +858,18 @@ export class LayeredGenerationOrchestrator {
         report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, totalDurationMs);
         if (!run.success || !fs.existsSync(outputFile)) {
             report.state = 'failed';
-            report.error = run.errorMessage || `No se generó ${ROLE_OUTPUTS[role]}.`;
+            if (run.errorCode === 'AGENT_FEEDBACK_IDLE') {
+                const latestFeedback = fs.existsSync(repairFeedbackFile)
+                    ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
+                    : undefined;
+                report.error = [
+                    `${identity.name} no corrigió su capa tras ${MAX_LIVE_FEEDBACK_ROUNDS + 1} rondas de feedback dirigido; `
+                    + `la última se cortó por inactividad (${run.errorMessage || 'sin corrección en el plazo'}).`,
+                    ...(latestFeedback?.errors || []),
+                ].join(' | ');
+            } else {
+                report.error = run.errorMessage || `No se generó ${ROLE_OUTPUTS[role]}.`;
+            }
             options.onStageChange?.({ ...report });
             throw new Error(report.error);
         }
@@ -1118,6 +1145,7 @@ export class LayeredGenerationOrchestrator {
         state: LayeredGenerationRunReport['state'],
         stages: LayeredGenerationStageReport[],
         repairAttempts: number,
+        draft?: LayeredDraftReport,
     ): void {
         writeJsonUtf8(reportFile, {
             schemaVersion: 1,
@@ -1130,6 +1158,7 @@ export class LayeredGenerationOrchestrator {
                 state: state === 'completed' ? 'completed' : 'failed',
                 delegates: DELEGATES,
             },
+            ...(draft ? { draft } : {}),
             stages,
             repairAttempts,
             startedAt,

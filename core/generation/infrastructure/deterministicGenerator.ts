@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import ts from 'typescript';
 import {
     AgentGeneratedFile,
     AutomationAgentResponse,
@@ -10,7 +11,6 @@ import {
     ResolvedContext,
     ModuleDeclaration,
     declareElement,
-    screenObjectNames,
 } from '../../automation/contracts';
 import {
     FwkMobileGenerator,
@@ -18,11 +18,17 @@ import {
     ReusedLocator,
     scenarioRowMethodName,
 } from './fwkMobileGenerator';
-import { aliasImport, frameworkContract, projectPaths } from '../../workspace';
+import { frameworkContract, projectPaths } from '../../workspace';
 import { effectiveGenerationPlan } from './effectiveGenerationPlan';
 import { ReuseAnalyzer } from '../../indexing';
 import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from '../../shared';
 import { mergePatchImports, proposedImports } from './patchImports';
+import {
+    LocatorNaming,
+    existingLocatorBlocks,
+    locatorBlockPlatform,
+    targetLocatorBlock,
+} from '../domain/locatorBlocks';
 
 function readJson<T>(file: string): T {
     return readJsonUtf8<T>(file);
@@ -297,21 +303,36 @@ export function mergeLocatorUpdate(baseline: string, generated: string, plan: Ge
     const replacements = new Map((plan.resolutions || [])
         .filter(item => item.locatorReplacement && item.locatorName)
         .map(item => [item.locatorName!, item.locatorReplacement!]));
-    for (const [block, entries] of Object.entries(addition)) {
+    // Las claves nuevas se suman al bloque que el baseline ya tiene para esa
+    // plataforma aunque se llame distinto (`yapearAndroid` frente al
+    // `yapearOtpAndroid` de la convencion): un segundo par de bloques dejaria
+    // el getter y el validador leyendo un bloque sin la clave.
+    const existing = existingLocatorBlocks(base);
+    for (const [proposedBlock, entries] of Object.entries(addition)) {
         if (!entries || typeof entries !== 'object' || Array.isArray(entries)) continue;
-        base[block] = { ...(base[block] || {}) };
+        const block = targetLocatorBlock(proposedBlock, base, existing);
+        const platform = locatorBlockPlatform(block);
+        const merged: Record<string, unknown> = { ...(base[block] || {}) };
+        let touched = Object.prototype.hasOwnProperty.call(base, block);
         for (const [name, value] of Object.entries(entries)) {
             if (!created.has(name)) continue;
             const replacement = replacements.get(name);
-            if (replacement && !block.toLowerCase().endsWith(replacement.platform)) continue;
-            base[block][name] = value;
+            if (replacement && platform !== replacement.platform) continue;
+            merged[name] = value;
+            touched = true;
         }
+        if (touched) base[block] = merged;
     }
     return `${JSON.stringify(base, null, 4)}\n`;
 }
 
+// `private async readRecordedText` es el helper del contrato de aserciones de
+// texto: sin admitir la visibilidad, el merge lo dejaba fuera del update y el
+// borrador materializado no pasaba `recorded-text-assertion`.
+const ASYNC_METHOD_PATTERN = /\b(?:public|private|protected)\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g;
+
 function methodNames(source: string): Set<string> {
-    return new Set([...source.matchAll(/\bpublic\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(match => match[1]));
+    return new Set([...source.matchAll(ASYNC_METHOD_PATTERN)].map(match => match[1]));
 }
 
 function getterNames(source: string): Set<string> {
@@ -369,49 +390,55 @@ function extractClassMembers(
 }
 
 function extractAsyncMethods(source: string): Array<{ name: string; content: string; start: number; end: number }> {
-    return extractClassMembers(source, /\bpublic\s+async\s+([A-Za-z_$][\w$]*)\s*\(/g);
+    return extractClassMembers(source, new RegExp(ASYNC_METHOD_PATTERN.source, 'g'));
 }
 
 function extractGetters(source: string): Array<{ name: string; content: string; start: number; end: number }> {
     return extractClassMembers(source, /\bpublic\s+get\s+([A-Za-z_$][\w$]*)\s*\(/g);
 }
 
-function modernizeScreenBaseline(baseline: string, screenPath: string): string {
-    const absoluteScreen = path.join(projectPaths.frameworkRoot, screenPath);
+/**
+ * Resuelve un specifier a una ruta canonica relativa al framework, sin
+ * extension: `../commons/base.screen.js` visto desde `screenobjects/payment/x.screen.ts`
+ * y `@screenobjects/commons/base.screen.ts` son el mismo modulo. Permite
+ * fusionar imports sin reescribir los relativos que el baseline ya tiene.
+ */
+export function frameworkModuleResolver(filePath: string): (specifier: string) => string {
     const contract = frameworkContract(projectPaths.frameworkRoot);
-    let output = baseline.replace(
-        /(from\s+['"])(\.\.?\/[^'"]+)(['"])/g,
-        (_match, prefix: string, source: string, suffix: string) => {
-            const target = path.resolve(path.dirname(absoluteScreen), source);
-            const relativeTarget = path.relative(projectPaths.frameworkRoot, target).replace(/\\/g, '/');
-            const aliased = aliasImport(relativeTarget, contract.aliases);
-            return aliased ? `${prefix}${aliased}${suffix}` : `${prefix}${source}${suffix}`;
+    const directory = path.posix.dirname(String(filePath).replace(/\\/g, '/'));
+    const aliases = Object.entries(contract.aliases).sort((a, b) => b[0].length - a[0].length);
+    return (specifier: string): string => {
+        const clean = String(specifier).replace(/\\/g, '/');
+        let canonical = clean;
+        if (clean.startsWith('.')) {
+            canonical = path.posix.normalize(path.posix.join(directory, clean));
+        } else {
+            const alias = aliases.find(([name]) => clean === name || clean.startsWith(`${name}/`));
+            if (alias) canonical = `${alias[1]}${clean.slice(alias[0].length)}`;
+        }
+        return canonical.replace(/\.(?:js|ts|mjs|cjs)$/, '');
+    };
+}
+
+/**
+ * El baseline entra al merge tal cual: un `update` conserva byte a byte la
+ * clase, los imports (relativos incluidos) y todo lo que no agrega. Antes se
+ * "modernizaba" (alias, clase en PascalCase, BaseScreen del contrato) y eso
+ * era justo lo que el QA no quiere en Screens escritos a mano; el validador
+ * tolera esa deuda heredada. Solo se asegura `browser` en `@wdio/globals` si
+ * el baseline lo usa sin importarlo, porque sin eso el archivo no compila.
+ */
+function prepareScreenBaseline(baseline: string): string {
+    if (!/\bbrowser\./.test(baseline)) return baseline;
+    if (/import\s*\{[^}]*\bbrowser\b[^}]*\}\s*from\s*['"]@wdio\/globals['"]/.test(baseline)) return baseline;
+    return baseline.replace(
+        /import\s*\{([^}]*)\}\s*from\s*['"]@wdio\/globals['"];?/,
+        (_match, symbols: string) => {
+            const names = new Set(symbols.split(',').map((item: string) => item.trim()).filter(Boolean));
+            names.add('browser');
+            return `import { ${[...names].sort().join(', ')} } from '@wdio/globals';`;
         },
     );
-    output = output.replace(
-        /(import\s+BaseScreen\s+from\s+['"])[^'"]+(['"])/,
-        `$1${contract.baseScreenImport}$2`,
-    );
-    if (/\bbrowser\./.test(output)) {
-        output = output.replace(
-            /import\s*\{([^}]*)\}\s*from\s*['"]@wdio\/globals['"];?/,
-            (_match, symbols: string) => {
-                const names = new Set(symbols.split(',').map((item: string) => item.trim()).filter(Boolean));
-                names.add('browser');
-                return `import { ${[...names].sort().join(', ')} } from '@wdio/globals';`;
-            },
-        );
-    }
-    const expected = screenObjectNames(screenPath);
-    const declared = output.match(/\bclass\s+([A-Za-z_$][\w$]*)\s+extends\s+/)?.[1];
-    if (declared && declared !== expected.className) {
-        output = output.replace(new RegExp(`\\bclass\\s+${declared}\\b`), `class ${expected.className}`);
-        output = output.replace(
-            new RegExp(`(export\\s+default\\s+new\\s+)${declared}(\\s*\\()`),
-            `$1${expected.className}$2`,
-        );
-    }
-    return output;
 }
 
 export function mergeScreenUpdate(
@@ -420,7 +447,7 @@ export function mergeScreenUpdate(
     screenPath: string,
     replacementGetterNames: ReadonlySet<string> = new Set(),
 ): string {
-    baseline = modernizeScreenBaseline(baseline, screenPath);
+    baseline = prepareScreenBaseline(baseline);
     const generatedGetters = extractGetters(generated);
     const generatedByName = new Map(generatedGetters.map(getter => [getter.name, getter]));
     const existingForReplacement = extractGetters(baseline)
@@ -436,7 +463,7 @@ export function mergeScreenUpdate(
     const methodAdditions = extractAsyncMethods(generated).filter(method => !existingMethods.has(method.name));
     const additions = [...getterAdditions, ...methodAdditions];
     if (!additions.length && !existingForReplacement.length) return baseline;
-    baseline = mergePatchImports(baseline, proposedImports(generated));
+    baseline = mergePatchImports(baseline, proposedImports(generated), frameworkModuleResolver(screenPath));
     if (!additions.length) return baseline;
     const exportIndex = baseline.lastIndexOf('\nexport default');
     const classEnd = baseline.lastIndexOf('\n}', exportIndex >= 0 ? exportIndex : baseline.length);
@@ -457,13 +484,19 @@ function assertCreateArtifacts(
         throw new Error('GENERATION_MATERIALIZATION_ERROR: un create requiere Locators y Screen Object.');
     }
     const locators = JSON.parse(preview.locatorContent) as Record<string, Record<string, unknown>>;
-    const activeSuffix = scenario.platform;
-    const inactiveSuffix = scenario.platform === 'android' ? 'ios' : 'android';
-    const active = Object.entries(locators).find(([name]) => name.toLowerCase().endsWith(activeSuffix))?.[1] || {};
-    const inactive = Object.entries(locators).find(([name]) => name.toLowerCase().endsWith(inactiveSuffix))?.[1] || {};
+    const inactivePlatform = scenario.platform === 'android' ? 'ios' : 'android';
+    // Un JSON legacy puede traer mas de un bloque por plataforma; la clave
+    // vale en cualquiera de ellos, no solo en el primero.
+    const blocksOf = (platform: string) => Object.entries(locators)
+        .filter(([name, value]) => locatorBlockPlatform(name) === platform && value && typeof value === 'object')
+        .map(([, value]) => value);
+    const declares = (blocks: Array<Record<string, unknown>>, name: string) =>
+        blocks.some(block => Object.prototype.hasOwnProperty.call(block, name));
+    const active = blocksOf(scenario.platform);
+    const inactive = blocksOf(inactivePlatform);
     const missing = created.filter(name =>
-        !Object.prototype.hasOwnProperty.call(active, name)
-        || !Object.prototype.hasOwnProperty.call(inactive, name)
+        !declares(active, name)
+        || !declares(inactive, name)
         || !new RegExp(`\\bpublic\\s+get\\s+${name}\\s*\\(`).test(preview.screenContent!)
     );
     if (missing.length) {
@@ -492,13 +525,41 @@ function stepDefinitionBlocks(source: string): Array<{ name: string; code: strin
  * ya se fusionaban; Steps se proponia entero de nuevo y el caso quedaba
  * bloqueado aunque todo estuviera verificado.
  */
+const IMPORT_LINE_PATTERN = /^import\s+(?:\{[^}]*\}|[A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"];?$/;
+
+/** Steps legacy: `import yapearOTPScreen from '../../../screenobjects/payment/yapear-otp.screen.ts'`. */
+function existingScreenBinding(baseline: string, generatedImport: string): { local: string; line: string } | undefined {
+    const generatedSpecifier = IMPORT_LINE_PATTERN.exec(generatedImport)?.[1];
+    if (!generatedSpecifier) return undefined;
+    const fileName = path.posix.basename(generatedSpecifier).replace(/\.(?:js|ts)$/, '');
+    for (const match of baseline.matchAll(/^import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"];?$/gm)) {
+        const [line, local, specifier] = match;
+        if (path.posix.basename(specifier).replace(/\.(?:js|ts)$/, '') === fileName) return { local, line };
+    }
+    return undefined;
+}
+
 export function mergeStepsUpdate(baseline: string, generated: string): string {
     const existing = new Set([...baseline.matchAll(STEP_DEFINITION_PATTERN)].map(match => match[1]));
-    const additions = stepDefinitionBlocks(generated).filter(block => !existing.has(block.name));
+    let additions = stepDefinitionBlocks(generated).filter(block => !existing.has(block.name));
     const baselineImports = new Set([...baseline.matchAll(/^import .+;$/gm)].map(match => match[0]));
-    const missingImports = [...generated.matchAll(/^import .+;$/gm)]
-        .map(match => match[0])
-        .filter(line => !baselineImports.has(line) && /screen/i.test(line));
+    const missingImports: string[] = [];
+    for (const line of [...generated.matchAll(/^import .+;$/gm)].map(match => match[0])) {
+        if (baselineImports.has(line) || !/screen/i.test(line)) continue;
+        // El baseline ya importa ese Screen (quiza por ruta relativa y con otro
+        // nombre, `yapearOTPScreen`): las definiciones nuevas usan ese binding
+        // en vez de importar el mismo modulo dos veces.
+        const bound = existingScreenBinding(baseline, line);
+        const generatedLocal = /^import\s+([A-Za-z_$][\w$]*)\s+from/.exec(line)?.[1];
+        if (bound && generatedLocal) {
+            if (bound.local !== generatedLocal) {
+                const identifier = new RegExp(`\\b${generatedLocal}\\b`, 'g');
+                additions = additions.map(block => ({ ...block, code: block.code.replace(identifier, bound.local) }));
+            }
+            continue;
+        }
+        missingImports.push(line);
+    }
     if (!additions.length && !missingImports.length) return baseline;
     let output = baseline.replace(/\s+$/, '');
     if (missingImports.length) {
@@ -595,6 +656,51 @@ function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan
     return { ...preview, screenContent, locatorContent, stepContent, featureContent };
 }
 
+/**
+ * Identificador con el que el Screen existente importa ese JSON de locators
+ * (`import LocatorOtp from '../../resources/locators/payment/yapear-otp.locator.json'`).
+ * Se compara por nombre de archivo porque el baseline puede usar ruta
+ * relativa y el generador alias.
+ */
+export function existingLocatorImportIdentifier(screenBaseline: string, locatorPath: string): string | undefined {
+    const fileName = path.posix.basename(String(locatorPath).replace(/\\/g, '/'));
+    if (!fileName) return undefined;
+    const source = ts.createSourceFile('baseline.ts', screenBaseline, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    for (const statement of source.statements) {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+        const specifier = statement.moduleSpecifier.text.replace(/\\/g, '/');
+        if (specifier !== fileName && !specifier.endsWith(`/${fileName}`)) continue;
+        const name = statement.importClause?.name?.text;
+        if (name) return name;
+    }
+    return undefined;
+}
+
+/**
+ * Nombres que el generador debe respetar cuando Screen y Locators son
+ * `update`: bloques por plataforma del JSON existente e identificador del
+ * import en el Screen existente. Sin baseline no impone nada.
+ */
+export function updateLocatorNaming(plan: GenerationPlan): LocatorNaming {
+    const naming: LocatorNaming = {};
+    const locatorPlan = plan.files.find(file => file.layer === 'locators' && file.operation === 'update');
+    if (!locatorPlan) return naming;
+    const locatorFile = path.join(projectPaths.frameworkRoot, locatorPlan.path);
+    if (fs.existsSync(locatorFile)) {
+        try {
+            naming.blocks = existingLocatorBlocks(JSON.parse(readUtf8File(locatorFile)));
+        } catch {
+            // Un JSON ilegible no bloquea el borrador: se aplica la convencion.
+        }
+    }
+    const screenPlan = plan.files.find(file => file.layer === 'screen' && file.operation === 'update');
+    const screenFile = screenPlan ? path.join(projectPaths.frameworkRoot, screenPlan.path) : undefined;
+    if (screenFile && fs.existsSync(screenFile)) {
+        naming.identifier = existingLocatorImportIdentifier(readUtf8File(screenFile), locatorPlan.path);
+    }
+    return naming;
+}
+
 function responseFromPreview(
     scenario: AutomationScenario,
     plan: GenerationPlan,
@@ -689,6 +795,7 @@ export class DeterministicGenerator {
                 preserveDistinctActionLocators: !repetitionUsesExistingMethods(plan, methodMappings),
                 paths: plannedPreviewPaths(plan),
                 existingMethods: methodMappings,
+                locatorNaming: updateLocatorNaming(plan),
             },
         );
         const preview = preserveUpdateBaselines(generatedPreview, plan);

@@ -152,6 +152,11 @@ export const BEHAVIOR_RULE_CODES = new Set([
     // Lorem. Zorem no puede corregirlos y encadenaba rondas de feedback (15
     // min en TC-10239) por un import sin `.ts` que no era suyo.
     'screen-import-alias', 'screen-alias', 'screen-alias-usage',
+    // La comparación del texto grabado vive en el Step (el Screen devuelve la
+    // lectura): si falta o usa otro operador/valor, lo corrige Lorem.
+    'recorded-text-assertion-steps',
+    // El alias con el que Steps importa el Screen lo escribe Lorem.
+    'screen-alias',
 ]);
 
 export const INTERACTION_RULE_CODES = new Set([
@@ -163,6 +168,10 @@ export const INTERACTION_RULE_CODES = new Set([
     'invented-selector', 'locator-type-mismatch', 'platform-coverage',
     'trace-locator', 'trace-screen-method',
     'framework-symbol', 'framework-import-alias', 'missing-update-target', 'interaction-path',
+    // Reglas mecanicas del Screen Object (screenObjectProblems): son de Zorem.
+    'json-import-attribute', 'locator-import-alias', 'locator-import-identifier', 'locator-bracket-notation',
+    'getElement-arity', 'getElement-order', 'type-locator-import', 'helper-method',
+    'screen-class-name', 'screen-singleton-name',
 ]);
 
 export const INTEGRATION_RULE_CODES = new Set([

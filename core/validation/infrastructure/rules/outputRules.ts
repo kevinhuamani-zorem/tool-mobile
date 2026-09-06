@@ -10,14 +10,20 @@ import { PreviewRuleContext, RuleReport } from './ruleContext';
 export function outputRules(context: PreviewRuleContext, report: RuleReport): void {
     const { scenario, plan, response, preview, outputValidator, reusesScreenWithoutChanges, updateBaselines } = context;
     const { errors, warnings } = report;
-            const output = outputValidator.validate(preview, scenario.platform);
             // Deuda que el Screen baseline ya tenia (imports relativos, browser
-            // sin importar...) no es del agente: solo cuenta lo que agrega.
+            // sin importar...) no es del agente: solo cuenta lo que agrega. Los
+            // imports relativos se descuentan uno a uno (el agente puede haber
+            // aliasado parte de ellos); el resto de mensajes, por igualdad.
             const screenBaseline = plan.files.find(file => file.layer === 'screen')?.operation === 'update'
                 ? updateBaselines.get('screen')
                 : undefined;
+            const stepsBaseline = plan.files.find(file => file.layer === 'steps')?.operation === 'update'
+                ? updateBaselines.get('steps')
+                : undefined;
+            const baselines = { screen: screenBaseline, steps: stepsBaseline };
+            const output = outputValidator.validate(preview, scenario.platform, { baselines });
             const inherited = new Set(screenBaseline
-                ? outputValidator.validate({ ...preview, screenContent: screenBaseline }, scenario.platform).errors
+                ? outputValidator.validate({ ...preview, screenContent: screenBaseline }, scenario.platform, { baselines }).errors
                     .filter(message => /^ScreenObject/.test(message))
                 : []);
             output.errors.forEach(message => {

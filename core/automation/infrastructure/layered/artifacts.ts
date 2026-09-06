@@ -10,12 +10,14 @@ import {
     screenObjectNames,
 } from '../../contracts';
 import {
+    LayeredDraftReport,
     GenerationAgentRole,
     LAYERED_GENERATION_AGENTS,
     LayeredAgentResult,
     LayeredGenerationHandoff,
     sha256Text,
 } from '../../domain/layeredGenerationContracts';
+import { normalizeRecordedTextReader } from '../../domain/recordedTextReaderNormalizer';
 import {
     readJsonUtf8,
     readUtf8File,
@@ -243,6 +245,16 @@ export function normalizeAuthorResult(
             return clean as unknown as typeof trace;
         });
     }
+    if (role === 'interaction-author' && Array.isArray(result.files)) {
+        // El helper de aserciones de texto es contrato exacto; Zorem suele
+        // reescribirlo y la regla fallaría sin decir por qué. Derek lo
+        // restaura: es mecánico y no cambia la evidencia que lee el método.
+        for (const file of result.files) {
+            if (file.layer !== 'screen' || typeof file.content !== 'string') continue;
+            const content = normalizeRecordedTextReader(file.content);
+            if (content !== file.content) { file.content = content; changed = true; }
+        }
+    }
     if (role === 'behavior-author' && Array.isArray(result.files)) {
         const screenPath = plan.files.find(file => file.layer === 'screen')?.path;
         for (const file of result.files) {
@@ -385,6 +397,7 @@ export function writeOwnerManifest(
     agentsRoot: string,
     plan: GenerationPlan,
     state: 'running' | 'completed' | 'failed',
+    draft?: LayeredDraftReport,
 ): void {
     const ownerDirectory = path.join(agentsRoot, LAYERED_GENERATION_AGENTS.owner.directory);
     fs.mkdirSync(ownerDirectory, { recursive: true });
@@ -394,6 +407,9 @@ export function writeOwnerManifest(
         recordingId: plan.recordingId,
         planId: plan.planId,
         state,
+        // Se escribe desde el arranque: si la corrida se corta, el motivo por
+        // el que no hubo borrador sigue disponible aunque no exista el reporte.
+        ...(draft ? { draft } : {}),
         delegates: DELEGATES,
         sequence: DELEGATES.map(delegate => delegate.name),
         updatedAt: new Date().toISOString(),

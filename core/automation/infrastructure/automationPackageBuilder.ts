@@ -26,8 +26,10 @@ import {
     GeneratedPreview,
     ReusedLocator,
     scenarioRowMethodName,
+    existingLocatorBlocks,
+    existingLocatorImportIdentifier,
 } from '../../generation';
-import { locatorImportIdentifier, screenObjectNames, signatureHint } from '../contracts';
+import { locatorImportIdentifier, screenObjectNames, signatureHint, RECORDED_TEXT_READER } from '../contracts';
 import { frameworkHelpersOf } from '../../workspace';
 import { ModuleDeclaration } from '../contracts';
 import { FrameworkContract, frameworkContract } from '../../workspace';
@@ -286,6 +288,56 @@ function responseSchema(): object {
     };
 }
 
+/**
+ * Bloques e identificador reales de un módulo de locators existente
+ * (`yapearAndroid`/`yapearIos`, `LocatorOtp`), leídos del framework cuando el
+ * plan lo actualiza. Para un módulo nuevo no impone nada.
+ */
+export function existingLocatorNaming(
+    file: GenerationPlan['files'][number],
+    plan: Pick<GenerationPlan, 'files'>,
+): { identifier?: string; blocks?: { android?: string; ios?: string } } {
+    if (file.operation !== 'update') return {};
+    const result: { identifier?: string; blocks?: { android?: string; ios?: string } } = {};
+    const locatorFile = path.join(projectPaths.frameworkRoot, file.path);
+    if (fs.existsSync(locatorFile)) {
+        try {
+            const blocks = existingLocatorBlocks(JSON.parse(fs.readFileSync(locatorFile, 'utf-8')));
+            if (blocks.android || blocks.ios) result.blocks = blocks;
+        } catch {
+            // Un JSON ilegible se reporta por otras reglas; aquí no bloquea.
+        }
+    }
+    const screen = plan.files.find(item => item.layer === 'screen' && item.operation === 'update');
+    const screenFile = screen ? path.join(projectPaths.frameworkRoot, screen.path) : undefined;
+    if (screenFile && fs.existsSync(screenFile)) {
+        result.identifier = existingLocatorImportIdentifier(fs.readFileSync(screenFile, 'utf-8'), file.path);
+    }
+    return result;
+}
+
+/**
+ * Import con el que el Steps existente (operation update) ya trae ese Screen:
+ * `import yapearOTPScreen from '../../../screenobjects/payment/yapear-otp.screen.ts'`.
+ */
+export function existingStepsScreenImport(
+    plan: Pick<GenerationPlan, 'files'>,
+    screenPath: string,
+): { instanceName: string; source: string } | undefined {
+    const steps = plan.files.find(file => file.layer === 'steps' && file.operation === 'update');
+    if (!steps) return undefined;
+    const stepsFile = path.join(projectPaths.frameworkRoot, steps.path);
+    if (!fs.existsSync(stepsFile)) return undefined;
+    const screenModule = path.posix.basename(screenPath.replace(/\\/g, '/')).replace(/\.(?:ts|js)$/, '');
+    for (const match of fs.readFileSync(stepsFile, 'utf-8')
+        .matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.screen\.(?:ts|js))['"]/gm)) {
+        if (path.posix.basename(match[2]).replace(/\.(?:ts|js)$/, '') === screenModule) {
+            return { instanceName: match[1], source: match[2] };
+        }
+    }
+    return undefined;
+}
+
 function frameworkApiDocument(
     contract: FrameworkContract,
     plan: Pick<GenerationPlan, 'files'>
@@ -306,6 +358,9 @@ function frameworkApiDocument(
             preserveDiacritics: true,
         },
         helpers: frameworkHelpersOf(projectPaths.frameworkRoot),
+        // Clase base real del framework: la usa el verificador local del autor
+        // (tools/check.js) para exigir `class X extends BaseScreen`.
+        baseScreen: { className: contract.baseScreenClass, import: contract.baseScreenImport },
         screenObjects: plan.files
             .filter(file => file.layer === 'screen')
             .map(file => {
@@ -319,21 +374,50 @@ function frameworkApiDocument(
                     ? fs.readFileSync(absolute, 'utf-8')
                         .match(/class\s+([A-Za-z_$][\w$]*)\s+extends\s+[A-Za-z_$][\w$]*/)?.[1]
                     : undefined;
+                // Un Steps `update` escrito a mano ya importa ese Screen (quiza
+                // por ruta relativa y con otro nombre): Lorem debe usar ese
+                // binding en sus definiciones nuevas, no importarlo otra vez.
+                const existingImport = existingStepsScreenImport(plan, file.path);
                 return {
                     path: file.path,
                     className: declared || names.className,
-                    instanceName: names.instanceName,
+                    instanceName: existingImport?.instanceName || names.instanceName,
                     importSource: `@screenobjects/${file.path.replace(/^screenobjects\//, '')}`,
+                    ...(existingImport ? { existingImport } : {}),
                 };
             }),
+        // Aserción de texto grabado: el helper viaja completo y aparte del
+        // borrador determinista. Sin esto, cuando el borrador no se generaba
+        // Zorem reescribía `readRecordedText` de memoria y la regla
+        // `recorded-text-assertion` fallaba ronda tras ronda (TC-10239).
+        textAssertion: {
+            rule: 'recorded-text-assertion',
+            helperName: 'readRecordedText',
+            helper: RECORDED_TEXT_READER,
+            usage: [
+                'Copia el helper idéntico dentro de la clase del Screen Object (Derek lo restaura si difiere).',
+                "Screen (Zorem): el método trazado lee desde el getter y DEVUELVE la lectura: const actual = await this.readRecordedText(this.<locatorName>, '<element|container>'); return actual; (Promise<string>).",
+                "Steps (Lorem): el Step compara con el valor grabado: const actualText: string = await <screen>.<screenMethod>(); contains -> expect(actualText).toContain('<valor>'); equals -> expect(actualText).toBe('<valor>'); importa expect desde @wdio/globals.",
+                'También se acepta la forma heredada con la comparación dentro del método del Screen; en ese caso el Step solo invoca el método.',
+                'El XPath solo localiza: nunca infieras de él el esperado, la comparación ni un contenedor.',
+            ],
+        },
         locatorContract: {
             modules: plan.files
                 .filter(file => file.layer === 'locators')
-                .map(file => ({
-                    path: file.path,
-                    importSource: `@locators/${file.path.replace(/^resources\/locators\//, '')}`,
-                    identifier: locatorImportIdentifier(file.path),
-                })),
+                .map(file => {
+                    // Un módulo `update` conserva sus bloques y el identificador
+                    // con el que su Screen ya lo importa, aunque no sigan la
+                    // convención; pedirle a Zorem la convención lo obligaba a
+                    // duplicar el import o a escribir en un bloque que nadie lee.
+                    const existing = existingLocatorNaming(file, plan);
+                    return {
+                        path: file.path,
+                        importSource: `@locators/${file.path.replace(/^resources\/locators\//, '')}`,
+                        identifier: existing.identifier || locatorImportIdentifier(file.path),
+                        ...(existing.blocks ? { blocks: existing.blocks } : {}),
+                    };
+                }),
             accessPattern: {
                 notation: 'dot-only',
                 shape: '<LocatorIdentifier>.<moduleAndroid|moduleIos>.<locatorName>',

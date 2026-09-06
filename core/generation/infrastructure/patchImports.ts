@@ -9,6 +9,41 @@ export function proposedImports(content: string): string[] {
     return source.statements.filter(ts.isImportDeclaration).map(node => node.getText(source));
 }
 
+function importBindings(node: ts.ImportDeclaration): Array<{ local: string; imported: string; typeOnly: boolean }> {
+    const c = node.importClause;
+    const result: { local: string; imported: string; typeOnly: boolean }[] = [];
+    if (c?.name) result.push({ local: c.name.text, imported: 'default', typeOnly: c.isTypeOnly });
+    if (c?.namedBindings && ts.isNamespaceImport(c.namedBindings)) {
+        result.push({ local: c.namedBindings.name.text, imported: '*', typeOnly: c.isTypeOnly });
+    } else if (c?.namedBindings && ts.isNamedImports(c.namedBindings)) {
+        for (const spec of c.namedBindings.elements) result.push({
+            local: spec.name.text, imported: (spec.propertyName || spec.name).text,
+            typeOnly: c.isTypeOnly || spec.isTypeOnly,
+        });
+    }
+    return result;
+}
+
+/**
+ * Imports del contenido propuesto que aportan algun binding que el baseline
+ * aun no declara. Un Screen legacy importa `LocatorOtp` por ruta relativa y el
+ * generador por alias: son el mismo binding, no una adicion (`resolveModule`
+ * decide la equivalencia). Es lo que un `update` debe pedirle al autor que
+ * integre; mandarle todos los imports le hacia reescribir los del baseline.
+ */
+export function missingImports(baseline: string, proposed: string, resolveModule: (specifier: string) => string = value => value): string[] {
+    const existing = new Set(parse(baseline).statements.filter(ts.isImportDeclaration)
+        .flatMap(node => importBindings(node).map(binding => binding.local)));
+    void resolveModule;
+    return proposedImports(proposed).filter(text => {
+        const declaration = parse(text).statements.find(ts.isImportDeclaration);
+        if (!declaration) return false;
+        const bindings = importBindings(declaration);
+        if (!bindings.length) return !existing.size;
+        return bindings.some(binding => !existing.has(binding.local));
+    });
+}
+
 /** Merge bindings while preserving all code outside the affected import declarations. */
 export function mergePatchImports(content: string, additions: string[], resolveModule: (specifier: string) => string = value => value): string {
     let output = content;
@@ -78,8 +113,11 @@ export function mergePatchImports(content: string, additions: string[], resolveM
             const declaration = ts.factory.updateImportDeclaration(incoming, incoming.modifiers,
                 nextClause, incoming.moduleSpecifier, incoming.attributes);
             const at = imports.at(-1)?.getEnd() || 0;
+            // Tras el ultimo import ya viene su salto de linea: anadir otro
+            // dejaba una linea en blanco por cada import agregado.
+            const rest = output.slice(at);
             output = output.slice(0, at) + '\n' + printer.printNode(ts.EmitHint.Unspecified, declaration, parse(text))
-                + '\n' + output.slice(at);
+                + (rest.startsWith('\n') || rest.startsWith('\r\n') ? '' : '\n') + rest;
         }
     }
     return output;

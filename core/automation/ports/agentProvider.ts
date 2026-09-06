@@ -25,7 +25,15 @@ export interface AgentProviderRunInput {
          * watcher activo hasta que el agente escriba una versión distinta.
          */
         acceptOutput?: (output: unknown) => boolean;
+        /**
+         * Tras rechazar una salida (`acceptOutput` false), plazo para que el
+         * agente escriba una versión distinta; agotado, la sesión termina con
+         * `AGENT_FEEDBACK_IDLE`. `undefined` usa el valor del entorno; 0 desactiva.
+         */
+        feedbackIdleMs?: number;
     };
+    /** Silencio máximo sin eventos antes de cortar con `AGENT_IDLE`; 0 desactiva. */
+    idleStopMs?: number;
 }
 
 export interface AgentDeniedPathStats {

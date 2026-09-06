@@ -252,9 +252,58 @@ descarta ese historial.
 Revisa `layered-generation-run.json`: duración, `contextBytes`, `cacheHit` y
 `budgetWarnings` por etapa. Los objetivos predeterminados son 120 000 bytes y
 300 000 ms por etapa; excederlos informa al QA, no cancela el trabajo ni recorta
-evidencia. El recorder controla las sesiones headless y aplica un hang stop
-independiente de una hora (`RECORDER_AGENT_HANG_STOP_MS`). Comprueba los paquetes
-`agents/<rol>` y la proyección de memoria antes de aumentar contexto.
+evidencia. El recorder controla las sesiones headless y aplica tres cortes que
+no son presupuesto sino detectores de sesión que no avanza: el hang stop de una
+hora (`RECORDER_AGENT_HANG_STOP_MS`), el silencio total de eventos durante diez
+minutos (`RECORDER_AGENT_IDLE_STOP_MS`, `AGENT_IDLE`) y cinco minutos sin una
+corrección nueva tras un `output-rejected` (`RECORDER_AGENT_FEEDBACK_IDLE_MS`,
+`AGENT_FEEDBACK_IDLE`). En el último caso Derek relanza al autor en una sesión
+nueva con el `repair-feedback.json` ya escrito (`.../feedback-N`) y, agotadas las
+rondas, la etapa falla con «no corrigió su capa tras 3 rondas de feedback
+dirigido; la última se cortó por inactividad» más los errores pendientes; el
+`agent-execution.log` marca el momento con `[feedback-idle]` o `[idle]`. Comprueba
+los paquetes `agents/<rol>` y la proyección de memoria antes de aumentar contexto.
+
+### La sesión tarda en arrancar o el log muestra MCP y skills que el recorder no usa
+
+Cada sesión de Copilot carga la configuración personal de la máquina: el MCP
+builtin de GitHub, los MCP de plugins (`workiq` aparece como `needs-auth` y
+reintenta autenticarse en cada sesión) y las skills personales. Ninguno lo usan
+Lorem, Zorem ni Sumrak. El adapter los desactiva con los flags oficiales del CLI
+(`--disable-builtin-mcps`, `--disable-mcp-server=<nombre>`) cuando `copilot --help`
+los anuncia; la línea `[start]` de `agent-execution.log` dice qué ocurrió:
+`mcpIsolation=builtin-mcps+mcp[workiq]` (aislado), `unsupported` (actualiza el
+CLI: la versión instalada no trae los flags), `no-help` (no se pudo ejecutar
+`copilot --help`), `off-by-env` (`RECORDER_COPILOT_ISOLATE=0`). La línea `[mcp]`
+lista los servidores que la sesión cargó de todos modos. Los MCP de plugins se
+aprenden en la primera sesión y quedan en `config/copilot-mcp-servers.json`; si
+quieres desactivarlos desde la primera sesión de una máquina nueva, define
+`RECORDER_COPILOT_DISABLED_MCP_SERVERS=workiq,otro`. Las skills personales
+siguen cargándose: no existe flag oficial para excluirlas y `COPILOT_HOME`
+aislado también movería la sesión autenticada.
+
+### Zorem busca `tsc`, `node_modules` o babel, o escribe scripts en `/tmp`
+
+Es la señal de que el modelo intenta verificar su Screen Object por su cuenta.
+El paquete de Zorem trae `tools/check.js` (contrato mecánico del Screen Object,
+JSON de locators y sintaxis TypeScript con el `typescript` del framework) y el
+prompt le indica que es su única verificación; si aun así lo hace, revisa que
+`agents/zorem/tools/` exista en el paquete (requiere `screen-object-contract.js`
+en la raíz del paquete) y que `node_modules/typescript` esté instalado en el
+framework destino; sin él, `check.js` lo avisa como NOTA y la sintaxis se
+comprueba al importar el resultado.
+
+### El progreso indica «Borrador determinista no disponible»
+
+El borrador de Derek no pudo materializarse y la corrida siguió sin él: Lorem y
+Zorem trabajan en secuencia, sin contrato de interfaz previo, y Zorem no recibe
+el helper `readRecordedText` del borrador, así que un caso con `VERIFICAR_TEXTO`
+tarda más y puede encadenar rondas de reparación. El motivo exacto está en
+`agents/derek/orchestration.json` (`draft.reason`, disponible aunque la corrida
+se corte) y en `layered-generation-run.json` (`draft`). Un
+`GENERATION_MATERIALIZATION_ERROR` sobre locator/getter apunta a un módulo de
+locators cuyo JSON no declara un bloque por plataforma reconocible por sufijo
+(`...Android`, `...Ios`/`...iOS`); corrige el JSON del framework o reporta el caso.
 
 ### La propuesta falla validación
 

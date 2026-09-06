@@ -27,6 +27,7 @@ import {
 import { readJsonUtf8, writeJsonUtf8 } from '../../../shared';
 import { AuthorRole, ROLE_LAYERS, ROLE_OUTPUTS } from './roles';
 import { artifact, writeHandoff } from './artifacts';
+import { gapJudgment } from './gapJudgment';
 
 export type BehaviorAuthoring = 'agent' | 'design-review' | 'deterministic';
 export type InteractionAuthoring = 'agent' | 'deterministic';
@@ -69,8 +70,13 @@ export function authoringNeeds(
     if (!rows.length || !draft?.actionTrace?.length || layers.size < 4) {
         return { ...agents, reason: 'sin borrador completo' };
     }
-    if ((plan.unresolvedGapIds || []).length) {
-        return { ...agents, reason: `${plan.unresolvedGapIds.length} gap(s) abiertos` };
+    // Solo cuentan los gaps que aun exigen juicio. Todo `update` lleva
+    // `gap-extend-existing-artifacts`, que Derek firma sin abrir sesion; con el
+    // plan crudo el atajo nunca se activaba en updates y Zorem corria 100 s
+    // para cambiar cinco imports (df0669f9, 05-09-2026).
+    const open = gapJudgment(packageDirectory, plan).open;
+    if (open.length) {
+        return { ...agents, reason: `${open.length} gap(s) abiertos: ${open.join(', ')}` };
     }
     const fresh = rows.filter(row => row.status !== 'reused' && row.wording !== 'memory');
     if (fresh.length) {

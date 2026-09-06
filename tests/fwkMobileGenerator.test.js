@@ -362,3 +362,66 @@ test('renderiza DataTable cuando la fila del escenario la incluye', () => {
     assert.match(preview.screenContent, /for \(const filtroValue of filtroValues\)/);
     assert.match(preview.screenContent, /this\.selectToday\(filtroValue\)/);
 });
+
+// Un `update` sobre un modulo legacy: el JSON existente organiza sus
+// plataformas como `yapearAndroid`/`yapearIos` y el Screen lo importa como
+// `LocatorOtp`. Nombrar por convencion (`yapearOtpAndroid`, `LocatorYapearOtp`)
+// dejaba las claves nuevas en un bloque que nadie lee y duplicaba el import;
+// el borrador determinista de TC-10239 abortaba por eso.
+test('un update respeta los bloques y el identificador del locator existente', () => {
+    const actions = [{
+        sequence: 1,
+        action: 'CLICK',
+        variableName: 'emailButton',
+        selector: '~Botón de enviar por correo',
+    }];
+    const request = {
+        squad: 'payment',
+        featureName: 'Enviar correo',
+        scenarioName: 'Enviar correo',
+        fileName: 'enviar-correo',
+        locatorModule: 'yapear-otp',
+        caseId: 'TC-10239',
+        pathType: 'Happy Path',
+        tag: 'enviar_correo',
+        platform: 'android',
+        scenarioRows: [{
+            keyword: 'When',
+            text: 'el usuario selecciona enviar por correo',
+            status: 'missing',
+            methodName: 'userSelectEmail',
+            actions,
+        }],
+    };
+
+    const preview = new FwkMobileGenerator().preview(request, actions, [], {
+        locatorNaming: { blocks: { android: 'yapearAndroid', ios: 'yapearIos' }, identifier: 'LocatorOtp' },
+    });
+
+    assert.deepEqual(Object.keys(JSON.parse(preview.locatorContent)), ['yapearAndroid', 'yapearIos']);
+    assert.match(preview.screenContent, /import LocatorOtp from '@locators\/payment\/yapear-otp\.locator\.json'/);
+    assert.match(preview.screenContent, /LocatorOtp\.yapearAndroid\.emailButton/);
+    assert.match(preview.screenContent, /LocatorOtp\.yapearIos\.emailButton/);
+    assert.doesNotMatch(preview.screenContent, /yapearOtpAndroid|LocatorYapearOtp/);
+});
+
+test('sin baseline el modulo nuevo sigue la convencion <camel>Android|Ios', () => {
+    const actions = [{ sequence: 1, action: 'CLICK', variableName: 'emailButton', selector: '~Enviar' }];
+    const request = {
+        squad: 'payment',
+        featureName: 'Enviar correo',
+        scenarioName: 'Enviar correo',
+        fileName: 'enviar-correo',
+        locatorModule: 'yapear-otp',
+        caseId: 'TC-10239',
+        pathType: 'Happy Path',
+        tag: 'enviar_correo',
+        platform: 'android',
+        scenarioRows: [{ keyword: 'When', text: 'el usuario envía', status: 'missing', methodName: 'send', actions }],
+    };
+
+    const preview = new FwkMobileGenerator().preview(request, actions, [], { locatorNaming: {} });
+
+    assert.deepEqual(Object.keys(JSON.parse(preview.locatorContent)), ['yapearOtpAndroid', 'yapearOtpIos']);
+    assert.match(preview.screenContent, /LocatorYapearOtp\.yapearOtpAndroid\.emailButton/);
+});

@@ -84,7 +84,11 @@ export type AgentProviderErrorCode =
     | 'AGENT_TIMEOUT'
     | 'AGENT_CANCELLED'
     | 'AGENT_NON_ZERO_EXIT'
-    | 'AGENT_OUTPUT_MISSING';
+    | 'AGENT_OUTPUT_MISSING'
+    /** Tras un feedback dirigido, la sesión no entregó una salida nueva en el plazo. */
+    | 'AGENT_FEEDBACK_IDLE'
+    /** La sesión dejó de emitir eventos durante más tiempo del tolerado. */
+    | 'AGENT_IDLE';
 
 export type AgentErrorCode = AgentDomainErrorCode | AgentProviderErrorCode;
 
@@ -113,6 +117,8 @@ export const DEFAULT_AGENT_FALLBACK_POLICY: AgentFallbackPolicy = {
     AGENT_CANCELLED: false,
     AGENT_NON_ZERO_EXIT: false,
     AGENT_OUTPUT_MISSING: false,
+    AGENT_FEEDBACK_IDLE: false,
+    AGENT_IDLE: false,
 };
 
 export function isAgentFallbackAllowed(

@@ -5,6 +5,7 @@ import { aliasImport, frameworkContract, projectPaths } from '../../workspace';
 import { frameworkLocator } from '../../indexing';
 import { withGeneratedFileMetadata } from '../application/generatedFileMetadata';
 import type { GeneratedPreview, ReusedLocator } from '../domain/generatedPreview';
+import type { LocatorNaming } from '../domain/locatorBlocks';
 import type {
     GenerationRequest,
     MobilePlatform,
@@ -88,7 +89,14 @@ function validateRelativeModule(value: string, label: string): string {
     return normalized;
 }
 
-function locatorBlockName(moduleName: string, platform: MobilePlatform): string {
+/**
+ * Bloque de plataforma del modulo. En un `update` manda el nombre que ya usa
+ * el JSON existente (`naming.blocks`); la convencion `<camel>Android|Ios`
+ * solo aplica a modulos nuevos o a la plataforma que el baseline no declara.
+ */
+function locatorBlockName(moduleName: string, platform: MobilePlatform, naming?: LocatorNaming): string {
+    const existing = naming?.blocks?.[platform];
+    if (existing) return existing;
     const base = path.posix.basename(moduleName);
     const camel = base.replace(/-([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
     return `${camel}${platform === 'android' ? 'Android' : 'Ios'}`;
@@ -103,6 +111,8 @@ export class FwkMobileGenerator {
             preserveDistinctActionLocators?: boolean;
             paths?: Partial<Pick<GeneratedPreview, 'featurePath' | 'stepPath' | 'screenPath' | 'locatorPath'>>;
             existingMethods?: Map<number, { name: string; args?: string[] }>;
+            /** Bloques e identificador del modulo de locators cuando ya existe en el framework. */
+            locatorNaming?: LocatorNaming;
         } = {},
     ): GeneratedPreview {
         const normalized = this.normalizeRequest(request);
@@ -147,7 +157,7 @@ export class FwkMobileGenerator {
         const locatorContent = locatorPath
             ? withGeneratedFileMetadata(
                 'locators',
-                this.buildLocators(normalized, locatorEntries),
+                this.buildLocators(normalized, locatorEntries, options.locatorNaming),
                 createdAt
             )
             : undefined;
@@ -167,7 +177,7 @@ export class FwkMobileGenerator {
             stepContent: stepPath && screenPath
                 ? withGeneratedFileMetadata(
                     'steps',
-                    this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath),
+                    this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath, options.existingMethods),
                     createdAt
                 )
                 : undefined,
@@ -182,6 +192,7 @@ export class FwkMobileGenerator {
                         locatorPath,
                         reusedByName,
                         options.existingMethods,
+                        options.locatorNaming,
                     ),
                     createdAt
                 )
@@ -437,7 +448,8 @@ export class FwkMobileGenerator {
 
     private buildLocators(
         request: GenerationRequest,
-        entries: [string, string][]
+        entries: [string, string][],
+        naming?: LocatorNaming,
     ): string {
         const active = Object.fromEntries(entries.map(([name, selector]) => [
             name,
@@ -447,8 +459,8 @@ export class FwkMobileGenerator {
         const android = request.platform === 'android' ? active : inactive;
         const ios = request.platform === 'ios' ? active : inactive;
         return JSON.stringify({
-            [locatorBlockName(request.locatorModule, 'android')]: android,
-            [locatorBlockName(request.locatorModule, 'ios')]: ios
+            [locatorBlockName(request.locatorModule, 'android', naming)]: android,
+            [locatorBlockName(request.locatorModule, 'ios', naming)]: ios
         }, null, 4) + '\n';
     }
 
@@ -456,7 +468,8 @@ export class FwkMobileGenerator {
         request: GenerationRequest,
         rows: NonNullable<GenerationRequest['scenarioRows']>,
         stepPath: string,
-        screenPath: string
+        screenPath: string,
+        existingMethods: Map<number, { name: string; args?: string[] }> = new Map(),
     ): string {
         const importPath = this.frameworkAlias(
             screenPath,
@@ -487,12 +500,25 @@ export class FwkMobileGenerator {
             const setup = dataTableBinding
                 ? [`    const ${dataTableBinding.callArgument} = ${dataTableBinding.extractExpression};`]
                 : [];
+            const returned = this.returnedTextAssertion(row.actions || [], existingMethods);
+            const assertion = returned
+                ? parseTextAssertion(returned.textAssertion, returned.action, returned.value)!
+                : undefined;
+            const call = `${screenInstanceName}.${methodName}(${callArgs})`;
             return {
                 key: `${keyword}:${expression}`,
+                asserts: Boolean(assertion),
                 content: [
                 `${keyword}(/^${expression}$/, async (${args}) => {`,
                 ...setup,
-                `    await ${screenInstanceName}.${methodName}(${callArgs});`,
+                ...(assertion
+                    ? [
+                        // El Step recibe la lectura y afirma el resultado de negocio
+                        // con el operador y el valor grabados, al lado del Gherkin.
+                        `    const actualText: string = await ${call};`,
+                        `    expect(actualText).${assertion.operator === 'contains' ? 'toContain' : 'toBe'}(${this.codeValue(returned!.value || '', parameters)});`,
+                    ]
+                    : [`    await ${call};`]),
                 `});`
                 ].join('\n')
             };
@@ -502,6 +528,7 @@ export class FwkMobileGenerator {
 
         return [
             `import { ${imports.join(', ')} } from '@wdio/cucumber-framework';`,
+            ...(blocks.some(block => block.asserts) ? [`import { expect } from '@wdio/globals';`] : []),
             `import ${screenInstanceName} from '${importPath}';`,
             '',
             ...blocks.flatMap(block => [block.content, ''])
@@ -527,6 +554,7 @@ export class FwkMobileGenerator {
         locatorPath?: string,
         reused: Map<string, ReusedLocator> = new Map(),
         existingMethods: Map<number, { name: string; args?: string[] }> = new Map(),
+        naming?: LocatorNaming,
     ): string {
         // Resueltos contra el framework en disco, no fijos: si BaseScreen o
         // LocatorFactory se mueven, el import generado se mueve con ellos.
@@ -537,15 +565,17 @@ export class FwkMobileGenerator {
         const locatorImport = locatorPath
             ? this.frameworkAlias(locatorPath, projectPaths.locators, '@locators')
             : undefined;
+        // Un Screen existente ya importa su JSON con un nombre (`LocatorOtp`):
+        // los getters nuevos lo reutilizan para no duplicar el import.
         const locatorIdentifier = locatorPath
-            ? locatorImportIdentifier(locatorPath)
+            ? naming?.identifier || locatorImportIdentifier(locatorPath)
             : undefined;
         const className = screenObjectNames(screenPath).className;
         // Los reutilizados quedan fuera del bloque propio: se referencian, no se crean.
         const locators = this.collectLocators(rows.flatMap(row => row.actions || []))
             .filter(([name]) => !reused.has(name));
-        const androidBlock = locatorBlockName(request.locatorModule, 'android');
-        const iosBlock = locatorBlockName(request.locatorModule, 'ios');
+        const androidBlock = locatorBlockName(request.locatorModule, 'android', naming);
+        const iosBlock = locatorBlockName(request.locatorModule, 'ios', naming);
 
         // Un locator reutilizado se referencia en su modulo de origen; copiarlo
         // aqui crearia una segunda fuente de verdad para el mismo elemento.
@@ -626,17 +656,19 @@ export class FwkMobileGenerator {
                 ...parameters.map(name => `${name}: string`),
                 ...(dataTableBinding ? [dataTableBinding.signature] : []),
             ].join(', ');
+            const returnsText = Boolean(this.returnedTextAssertion(rowActions, existingMethods));
             const actions = this.methodActions(rowActions, {
                 hasTimeout,
                 parameters,
                 dataTableBinding,
                 repetitionExecution: row.repetitionExecution,
                 existingMethods,
+                returnTextAssertion: returnsText,
             });
             return {
                 name: methodName,
                 content: [
-                `    public async ${methodName}(${args}): Promise<void> {`,
+                `    public async ${methodName}(${args}): Promise<${returnsText ? 'string' : 'void'}> {`,
                 ...(hasTimeout && actions.some(line => /\btimeout\b/.test(line))
                     ? [`        const timeout: number = ${contract.timeoutHelperSymbol}();`] : []),
                 ...actions.map(line => `        ${line}`),
@@ -706,7 +738,7 @@ export class FwkMobileGenerator {
         action: RecordedStep,
         parameters: string[],
         actionIndex: number,
-        options: { hasTimeout: boolean; next?: RecordedStep } = { hasTimeout: false }
+        options: { hasTimeout: boolean; next?: RecordedStep; returnText?: boolean } = { hasTimeout: false }
     ): string[] {
         const dynamicParameter = String(action.selector || '').match(/\{([A-Za-z_][A-Za-z0-9_]*)\}/)?.[1];
         const locator = action.variableName
@@ -734,10 +766,16 @@ export class FwkMobileGenerator {
             case 'VERIFICAR_TEXTO':
                 if (action.textAssertion && locator) {
                     const assertion = parseTextAssertion(action.textAssertion, action.action, action.value)!;
+                    // Page Object puro: el Screen lee el texto grabado y lo devuelve; la
+                    // expectativa de negocio vive en el Step, junto al Gherkin. Cuando la
+                    // fila no puede devolver una única lectura, la comparación se queda en
+                    // el Screen (forma heredada, también válida para el validador).
                     return [
                         ...displayed(locator, 'The element to validate was not displayed'),
                         `const actualText${actionIndex + 1} = await this.readRecordedText(await ${locator}, '${assertion.source}');`,
-                        `await expect(actualText${actionIndex + 1}).${assertion.operator === 'contains' ? 'toContain' : 'toBe'}(${value});`,
+                        options.returnText
+                            ? `return actualText${actionIndex + 1};`
+                            : `await expect(actualText${actionIndex + 1}).${assertion.operator === 'contains' ? 'toContain' : 'toBe'}(${value});`,
                     ];
                 }
                 return locator
@@ -908,6 +946,8 @@ export class FwkMobileGenerator {
                 parameter: string;
             };
             existingMethods: Map<number, { name: string; args?: string[] }>;
+            /** La fila termina en su única aserción de texto: el método devuelve la lectura y el Step compara. */
+            returnTextAssertion?: boolean;
         }
     ): string[] {
         // La intención explícita se materializa por acción: no comprimir comparaciones
@@ -917,6 +957,7 @@ export class FwkMobileGenerator {
                 this.existingMethodLines(action, options.existingMethods) || this.actionLines(action, options.parameters, actionIndex, {
                     hasTimeout: options.hasTimeout,
                     next: rowActions[actionIndex + 1],
+                    returnText: Boolean(options.returnTextAssertion) && actionIndex === rowActions.length - 1,
                 })
             );
         }
@@ -951,6 +992,24 @@ export class FwkMobileGenerator {
             `}`,
             ...postLines,
         ];
+    }
+
+    /**
+     * La accion cuya lectura devuelve el metodo de la fila: la unica con
+     * `textAssertion` explicita, situada al final y sin metodo existente que
+     * la reemplace. Con dos aserciones, o con acciones despues de la lectura,
+     * no hay un unico valor que devolver y la comparacion se queda en el Screen.
+     */
+    private returnedTextAssertion(
+        rowActions: RecordedStep[],
+        methods: Map<number, { name: string; args?: string[] }>,
+    ): RecordedStep | undefined {
+        const assertions = rowActions.filter(action => action.textAssertion);
+        if (assertions.length !== 1) return undefined;
+        const last = rowActions[rowActions.length - 1];
+        if (last !== assertions[0] || !last.variableName) return undefined;
+        if (methods.has(Number(last.sequence))) return undefined;
+        return last;
     }
 
     private existingMethodLines(

@@ -12,6 +12,7 @@ export type {
 } from './domain/generatedPreview';
 export * from './domain/deterministicDraft';
 export * from './domain/generationQuality';
+export * from './domain/locatorBlocks';
 export {
     GENERATED_FILE_AUTHOR,
     GENERATED_FILE_GENERATOR,
@@ -22,4 +23,4 @@ export * from './infrastructure/fwkMobileGenerator';
 export * from './infrastructure/deterministicGenerator';
 export * from './infrastructure/deterministicDraftBuilder';
 export * from './infrastructure/effectiveGenerationPlan';
-export { mergePatchImports, proposedImports } from './infrastructure/patchImports';
+export { mergePatchImports, missingImports, proposedImports } from './infrastructure/patchImports';

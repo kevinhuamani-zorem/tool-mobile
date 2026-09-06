@@ -479,3 +479,99 @@ test('denegación fuera de cwd se contabiliza como fuga y no corta ejecución', 
     assert.equal(result.deniedToolAttempts?.[0]?.pathClass, 'outside');
     fs.rmSync(cwd, { recursive: true, force: true });
 });
+
+// Una ronda de correccion que no cierra no debe esperar al hang stop: tras
+// rechazar la salida, si el agente no escribe una version distinta en el plazo,
+// la sesion termina con AGENT_FEEDBACK_IDLE y el orquestador decide.
+test('adapter corta la sesión si tras rechazar la salida no llega una corrección en el plazo', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-feedback-idle-'));
+    fs.writeFileSync(path.join(root, 'response.schema.json'), JSON.stringify({ type: 'object' }));
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => fakeChild(), 'copilot', ['-p']);
+    setTimeout(() => fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: false })), 20);
+    const started = Date.now();
+    try {
+        const result = await adapter.execute({
+            cwd: root,
+            prompt: 'corrige',
+            timeoutMs: 10_000,
+            traceFile: './trace.log',
+            stopOnValidatedOutput: {
+                outputFile: './response.json',
+                schemaFile: './response.schema.json',
+                pollIntervalMs: 10,
+                feedbackIdleMs: 120,
+                acceptOutput: output => output.ok === true,
+            },
+        });
+        assert.equal(result.success, false);
+        assert.equal(result.errorCode, 'AGENT_FEEDBACK_IDLE');
+        assert.match(result.errorMessage, /no entregó una corrección en 0 s tras el feedback/);
+        assert.equal(result.timedOut, false);
+        assert.ok(Date.now() - started < 2_000);
+        const trace = fs.readFileSync(path.join(root, 'trace.log'), 'utf8');
+        assert.match(trace, /\[output-rejected\]/);
+        assert.match(trace, /\[feedback-idle\] Sin corrección 0 s después del feedback \(ronda 1\)/);
+        assert.match(trace, /feedbackIdleMs=120/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('una corrección dentro del plazo reinicia la espera y la sesión termina aceptada', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-feedback-idle-ok-'));
+    fs.writeFileSync(path.join(root, 'response.schema.json'), JSON.stringify({ type: 'object' }));
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => fakeChild(), 'copilot', ['-p']);
+    setTimeout(() => fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: false, attempt: 1 })), 20);
+    setTimeout(() => fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: false, attempt: 2 })), 120);
+    setTimeout(() => fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: true })), 220);
+    try {
+        const result = await adapter.execute({
+            cwd: root,
+            prompt: 'corrige',
+            timeoutMs: 10_000,
+            stopOnValidatedOutput: {
+                outputFile: './response.json',
+                schemaFile: './response.schema.json',
+                pollIntervalMs: 10,
+                feedbackIdleMs: 180,
+                acceptOutput: output => output.ok === true,
+            },
+        });
+        assert.equal(result.success, true, result.errorMessage);
+        assert.equal(result.errorCode, undefined);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('adapter corta una sesión muda por silencio y cada evento reinicia el plazo', async () => {
+    const silent = new CopilotCliAdapter((_command, _args, _options) => fakeChild(), 'copilot', ['-p']);
+    const started = Date.now();
+    const result = await silent.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 10_000, idleStopMs: 100 });
+    assert.equal(result.success, false);
+    assert.equal(result.errorCode, 'AGENT_IDLE');
+    assert.match(result.errorMessage, /dejó de emitir eventos durante 0 s/);
+    assert.ok(Date.now() - started < 2_000);
+
+    let child;
+    const chatty = new CopilotCliAdapter((_command, _args, _options) => {
+        child = fakeChild();
+        return child;
+    }, 'copilot', ['-p']);
+    const ticker = setInterval(() => child?.stdout.write(JSON.stringify({ type: 'assistant.reasoning_delta', data: {} }) + '\n'), 30);
+    setTimeout(() => { clearInterval(ticker); child.emit('close', 0, null); }, 260);
+    const alive = await chatty.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 10_000, idleStopMs: 100 });
+    assert.equal(alive.success, true, alive.errorMessage);
+    assert.equal(alive.errorCode, undefined);
+});
+
+test('idleStopMs y feedbackIdleMs en 0 desactivan los cortes por inactividad', async () => {
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        setTimeout(() => child.emit('close', 0, null), 150);
+        return child;
+    }, 'copilot', ['-p']);
+    const result = await adapter.execute({ cwd: process.cwd(), prompt: 'hola', timeoutMs: 10_000, idleStopMs: 0 });
+    assert.equal(result.success, true);
+    assert.equal(result.errorCode, undefined);
+});

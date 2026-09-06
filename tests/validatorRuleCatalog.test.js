@@ -110,3 +110,23 @@ test('el contrato publica requisitos positivos y ejemplo minimo por regla', () =
         assert.ok(rule.minimalExample && rule.minimalExample.length > 0, `Falta ejemplo en ${code}`);
     }
 });
+
+// `codeStructureRules` reemite los codigos de `screenObjectProblems` de forma
+// dinamica (`code: problem.code`), asi que el catalogo no los veia y el agente
+// solo podia aprender esas once reglas leyendo screen-object-contract.js.
+test('el catálogo incluye las once reglas mecánicas del Screen Object con ejemplo', () => {
+    const { SCREEN_OBJECT_CONTRACT_RULE_CODES } = require('../dist/core/automation/contracts');
+    const contract = buildValidationRuleContractFromFile(defaultValidatorSourcePath());
+    const byCode = new Map(contract.rules.map(rule => [rule.code, rule]));
+    assert.equal(SCREEN_OBJECT_CONTRACT_RULE_CODES.length, 11);
+    for (const code of SCREEN_OBJECT_CONTRACT_RULE_CODES) {
+        const rule = byCode.get(code);
+        assert.ok(rule, `falta ${code} en el catálogo`);
+        assert.ok(rule.requirement.length > 20, `${code} sin requisito`);
+        assert.ok(rule.minimalExample, `${code} sin ejemplo mínimo`);
+        assert.equal(rule.needsExplanation, false);
+    }
+    // Solo cuando la fuente invoca al contrato: el orquestador sigue declarando `preview`.
+    assert.deepEqual(validatorRuleCodesFromSource("errors.push({ code: 'preview' })"), ['preview']);
+    assert.ok(validatorRuleCodesFromSource('screenObjectProblems(content, rules)').includes('getElement-arity'));
+});

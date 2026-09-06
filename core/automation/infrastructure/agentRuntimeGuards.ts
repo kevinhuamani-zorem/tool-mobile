@@ -39,6 +39,40 @@ export function resolveAgentHangStopMs(raw: unknown = process.env.RECORDER_AGENT
     return Math.max(1, Math.floor(value));
 }
 
+/**
+ * Plazo para una correccion tras un feedback dirigido (`output-rejected`).
+ *
+ * El hang stop protege contra una sesion colgada, no contra una que sigue
+ * "trabajando" sin cerrar la ronda: en TC-10239 Zorem llevaba 5 minutos
+ * corrigiendo sin entregar y el QA solo veia que tardaba. Si tras rechazar
+ * la salida no llega una version nueva en este plazo, la sesion se corta y
+ * Derek relanza al autor con el feedback ya escrito (o falla con el detalle
+ * si las rondas se agotaron). Cinco minutos por defecto; 0 lo desactiva.
+ */
+export const DEFAULT_AGENT_FEEDBACK_IDLE_MS = 300_000;
+
+export function resolveAgentFeedbackIdleMs(raw: unknown = process.env.RECORDER_AGENT_FEEDBACK_IDLE_MS): number {
+    if (raw === undefined || raw === null || raw === '') return DEFAULT_AGENT_FEEDBACK_IDLE_MS;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return DEFAULT_AGENT_FEEDBACK_IDLE_MS;
+    return Math.floor(value);
+}
+
+/**
+ * Silencio maximo de la sesion (sin eventos en stdout/stderr). Una llamada al
+ * modelo larga o una herramienta que Copilot corta a los 120 s producen
+ * huecos de unos dos minutos (medido: 120 s); diez minutos sin ningun evento
+ * es una sesion muerta, no una que piensa. 0 lo desactiva.
+ */
+export const DEFAULT_AGENT_IDLE_STOP_MS = 600_000;
+
+export function resolveAgentIdleStopMs(raw: unknown = process.env.RECORDER_AGENT_IDLE_STOP_MS): number {
+    if (raw === undefined || raw === null || raw === '') return DEFAULT_AGENT_IDLE_STOP_MS;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return DEFAULT_AGENT_IDLE_STOP_MS;
+    return Math.floor(value);
+}
+
 export function resolveAgentExecutionMode(
     mode?: string | null,
 ): AgentExecutionMode {

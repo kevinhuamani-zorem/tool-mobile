@@ -3,6 +3,14 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { normalizeAgentModel } from '../domain/agentModel';
 import { copilotPermissionArgs } from './copilotPermissions';
+import {
+    configuredDisabledMcpServers,
+    copilotIsolationEnabled,
+    DISABLE_BUILTIN_MCPS_FLAG,
+    DISABLE_MCP_SERVER_FLAG,
+    normalizeServerNames,
+    readRememberedMcpServers,
+} from './copilotIsolation';
 import { spawn } from 'child_process';
 import { AutomationAgent } from '../../workspace';
 import { resolveRecorderGenerationMode } from '../contracts';
@@ -15,8 +23,19 @@ export interface LaunchResult {
     requestedModel?: string;
 }
 
+export interface AutomationAgentLauncherOptions {
+    /** Mismo archivo que usa CopilotCliAdapter para recordar MCP personales. */
+    mcpServersFile?: string;
+}
+
+/** Solo nombres que viajan seguros sin comillas dentro del script de zsh. */
+const SHELL_SAFE_SERVER_NAME = /^[\w.@:-]+$/;
+
 export class AutomationAgentLauncher {
-    constructor(private readonly runner: typeof spawn = spawn) {}
+    constructor(
+        private readonly runner: typeof spawn = spawn,
+        private readonly options: AutomationAgentLauncherOptions = {},
+    ) {}
 
     private shellQuote(value: string): string {
         return `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -33,6 +52,29 @@ export class AutomationAgentLauncher {
         );
         if (flagIndex < 0) return [...args, prompt];
         return [...args.slice(0, flagIndex + 1), prompt, ...args.slice(flagIndex + 1)];
+    }
+
+    /**
+     * Lineas de zsh que anaden los flags de aislamiento MCP solo si el CLI
+     * instalado los anuncia en `--help`; asi el modo visible aisla igual que
+     * el headless sin bloquear el proceso principal con una sonda sincrona.
+     */
+    private isolationScriptLines(command: string): { lines: string[]; expansion: string } {
+        if (!copilotIsolationEnabled()) return { lines: [], expansion: '' };
+        const servers = normalizeServerNames([
+            ...configuredDisabledMcpServers(),
+            ...readRememberedMcpServers(this.options.mcpServersFile),
+        ]).filter(server => SHELL_SAFE_SERVER_NAME.test(server));
+        const lines = [
+            `copilot_help="$(${this.shellQuote(command)} --help 2>&1 || true)"`,
+            'isolation=""',
+            `case "$copilot_help" in *${DISABLE_BUILTIN_MCPS_FLAG}*) isolation="${DISABLE_BUILTIN_MCPS_FLAG}";; esac`,
+        ];
+        if (servers.length > 0) {
+            const flags = servers.map(server => `${DISABLE_MCP_SERVER_FLAG}=${server}`).join(' ');
+            lines.push(`case "$copilot_help" in *${DISABLE_MCP_SERVER_FLAG}*) isolation="$isolation ${flags}";; esac`);
+        }
+        return { lines, expansion: ' ${=isolation}' };
     }
 
     private withModelArg(args: string[]): string[] {
@@ -135,14 +177,16 @@ export class AutomationAgentLauncher {
             ...args.map(value => this.shellQuote(value)),
         ].join(' ');
         const launchScript = path.join(packageDirectory, `.recorder-copilot-${sessionId}.sh`);
+        const isolation = this.isolationScriptLines(command);
         const script = [
             '#!/bin/zsh',
             'set -u',
             `cd ${this.shellQuote(packageDirectory)}`,
             `cleanup() { /bin/rm -f ${this.shellQuote(promptFile)} ${this.shellQuote(launchScript)}; }`,
             'trap cleanup EXIT INT TERM',
+            ...isolation.lines,
             `echo ${this.shellQuote('[recorder] Copilot recibió el prompt del recorder. La revisión se abrirá al terminar.')}`,
-            shellCmd,
+            `${shellCmd}${isolation.expansion}`,
         ].join('\n') + '\n';
         fs.writeFileSync(launchScript, script, { encoding: 'utf8', mode: 0o700 });
         const terminalCommand = `${this.shellQuote('/bin/zsh')} ${this.shellQuote(launchScript)}`;

@@ -108,6 +108,26 @@ Estos flags no suprimen autenticación ni confianza inicial de carpeta, ni
 constituyen aislamiento de los intérpretes. No se modifica la configuración
 global de Copilot ni se aprueban URLs o rutas globalmente.
 
+- Aislamiento de MCP personales (`copilotIsolation.ts`). Cada sesión headless
+  arranca con todo lo que el CLI tiene instalado en la máquina: el MCP builtin
+  de GitHub (sus instrucciones entran al system prompt), los MCP de plugins
+  personales (por ejemplo `workiq`, que reintenta autenticarse en cada sesión)
+  y las skills personales. Lorem, Zorem y Sumrak nunca los usan. El adapter
+  sondea `copilot --help` una vez por proceso y añade solo los flags que el CLI
+  instalado anuncia: `--disable-builtin-mcps` y un `--disable-mcp-server=<nombre>`
+  por cada servidor no builtin conocido. Los servidores se aprenden del evento
+  `session.mcp_servers_loaded` (traza `[mcp]` en `agent-execution.log`) y se
+  recuerdan en `config/copilot-mcp-servers.json` para desactivarlos desde la
+  primera sesión del siguiente arranque; `RECORDER_COPILOT_DISABLED_MCP_SERVERS`
+  (lista separada por comas) los fija sin esperar a aprenderlos y
+  `RECORDER_COPILOT_ISOLATE=0` desactiva todo el aislamiento. La traza `[start]`
+  informa `mcpIsolation=builtin-mcps+mcp[workiq]`, `unsupported` (la ayuda no
+  anuncia los flags), `no-help` (no se pudo sondear), `off-by-env` o
+  `disabled` (adapter construido sin `isolateMcp`). El modo visible aplica la
+  misma sonda dentro del script de zsh. Las skills personales no tienen flag
+  oficial: la única vía es `COPILOT_HOME` aislado, que también mueve la sesión
+  autenticada, por eso no se aplica por defecto.
+
 ## Wizard de finalización (UX producto)
 
 El helper privado `review/copilotModelControls.js` gestiona preferencia,
@@ -259,9 +279,14 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
 1. Mantén los contratos JSON versionados en `automationContracts.ts`.
 2. Resuelve localmente selector, reuse, rutas y trazabilidad antes del agente.
 3. Mide los objetivos de 120 000 bytes y 300 000 ms por etapa; excederlos
-   produce avisos, no cancela la sesión. El hang stop independiente es de una
-   hora por defecto (`RECORDER_AGENT_HANG_STOP_MS`). Conserva los límites de
-   reparación del plan; no los amplíes sin decisión explícita y métricas.
+   produce avisos, no cancela la sesión. Los cortes son detectores de sesión
+   que no avanza, no presupuestos: hang stop de una hora
+   (`RECORDER_AGENT_HANG_STOP_MS`), silencio total de eventos de diez minutos
+   (`RECORDER_AGENT_IDLE_STOP_MS`) y cinco minutos sin corrección tras un
+   `output-rejected` (`RECORDER_AGENT_FEEDBACK_IDLE_MS`; el orquestador relanza
+   al autor con el feedback hasta agotar las rondas). Un valor 0 desactiva los
+   dos últimos. Conserva los límites de reparación del plan; no los amplíes sin
+   decisión explícita y métricas.
 4. Añade pruebas de resolver, paquete, validator y memoria.
 5. Un resultado solo entra a memoria después de escritura revisada y score 100.
 
