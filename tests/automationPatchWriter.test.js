@@ -153,7 +153,9 @@ test('inserta el getter tras el último getter y el método antes del cierre de 
     assert.ok(screen.indexOf('get mostrarMovimientos') < screen.indexOf('get btnDescargar'), 'el getter nuevo va después del existente');
     assert.ok(screen.indexOf('get btnDescargar') < screen.indexOf('elUsuarioConsulta'), 'los getters quedan antes de los métodos');
     assert.ok(screen.indexOf('elUsuarioConsulta') < screen.indexOf('elUsuarioDescarga'), 'el método nuevo va al final');
-    assert.match(screen, /\/\/ \[Appium Recorder\] rec-abc123/);
+    // Sin marcas de procedencia en el Screen: lo anadido se integra como
+    // codigo del framework; el rastro por simbolo vive en el registro.
+    assert.doesNotMatch(screen, /Appium Recorder|Author:/);
     assert.match(screen, /export default new FiltroScreen\(\);/);
     assert.match(screen, /await this\.uiHelper\.waitForDisplayed\(this\.mostrarMovimientos\);/);
 });
@@ -186,6 +188,7 @@ test('agrega la definición de step y el import del Screen si falta', t => {
     assert.match(steps, /el usuario consulta/);
     assert.ok(steps.indexOf('import otroScreen') < steps.indexOf('When(/^el usuario consulta'), 'el import va en el bloque de imports');
     assert.ok(steps.indexOf('When(/^el usuario consulta') < steps.indexOf('When(/^el usuario descarga'), 'la definición nueva va al final');
+    assert.doesNotMatch(steps, /Appium Recorder|Author:/, 'Steps sin marcas de procedencia');
 });
 
 test('agrega el escenario al final del Feature sin tocar los previos', t => {
@@ -198,7 +201,9 @@ test('agrega el escenario al final del Feature sin tocar los previos', t => {
     const feature = ctx.read('feature');
     assert.match(feature, /\[TC-1\]\[Happy Path\]\[AUTO-FRONT\] Consulta/);
     assert.match(feature, /\[TC-2\]\[Happy Path\]\[AUTO-FRONT\] Descarga/);
+    // El Feature es la unica capa con marca de procedencia, con su autor.
     assert.match(feature, /# \[Appium Recorder\] rec-abc123/);
+    assert.match(feature, /# Author: Kevinarnold\.zorem/);
     assert.ok(feature.indexOf('TC-1') < feature.indexOf('TC-2'));
 });
 

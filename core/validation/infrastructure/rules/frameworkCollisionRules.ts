@@ -1,13 +1,17 @@
 /**
  * Familia colisiones con el framework: lo propuesto no puede duplicar lo que
- * ya vive en el catalogo del squad.
+ * ya vive en el framework ni dejar lineas que Cucumber no resuelva a
+ * exactamente una definicion.
  *
- * Definiciones Gherkin equivalentes, escenarios con la misma secuencia de
- * steps y selectores que ya existen bajo otro nombre.
+ * Definiciones Gherkin equivalentes, lineas ambiguas o sin definicion,
+ * escenarios con la misma secuencia de steps y selectores que ya existen
+ * bajo otro nombre. Las definiciones se juzgan contra TODO el framework
+ * (todos los squads), que es lo que carga `wdio` al ejecutar; el catalogo del
+ * squad solo acota que se reutiliza.
  */
-import { selectorNormalization } from '../../../shared';
+import { matchingStepDefinitions, selectorNormalization, stepTextEscaping } from '../../../shared';
 import { changedLocatorValues, responseLocatorValues } from './locatorInspection';
-import { responseScenarioSteps } from './gherkinInspection';
+import { responseScenarioResolutions, responseScenarioSteps, stepDefinitionPatterns } from './gherkinInspection';
 import { PreviewRuleContext, RuleReport } from './ruleContext';
 
 export function frameworkCollisionRules(context: PreviewRuleContext, report: RuleReport): void {
@@ -18,10 +22,13 @@ export function frameworkCollisionRules(context: PreviewRuleContext, report: Rul
                 scenario.platform,
                 scenario.request.featureScope
             );
-            const stepsPath = response.files.find(file => file.layer === 'steps')?.path;
+            // Los catalogos de prueba antiguos solo traen `stepDefinitions`.
+            const frameworkDefinitions = catalog.frameworkStepDefinitions || catalog.stepDefinitions || [];
+            const stepsFile = response.files.find(file => file.layer === 'steps');
+            const stepsPath = stepsFile?.path;
             for (const definition of definitions) {
                 const normalizedDefinition = selectorNormalization.canonicalStepExpression(definition);
-                const collision = catalog.stepDefinitions.find(existing =>
+                const collision = frameworkDefinitions.find(existing =>
                     existing.file !== stepsPath
                     && (
                         existing.expression === definition
@@ -36,7 +43,60 @@ export function frameworkCollisionRules(context: PreviewRuleContext, report: Rul
                     });
                 }
             }
+            // Resolucion como la hace Cucumber: carga todas las definiciones del
+            // framework mas las propuestas, ignora el keyword y prueba cada
+            // regex contra cada linea expandida con Examples. Dos o mas
+            // coincidencias es `Multiple step definitions match` y el Scenario
+            // falla; cero es un step undefined. Un regex laxo de otro squad
+            // (`^el usuario ingresa su (.*) y (.*)$`) atrapa la frase nueva igual
+            // que la definicion propia, y eso solo se descubria ejecutando.
             const featurePath = response.files.find(file => file.layer === 'feature')?.path;
+            const resolutionPool = [
+                ...frameworkDefinitions
+                    .filter(existing => existing.file !== stepsPath)
+                    .map(existing => ({ expression: existing.expression, file: existing.file })),
+                ...stepDefinitionPatterns(stepsFile?.content || '')
+                    .map(expression => ({ expression, file: stepsPath || 'steps' })),
+            ];
+            const describe = (item: { expression: string; file: string }) =>
+                `${item.file} → ${item.expression.replace(/^\/([\s\S]+)\/$/, '$1')}`;
+            for (const outline of responseScenarioResolutions(preview.featureContent)) {
+                for (const line of outline.lines) {
+                    const ambiguous = line.expanded
+                        .map(text => ({ text, matches: matchingStepDefinitions(text, resolutionPool) }))
+                        .find(item => item.matches.length > 1);
+                    if (ambiguous) {
+                        const foreign = ambiguous.matches.filter(item => item.file !== stepsPath);
+                        const suggestion = foreign.length
+                            ? stepTextEscaping(line.raw, resolutionPool)
+                            : undefined;
+                        errors.push({
+                            code: 'step-ambiguous',
+                            message: `La línea «${line.raw}» del Scenario "${outline.title}" la resuelven ` +
+                                `${ambiguous.matches.length} definiciones y Cucumber la marcará ambigua ` +
+                                `(Multiple step definitions match): ${ambiguous.matches.map(describe).join(' | ')}. ` +
+                                (foreign.length
+                                    ? 'Reformula la frase para que solo la matchee tu definición (cambia el verbo o la ' +
+                                        `conjunción, sin sufijos: la captura final del regex ajeno se los come)` +
+                                        `${suggestion ? `, por ejemplo «${suggestion}»` : ''}, y actualiza la definición en Steps.`
+                                    : 'Deja una sola definición en Steps para esa frase.'),
+                            file: featurePath,
+                        });
+                        continue;
+                    }
+                    if (!frameworkDefinitions.length) continue;
+                    const undefinedText = line.expanded.find(text => matchingStepDefinitions(text, resolutionPool).length === 0);
+                    if (undefinedText !== undefined) {
+                        errors.push({
+                            code: 'step-undefined',
+                            message: `La línea «${line.raw}» del Scenario "${outline.title}" no la resuelve ninguna ` +
+                                'definición, ni de Steps ni del framework: al ejecutar queda undefined. Agrega su ' +
+                                'definición en Steps o, si es un step reutilizado, cópialo literal del borrador.',
+                            file: stepsPath,
+                        });
+                    }
+                }
+            }
             for (const proposed of responseScenarioSteps(preview.featureContent)) {
                 const collision = (catalog.scenarios || []).find(existing =>
                     existing.file !== featurePath &&

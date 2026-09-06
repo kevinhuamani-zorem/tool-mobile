@@ -16,7 +16,6 @@ import {
     AgentRunStore,
     AgentOrchestrator,
     LayeredGenerationOrchestrator,
-    QaRoastGenerationService,
 } from '../../../core/automation';
 import { RecordingCoverageAnalyzer } from '../../../core/coverage';
 import { AutomationResponseValidator } from '../../../core/validation';
@@ -46,7 +45,6 @@ export interface AutomationHandlersContext {
     automationAgentLauncher: AutomationAgentLauncher;
     agentOrchestrator: AgentOrchestrator;
     layeredGenerationOrchestrator: LayeredGenerationOrchestrator;
-    qaRoastGenerator: QaRoastGenerationService;
     deterministicGenerator: DeterministicGenerator;
     automationResponseValidator: AutomationResponseValidator;
     automationMemory: AutomationMemory;
@@ -66,7 +64,6 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         automationAgentLauncher,
         agentOrchestrator,
         layeredGenerationOrchestrator,
-        qaRoastGenerator,
         deterministicGenerator,
         automationResponseValidator,
         automationMemory,
@@ -90,7 +87,6 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         automationAgentLauncher,
         agentOrchestrator,
         layeredGenerationOrchestrator,
-        qaRoastGenerator,
         responseImporter,
         emitProgress: emitAutomationProgress,
     });

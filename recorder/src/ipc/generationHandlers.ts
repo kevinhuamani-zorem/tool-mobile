@@ -220,7 +220,6 @@ export function registerGenerationHandlers(context: GenerationHandlersContext): 
             const allBlocks = [...existingBlocks, ...newBlocks];
 
             const tsContent = [
-                `// Generado por Appium Recorder — ${date}`,
                 `import { Given } from '@cucumber/cucumber';`,
                 `import { PageFactory } from '../pageFactory';`,
                 '',

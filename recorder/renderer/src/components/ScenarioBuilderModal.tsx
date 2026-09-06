@@ -190,7 +190,6 @@ export function ScenarioBuilderModal() {
                 </button>
               </div>
               <div id="testDesignSuggestionSummary" className="wizard-help" />
-              <div id="testDesignSuggestionRoast" className="qa-roast-message" style={{display: 'none'}} />
               <ul id="testDesignSuggestionIssues" />
             </section>
             <section id="qaObservationsPanel" className="qa-observations-panel" style={{display: 'none'}}>

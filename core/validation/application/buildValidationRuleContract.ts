@@ -218,6 +218,19 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'features/yape-features/autoatencion/native/movements/happy-path-movements.feature\n' +
             'Given el usuario <username> inicia sesión en Yape',
     },
+    'step-ambiguous': {
+        requirement: 'Cada línea del Feature debe resolver a exactamente una step definition de todo el framework: Cucumber carga las de todos los squads, no distingue Given de When y un regex ajeno con capturas que atrape la frase la deja ambigua (Multiple step definitions match). Si collision-report.json marca un regex con swallows, hay que cambiar la redacción de la frase (verbo o conjunción), no sufijarla.',
+        minimalExample:
+            '# ^el usuario ingresa su (.*) y (.*)$ (login) atrapa «el usuario ingresa su correo <email> y selecciona enviar»\n' +
+            'When el usuario escribe su correo <email> y selecciona enviar\n' +
+            'When(/^el usuario escribe su correo (.*) y selecciona enviar$/, async (email: string) => { ... });',
+    },
+    'step-undefined': {
+        requirement: 'Toda línea del Feature debe tener su definición en Steps, o copiarse literal si reutiliza una definición existente del framework: una línea que ningún regex resuelve queda undefined al ejecutar.',
+        minimalExample:
+            'When el usuario selecciona enviar reporte de movimiento\n' +
+            'When(/^el usuario selecciona enviar reporte de movimiento$/, async () => { ... });',
+    },
     'framework-symbol': {
         requirement: 'Los simbolos usados en Screen/Steps deben existir en el contrato del framework-api entregado.',
         minimalExample:

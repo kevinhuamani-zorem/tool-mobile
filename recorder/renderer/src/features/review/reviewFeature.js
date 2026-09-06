@@ -9,7 +9,7 @@
 // feature); nunca copia ese estado.
 
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
-import { isQaRoastModeEnabled, isInheritDesignReviewEnabled } from '../shared/recorderPreferences.js';
+import { isInheritDesignReviewEnabled } from '../shared/recorderPreferences.js';
 import { createCopilotModelControls } from './copilotModelControls.js';
 
 const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
@@ -62,7 +62,6 @@ export function createReviewFeature(deps) {
     const automationAgentSummaryDescription = document.getElementById('automationAgentSummaryDescription');
     const testDesignSuggestionsPanel = document.getElementById('testDesignSuggestionsPanel');
     const testDesignSuggestionSummary = document.getElementById('testDesignSuggestionSummary');
-    const testDesignSuggestionRoast = document.getElementById('testDesignSuggestionRoast');
     const testDesignSuggestionIssues = document.getElementById('testDesignSuggestionIssues');
     const btnImproveTestDesign = document.getElementById('btnImproveTestDesign');
     const automationPipelineExecution = document.getElementById('automationPipelineExecution');
@@ -247,17 +246,10 @@ export function createReviewFeature(deps) {
         if (!visible) {
             testDesignSuggestionIssues.innerHTML = '';
             if (testDesignSuggestionSummary) testDesignSuggestionSummary.textContent = '';
-            if (testDesignSuggestionRoast) testDesignSuggestionRoast.style.display = 'none';
             return;
         }
         if (testDesignSuggestionSummary) {
             testDesignSuggestionSummary.textContent = review.summary || 'Copilot encontró oportunidades de mejora.';
-        }
-        if (testDesignSuggestionRoast && isQaRoastModeEnabled() && review.roast) {
-            testDesignSuggestionRoast.style.display = '';
-            testDesignSuggestionRoast.textContent = review.roast;
-        } else if (testDesignSuggestionRoast) {
-            testDesignSuggestionRoast.style.display = 'none';
         }
         testDesignSuggestionIssues.innerHTML = review.issues.map(issue => {
             const sequences = Array.isArray(issue.actionSequences) && issue.actionSequences.length
@@ -816,7 +808,6 @@ export function createReviewFeature(deps) {
             const launched = await api.launchAutomationAgent({
                 mode: 'automatic',
                 model,
-                qaRoastMode: isQaRoastModeEnabled(),
                 inheritDesignReview: isInheritDesignReviewEnabled(),
             });
             await copilotModel.refresh();

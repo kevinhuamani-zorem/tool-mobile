@@ -335,7 +335,9 @@ test('gap-resolutions acepta wording Gherkin trazado y rechaza secuencias duplic
     assert.equal(invalid.errors.some(error => error.code === 'duplicate-gherkin-sequence'), true);
 });
 
-test('gap-resolutions valida la revisión funcional sin acoplarla al roast', () => {
+// El campo `roast` de artefactos anteriores (QA Roast Mode, retirado) se
+// tolera al leer y nunca se conserva en la revisión normalizada.
+test('gap-resolutions valida la revisión funcional e ignora el campo roast heredado', () => {
     const valid = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
         testDesignReview: {
@@ -352,7 +354,7 @@ test('gap-resolutions valida la revisión funcional sin acoplarla al roast', () 
     }), 20);
     assert.equal(valid.valid, true);
     assert.equal(valid.value.testDesignReview.status, 'suggestion');
-    assert.match(valid.value.testDesignReview.roast, /Tocaste tres filtros/);
+    assert.equal(valid.value.testDesignReview.roast, undefined);
 
     const missingRoast = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],
@@ -380,6 +382,7 @@ test('gap-resolutions valida la revisión funcional sin acoplarla al roast', () 
         },
     }), 20);
     assert.equal(blandRoast.valid, true);
+    assert.equal(blandRoast.value.testDesignReview.roast, undefined);
 
     const invalid = parseGapResolutions(JSON.stringify({
         schemaVersion: '1.0', recordingId: 'rec-1', planId: 'plan-1', resolutions: [],

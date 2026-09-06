@@ -194,10 +194,12 @@ generadores, validadores o plantillas.
   `@utils` y `@locators`; no generan rutas relativas hacia módulos del
   framework. `browser` se importa desde `@wdio/globals` solo cuando el archivo
   contiene una llamada `browser.`.
-- El recorder, no el agente, agrega metadata uniforme a las cuatro capas:
-  generador, `Author: Kevinarnold.zorem` y fecha ISO de creación. Locators usa
-  `_metadata` porque JSON no admite comentarios; los indexadores deben ignorar
-  ese bloque.
+- El recorder, no el agente, agrega la metadata de procedencia, y solo en el
+  Feature (generador, `Author: Kevinarnold.zorem` y fecha ISO). Steps, Screen
+  Object y Locators no llevan cabecera ni comentarios por método: deben
+  parecer código del framework; la trazabilidad por símbolo vive en
+  `config/generated-files.json`. Los indexadores deben ignorar un `_metadata`
+  heredado en Locators.
 - Recording, paquete, respuesta del agente y archivos generados usan UTF-8
   estricto, normalización Unicode NFC y ningún BOM. Conserva literalmente
   tildes, eñes y diacríticos de selectores verificados; U+FFFD y mojibake como
@@ -211,6 +213,14 @@ generadores, validadores o plantillas.
   plan crea Feature/Steps y marca Screen/Locators como `update`. `update` puede
   ser una referencia pura: conserva el baseline sin cambios cuando las APIs
   existentes cubren todas las acciones y añade únicamente símbolos faltantes.
+- Cada línea del Feature resuelve a exactamente una step definition de todo
+  el framework, como lo hace Cucumber (carga todos los squads, ignora el
+  keyword, expande Examples). Reutilizar (`stepDefinitions`, squad + commons)
+  y colisionar (`frameworkStepDefinitions`, todos los squads) son preguntas
+  distintas; `core/shared/domain/stepMatching.ts` es la única resolución. Una
+  frase atrapada por un regex ajeno con capturas se reformula (verbo o
+  conjunción), nunca se sufija; el validador la rechaza como `step-ambiguous`
+  o `step-undefined` (ambas de Lorem).
 - Los tags de plataforma reflejan cobertura completa: `@android` para Android
   y `@ios` solo cuando todos los locators requeridos de iOS estén disponibles.
 - Una propuesta solo debe cubrir la plataforma del recording. El bloque de la

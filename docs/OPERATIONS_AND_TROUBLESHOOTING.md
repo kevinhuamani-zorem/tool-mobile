@@ -327,6 +327,26 @@ a memoria (`runtime/automation-memory/index.json` con `qualityScore: 100`),
 borra esa entrada y sus fragmentos (`fragments.json`, mismo `fingerprint`) para
 que no se replique en la siguiente grabación.
 
+### Al ejecutar, Cucumber reporta «Multiple step definitions match» o un step undefined
+
+Síntoma: el caso generado tiene su definición en Steps, pero al correrlo
+Cucumber encuentra dos definiciones para la misma línea (o ninguna) y el
+Scenario falla. Causa habitual: un regex laxo de **otro squad** que atrapa la
+frase por sus capturas, como `^el usuario ingresa su (.*) y (.*)$` en
+`autenticacion/login/login.steps.ts`, que resuelve «el usuario ingresa su
+correo <email> y selecciona enviar» con `username = "correo …"` y
+`password = "selecciona enviar"`. Cucumber carga todas las definiciones del
+framework y no distingue `Given` de `When`; el recorder ahora juzga las
+colisiones contra `frameworkStepDefinitions` (todos los squads), el borrador
+reformula la frase en vez de sufijarla (los sufijos no escapan de una captura
+final) y el validador rechaza `step-ambiguous` con la redacción sugerida y
+`step-undefined`. Un caso ya generado con la frase ambigua se corrige
+cambiando el verbo en el Feature y en su definición («el usuario escribe su
+correo <email> y …»); el step ajeno no se toca. Si el regex laxo es del propio
+framework y nadie más lo usa, acotarlo (por ejemplo `^el usuario ingresa su
+usuario (.*) y contraseña (.*)$`) elimina la mina para todos los squads, pero
+es una decisión del squad dueño.
+
 ### El Screen Object escribe el dato de la grabación en vez del parámetro
 
 Síntoma: el Gherkin trae `<email>` en Examples pero el Screen hace

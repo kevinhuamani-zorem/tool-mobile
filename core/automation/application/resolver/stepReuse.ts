@@ -15,7 +15,10 @@ import {
 import { FeatureScenarioInfo, LocatorInfo, SquadReuseCatalog, StepDefinitionInfo, inferredStrategy, strategyOf, strategyValue } from '../../../indexing';
 import {
     canonicalStepExpression as canonicalStepExpressionShared,
+    matchingStepDefinitions,
     normalizeStepText as normalizeStepTextShared,
+    stepTextEscaping,
+    swallowingStepDefinitions,
 } from '../../../shared';
 import { selectorAliases, titleFromSlug } from './naming';
 
@@ -73,19 +76,28 @@ export function stepSimilarity(left: string[], right: string[]): number {
     return (2 * common) / (a.size + b.size);
 }
 
+/**
+ * Todas las definiciones que Cucumber cargara al ejecutar. Los catalogos de
+ * prueba antiguos solo traen `stepDefinitions`; con ellos se juzga lo que hay.
+ */
+export function frameworkStepDefinitionsOf(
+    catalog: Pick<SquadReuseCatalog, 'stepDefinitions'> & Partial<Pick<SquadReuseCatalog, 'frameworkStepDefinitions'>>,
+): StepDefinitionInfo[] {
+    return catalog.frameworkStepDefinitions || catalog.stepDefinitions || [];
+}
+
+/**
+ * Una frase colisiona si alguna definicion del framework la resolveria al
+ * ejecutar (mismo texto canonico o un regex que la atrapa), sin importar el
+ * squad ni el keyword: Cucumber carga todas y no distingue Given de When.
+ */
 export function collidesWithFrameworkStep(
     text: string,
-    definitions: SquadReuseCatalog['stepDefinitions'],
+    definitions: ReadonlyArray<Pick<StepDefinitionInfo, 'expression'>>,
 ): boolean {
     const canonical = canonicalStepExpressionShared(text);
-    return definitions.some(definition => {
-        if (canonicalStepExpressionShared(definition.expression) === canonical) return true;
-        try {
-            return new RegExp(definition.expression).test(text);
-        } catch {
-            return false;
-        }
-    });
+    if (definitions.some(definition => canonicalStepExpressionShared(definition.expression) === canonical)) return true;
+    return matchingStepDefinitions(text, definitions).length > 0;
 }
 
 /** Texto literal de una expresion `^...$` sin metacaracteres; undefined si captura parametros. */
@@ -148,18 +160,36 @@ export function existingStepFor(
     return undefined;
 }
 
+/**
+ * Texto final de una fila nueva: el propio si nadie lo ocupa; si no, una
+ * variante que no colisione con ninguna definicion del framework ni con otra
+ * fila del caso.
+ *
+ * Cuando un regex ajeno con capturas atrapa la frase (`^el usuario ingresa
+ * su (.*) y (.*)$` de login traga «el usuario ingresa su correo <email> y
+ * selecciona enviar»), sufijar no sirve: la captura final se lo come igual.
+ * Ahi se cambia primero la redaccion (verbo sinonimo, conjuncion) y solo
+ * despues se recurre a los sufijos. Si nada escapa se devuelve el texto tal
+ * cual: el validador lo rechaza como `step-ambiguous` y el agente lo ve en
+ * `reservedStepExpressions`.
+ */
 export function disambiguateStepText(
     baseText: string,
     usedCanonicals: Set<string>,
-    definitions: SquadReuseCatalog['stepDefinitions'],
+    definitions: ReadonlyArray<Pick<StepDefinitionInfo, 'expression'>>,
     technicalName: string,
     caseId: string,
 ): string {
     const trimmed = String(baseText || '').trim().replace(/\s+/g, ' ');
     const scope = titleFromSlug(technicalName).toLowerCase();
     const caseToken = String(caseId || '').toLowerCase();
+    const reworded = swallowingStepDefinitions(trimmed, definitions).length
+        ? stepTextEscaping(trimmed, definitions, candidate =>
+            usedCanonicals.has(canonicalStepExpressionShared(candidate)))
+        : undefined;
     const candidates = [
         trimmed,
+        ...(reworded ? [reworded] : []),
         `${trimmed} en ${scope}`,
         `${trimmed} para ${scope}`,
         `${trimmed} para ${caseToken}`,

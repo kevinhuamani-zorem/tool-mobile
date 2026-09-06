@@ -161,7 +161,7 @@ export function designReviewPrompt(memoryCases: string[]): string {
         'Usa status "suggestion" si observas oportunidades de mejorar el diseño; son recomendaciones no bloqueantes: no exijas una aserción tras cada interacción, acepta una validación consolidada al final y no inventes requisitos fuera de acceptanceCriteria.',
         'Usa status "pass" cuando no tengas recomendaciones útiles.',
         'Los issue.code permitidos son missing-business-assertion, control-existence-only, acceptance-criteria-mismatch, missing-test-oracle, dependent-variants y ambiguous-objective. actionSequences solo puede referenciar acciones reales. Da al QA una recomendación concreta para volver a grabar.',
-        'No incluyas roast ni contenido humorístico.',
+        'No incluyas contenido humorístico ni juicios de valor.',
         'Escribe solo test-design-review.json y cumple result.schema.json. No explores el framework ni escribas fuera de esta carpeta.',
     ].join(' ');
 }

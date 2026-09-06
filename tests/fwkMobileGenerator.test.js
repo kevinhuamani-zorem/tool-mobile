@@ -81,7 +81,9 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.equal(Object.prototype.hasOwnProperty.call(locatorDocument, '_metadata'), false,
         'JSON no admite comentarios y `_metadata` es lo mismo con otro nombre');
     assert.deepEqual(Object.keys(locatorDocument), ['movementsAndroid', 'movementsIos']);
-    assert.match(preview.stepContent, /^\/\/ Generado por Appium Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
+    // La metadata de procedencia vive solo en el Feature: Steps y Screen salen
+    // como codigo del framework, sin cabecera.
+    assert.doesNotMatch(preview.stepContent, /Appium Recorder|Author:|Fecha de creación/);
     assert.match(preview.stepContent, /movementsScreen\.revisarMovimientos\(\)/);
     assert.match(preview.stepContent, /movementsScreen\.validarMovimiento\(movimiento\)/);
     assert.match(preview.stepContent, /import movementsScreen from/);
@@ -89,7 +91,8 @@ test('genera Feature, Steps, Locators y Screen Object para filas nuevas', () => 
     assert.doesNotMatch(preview.stepContent, /generatedScreen/);
     // Imports y símbolos salen del framework real, no de una constante del test.
     assert.ok(preview.screenContent.includes(`from '${CONTRACT.baseScreenImport}'`));
-    assert.match(preview.screenContent, /^\/\/ Generado por Appium Recorder\n\/\/ Author: Kevinarnold\.zorem\n\/\/ Fecha de creación: 2026-08-21T18:30:00\.000Z/m);
+    assert.doesNotMatch(preview.screenContent, /Appium Recorder|Author:|Fecha de creación/);
+    assert.match(preview.screenContent, /^import /, 'el archivo empieza por sus imports');
     assert.ok(preview.screenContent.includes(`from '${CONTRACT.locatorFactoryImport}'`));
     assert.ok(preview.screenContent.includes(`from '${CONTRACT.typeLocatorImport}'`));
     assert.ok(preview.screenContent.includes(`${CONTRACT.locatorFactorySymbol}.getElement(`),

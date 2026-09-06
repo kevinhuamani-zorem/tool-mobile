@@ -89,7 +89,17 @@ export interface SquadReuseCatalog {
     squad: string;
     featureScope: string;
     platform: 'android' | 'ios';
+    /** Definiciones del squad y de commons: las candidatas a reutilizar o extender. */
     stepDefinitions: StepDefinitionInfo[];
+    /**
+     * Todas las definiciones del framework, de todos los squads. Es lo que
+     * Cucumber carga al ejecutar (`features/yape-steps-definitions/**`), asi
+     * que una frase nueva colisiona con cualquiera de ellas aunque viva en
+     * otro squad: `^el usuario ingresa su (.*) y (.*)$` de autenticacion
+     * atrapa «el usuario ingresa su correo <email> y selecciona enviar» de
+     * payment. Reutilizar sigue acotado a `stepDefinitions`.
+     */
+    frameworkStepDefinitions: StepDefinitionInfo[];
     screenMethods: ScreenMethodInfo[];
     locators: LocatorInfo[];
     features: FeatureStepGroup[];
@@ -259,6 +269,7 @@ export class ReuseAnalyzer {
             featureScope: normalizedScope,
             platform,
             stepDefinitions,
+            frameworkStepDefinitions: this.getStepDefinitions(),
             screenMethods: this.getScreenMethods(squad),
             locators: this.indexLocators(squad, platform),
             features: this.indexFeatureSteps(squad, stepDefinitions, normalizedScope),

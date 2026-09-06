@@ -85,7 +85,7 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /const PRODUCT_STAGES = \[/);
     assert.match(review, /async function runAutomationPipeline\(\)/);
     assert.match(review, /if \(!prepare\.result\.responseAvailable\)/);
-    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{[\s\S]*?mode: 'automatic',[\s\S]*?qaRoastMode: isQaRoastModeEnabled\(\)/);
+    assert.match(review, /const launched = await api\.launchAutomationAgent\(\{[\s\S]*?mode: 'automatic',[\s\S]*?inheritDesignReview: isInheritDesignReviewEnabled\(\)/);
     assert.match(automationHandlers, /process\.env\.RECORDER_AGENT_PIPELINE === 'deterministic' \? 'deterministic' : 'layered'/);
     assert.match(automationHandlers, /new LayeredGenerationOrchestrator|layeredGenerationOrchestrator\.run/);
     assert.match(automationHandlers, /generationMode === 'layered'/);
@@ -161,7 +161,7 @@ test('main conserva Copilot visible para legacy y usa Derek con tres agentes hea
     assert.match(automationHandlers, /Zorem construye Screen Object y Locators/);
     assert.match(automationHandlers, /Sumrak integra y revisa la automatización/);
     assert.doesNotMatch(main, /openExecutionMonitor\(activeAutomationPackage\)/);
-    assert.match(review, /qaRoastMode: isQaRoastModeEnabled\(\)/);
+    assert.match(review, /inheritDesignReview: isInheritDesignReviewEnabled\(\)/);
     assert.match(review, /const imported = await importAutomationResponse\(true\);/);
     assert.match(review, /setWizardPage\(3\);/);
 });
@@ -188,43 +188,29 @@ test('una revisión funcional se muestra como sugerencia y no bloquea la automat
     assert.match(review, /setWizardPage\(3\)/);
 });
 
-test('QA Roast Mode es opcional y conserva el diagnóstico técnico', () => {
+// QA Roast Mode se retiró (06-09-2026): la revisión de diseño se presenta
+// solo con su diagnóstico técnico y ninguna sesión extra de Copilot la reescribe.
+test('la revisión de diseño se presenta sin roast ni sesión de presentación', () => {
     const configurationScreen = fs.readFileSync(path.join(
         root, 'recorder/renderer/src/components/ConfigurationScreen.tsx'
     ), 'utf8');
     const preferences = fs.readFileSync(path.join(
         root, 'recorder/renderer/src/features/shared/recorderPreferences.js'
     ), 'utf8');
-
-    assert.match(configurationScreen, /id="chkQaRoastMode"/);
-    assert.match(configurationScreen, /QA Roast Mode/);
-    assert.match(preferences, /getItem\(QA_ROAST_MODE_STORAGE_KEY\) === 'true'/);
-    assert.match(preferences, /removeItem\(QA_ROAST_MODE_STORAGE_KEY\)/);
-    assert.match(review, /isQaRoastModeEnabled\(\)/);
-    assert.match(review, /review\.roast/);
-    assert.match(review, /testDesignSuggestionRoast\.textContent = review\.roast/);
-    assert.doesNotMatch(review, /TEST_DESIGN_ROASTS/);
-    assert.match(modal, /Sugerencias de diseño del caso/);
-});
-
-test('el roast se genera en otra sesión y nunca bloquea el diagnóstico semántico', () => {
-    const orchestrator = fs.readFileSync(path.join(
+    const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
+    const prompts = fs.readFileSync(path.join(
         root, 'core/automation/infrastructure/agent/prompts.ts'
     ), 'utf8');
 
-    assert.match(orchestrator, /No incluyas roast ni contenido humorístico/);
-
-    const contracts = fs.readFileSync(path.join(
-        root, 'core/automation/domain/qaRoastContracts.ts'
-    ), 'utf8');
-    assert.match(contracts, /SARCASTIC_PUNCHLINE/);
-    assert.match(contracts, /Critica el caso, nunca a la persona/);
-
-    const main = fs.readFileSync(path.join(root, 'recorder/src/main.ts'), 'utf8');
-    const handlers = automationHandlers;
-    assert.match(main, /new CopilotQaRoastGenerator\(copilotCliAdapter\)/);
-    assert.match(handlers, /input\?\.qaRoastMode/);
-    assert.match(handlers, /qaRoastGenerator\.generate/);
+    for (const source of [configurationScreen, preferences, review, modal, main, automationHandlers]) {
+        assert.doesNotMatch(source, /roast/i);
+    }
+    assert.match(configurationScreen, /id="chkInheritDesignReview"/);
+    assert.match(preferences, /INHERIT_DESIGN_REVIEW_STORAGE_KEY/);
+    assert.match(modal, /Sugerencias de diseño del caso/);
+    assert.match(prompts, /No incluyas contenido humorístico ni juicios de valor/);
+    assert.equal(fs.existsSync(path.join(root, 'core/automation/domain/qaRoastContracts.ts')), false);
+    assert.equal(fs.existsSync(path.join(root, 'core/automation/infrastructure/copilotQaRoastGenerator.ts')), false);
 });
 
 test('el resumen del análisis muestra lo heredado de la memoria de otros casos', () => {

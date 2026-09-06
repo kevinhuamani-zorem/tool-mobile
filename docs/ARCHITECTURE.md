@@ -424,12 +424,8 @@ XML, screenshots, source, capabilities ni credenciales.
    acciones y aserciones. Si una interacción solo verifica que existe el control
    o carece de una aserción posterior sobre el resultado de negocio, Lorem
    publica una sugerencia en `test-design-review.json`; no bloquea la respuesta
-   ni obliga al QA a volver a grabar.
-   El roast no pertenece a PASS 2. Si la preferencia **QA Roast Mode** está
-   activa, `CopilotQaRoastGenerator` usa después el puerto
-   `QaRoastGenerationService` para abrir una sesión headless independiente con
-   contexto sanitizado. Su fallo es no bloqueante y el renderer siempre conserva
-   el diagnóstico estructurado.
+   ni obliga al QA a volver a grabar. La revisión se presenta tal cual, con su
+   diagnóstico estructurado; no hay ninguna sesión posterior de presentación.
 8. `AutomationResponseValidator` exige cuatro capas, trazabilidad y `Then`, y
    bloquea colisiones contra el framework aunque el agente ignore el contexto.
    La clase no contiene reglas: compone en un orden fijo las familias de

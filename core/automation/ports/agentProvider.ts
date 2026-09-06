@@ -10,7 +10,7 @@ export interface AgentProviderRunInput {
     agentName?: string;
     /** Nombre humano y estable de la sesión de Copilot. */
     sessionName?: string;
-    /** Disable interpreter approvals for presentation-only tasks such as QA roast. */
+    /** Disable interpreter approvals for sessions that only read and write (Lorem, Sumrak). */
     allowValidationScripts?: boolean;
     traceFile?: string;
     traceLabel?: string;

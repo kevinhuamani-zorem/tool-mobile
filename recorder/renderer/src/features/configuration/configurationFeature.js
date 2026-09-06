@@ -9,7 +9,6 @@
 
 import { disableBtn, enableBtn } from '../shared/domHelpers.js';
 import {
-    isQaRoastModeEnabled, setQaRoastModeEnabled,
     isInheritDesignReviewEnabled, setInheritDesignReviewEnabled,
 } from '../shared/recorderPreferences.js';
 
@@ -49,7 +48,6 @@ export function createConfigurationFeature(deps) {
     const btnChangeFrameworkInline = document.getElementById('btnChangeFrameworkInline');
     const btnSelectFrameworkRoot = document.getElementById('btnSelectFrameworkRoot');
     const chkRememberFramework = document.getElementById('chkRememberFramework');
-    const chkQaRoastMode = document.getElementById('chkQaRoastMode');
     const chkInheritDesignReview = document.getElementById('chkInheritDesignReview');
     const lblSavedEnvironment = document.getElementById('lblSavedEnvironment');
     const lblSavedSquad = document.getElementById('lblSavedSquad');
@@ -163,7 +161,6 @@ export function createConfigurationFeature(deps) {
     }
 
     function openFrameworkSetup() {
-        if (chkQaRoastMode) chkQaRoastMode.checked = isQaRoastModeEnabled();
         if (chkInheritDesignReview) chkInheritDesignReview.checked = isInheritDesignReviewEnabled();
         frameworkSetupModal.style.display = 'flex';
     }
@@ -544,7 +541,6 @@ export function createConfigurationFeature(deps) {
             } else {
                 localStorage.removeItem(FRAMEWORK_PREFERENCES_STORAGE_KEY);
             }
-            setQaRoastModeEnabled(Boolean(chkQaRoastMode?.checked));
             setInheritDesignReviewEnabled(Boolean(chkInheritDesignReview?.checked));
             state.linkedScenarioData = null;
             state.activeScenarioCoverage = null;

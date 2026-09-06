@@ -31,7 +31,6 @@ export * from './featureScope';
 export * from './repetitionDetector';
 export * from './elementDeclaration';
 
-
 export const AUTOMATION_SCHEMA_VERSION = 1;
 export const AUTOMATION_PIPELINE_VERSION = '1.0.0';
 export const AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION = 1;
@@ -664,30 +663,12 @@ export interface TestDesignReview {
     /** `qa-required` de artefactos anteriores se normaliza como `suggestion`. */
     status: 'pass' | 'suggestion';
     summary: string;
-    /** Compatibilidad/presentación: no forma parte del diagnóstico semántico. */
-    roast?: string;
     issues: TestDesignIssue[];
     /**
      * `memory`: el QA pidió heredar la revisión de los casos de origen y
      * ningún agente evaluó este caso. Ausente o `agent`: la evaluó Lorem.
      */
     source?: 'agent' | 'memory';
-}
-
-export interface QaRoastResponse {
-    schemaVersion: 1;
-    roast: string;
-}
-
-export interface QaRoastGenerationResult {
-    success: boolean;
-    roast?: string;
-    attempts: number;
-    repairAttempts: number;
-    durationMs: number;
-    responseBytes: number;
-    result: 'generated' | 'invalid-output' | 'provider-failed' | 'missing-output';
-    error?: string;
 }
 
 export interface AutomationAgentResponse {

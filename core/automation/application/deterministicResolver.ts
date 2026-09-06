@@ -23,6 +23,7 @@ import {
 import { ReuseAnalyzer, SquadReuseCatalog, CodeGraph, importsOf, indexModuleImports, roundTrip } from '../../indexing';
 import {
     canonicalStepExpression as canonicalStepExpressionShared,
+    matchingStepDefinitions,
     spanishTokens,
     translateToEnglish,
     translateToSlug,
@@ -93,6 +94,7 @@ import {
     normalizeStepText,
     existingStepFor,
     disambiguateStepText,
+    frameworkStepDefinitionsOf,
     frameworkCandidates,
 } from './resolver/stepReuse';
 import {
@@ -777,10 +779,13 @@ export class DeterministicResolver {
             // Una fila de memoria cuyo texto ya exista en el framework con otros
             // locators, o que se repita en este caso, se desambigua igual que
             // cualquier otra: reutilizar es adoptar el step, nunca colisionar.
+            // Contra TODO el framework: Cucumber carga las definiciones de
+            // todos los squads y un regex ajeno con capturas resuelve la
+            // frase igual que uno propio.
             return { ...row, text: disambiguateStepText(
                 row.text,
                 usedCanonicals,
-                catalog.stepDefinitions,
+                frameworkStepDefinitionsOf(catalog),
                 technicalName,
                 normalizedRequest.caseId,
             ) };
@@ -1043,18 +1048,15 @@ export class DeterministicResolver {
                 elementDeclarations: declarations,
                 frameworkAwareness: {
                     candidates,
-                    exactStepDefinitions: catalog.stepDefinitions.filter(definition =>
-                        uniqueScenarioRows.some(row => {
-                            if (
-                                selectorNormalization.canonicalStepExpression(definition.expression)
+                    // Definiciones de cualquier squad que resolverian alguna
+                    // fila al ejecutar: las que se reutilizan (misma expresion)
+                    // y las ajenas que atrapan una frase nueva por sus capturas.
+                    exactStepDefinitions: frameworkStepDefinitionsOf(catalog).filter(definition =>
+                        uniqueScenarioRows.some(row =>
+                            selectorNormalization.canonicalStepExpression(definition.expression)
                                 === selectorNormalization.canonicalStepExpression(row.text)
-                            ) return true;
-                            try {
-                                return new RegExp(definition.expression).test(row.text);
-                            } catch {
-                                return false;
-                            }
-                        })
+                            || matchingStepDefinitions(row.text, [definition]).length > 0
+                        )
                     ).map(definition => ({
                         expression: definition.expression,
                         file: definition.file,

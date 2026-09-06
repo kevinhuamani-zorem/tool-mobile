@@ -10,5 +10,6 @@ export * from './domain/englishIdentifiers';
 export * from './domain/selectorNormalization';
 export * from './domain/semanticNaming';
 export * from './domain/featureScope';
+export * from './domain/stepMatching';
 export * from './infrastructure/utf8Text';
 export * from './infrastructure/fileRollback';

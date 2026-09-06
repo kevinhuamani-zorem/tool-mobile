@@ -168,11 +168,17 @@ El presupuesto operativo del plan vive en una sola fuente (`GenerationPlan.budge
 En Fase 4.1, `maxContextBytes` se valida **por invocación**: PASS 1 y PASS 2
 usan contextos distintos y cada uno debe caber individualmente.
 
-Las cuatro capas llevan metadata de procedencia agregada por el recorder:
-`Generado por Appium Recorder`, `Author: Kevinarnold.zorem` y fecha ISO
-de creación. Feature usa comentarios `#`, Steps y Screen Object usan `//`, y
-Locators conserva JSON válido mediante un objeto raíz `_metadata`. Este objeto
-no forma parte del catálogo de locators.
+Solo el Feature lleva metadata de procedencia agregada por el recorder: la
+cabecera `# Generado por Appium Recorder`, `# Author: Kevinarnold.zorem` y
+`# Fecha de creación` (ISO) en un archivo nuevo, y la marca
+`# [Appium Recorder] <recordingId> · <fecha>` + `# Author` encima de un
+Scenario añadido a un Feature existente. Steps, Screen Object y Locators salen
+como código del framework, sin cabecera ni comentarios por método: git ya
+registra quién y cuándo, y qué grabación aportó cada símbolo vive en
+`config/generated-files.json` y en `package-provenance.json`, fuera del
+framework. Las cabeceras y marcas que versiones anteriores dejaron en archivos
+TypeScript ya generados no se retiran en un `update` (no se tocan líneas ajenas
+a lo añadido).
 
 ## Feature
 
@@ -271,6 +277,23 @@ Examples:
   locators que el caso ya resolvió como `reuse` para esa fila — ni uno más ni
   uno menos. Sin esa evidencia el texto se desambigua con un sufijo, como
   antes; nunca se adopta un step por el texto.
+- Cada línea del Feature debe resolver a **exactamente una** step definition
+  de **todo** el framework, que es como resuelve Cucumber: carga
+  `features/yape-steps-definitions/**` (todos los squads), no distingue
+  `Given` de `When` y prueba cada regex contra la línea ya expandida con
+  Examples. Dos coincidencias son `Multiple step definitions match` y el
+  Scenario falla; cero, un step undefined. El catálogo del squad
+  (`stepDefinitions`) sigue acotando qué se reutiliza o extiende, pero las
+  colisiones se juzgan contra `frameworkStepDefinitions`. Caso real
+  (TC-10239): `autenticacion/login/login.steps.ts` define
+  `^el usuario ingresa su (.*) y (.*)$`, que atrapa «el usuario ingresa su
+  correo <email> y selecciona enviar» de payment además de la definición
+  propia. Un regex con captura final se traga cualquier sufijo, así que el
+  borrador reformula la frase (verbo sinónimo: «el usuario escribe su correo
+  <email> y selecciona enviar»; o conjunción «, luego ») antes de sufijar;
+  `collision-report.json → reservedStepExpressions` marca con `swallows` los
+  regex que aún atrapan una frase, y el validador rechaza `step-ambiguous`
+  (con la reformulación sugerida) y `step-undefined`. Ambas son de Lorem.
 - El Screen Object se importa con
   `@screenobjects/<squad>/<modulo>.screen.ts`; no se admiten rutas relativas.
 - Un Steps planificado como `update` (el caso reutiliza el Screen Object de
@@ -767,15 +790,9 @@ grabación contiene un oráculo observable alineado con objetivo y aceptación.
 Verificar que aparece un botón, opción o campo antes de usarlo no demuestra su
 efecto funcional. Los hallazgos se presentan como sugerencias al QA y no
 bloquean la generación ni la importación de `agent-response.json`; el detalle
-se persiste en `test-design-review.json` sin prompts, XML ni capturas.
-Cuando el QA activa **QA Roast Mode**, el proceso principal inicia después una
-segunda sesión headless de Copilot. Esta recibe un `qa-roast-request.json`
-compacto con el diagnóstico, acciones relacionadas y ejemplos; escribe
-`qa-roast-response.json` bajo un schema independiente. Puede corregir una vez
-un tono inválido. Si falla o agota el tiempo, se descarta el roast y se conserva
-el diagnóstico técnico: la presentación nunca invalida `gap-resolutions.json`.
-La ejecución se audita en `qa-roast-run.json` sin guardar prompts, selectores,
-XML ni capturas.
+se persiste en `test-design-review.json` sin prompts, XML ni capturas. Un
+`roast` presente en artefactos anteriores (QA Roast Mode, retirado) se tolera al
+leer `gap-resolutions.json` y nunca se conserva en la revisión normalizada.
 
 El nombre del Screen Object es parte del contrato. Se deriva del basename de la
 ruta planificada en kebab-case: `movements-view.screen.ts` corresponde a la

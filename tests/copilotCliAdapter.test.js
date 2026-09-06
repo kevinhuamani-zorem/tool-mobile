@@ -35,7 +35,7 @@ test('permisos headless autorizan paquete y validadores sin habilitar permisos g
             assert.ok(captured.includes(flag), flag);
         }
         assert.equal(captured.some(arg => /^--allow-all|^--yolo|^--deny-tool=bash$/.test(arg)), false);
-        await adapter.execute({ cwd: root, prompt: 'roast', timeoutMs: 1000, allowValidationScripts: false });
+        await adapter.execute({ cwd: root, prompt: 'revisar', timeoutMs: 1000, allowValidationScripts: false });
         assert.ok(captured.includes('--deny-tool=shell'));
         assert.equal(captured.some(arg => arg.startsWith('--allow-tool=shell(')), false);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }

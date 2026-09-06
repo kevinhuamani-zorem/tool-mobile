@@ -2648,7 +2648,8 @@ test('package builder publica expresiones reservadas para evitar colisiones de s
         path.join(result.packageDirectory, 'instructions.md'), 'utf8'
     );
     assert.match(instructions, /reservedStepExpressions/);
-    assert.match(instructions, /DataTable NO desambigua/i);
+    assert.match(instructions, /DataTable \(no desambigua/i);
+    assert.match(instructions, /swallows/);
 });
 
 // Caso real: el agente inlinó el usuario dentro del Given y perdió la tilde de
@@ -3194,7 +3195,7 @@ test('el flujo de automatización cruza renderer, preload y main por IPC explíc
     assert.match(rendererCombined, /generateAutomationResponse/);
     assert.match(
         rendererCombined,
-        /launchAutomationAgent\(\{[\s\S]*mode: 'automatic',[\s\S]*qaRoastMode: isQaRoastModeEnabled\(\)[\s\S]*\}\)/,
+        /launchAutomationAgent\(\{[\s\S]*mode: 'automatic',[\s\S]*inheritDesignReview: isInheritDesignReviewEnabled\(\)[\s\S]*\}\)/,
     );
     assert.match(rendererCombined, /importAutomationResponse\(true\)/);
     assert.match(rendererCombined, /updateAutomationProgress\(/);

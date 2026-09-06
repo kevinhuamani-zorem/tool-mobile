@@ -100,9 +100,9 @@ Flags útiles del pipeline agentic:
   scripts anteriores; Lorem y Sumrak se lanzan con `allowValidationScripts: false`.
   El modo manual/heredado permite scripts según su configuración;
   no se añade `--deny-tool=bash`, que interfería con los comandos auxiliares.
-  `allowValidationScripts: false` conserva lectura/escritura y deniega shell
-  para la sesión de presentación del roast. Los overrides explícitos del
-  usuario en CLI_ARGS se conservan; una denegación tiene precedencia.
+  `allowValidationScripts: false` conserva lectura/escritura y deniega shell.
+  Los overrides explícitos del usuario en CLI_ARGS se conservan; una denegación
+  tiene precedencia.
 
 Estos flags no suprimen autenticación ni confianza inicial de carpeta, ni
 constituyen aislamiento de los intérpretes. No se modifica la configuración
@@ -182,12 +182,6 @@ y a Zorem únicamente Screen/Locators. Es una referencia editable: plan,
 candidatos autorizados y validadores siguen siendo la autoridad. Los paquetes
 de agentes ya no reciben `unresolved-context.json`; su contenido histórico está
 cubierto por `gaps.json`, `query-results.json` y los contextos proyectados.
-
-QA Roast Mode no altera esa pasada. Cuando `testDesignReview` contiene
-sugerencias y la preferencia está activa, el renderer envía `qaRoastMode` por
-IPC y el proceso principal ejecuta una segunda llamada headless mediante el
-adapter controlado. Esta llamada solo puede crear `qa-roast-response.json`; si
-falla, el wizard presenta el diagnóstico técnico sin roast.
 
 El progreso de ese pipeline lo emite `main.ts` por IPC (`automation-progress`) y
 el renderer solo refleja los estados backend (`ANALYZING`, `RESOLVING_CONTEXT`,

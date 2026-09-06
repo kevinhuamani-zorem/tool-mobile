@@ -152,12 +152,9 @@ export function gapResolutionsSchema(maxResolutions: number): Record<string, unk
                 properties: {
                     status: { enum: ['pass', 'suggestion', 'qa-required'] },
                     summary: { type: 'string', minLength: 8, maxLength: 500 },
-                    roast: {
-                        type: 'string',
-                        minLength: 20,
-                        maxLength: 280,
-                        description: 'Compatibilidad con respuestas anteriores. La presentación troll se genera fuera de la resolución semántica.',
-                    },
+                    // Campo de artefactos anteriores (QA Roast Mode, retirado): se
+                    // tolera al leer y nunca se conserva.
+                    roast: { type: 'string' },
                     issues: {
                         type: 'array',
                         maxItems: 8,
@@ -438,9 +435,6 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
             const summary = typeof review.summary === 'string'
                 ? review.summary.replace(/\s+/g, ' ').trim().slice(0, 500)
                 : '';
-            const roast = typeof review.roast === 'string'
-                ? review.roast.replace(/\s+/g, ' ').trim().slice(0, 280)
-                : '';
             const rawIssues = Array.isArray(review.issues) ? review.issues : undefined;
             if (!status) errors.push({
                 code: 'test-design-review-status',
@@ -503,7 +497,7 @@ export function validateGapResolutions(document: unknown, maxResolutions: number
                 message: 'suggestion necesita al menos un hallazgo.',
             });
             if (status && summary.length >= 8 && rawIssues && issues.length === rawIssues.length) {
-                normalizedTestDesignReview = { status, summary, ...(roast ? { roast } : {}), issues };
+                normalizedTestDesignReview = { status, summary, issues };
             }
         }
         if (errors.length > reviewErrorStart) {

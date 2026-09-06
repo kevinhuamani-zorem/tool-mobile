@@ -47,7 +47,7 @@ import { resolveAgentExecutionMode, resolvePackageArtifactPath } from './agentRu
 import { buildValidationRuleContractFromFile, defaultValidatorSourcePath } from '../../validation';
 import { scenarioEnglishVocabulary } from '../domain/agentResponseEnglishNormalizer';
 import { gapResolutionsSchema } from '../domain/gapResolutionContracts';
-import { readJsonUtf8, readUtf8File, writeJsonUtf8, writeUtf8FileAtomic } from '../../shared';
+import { matchingStepDefinitions, readJsonUtf8, readUtf8File, writeJsonUtf8, writeUtf8FileAtomic } from '../../shared';
 import {
     AutomationPackageProvenance,
     createAutomationPackageProvenance,
@@ -531,7 +531,7 @@ function instructions(result: ResolverResult): string {
         `Nota de modo: si RECORDER_GENERATION_MODE=deterministic, PASS 2 semántico escribe \`gap-resolutions.json\` y el recorder materializa \`agent-response.json\` de forma determinística.\n\n` +
         `Reglas:\n` +
         `- Prioriza exactitud y viabilidad del caso por encima de la rapidez.\n` +
-        `- En deterministic solo escribe query-requests.json o gap-resolutions.json. No edites agent-response.json ni archivos inmutables. Resuelve wording \"template\" en gherkinResolutions. Incluye testDesignReview como sugerencia no bloqueante y contrasta objetivo/aceptación con el efecto comprobado; acepta validaciones consolidadas y no inventes requisitos. No incluyas roast: la presentación opcional se genera en otra sesión.\n` +
+        `- En deterministic solo escribe query-requests.json o gap-resolutions.json. No edites agent-response.json ni archivos inmutables. Resuelve wording \"template\" en gherkinResolutions. Incluye testDesignReview como sugerencia no bloqueante y contrasta objetivo/aceptación con el efecto comprobado; acepta validaciones consolidadas y no inventes requisitos. No incluyas contenido humorístico ni juicios de valor.\n` +
         `- Empieza por hints.json, gaps.json, generation-plan.json y scenario.json. resolved-context.json y unresolved-context.json se conservan solo por compatibilidad.\n` +
         `- NO SEARCH WITHOUT GAP: no solicites contexto si no hay un gap abierto; usa únicamente sus allowedQueries y respeta maxQueries. Un gap blocked-qa no se entrega al agente.\n` +
         `- Consulta reuse-context.json o collision-report.json solo cuando la evidencia de un hint/gap apunte a ellos.\n` +
@@ -574,7 +574,7 @@ function instructions(result: ResolverResult): string {
         `- REUSO: si TypeLocator + selector normalizado coinciden, reutiliza ruta y nombre lógico existentes; el nombre no define identidad.\n` +
         `- Reemplazo pedido por QA: decision:'replace-existing', selectedCandidate y replacement:{platform:'${result.scenario.platform}',sequence:<acción>}. Tipo/selector salen de la grabación y se conserva la otra plataforma.\n` +
         `- CORRECCIÓN: modifica gap-resolutions.json, nunca agent-response.json; al reimportar el recorder rematerializa y valida las cuatro capas.\n` +
-        `- collision-report.json incluye \`reservedStepExpressions\`: expresiones ya ocupadas en el framework (forma canónica). Debes evitar regex/texto equivalente aunque cambie ^$, mayúsculas o agregues DataTable: DataTable NO desambigua definiciones idénticas.\n` +
+        `- collision-report.json incluye \`reservedStepExpressions\`: expresiones ya ocupadas en el framework (forma canónica, de cualquier squad). Evita regex/texto equivalente aunque cambie ^$, mayúsculas o agregues DataTable (no desambigua definiciones idénticas). Una entrada con \`swallows\` atrapa esa frase (step ambiguo): cámbiale el verbo o la conjunción, sin sufijos.\n` +
         `- Si reuse-context.json identifica un caso equivalente, conserva sus cuatro rutas y contenido.\n` +
         `- Un locator existente puede tener su hueco vacio en ${result.scenario.platform}, que es la plataforma de esta grabacion (casi el 40% de las claves compartidas de este framework estan asi). Adoptar esa clave sin rellenarla deja el getter resolviendo a "" y el caso falla al ejecutar. Para adoptarla, declara el relleno en \`completions\`: \`{ "file": "<ruta del .locator.json>", "name": "<clave>", "platform": "${result.scenario.platform}", "sequence": <accion que capturo ese elemento> }\`. NO escribas el selector: lo copia el recorder de esa accion de la grabacion. Solo vale si la clave YA existe en el bloque de ${result.scenario.platform} y esta vacia; si la clave no esta en ese bloque, ese modulo no declara el elemento para esa plataforma y hay que crear el locator en el modulo de este caso.\n` +
         '- Cada completion debe coincidir exactamente con un `completionTargets` del plan; file, modulo, bloque, key, plataforma y secuencia son inmutables. El `screenMethod` trazado debe consumir ese getter importado. Una key homonima de otro archivo o bloque no autoriza el relleno.\n' +
@@ -1244,22 +1244,45 @@ export class AutomationPackageBuilder {
             elements: result.resolvedContext.elementDeclarations || [],
             updateBaselines,
         });
+        // Cada definicion que resolveria alguna fila del borrador, con el
+        // motivo: la que una fila `reused` adopta (se copia literal) o un
+        // regex de cualquier squad que atrapa una frase nueva por sus
+        // capturas (Cucumber la resolveria ademas de la propia: ambiguo).
+        const draftRows = result.scenario.request.scenarioRows || [];
+        const reservedStepExpressions = (result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [])
+            .map(item => {
+                const canonical = selectorNormalization.canonicalStepExpression(item.expression);
+                const reused = draftRows.some(row => row.status === 'reused'
+                    && selectorNormalization.canonicalStepExpression(row.text) === canonical);
+                const swallowed = draftRows
+                    .filter(row => row.status !== 'reused' && matchingStepDefinitions(row.text, [item]).length > 0)
+                    .map(row => row.text);
+                return {
+                    expression: item.expression,
+                    canonical,
+                    file: item.file,
+                    scope: item.scope,
+                    reason: swallowed.length
+                        ? `Regex que atrapa «${swallowed.join('», «')}»: Cucumber resolvería esa línea con esta ` +
+                            'definición además de la tuya (step ambiguo). Cambia el verbo o la conjunción de la frase.'
+                        : reused
+                            ? 'Step reutilizado: se copia literal en el Feature y no se define de nuevo.'
+                            : 'Expresión reservada en framework; una variante equivalente produce step ambiguo.',
+                    ...(swallowed.length ? { swallows: swallowed } : {}),
+                };
+            });
         writeJson(path.join(packageDirectory, 'collision-report.json'), {
             schemaVersion: result.resolvedContext.schemaVersion,
             recordingId: result.scenario.recordingId,
             exactStepDefinitions: result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [],
-            reservedStepExpressions: (result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [])
-                .map(item => ({
-                    expression: item.expression,
-                    canonical: selectorNormalization.canonicalStepExpression(item.expression),
-                    file: item.file,
-                    scope: item.scope,
-                    reason: 'Expresión reservada en framework; una variante equivalente produce step ambiguo.',
-                })),
+            reservedStepExpressions,
             selectorCollisions: result.resolvedContext.frameworkAwareness?.selectorCollisions || [],
             requiresReuse: Boolean(result.resolvedContext.frameworkAwareness?.selectorCollisions?.length),
-            blocking: !result.plan.existingCase && Boolean(
-                result.resolvedContext.frameworkAwareness?.exactStepDefinitions?.length
+            // Bloquea solo lo que de verdad choca: un step reutilizado no es
+            // una colision, es la definicion que ejecuta esa linea.
+            blocking: !result.plan.existingCase && reservedStepExpressions.some(item =>
+                item.swallows || !draftRows.some(row => row.status === 'reused'
+                    && selectorNormalization.canonicalStepExpression(row.text) === item.canonical)
             ),
         });
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());

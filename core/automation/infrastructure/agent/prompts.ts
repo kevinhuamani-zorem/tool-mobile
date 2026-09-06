@@ -15,7 +15,7 @@ export function semanticPassPrompt(context: Record<string, unknown>): string {
         'No reescribas filas domain, qa o reused. No inventes resultados no observados, no menciones clicks, botones, campos, scrolls ni selectores.',
         'Incluye siempre testDesignReview con status, summary e issues. Evalúa diseño funcional, no sintaxis: contrasta objective y acceptanceCriteria con las acciones y verificaciones observadas.',
         'Usa status "suggestion" si observas oportunidades de mejorar el diseño. Son recomendaciones no bloqueantes: no exijas una aserción tras cada interacción, acepta una validación consolidada al final y no inventes requisitos fuera de acceptanceCriteria.',
-        'No incluyas roast ni contenido humorístico: esta pasada produce únicamente el diagnóstico funcional. La presentación opcional se genera después en una sesión aislada.',
+        'No incluyas contenido humorístico ni juicios de valor: esta pasada produce únicamente el diagnóstico funcional.',
         'Usa status "pass" cuando no tengas recomendaciones útiles. No decidas si se permite generar: el recorder solo bloquea por errores técnicos.',
         'Los issue.code permitidos son missing-business-assertion, control-existence-only, acceptance-criteria-mismatch, missing-test-oracle, dependent-variants y ambiguous-objective. actionSequences solo puede referenciar acciones reales. Da al QA una recomendación concreta para volver a grabar.',
         'Decisiones canónicas permitidas: "reuse", "replace-existing", "create", "resolved", "qa-required" o "unresolved".',

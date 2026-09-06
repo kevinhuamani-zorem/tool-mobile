@@ -11,15 +11,14 @@ function validCreatedAt(value: string): string {
     return Number.isNaN(timestamp) ? new Date().toISOString() : new Date(timestamp).toISOString();
 }
 
-function stripCommentMetadata(content: string, marker: '#' | '//'): string {
-    const escaped = marker === '#' ? '#' : '\\/\\/';
+function stripCommentMetadata(content: string, marker: '#'): string {
     const metadata = new RegExp(
-        `^(?:${escaped} (?:Generado por Appium (?:Visual )?Recorder|Author: [^\\n]+|Fecha de creación: [^\\n]+)\\r?\\n)+\\r?\\n?`
+        `^(?:${marker} (?:Generado por Appium (?:Visual )?Recorder|Author: [^\\n]+|Fecha de creación: [^\\n]+)\\r?\\n)+\\r?\\n?`
     );
     return content.replace(metadata, '');
 }
 
-function commentHeader(marker: '#' | '//', createdAt: string): string {
+function commentHeader(marker: '#', createdAt: string): string {
     return [
         `${marker} Generado por ${GENERATED_FILE_GENERATOR}`,
         `${marker} Author: ${GENERATED_FILE_AUTHOR}`,
@@ -28,11 +27,27 @@ function commentHeader(marker: '#' | '//', createdAt: string): string {
     ].join('\n');
 }
 
+/**
+ * Metadata de procedencia: solo en el Feature.
+ *
+ * El Feature es documentacion que la gente lee y ahi una cabecera (generador,
+ * autor y fecha) tiene sentido. Steps, Screen Object y Locators deben parecer
+ * codigo del framework: git ya sabe quien y cuando, y que grabacion aporto
+ * cada simbolo vive en `config/generated-files.json` y en
+ * `package-provenance.json`, fuera del framework. Un comentario por metodo
+ * con el recordingId (que solo existe en `runtime/` de una maquina) era ruido
+ * para cualquier revisor.
+ */
 export function withGeneratedFileMetadata(
     layer: AgentGeneratedFile['layer'],
     content: string,
     createdAt: string
 ): string {
+    if (layer === 'steps' || layer === 'screen') {
+        // Sin cabecera. Tampoco se retira la de archivos ya generados con
+        // versiones anteriores: un update no toca lineas ajenas a lo anadido.
+        return content;
+    }
     if (layer === 'locators') {
         let parsed: Record<string, unknown>;
         try {
@@ -50,8 +65,7 @@ export function withGeneratedFileMetadata(
         return JSON.stringify(blocks, null, 4) + '\n';
     }
 
-    const marker = layer === 'feature' ? '#' : '//';
-    return commentHeader(marker, createdAt) + stripCommentMetadata(content, marker);
+    return commentHeader('#', createdAt) + stripCommentMetadata(content, '#');
 }
 
 export function withGeneratedResponseMetadata(

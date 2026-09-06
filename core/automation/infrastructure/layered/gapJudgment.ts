@@ -146,6 +146,9 @@ export function gapJudgment(packageDirectory: string, plan: GenerationPlan): Gap
 export const BEHAVIOR_RULE_CODES = new Set([
     'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
     'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
+    // Cada linea del Feature resuelve a exactamente una definicion de todo
+    // el framework: la redaccion y la definicion son de Lorem.
+    'step-ambiguous', 'step-undefined',
     'gherkin-keyword', 'gherkin-person',
     // El dato parametrizado en Examples viaja por el step y su definition.
     'examples-unused-column', 'parameter-not-forwarded',

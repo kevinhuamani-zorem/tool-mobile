@@ -30,7 +30,6 @@ import {
     VisibleCopilotProvider,
     AgentOrchestrator,
     LayeredGenerationOrchestrator,
-    CopilotQaRoastGenerator,
 } from '../../core/automation';
 import { readJsonUtf8 } from '../../core/shared';
 import { RecordingCoverageAnalyzer, RecordingPlatformUpdater } from '../../core/coverage';
@@ -148,7 +147,6 @@ app.whenReady().then(async () => {
         mcpServersFile: copilotMcpServersFile,
     });
     const visibleCopilotProvider = new VisibleCopilotProvider(copilotCliAdapter, automationAgentLauncher);
-    const qaRoastGenerator = new CopilotQaRoastGenerator(copilotCliAdapter);
     const deterministicGenerator = new DeterministicGenerator();
     const agentOrchestrator = new AgentOrchestrator(
         frameworkQueryService,
@@ -216,7 +214,6 @@ app.whenReady().then(async () => {
         automationAgentLauncher,
         agentOrchestrator,
         layeredGenerationOrchestrator,
-        qaRoastGenerator,
         deterministicGenerator,
         automationResponseValidator,
         automationMemory,

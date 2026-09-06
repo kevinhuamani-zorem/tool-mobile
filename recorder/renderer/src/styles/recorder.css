@@ -2208,23 +2208,6 @@ body {
 .remember-config input { accent-color: #8a2fba; }
 .remember-config span { display: flex; flex-direction: column; gap: 3px; }
 .remember-config small { color: var(--text3); }
-.qa-roast-setting {
-    margin-top: -5px;
-    padding: 10px;
-    border: 1px solid #71402b;
-    border-radius: 7px;
-    background: rgba(111, 49, 24, .15);
-}
-.qa-roast-setting input { margin-top: 2px; }
-.qa-roast-message {
-    padding: 12px !important;
-    border: 1px solid #a85522 !important;
-    border-radius: 7px;
-    background: linear-gradient(135deg, rgba(120, 48, 20, .28), rgba(88, 31, 73, .22));
-    color: #ffd9b8;
-}
-.qa-roast-message strong { color: #ff9d57; }
-.qa-roast-message span { display: inline-block; margin-top: 5px; line-height: 1.45; }
 .wizard-case-config {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2272,11 +2255,6 @@ body {
     display: grid;
     gap: 12px;
     margin-top: 14px;
-}
-.automation-test-design-content .qa-roast-message {
-    display: grid;
-    gap: 5px;
-    padding: 15px 17px !important;
 }
 .automation-test-design-diagnosis {
     display: grid;

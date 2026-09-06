@@ -6,7 +6,7 @@
  * Son consultas puras sobre el contenido propuesto; las reglas que las usan
  * viven en `gherkinQualityRules` y `frameworkCollisionRules`.
  */
-import { selectorNormalization } from '../../../shared';
+import { expandExampleRow, selectorNormalization } from '../../../shared';
 import {
     gherkinKeywordAccepted,
     gherkinPersonProblem,
@@ -178,4 +178,94 @@ export function hasPlatformTag(content: string, platform: 'android' | 'ios'): bo
     // `@android @ventas` (el tag de plataforma primero) tambien cuenta: la
     // version anterior exigia algo antes de `@android` y lo daba por ausente.
     return new RegExp(`^\\s*(?:@[^\\s@]+\\s+)*@${platform}(?:\\s|$)`, 'mi').test(content);
+}
+
+export interface ScenarioResolutionLine {
+    /** Texto de la linea sin keyword, tal cual esta en el Feature. */
+    raw: string;
+    keyword: string;
+    /** Textos que Cucumber resolvera: la linea expandida por cada fila de Examples (o la propia si no hay). */
+    expanded: string[];
+}
+
+export interface ScenarioResolution {
+    title: string;
+    lines: ScenarioResolutionLine[];
+}
+
+/**
+ * Los Scenarios del Feature con sus lineas y cada linea expandida con las
+ * filas de Examples, que es lo que Cucumber resuelve contra las definiciones.
+ * Las filas de una DataTable (`| … |`) y los docstrings no son lineas de
+ * step y se ignoran; `<columna>` sin Examples se deja tal cual (lo reporta
+ * `missing-examples`).
+ */
+export function responseScenarioResolutions(content: string): ScenarioResolution[] {
+    const scenarios: Array<{ title: string; steps: Array<{ keyword: string; raw: string }>; examples: Array<Record<string, string>> }> = [];
+    let current: (typeof scenarios)[number] | undefined;
+    let headers: string[] | undefined;
+    let inExamples = false;
+    for (const line of String(content || '').split(/\r?\n/)) {
+        const scenarioMatch = line.match(/^\s*(?:Scenario(?: Outline)?|Esquema del escenario|Escenario):\s*(.*)$/i);
+        if (scenarioMatch) {
+            current = { title: scenarioMatch[1].trim(), steps: [], examples: [] };
+            scenarios.push(current);
+            headers = undefined;
+            inExamples = false;
+            continue;
+        }
+        if (!current) continue;
+        if (/^\s*(?:Examples|Ejemplos):/i.test(line)) {
+            inExamples = true;
+            headers = undefined;
+            continue;
+        }
+        const stepMatch = line.match(/^\s*(Given|When|Then|And|But)\s+(.+)$/i);
+        if (stepMatch) {
+            inExamples = false;
+            current.steps.push({
+                keyword: stepMatch[1][0].toUpperCase() + stepMatch[1].slice(1).toLowerCase(),
+                raw: stepMatch[2].trim().replace(/\s+/g, ' '),
+            });
+            continue;
+        }
+        if (inExamples && /^\s*\|/.test(line)) {
+            const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+            if (!headers) {
+                headers = cells;
+                continue;
+            }
+            const row: Record<string, string> = {};
+            headers.forEach((header, index) => { row[header] = cells[index] ?? ''; });
+            current.examples.push(row);
+        }
+    }
+    return scenarios.map(scenario => ({
+        title: scenario.title,
+        lines: scenario.steps.map(step => ({
+            raw: step.raw,
+            keyword: step.keyword,
+            expanded: scenario.examples.length
+                ? [...new Set(scenario.examples.map(row => expandExampleRow(step.raw, row)))]
+                : [step.raw],
+        })),
+    }));
+}
+
+/**
+ * Las definiciones del archivo de Steps tal como Cucumber las cargara:
+ * regex literales con sus anclas y flags (`/^…$/i`) o cucumber expressions
+ * en texto. A diferencia de `stepDefinitionExpressions`, no exige `^…$`:
+ * una definicion sin anclas tambien resuelve lineas al ejecutar (y de mas).
+ */
+export function stepDefinitionPatterns(content: string): string[] {
+    const source = String(content || '');
+    const patterns: Array<{ index: number; expression: string }> = [];
+    for (const match of source.matchAll(/\b(?:Given|When|Then)\s*\(\s*\/((?:\\\/|[^/\n])+)\/([a-z]*)\s*,/g)) {
+        patterns.push({ index: match.index ?? 0, expression: `/${match[1]}/${match[2]}` });
+    }
+    for (const match of source.matchAll(/\b(?:Given|When|Then)\s*\(\s*(['"`])((?:\\\1|(?!\1).)+)\1\s*,/g)) {
+        patterns.push({ index: match.index ?? 0, expression: match[2] });
+    }
+    return patterns.sort((left, right) => left.index - right.index).map(item => item.expression);
 }

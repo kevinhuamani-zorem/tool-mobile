@@ -9,7 +9,6 @@ import {
     AgentOrchestrator,
     LayeredGenerationOrchestrator,
     resolveAgentExecutionMode,
-    QaRoastGenerationService,
     TestDesignReview,
     normalizeAgentModel,
     CopilotModelEvents,
@@ -22,7 +21,6 @@ import { AutomationResponseImporter } from './responseImport';
 export interface LaunchAutomationAgentInput {
     mode?: string;
     autorun?: boolean;
-    qaRoastMode?: boolean;
     inheritDesignReview?: boolean;
     model?: string;
     pipeline?: 'layered' | 'deterministic';
@@ -33,7 +31,6 @@ export interface AutomationAgentLaunchDependencies {
     automationAgentLauncher: AutomationAgentLauncher;
     agentOrchestrator: AgentOrchestrator;
     layeredGenerationOrchestrator: LayeredGenerationOrchestrator;
-    qaRoastGenerator: QaRoastGenerationService;
     responseImporter: AutomationResponseImporter;
     emitProgress: AutomationProgressEmitter;
 }
@@ -81,7 +78,6 @@ export class AutomationAgentLaunchService {
             automationAgentLauncher,
             agentOrchestrator,
             layeredGenerationOrchestrator,
-            qaRoastGenerator,
             responseImporter,
             emitProgress: emitAutomationProgress,
         } = this.deps;
@@ -303,39 +299,7 @@ export class AutomationAgentLaunchService {
             const run = await agentOrchestrator.run(state.activeAutomationPackage, mode, { model });
             run.modelUsage = currentModelUsage();
             if (run.success) {
-                let testDesignReview = run.testDesignReview;
-                let roastGeneration;
-                if (testDesignReview?.status === 'suggestion' && input?.qaRoastMode) {
-                    emitAutomationProgress(
-                        'RESOLVING_DECISIONS',
-                        'Preparando una sugerencia para QA',
-                        3,
-                        6,
-                    );
-                    try {
-                        roastGeneration = await qaRoastGenerator.generate(
-                            state.activeAutomationPackage,
-                            testDesignReview,
-                        );
-                        if (roastGeneration.success && roastGeneration.roast) {
-                            testDesignReview = { ...testDesignReview, roast: roastGeneration.roast };
-                            writeJsonUtf8(
-                                path.join(state.activeAutomationPackage, 'test-design-review.json'),
-                                testDesignReview,
-                            );
-                        }
-                    } catch (error: any) {
-                        roastGeneration = {
-                            success: false,
-                            attempts: 0,
-                            repairAttempts: 0,
-                            durationMs: 0,
-                            responseBytes: 0,
-                            result: 'provider-failed' as const,
-                            error: String(error?.message || error || 'No se pudo generar el roast.'),
-                        };
-                    }
-                }
+                const testDesignReview = run.testDesignReview;
                 emitAutomationProgress('GENERATING', 'Generando automatización', 4, 6);
                 const imported = await importAutomationResponseFromPackage(state.activeAutomationPackage);
                 if (imported.success) {
@@ -347,7 +311,6 @@ export class AutomationAgentLaunchService {
                     automatic: true,
                     run,
                     ...(testDesignReview ? { testDesignReview } : {}),
-                    ...(roastGeneration ? { roastGeneration } : {}),
                     ...(imported.success
                         ? { imported }
                         : {

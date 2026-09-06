@@ -65,7 +65,12 @@ export interface PreparedPatch extends PatchOutcome { before: string; content: s
 
 export class AdditivePatchError extends Error {}
 
-function provenance(marker: '//' | '#', recordingId: string, createdAt: string, indent = ''): string {
+/**
+ * Marca de procedencia de un Scenario anadido a un Feature existente. Solo el
+ * Feature la lleva: en Steps y Screen Object lo anadido se integra sin
+ * comentarios (la trazabilidad por simbolo vive en config/generated-files.json).
+ */
+function provenance(marker: '#', recordingId: string, createdAt: string, indent = ''): string {
     return `${indent}${marker} [${GENERATED_FILE_GENERATOR}] ${recordingId} · ${createdAt}\n` +
         `${indent}${marker} Author: ${GENERATED_FILE_AUTHOR}\n`;
 }
@@ -172,7 +177,7 @@ export class AutomationPatchWriter {
     }
 
     /** Getters tras el último getter existente; métodos antes del cierre de clase. */
-    patchScreen(content: string, getters: MemberAddition[], methods: MemberAddition[], recordingId: string, createdAt: string, imports: string[] = [], resolveModule?: (specifier: string) => string) {
+    patchScreen(content: string, getters: MemberAddition[], methods: MemberAddition[], _recordingId: string, _createdAt: string, imports: string[] = [], resolveModule?: (specifier: string) => string) {
         content = mergePatchImports(content, imports, resolveModule);
         const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
         const declaration = source.statements.find(ts.isClassDeclaration);
@@ -192,12 +197,11 @@ export class AutomationPatchWriter {
         if (!newGetters.length && !newMethods.length) return { content, added, skipped };
 
         const accessors = declaration.members.filter(ts.isGetAccessorDeclaration);
-        const header = provenance('//', recordingId, createdAt, '    ');
         let output = content;
         // Se inserta de atrás hacia adelante para no invalidar los offsets.
         const closing = declaration.getEnd() - 1;
         if (newMethods.length) {
-            const block = '\n' + newMethods.map(item => header + item.code.replace(/\n?$/, '\n')).join('\n');
+            const block = '\n' + newMethods.map(item => item.code.replace(/\n?$/, '\n')).join('\n');
             output = output.slice(0, closing) + block + output.slice(closing);
         }
         if (newGetters.length) {
@@ -205,15 +209,15 @@ export class AutomationPatchWriter {
                 ? accessors[accessors.length - 1].getEnd()
                 : declaration.members[0]?.getStart(source) ?? closing;
             const block = accessors.length
-                ? '\n\n' + newGetters.map(item => header + item.code.replace(/\n?$/, '')).join('\n\n')
-                : newGetters.map(item => header + item.code.replace(/\n?$/, '\n\n')).join('');
+                ? '\n\n' + newGetters.map(item => item.code.replace(/\n?$/, '')).join('\n\n')
+                : newGetters.map(item => item.code.replace(/\n?$/, '\n\n')).join('');
             output = output.slice(0, anchor) + block + output.slice(anchor);
         }
         return { content: output, added, skipped };
     }
 
     /** Definiciones al final del archivo, añadiendo el import del Screen si falta. */
-    patchSteps(content: string, definitions: MemberAddition[], screenImport: string | string[] | undefined, recordingId: string, createdAt: string) {
+    patchSteps(content: string, definitions: MemberAddition[], screenImport: string | string[] | undefined, _recordingId: string, _createdAt: string) {
         const existing = new Set(symbolsOf('steps', content));
         const added: string[] = [];
         const skipped: string[] = [];
@@ -225,8 +229,7 @@ export class AutomationPatchWriter {
         if (!pending.length) return { content, added, skipped };
         let output = mergePatchImports(content, typeof screenImport === 'string'
             ? [screenImport] : screenImport || []).replace(/\s*$/, '\n');
-        const header = provenance('//', recordingId, createdAt);
-        output += '\n' + pending.map(item => header + item.code.replace(/\n?$/, '\n')).join('\n');
+        output += '\n' + pending.map(item => item.code.replace(/\n?$/, '\n')).join('\n');
         return { content: output, added, skipped };
     }
 
