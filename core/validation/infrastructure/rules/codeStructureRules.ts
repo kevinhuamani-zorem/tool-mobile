@@ -12,6 +12,7 @@ import path from 'path';
 import fs from 'fs';
 import {
     locatorImportIdentifier,
+    scenarioExampleValues,
     screenObjectNames,
     screenObjectProblems,
 } from '../../../automation/contracts';
@@ -198,6 +199,8 @@ export function codeStructureRules(context: PreviewRuleContext, report: RuleRepo
                         importSource: inheritsScreenImport ? source : expectedSource,
                         baseScreenClass: contract.baseScreenClass,
                     },
+                    // Un dato parametrizado en Examples nunca queda fijo en el Screen.
+                    exampleValues: scenarioExampleValues(scenario),
                 };
                 const inheritedProblems = new Set(
                     (screenBaseline ? screenObjectProblems(screenBaseline, screenRules) : [])

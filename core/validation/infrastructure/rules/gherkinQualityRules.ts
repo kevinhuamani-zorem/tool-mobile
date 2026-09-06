@@ -19,6 +19,8 @@ import { projectPaths } from '../../../workspace';
 import {
     TECHNICAL_ACTIONS,
     genericTemplateGherkinSteps,
+    gherkinKeywordProblems,
+    gherkinPersonProblems,
     hasPlatformTag,
     imperativeGherkinSteps,
     responseScenarioSteps,
@@ -80,6 +82,36 @@ export function gherkinQualityRules(context: PreviewRuleContext, report: RuleRep
                 errors.push({
                     code: 'generic-template-gherkin',
                     message: `Gherkin genérico generado por plantilla: ${step}. Consolida el ciclo y describe un único comportamiento o resultado observable.`,
+                    file: response.files.find(file => file.layer === 'feature')?.path,
+                });
+            }
+            // Given: contexto inicial. When: accion. Then: resultado esperado.
+            // And/But complementan el paso anterior y heredan su tipo: la
+            // accion que sigue a un Then vuelve a ser When, y un resultado
+            // tras un When es Then.
+            for (const problem of gherkinKeywordProblems(preview.featureContent, response.actionTrace, scenario.actions)) {
+                const kindLabel = problem.kind === 'assertion'
+                    ? 'un resultado esperado'
+                    : problem.kind === 'behavior' ? 'una acción del usuario' : 'contexto inicial';
+                errors.push({
+                    code: 'gherkin-keyword',
+                    message: `Keyword incorrecto en "${problem.step}": el step es ${kindLabel} y debe ir con ` +
+                        `${problem.expected} (Given: contexto inicial; When: acción; Then: resultado esperado; ` +
+                        'And/But: complementan el paso anterior y heredan su tipo).',
+                    file: response.files.find(file => file.layer === 'feature')?.path,
+                });
+            }
+            // Los steps reutilizados ya existen en el framework con esa redaccion:
+            // no se juzgan, solo lo que este caso escribe.
+            const reusedTexts = new Set((scenario.request?.scenarioRows || [])
+                .filter(row => row.status === 'reused')
+                .map(row => selectorNormalization.normalizeStepText(row.text)));
+            for (const problem of gherkinPersonProblems(preview.featureContent, reusedTexts)) {
+                errors.push({
+                    code: 'gherkin-person',
+                    message: `Redacción en ${problem.problem === 'first-person' ? 'primera persona'
+                        : problem.problem === 'infinitive' ? 'infinitivo' : 'imperativo o segunda persona'}: ` +
+                        `"${problem.step}". Redacta en tercera persona («el usuario …») o de forma impersonal («se muestra …»).`,
                     file: response.files.find(file => file.layer === 'feature')?.path,
                 });
             }

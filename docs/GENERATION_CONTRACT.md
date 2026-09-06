@@ -201,19 +201,44 @@ importación.
   expresa todas las vueltas como una sola expectativa declarativa. No generes
   una pareja genérica de comportamiento/resultado por cada variante. Por
   ejemplo: `Then se muestran los movimientos esperados al aplicar cada filtro`.
+- Keywords por semántica (`gherkin-keyword`): `Given` es el contexto o estado
+  inicial; `When`, la acción que ejecuta el usuario o el evento que ocurre;
+  `Then`, el resultado esperado; `And`/`But` complementan el paso anterior y
+  heredan su tipo. Por eso la acción que sigue a un `Then` vuelve a ser `When`
+  y el resultado que sigue a un `When` es `Then`; un `And` tras `Then` es otro
+  resultado, nunca una acción. El tipo de cada step sale de lo que ejecuta
+  según `actionTrace`: termina en una verificación, es resultado; ejecuta
+  cualquier otra acción, es comportamiento; sin acciones, es contexto (el
+  login). El borrador determinista ya sale así (`semanticGherkinKeywords`) y
+  las definitions llevan el keyword efectivo del step (un `And` tras `When` se
+  define con `When`).
+- Redacción en tercera persona («el usuario consulta…») o impersonal («se
+  muestra…») (`gherkin-person`). Nunca primera persona («ingreso mi correo»),
+  imperativo o segunda persona («ingresa tu correo», «selecciona el botón») ni
+  infinitivo («verificar que existe…»). Los steps `reused` se copian literales
+  aunque no cumplan: ya existen en el framework. El borrador convierte un
+  criterio en infinitivo («verificar que existe el filtro») en resultado
+  impersonal («se muestra el filtro») y, si el objetivo del QA viene en
+  infinitivo, redacta la acción con las intenciones en tercera persona.
+- Un dato escrito por el usuario viaja como `<param>` con su columna en
+  `Examples` y el step lo nombra («el usuario ingresa su correo <email> y
+  selecciona enviar correo»); la definition lo recibe como argumento y el
+  Screen Object lo usa, nunca lo deja fijo en código.
 
 Ejemplo:
 
 ```gherkin
 @miflujo
-Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Consultar movimientos
+Scenario Outline: [TC-10239][Happy Path][AUTO-FRONT] Enviar movimientos por correo
   Given el usuario <username> inicia sesión en Yape
-  When el usuario abre sus movimientos
-  Then visualiza el movimiento <descripcion>
+  When el usuario consulta todos sus movimientos
+  Then se muestra la pantalla de movimientos
+  When el usuario ingresa su correo <email> y confirma el envío
+  Then se muestra el mensaje de correo enviado
 
 Examples:
-  | username | descripcion |
-  | usuario_qa | Primer yapeo |
+  | username   | email            |
+  | usuario_qa | qa@yape.com.pe   |
 ```
 
 - Si la ruta del Feature ya existe (otro caso con el mismo objetivo, típicamente
@@ -227,6 +252,13 @@ Examples:
 
 - Las expresiones deben coincidir con el texto Gherkin y capturar parámetros.
 - Un step solo transforma argumentos mínimos y delega al Screen Object.
+- Todo parámetro que la definition captura se pasa al método del Screen
+  Object (`parameter-not-forwarded`); un valor de Examples o de una DataTable
+  nunca aparece como literal en Steps (`example-value-hardcoded`). La cadena
+  completa es `Examples -> <columna> en el step (examples-unused-column) ->
+  argumento de la definition -> argumento del método -> uso en el método`, y
+  cada eslabón tiene su regla: en rec-e84b3413 el Gherkin declaraba `<email>`,
+  la definition no lo pasaba y el Screen escribía el correo grabado.
 - No contiene selectores, llamadas directas a Appium/WebdriverIO ni lógica de
   navegación compleja.
 - Antes de avanzar desde Gherkin se contrasta cada texto con todas las
@@ -321,6 +353,36 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
   Derek lo firma con la decisión que el plan fijó y Sumrak no lo juzga. El QA
   puede haber elegido ese XPath a propósito para iterar en código con el
   agente.
+- Una acción grabada con un selector sin predicado identificador (solo
+  `className`, `instance(n)`, XPath o class chain sin predicado) también se
+  conserva tal cual y el QA recibe la observación `unspecific-selector`. Lo que
+  cambia es su valor como evidencia: coincidir con un locator de **otro**
+  módulo no prueba que sea el mismo elemento (`className("android.widget.EditText")`
+  es el campo del código OTP y también el del correo en movimientos), así que
+  el resolver no lo reutiliza ni lo cuenta para elegir qué Screen extender: lo
+  crea en el módulo del caso con el selector grabado (`unspecificSelector: true`,
+  `declinedReuse` en la resolución) y `framework-locator-collision` lo avisa en
+  vez de bloquearlo. Si el locator con ese selector vive en el módulo que el
+  caso extiende, sí se reutiliza: ahí sí es el mismo elemento. Cuando no hay
+  ninguna coincidencia que identifique un elemento de verdad, las genéricas
+  vuelven a contar (un caso de una acción sobre el mismo XPath que ya usa un
+  módulo sigue extendiéndolo).
+
+### Qué Screen Object extiende un caso
+
+`reuseTarget` del plan lo decide `bestArtifactBundle` por evidencia, no por
+presencia. Cada Screen candidato (con el Steps que lo importa, o solo, si aún
+no lo importa ninguno) puntúa por la proporción de locators reutilizados que
+le pertenecen, por cuántas intenciones del recording cubre ya con sus métodos,
+por cuánto usan sus Steps esos mismos locators y por la afinidad de su Gherkin
+con el objetivo. Un único acierto no adopta un Screen ajeno salvo que sea la
+mayoría de lo reutilizado en un caso corto o que el Screen cubra al menos la
+mitad de las intenciones. Un Screen que importa varios locators (movements +
+home) es candidato igual: las claves nuevas van al locator que aportó los
+aciertos o, sin ellos, al que lleva el nombre del Screen. `reuseTarget.reason`
+dice cuántos de los locators reutilizados consume el Screen elegido (por
+ejemplo «5 de los 6»), y `reuse-context.json` deja los candidatos con su
+score para que el QA pueda auditar la decisión.
 
 ## Screen Object
 
@@ -332,6 +394,16 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
 - Se exporta siguiendo la convención vigente del target.
 - Los nombres de métodos derivan de intención de negocio, no de coordenadas o
   índices efímeros.
+- Cada parámetro que declara un método se usa en su cuerpo
+  (`parameter-unused`) y ningún valor de Examples o DataTable se escribe como
+  literal (`example-value-hardcoded`): el dato lo entrega la definition. Ambas
+  reglas corren también en `tools/check.js` de Zorem, que lee los valores de
+  `scenario.json`. Un ciclo con un getter por variante (filtros con locators
+  distintos) recorre la DataTable y elige el getter con un método privado
+  `<columna>OptionFor(valor)` (`case 'Solo hoy': return this.filterOnlyToday`);
+  ahí el literal es la clave del mapa, no un dato fijo, y el validador lo
+  exime. Un ciclo sobre un único locator parametrizable conserva el getter
+  dinámico (`selectFilter(filtro)`).
 - Los imports internos usan exclusivamente `@screenobjects`, `@utils` y
   `@locators`. `browser` solo se importa desde `@wdio/globals` si el código
   generado invoca directamente `browser.`; un import sin uso bloquea la salida.

@@ -578,11 +578,14 @@ test('Derek relanza solo el autor con feedback pendiente cuando Copilot cerró a
 // el adapter la corta por inactividad (AGENT_FEEDBACK_IDLE) y Derek relanza al
 // autor con el feedback escrito; agotadas las rondas, falla con el detalle.
 test('una ronda cortada por inactividad se relanza con el feedback y, agotadas las rondas, falla con detalle', async () => {
+    // El mensaje incluye la primera línea del Feature: cada ronda entrega una
+    // versión con un error distinto, así que no se activa el corte por no
+    // convergencia y se ejercita el camino de inactividad.
     const validator = (_packageDirectory, response) => {
         const feature = response.files.find(file => file.layer === 'feature')?.content || '';
         return feature.includes('Scenario: [TC-1][Happy Path][AUTO-FRONT]')
             ? { valid: true, errors: [] }
-            : { valid: false, errors: [{ message: 'Scenario sin formato [TC-1][Path][AUTO-FRONT]' }] };
+            : { valid: false, errors: [{ message: `Scenario sin formato [TC-1][Path][AUTO-FRONT] en "${feature.split('\n')[0]}"` }] };
     };
     const idleProvider = (calls, { fixOnRound } = {}) => {
         const base = provider(calls);
@@ -592,13 +595,15 @@ test('una ronda cortada por inactividad se relanza con el feedback y, agotadas l
                 const result = await base.execute(input);
                 const round = /feedback-(\d+)$/.exec(input.sessionName)?.[1];
                 if (input.agentName !== 'Lorem' || !/repair-1/.test(input.sessionName)) return result;
+                const outputFile = path.join(input.cwd, 'behavior-result.json');
+                const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
                 if (fixOnRound !== undefined && Number(round) === fixOnRound) {
-                    const outputFile = path.join(input.cwd, 'behavior-result.json');
-                    const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
                     candidate.files.find(file => file.layer === 'feature').content = 'Feature: Caso\nScenario: [TC-1][Happy Path][AUTO-FRONT] Caso válido';
                     writeJson(outputFile, candidate);
                     return result;
                 }
+                candidate.files.find(file => file.layer === 'feature').content = `Feature: Caso intento ${round || 0}`;
+                writeJson(outputFile, candidate);
                 // La salida rechazada sigue en disco y la sesión se cortó por inactividad.
                 return { ...result, success: false, errorCode: 'AGENT_FEEDBACK_IDLE', errorMessage: 'La sesión no entregó una corrección en 1 s tras el feedback dirigido.' };
             },
@@ -620,6 +625,46 @@ test('una ronda cortada por inactividad se relanza con el feedback y, agotadas l
     assert.match(failed.error, /Lorem no corrigió su capa tras 3 rondas de feedback dirigido; la última se cortó por inactividad/);
     assert.match(failed.error, /Scenario sin formato/);
     assert.equal(exhaustedCalls.filter(call => /Lorem\/repair-1/.test(call.sessionName)).length, 3, 'una sesión inicial y dos rondas de feedback');
+    const report = JSON.parse(fs.readFileSync(failed.reportFile, 'utf8'));
+    assert.equal(report.state, 'failed');
+});
+
+// Una version que repite exactamente los errores del feedback anterior no va
+// a converger con mas rondas: Derek corta ya, con el detalle y sin gastar las
+// dos sesiones restantes; la ultima version del agente queda en disco.
+test('una corrección que repite los mismos errores corta sin agotar las rondas y conserva la última versión', async () => {
+    const validator = (_packageDirectory, response) => {
+        const feature = response.files.find(file => file.layer === 'feature')?.content || '';
+        return feature.includes('Scenario: [TC-1][Happy Path][AUTO-FRONT]')
+            ? { valid: true, errors: [] }
+            : { valid: false, errors: [{ message: 'Scenario sin formato [TC-1][Path][AUTO-FRONT]' }] };
+    };
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    const stubbornProvider = {
+        ...base,
+        async execute(input) {
+            const result = await base.execute(input);
+            if (input.agentName !== 'Lorem' || !/repair-1/.test(input.sessionName)) return result;
+            // "Corrige" cambiando algo irrelevante: el error sigue siendo el mismo.
+            const outputFile = path.join(input.cwd, 'behavior-result.json');
+            const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
+            candidate.files.find(file => file.layer === 'feature').content = 'Feature: Caso\n# intento sin formato';
+            writeJson(outputFile, candidate);
+            return result;
+        },
+    };
+    const failed = await new LayeredGenerationOrchestrator(stubbornProvider, stubbornProvider, validator).run(root);
+    assert.equal(failed.success, false);
+    assert.match(failed.error, /Lorem no converge: entregó versiones consecutivas con exactamente los mismos errores \(ronda 2 de 3\)/);
+    assert.match(failed.error, /queda en behavior-result\.json/);
+    assert.match(failed.error, /Scenario sin formato/);
+    assert.equal(calls.filter(call => /Lorem\/repair-1/.test(call.sessionName)).length, 2, 'dos rechazos idénticos: no se gasta la tercera ronda');
+    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents', 'lorem', 'repair-feedback.json'), 'utf8'));
+    assert.equal(feedback.status, 'stuck');
+    assert.equal(feedback.repeatedErrors, true);
+    assert.ok(fs.existsSync(path.join(root, 'agents', 'lorem', 'behavior-result.json')), 'la última versión se conserva para el QA');
     const report = JSON.parse(fs.readFileSync(failed.reportFile, 'utf8'));
     assert.equal(report.state, 'failed');
 });

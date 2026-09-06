@@ -123,6 +123,13 @@ export function createReviewFeature(deps) {
             `Evidencia: acción ${observation.actionSequence}`,
             `Detalle: ${observation.message}`,
             'Nota: el selector grabado se conserva; la automatización puede refinarlo en el Screen Object.',
+        ].join('\n') : observation.type === 'unspecific-selector' ? [
+            'Título: Acción con selector sin predicado identificador',
+            `Plataforma: ${String(observation.platform || '').toUpperCase()}`,
+            `Selector: ${observation.selector}`,
+            `Evidencia: acción ${observation.actionSequence}`,
+            `Detalle: ${observation.message}`,
+            'Nota: el selector grabado se conserva; no se reutiliza un locator de otra pantalla por coincidir en él.',
         ].join('\n') : [
             'Título: Texto incorrecto en la aplicación',
             `Plataforma: ${String(observation.platform || '').toUpperCase()}`,
@@ -219,6 +226,12 @@ export function createReviewFeature(deps) {
                     `<code>${escapeHtml(observation.selector || '')}</code>` +
                     `<small>${where}. El selector se conserva tal cual; si buscas un elemento concreto, ` +
                     'refínalo o pide al agente que lo haga en código.</small></li>';
+            }
+            if (observation.type === 'unspecific-selector') {
+                return `<li><strong>Selector sin predicado identificador:</strong> ` +
+                    `<code>${escapeHtml(observation.selector || '')}</code>` +
+                    `<small>${where}. Se conserva tal cual; un locator de otra pantalla con el mismo selector ` +
+                    'no se da por el mismo elemento (solo se reutiliza dentro del módulo del caso).</small></li>';
             }
             return `<li><strong>${escapeHtml(observation.actual)}</strong> debería decir ` +
                 `<strong>${escapeHtml(observation.expected)}</strong>` +

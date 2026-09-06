@@ -264,6 +264,23 @@ dirigido; la última se cortó por inactividad» más los errores pendientes; el
 `agent-execution.log` marca el momento con `[feedback-idle]` o `[idle]`. Comprueba
 los paquetes `agents/<rol>` y la proyección de memoria antes de aumentar contexto.
 
+### El agente no converge: cada corrección trae los mismos errores
+
+Ningún autor entra en bucle. Dentro de una sesión de reparación, cada versión
+que el autor escribe se valida al instante y el feedback va a
+`repair-feedback.json`; si dos versiones seguidas repiten exactamente los
+mismos errores (mismos códigos y mensajes), Derek considera que no va a
+converger: el adapter corta la sesión (`AGENT_FEEDBACK_STUCK`, traza
+`[feedback-stuck]`), no se gastan las rondas restantes y la etapa falla con «no
+converge: entregó versiones consecutivas con exactamente los mismos errores
+(ronda N de 3)» más los errores. `repair-feedback.json` queda con
+`status: stuck` y `repeatedErrors: true`, y la última versión del autor se
+conserva en `agents/<rol>/<rol>-result.json` para revisarla. Topes en total por
+autor: 3 sesiones de feedback en vivo por intento de reparación, 1 intento de
+reparación tras la integración, 5 min sin corrección tras un rechazo, 10 min
+sin eventos, 1 h por sesión. Desde ahí el QA decide: **Corregir con Copilot**
+(sesión visible), corregir a mano y **Reimportar corrección**, o regenerar.
+
 ### La sesión tarda en arrancar o el log muestra MCP y skills que el recorder no usa
 
 Cada sesión de Copilot carga la configuración personal de la máquina: el MCP
@@ -292,6 +309,36 @@ prompt le indica que es su única verificación; si aun así lo hace, revisa que
 en la raíz del paquete) y que `node_modules/typescript` esté instalado en el
 framework destino; sin él, `check.js` lo avisa como NOTA y la sintaxis se
 comprueba al importar el resultado.
+
+### El plan extiende un Screen Object que no corresponde al flujo
+
+Mira `generation-plan.json → reuseTarget.reason` y `resolutions[]`: el Screen
+que se extiende es el que consume la mayoría de los locators que el recording
+reutilizó («5 de los 6 locators reutilizados»), no el primero que comparta uno.
+Si el flujo cayó en otra pantalla, la causa habitual es una acción grabada con
+un selector sin predicado identificador (`className("android.widget.EditText")`,
+`instance(7)`, `//android.view.View`) que coincide con un locator de ese otro
+módulo: el resolver ya no adopta esa coincidencia (la resolución queda `create`
+con `unspecificSelector: true` y `declinedReuse`), el QA la ve en
+`qa-observations.json` (`unspecific-selector`) y el validador la avisa sin
+bloquear (`framework-locator-collision` como warning). Un caso ya aplicado con
+el Screen equivocado se revierte en el framework con git; si además se promovió
+a memoria (`runtime/automation-memory/index.json` con `qualityScore: 100`),
+borra esa entrada y sus fragmentos (`fragments.json`, mismo `fingerprint`) para
+que no se replique en la siguiente grabación.
+
+### El Screen Object escribe el dato de la grabación en vez del parámetro
+
+Síntoma: el Gherkin trae `<email>` en Examples pero el Screen hace
+`setValue('joseamendoza@yape.com.pe')`. Cuatro reglas lo bloquean ahora, cada
+una atribuida a su autor: `examples-unused-column` (Lorem: ningún step nombra la
+columna), `parameter-not-forwarded` (Lorem: la definition recibe el argumento y
+no lo pasa), `parameter-unused` y `example-value-hardcoded` (Zorem: el método no
+usa el parámetro o escribe el literal). Zorem las ve en `node tools/check.js`
+antes de entregar. El borrador determinista ya nombra el dato en el step («el
+usuario ingresa su correo <email> …»), la definition lo recibe y el Screen hace
+`setValue(email)`; un ciclo con un getter por filtro recorre la DataTable con
+`<columna>OptionFor(valor)`.
 
 ### El progreso indica «Borrador determinista no disponible»
 

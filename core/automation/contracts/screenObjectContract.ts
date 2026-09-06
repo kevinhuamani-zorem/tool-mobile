@@ -20,7 +20,8 @@ export interface ScreenObjectProblem {
     code: 'json-import-attribute' | 'locator-import-alias' | 'getElement-arity'
         | 'getElement-order' | 'type-locator-import' | 'helper-method'
         | 'screen-alias' | 'screen-singleton-name' | 'screen-class-name'
-        | 'locator-import-identifier' | 'locator-bracket-notation';
+        | 'locator-import-identifier' | 'locator-bracket-notation'
+        | 'parameter-unused' | 'example-value-hardcoded';
     message: string;
 }
 
@@ -36,6 +37,8 @@ export const SCREEN_OBJECT_CONTRACT_RULE_CODES: ScreenObjectProblem['code'][] = 
     'screen-class-name',
     'locator-import-identifier',
     'locator-bracket-notation',
+    'parameter-unused',
+    'example-value-hardcoded',
 ];
 
 export interface ScreenObjectRules {
@@ -68,6 +71,13 @@ export interface ScreenObjectRules {
     };
     /** Steps propuestos, usado para validar alias importado del Screen Object. */
     stepsContent?: string;
+    /**
+     * Valores de Examples (y DataTables) del Scenario, por nombre de columna.
+     * Un dato que el QA parametrizo viaja por argumento hasta el Screen
+     * Object; escrito como literal en el codigo, el caso deja de ser un
+     * Scenario Outline y solo sirve para ese dato.
+     */
+    exampleValues?: Record<string, string[]>;
 }
 
 const GENERIC_SCREEN_ALIASES = new Set([
@@ -396,6 +406,100 @@ export function screenObjectProblems(
             });
         }
     }
+    problems.push(...unusedParameterProblems(source));
+    problems.push(...hardcodedExampleProblems(source, rules.exampleValues));
+    return problems;
+}
+
+/**
+ * Metodos `public async` con sus parametros y su cuerpo, por conteo de
+ * llaves. Sin AST a proposito: esta logica corre tambien en tools/check.js,
+ * dentro del sandbox del agente, sin dependencias.
+ */
+export function screenMethodBodies(content: string): Array<{ name: string; parameters: string[]; body: string }> {
+    const source = String(content || '');
+    const pattern = /public\s+async\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)[^{]*\{/g;
+    const methods: Array<{ name: string; parameters: string[]; body: string }> = [];
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source))) {
+        let depth = 1;
+        let index = pattern.lastIndex;
+        while (index < source.length && depth > 0) {
+            const char = source[index];
+            if (char === '{') depth += 1;
+            else if (char === '}') depth -= 1;
+            index += 1;
+        }
+        const body = source.slice(pattern.lastIndex, Math.max(pattern.lastIndex, index - 1));
+        const parameters = match[2]
+            .split(',')
+            .map(parameter => parameter.trim().replace(/^\.\.\./, '').replace(/[?:=].*$/s, '').trim())
+            .filter(Boolean);
+        methods.push({ name: match[1], parameters, body });
+        pattern.lastIndex = index;
+    }
+    return methods;
+}
+
+/**
+ * Un parametro que el metodo declara y no usa es el sintoma exacto del dato
+ * fijo: la definition pasa `email`, el Screen lo recibe y escribe el literal.
+ */
+export function unusedParameterProblems(content: string): ScreenObjectProblem[] {
+    const problems: ScreenObjectProblem[] = [];
+    for (const method of screenMethodBodies(content)) {
+        for (const parameter of method.parameters) {
+            const used = new RegExp(`(?<![\\w$.])${parameter.replace(/[$]/g, '\\$&')}(?![\\w$])`).test(method.body);
+            if (used) continue;
+            problems.push({
+                code: 'parameter-unused',
+                message: `El método ${method.name} declara el parámetro ${parameter} y no lo usa: el dato que ` +
+                    'llega desde el step debe ser el que se escribe o compara, no un literal.',
+            });
+        }
+    }
+    return problems;
+}
+
+/** Literales de cadena del codigo (comillas simples, dobles o template sin interpolar). */
+export function stringLiterals(content: string): string[] {
+    return [...String(content || '').matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\$]|\\.)*)`/g)]
+        .map(match => (match[1] ?? match[2] ?? match[3] ?? '').replace(/\\(.)/g, '$1'));
+}
+
+/**
+ * El valor de una columna de Examples escrito como literal en el codigo. El
+ * QA lo parametrizo para que el caso corra con cualquier dato; fijo en el
+ * Screen Object solo corre con el de la grabacion.
+ */
+export function hardcodedExampleProblems(
+    content: string,
+    exampleValues: Record<string, string[]> | undefined,
+): ScreenObjectProblem[] {
+    if (!exampleValues) return [];
+    const byValue = new Map<string, string>();
+    for (const [column, values] of Object.entries(exampleValues)) {
+        for (const value of values || []) {
+            const normalized = String(value ?? '').trim();
+            if (normalized.length >= 3 && !byValue.has(normalized)) byValue.set(normalized, column);
+        }
+    }
+    if (!byValue.size) return [];
+    const problems: ScreenObjectProblem[] = [];
+    const reported = new Set<string>();
+    // `case 'Solo hoy': return this.filterOnlyToday;` traduce el valor al getter
+    // grabado: ahi el literal es la clave del mapa, no un dato fijo.
+    const withoutCases = String(content || '').replace(/\bcase\s+(['"`])(?:(?!\1)[^\\]|\\.)*\1\s*:/g, 'case __value__:');
+    for (const literal of stringLiterals(withoutCases)) {
+        const column = byValue.get(literal.trim());
+        if (!column || reported.has(literal)) continue;
+        reported.add(literal);
+        problems.push({
+            code: 'example-value-hardcoded',
+            message: `El literal "${literal}" es el valor de la columna <${column}> de Examples: recíbelo como ` +
+                'parámetro del método (lo envía la definition del step) en vez de dejarlo fijo en el código.',
+        });
+    }
     return problems;
 }
 
@@ -411,6 +515,10 @@ export function signatureHint(rules: Pick<ScreenObjectRules, 'typeLocatorSymbol'
 export const screenObjectContract = {
     screenObjectProblems,
     helperMethodProblems,
+    screenMethodBodies,
+    unusedParameterProblems,
+    hardcodedExampleProblems,
+    stringLiterals,
     typeLocatorImportProblem,
     signatureHint,
     getElementCalls,

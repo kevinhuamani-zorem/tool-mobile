@@ -92,9 +92,174 @@ export function missingExamples(feature: string): string[] {
     return problems;
 }
 
+/**
+ * Valores parametrizados del Scenario por nombre de columna: Examples del
+ * request y celdas de las DataTables de las filas. Son los datos que viajan
+ * por argumento y nunca deben quedar fijos en Steps ni en el Screen Object.
+ */
+export function scenarioExampleValues(scenario: Pick<AutomationScenario, 'request'>): Record<string, string[]> {
+    const values: Record<string, string[]> = {};
+    const add = (column: string, value: unknown) => {
+        const text = String(value ?? '').trim();
+        if (!column || !text) return;
+        values[column] = values[column] || [];
+        if (!values[column].includes(text)) values[column].push(text);
+    };
+    for (const [column, value] of Object.entries(scenario.request?.examples || {})) add(column, value);
+    for (const row of scenario.request?.scenarioRows || []) {
+        const table = row.dataTable;
+        if (!table?.headers?.length) continue;
+        for (const cells of table.rows || []) {
+            table.headers.forEach((header, index) => add(header, cells[index]));
+        }
+    }
+    return values;
+}
+
+/**
+ * Una columna de Examples que ningun step del Scenario nombra como <columna>
+ * es un dato que el QA parametrizo y el caso ignora: la ejecucion no lo
+ * recibe y el codigo termina con el literal de la grabacion.
+ */
+export function unusedExamplesColumns(feature: string): string[] {
+    const problems: string[] = [];
+    const lines = String(feature || '').split(/\r?\n/);
+    let steps: string[] = [];
+    let columns: string[] = [];
+    let title = '';
+    let inExamples = false;
+    const flush = () => {
+        if (!title || !columns.length) return;
+        const referenced = new Set(steps.flatMap(step => [...step.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)].map(match => match[1])));
+        const unused = columns.filter(column => !referenced.has(column));
+        if (unused.length) {
+            problems.push(
+                `El Scenario "${title}" declara en Examples la(s) columna(s) <${unused.join('>, <')}> ` +
+                'y ningún step las usa: el dato parametrizado tiene que nombrarse en el step que lo emplea ' +
+                '(por ejemplo «el usuario ingresa su correo <email>») para que llegue por argumento.',
+            );
+        }
+    };
+    for (const line of lines) {
+        const scenario = line.match(/^\s*Scenario(?: Outline)?\s*:\s*(.+)$/i);
+        if (scenario) {
+            flush();
+            title = scenario[1].trim();
+            steps = [];
+            columns = [];
+            inExamples = false;
+            continue;
+        }
+        if (/^\s*Examples\s*:/i.test(line)) { inExamples = true; continue; }
+        const step = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+        if (step) { steps.push(step[1]); inExamples = false; continue; }
+        if (inExamples && line.trim().startsWith('|') && !columns.length) {
+            columns = line.split('|').slice(1, -1).map(cell => cell.trim()).filter(Boolean);
+        }
+    }
+    flush();
+    return problems;
+}
+
+/**
+ * Semantica de los keywords, tal como la fijo el QA:
+ *
+ *   Given: contexto o estado inicial.
+ *   When:  accion que ejecuta el usuario o evento que ocurre.
+ *   Then:  resultado esperado.
+ *   And / But: complementan el paso anterior (heredan su tipo).
+ *
+ * Un step se clasifica por lo que ejecuta: si su ultima accion grabada es una
+ * verificacion (`VERIFICAR_*`) es un resultado esperado; si ejecuta cualquier
+ * otra accion es un comportamiento; sin acciones es contexto. Un `And` tras
+ * `Then` es un resultado, nunca una accion: la accion que sigue a un `Then`
+ * vuelve a ser `When`.
+ */
+export type GherkinStepKind = 'context' | 'behavior' | 'assertion';
+export type GherkinKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But';
+
+export function gherkinStepKind(actions: ReadonlyArray<{ action: string }> | undefined): GherkinStepKind {
+    if (!actions || actions.length === 0) return 'context';
+    const last = actions[actions.length - 1];
+    return /^VERIFICAR_/.test(String(last?.action || '')) ? 'assertion' : 'behavior';
+}
+
+const PRIMARY_KEYWORD: Record<GherkinStepKind, GherkinKeyword> = {
+    context: 'Given',
+    behavior: 'When',
+    assertion: 'Then',
+};
+
+/** Keyword que corresponde a un step de `kind` cuando el anterior era `previous`. */
+export function expectedGherkinKeyword(kind: GherkinStepKind, previous: GherkinStepKind | undefined): GherkinKeyword {
+    return previous === kind ? 'And' : PRIMARY_KEYWORD[kind];
+}
+
+/** Recalcula los keywords de una secuencia de steps a partir de lo que ejecutan. */
+export function semanticGherkinKeywords(steps: ReadonlyArray<{ actions?: ReadonlyArray<{ action: string }> }>): GherkinKeyword[] {
+    let previous: GherkinStepKind | undefined;
+    return steps.map(step => {
+        const kind = gherkinStepKind(step.actions);
+        const keyword = expectedGherkinKeyword(kind, previous);
+        previous = kind;
+        return keyword;
+    });
+}
+
+/**
+ * Un keyword escrito cumple la semantica si es el primario de su tipo o un
+ * `And`/`But` que continua un step del mismo tipo. Un step de contexto solo
+ * puede ir al inicio del Scenario (antes del primer comportamiento).
+ */
+export function gherkinKeywordAccepted(
+    keyword: string,
+    kind: GherkinStepKind,
+    previous: GherkinStepKind | undefined,
+): boolean {
+    const normalized = String(keyword || '').trim();
+    if (normalized === 'And' || normalized === 'But') return previous === kind;
+    return normalized === PRIMARY_KEYWORD[kind];
+}
+
+/**
+ * Redaccion en tercera persona («el usuario …») o impersonal («se muestra …»).
+ * Primera persona («ingreso mi correo») e imperativo / segunda persona
+ * («ingresa tu correo», «selecciona el boton») no son steps de negocio.
+ */
+// Los verbos solo cuentan al inicio del step (sujeto omitido): «ingreso»,
+// «envío» o «inicio» tambien son sustantivos a mitad de frase.
+const FIRST_PERSON_PATTERN =
+    /(?:^|\s)(?:yo|mi|mis|conmigo)(?=\s|$)|^(?:yo\s+)?(?:quiero|puedo|tengo|estoy|soy|veo|hago|escribo|selecciono|presiono|pulso|toco|valido|verifico|confirmo|abro|cierro|busco|consulto|navego|reviso|acepto|cancelo|elijo|vuelvo)(?=\s|$)/i;
+const SECOND_PERSON_PATTERN =
+    /(?:^|\s)(?:t[uú]|tus|te|contigo|usted|ustedes|debes|puedes|tienes|quieres)(?=\s|$)|^(?:ingresa|ingrese|escribe|escriba|selecciona|seleccione|presiona|presione|pulsa|pulse|toca|toque|valida|valide|verifica|verifique|confirma|confirme|env[ií]a|env[ií]e|abre|abra|cierra|cierre|busca|busque|consulta|consulte|navega|navegue|inicia|inicie|revisa|revise|acepta|acepte|cancela|cancele|elige|elija|regresa|regrese|vuelve|vuelva|haz|haga|da|d[eé])(?=\s|$)/i;
+
+// Un step que empieza en infinitivo («verificar que existe…», «enviar los
+// movimientos») es una instruccion, no una frase en tercera persona ni
+// impersonal.
+const INFINITIVE_PATTERN =
+    /^(?:verificar|validar|comprobar|revisar|ingresar|escribir|digitar|seleccionar|presionar|pulsar|tocar|confirmar|enviar|abrir|cerrar|buscar|consultar|navegar|iniciar|aceptar|cancelar|elegir|regresar|volver|hacer|dar|ver|mostrar|visualizar|realizar|completar|registrar|descargar|compartir|eliminar|editar|filtrar|aplicar|pagar|yapear)(?=\s|$)/i;
+
+export type GherkinPersonIssue = 'first-person' | 'second-person' | 'infinitive';
+
+export function gherkinPersonProblem(text: string): GherkinPersonIssue | undefined {
+    const step = normalizeGherkinStep(text).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!step) return undefined;
+    if (FIRST_PERSON_PATTERN.test(step)) return 'first-person';
+    if (SECOND_PERSON_PATTERN.test(step)) return 'second-person';
+    if (INFINITIVE_PATTERN.test(step)) return 'infinitive';
+    return undefined;
+}
+
 export const gherkinContract = {
     normalizeGherkinStep,
     featureStepLines,
     rewrittenReusedSteps,
     missingExamples,
+    scenarioExampleValues,
+    unusedExamplesColumns,
+    gherkinStepKind,
+    expectedGherkinKeyword,
+    semanticGherkinKeywords,
+    gherkinKeywordAccepted,
+    gherkinPersonProblem,
 };

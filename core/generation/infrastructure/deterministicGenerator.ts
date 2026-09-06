@@ -221,10 +221,26 @@ function hydrateScenarioRows(
                 }];
             }),
     );
+    const examples = effectiveScenario.request.examples || {};
     const rows = (effectiveScenario.request.scenarioRows || []).map(row => {
+        // El paquete guarda las acciones de la fila solo por secuencia y el
+        // dato escrito vuelve literal desde scenario.actions. El step lo
+        // nombra como <param> con su columna en Examples: se restituye para
+        // que la definition lo reciba y el Screen no lo deje fijo en codigo.
+        const parameters = [...String(row.text || '').matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
+            .map(match => match[1]);
+        const pending = new Set(parameters);
         const actions = (row.actions || [])
             .map(entry => bySequence.get(Number((entry as any)?.sequence)))
-            .filter(Boolean);
+            .filter(Boolean)
+            .map(action => {
+                if (action!.action !== 'ESCRIBIR' || !pending.size) return action;
+                const literal = String(action!.value ?? '');
+                const parameter = [...pending].find(name => String(examples[name] ?? '') === literal);
+                if (!parameter || /^<[^>]+>$/.test(literal)) return action;
+                pending.delete(parameter);
+                return { ...action!, value: `<${parameter}>` };
+            });
         return {
             ...row,
             actions,

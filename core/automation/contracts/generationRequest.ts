@@ -35,6 +35,12 @@ export interface GenerationRequest {
             loopStartIndex: number;
             loopLength: number;
             parameter: string;
+            /**
+             * Ciclo cuyas vueltas tocan locators distintos (un getter por
+             * filtro): el metodo recorre los valores de la DataTable y elige
+             * el getter de cada valor, en vez de repetir los clicks fijos.
+             */
+            variants?: Array<{ value: string; variableName: string }>;
         };
         actions?: RecordedStep[];
         status?: 'reused' | 'missing';

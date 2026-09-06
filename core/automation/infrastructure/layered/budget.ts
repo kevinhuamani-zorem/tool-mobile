@@ -53,7 +53,8 @@ export function budgetWarnings(
         warnings.push(
             `${agentName} tardó ${Math.round(durationMs)} ms; el objetivo es ${budget.maxDurationMs} ms. `
             + `La sesión solo se corta al hang stop de ${budget.hangStopMs} ms, por silencio de `
-            + `${resolveAgentIdleStopMs()} ms o si una corrección no llega en ${resolveAgentFeedbackIdleMs()} ms tras el feedback.`,
+            + `${resolveAgentIdleStopMs()} ms, si una corrección no llega en ${resolveAgentFeedbackIdleMs()} ms tras el feedback `
+            + 'o si dos correcciones seguidas repiten exactamente los mismos errores.',
         );
     }
     return warnings;

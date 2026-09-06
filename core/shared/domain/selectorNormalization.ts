@@ -110,3 +110,43 @@ export function selectorCannotIdentifyElement(selector = ''): boolean {
     if (/[\[\]@=]|contains\(|text\(\)|starts-with\(/.test(value)) return false;
     return true;
 }
+
+/**
+ * Metodos de UiSelector que identifican un elemento por lo que es, no por la
+ * posicion que ocupa. `className` e `instance(n)` describen un tipo y un
+ * indice: el mismo par aparece en cualquier pantalla con un campo de texto.
+ */
+const UI_SELECTOR_IDENTIFYING_METHODS =
+    /\.(?:text|textContains|textStartsWith|textMatches|description|descriptionContains|descriptionStartsWith|descriptionMatches|resourceId|resourceIdMatches)\s*\(/;
+
+/**
+ * Un selector sin predicado identificador no prueba identidad entre modulos.
+ *
+ * `new UiSelector().className("android.widget.EditText")` es el campo del
+ * codigo OTP en `yapear-otp` y tambien el campo del correo en la pantalla de
+ * movimientos: coincidir en el texto del selector no significa que sea el
+ * mismo elemento. Lo mismo vale para `instance(n)`, para un XPath sin
+ * predicado o solo con indice (`//android.view.View[3]`) y para una class
+ * chain de iOS sin predicado (`**\/XCUIElementTypeTextField[2]`). Un id,
+ * un accessibility id, un texto o un resource-id si identifican. El selector
+ * grabado nunca se corrige por esto: solo deja de valer como evidencia de
+ * reutilizacion fuera del modulo que el caso extiende.
+ */
+export function selectorIsUnspecific(selector = ''): boolean {
+    const value = String(selector).trim();
+    if (!value) return false;
+    const uiSelector = value.replace(/^android=/, '');
+    if (/^new\s+UiSelector\(\)/.test(uiSelector)) {
+        return !UI_SELECTOR_IDENTIFYING_METHODS.test(uiSelector);
+    }
+    if (/^-ios predicate string:/.test(value)) return false;
+    const chain = value.replace(/^-ios class chain:/, '');
+    if (/^\*\*\//.test(chain) || /^XCUIElementType\w+(?:\/XCUIElementType\w+)*(?:\[\d+\])?$/.test(chain)) {
+        return !/\[`[^`]*`\]/.test(chain);
+    }
+    if (/^\(?\/{1,2}[^/]/.test(value) || value === '//*') {
+        const withoutPositions = value.replace(/\[\d+\]/g, '');
+        return !/[\[\]@=]|contains\(|text\(\)|starts-with\(/.test(withoutPositions);
+    }
+    return false;
+}

@@ -42,6 +42,7 @@ import {
     stepDefinitionExpressions,
     syntaxRules,
     updateSafetyRules,
+    parameterFlowRules,
 } from './rules';
 
 export { emptyOnRecordedPlatform } from './rules/screenInspection';
@@ -128,6 +129,7 @@ export class AutomationResponseValidator {
                 };
                 outputRules(previewContext, report);
                 gherkinQualityRules(previewContext, report);
+                parameterFlowRules(previewContext, report);
                 codeStructureRules(previewContext, report);
                 updateSafetyRules(previewContext, report);
                 frameworkCollisionRules(previewContext, report);

@@ -18,6 +18,7 @@ import {
     declareElements,
     detectRepetition,
     candidateAllowlist,
+    semanticGherkinKeywords,
 } from '../contracts';
 import { ReuseAnalyzer, SquadReuseCatalog, CodeGraph, importsOf, indexModuleImports, roundTrip } from '../../indexing';
 import {
@@ -27,6 +28,7 @@ import {
     translateToSlug,
     unknownTokens,
     selectorCannotIdentifyElement,
+    selectorIsUnspecific,
 } from '../../shared';
 import { frameworkContract, projectPaths } from '../../workspace';
 import { ElementIdentityIndex } from '../domain/elementIdentity';
@@ -194,6 +196,44 @@ export class DeterministicResolver {
         // el mismo par (TypeLocator, valor normalizado) representa el mismo
         // elemento, aunque el intent sugiera otro nombre.
         const createdByLocator = new Map<string, { name: string; sequence: number }>();
+        // Locator nuevo a partir del candidato primary verificado. Lo usan la
+        // pasada principal y la revision de selectores genericos: el mismo par
+        // (TypeLocator, valor) dentro de la grabacion es el mismo elemento.
+        const createFromPrimary = (
+            step: RecordedStep,
+            sequence: number,
+            intent: string,
+            primary: { candidateId: string; selector: string },
+            reason?: string,
+        ): ActionResolution => {
+            const pair = roundTrip(primary.selector, rawScenario.platform);
+            const identity = `${pair.type}\u0000${pair.value}`;
+            const already = createdByLocator.get(identity);
+            if (already) {
+                // Se conserva `create`: el locator es nuevo, solo que una
+                // sola vez. El generador colapsa las entradas por nombre.
+                return {
+                    sequence, action: step.action, intent,
+                    resolution: 'create', locatorName: already.name, selector: primary.selector,
+                    confidence: 1,
+                    reason: `Mismo par TypeLocator/selector normalizado (${pair.type}) que la accion ` +
+                        `${already.sequence}: es el mismo elemento, no se duplica el locator.`,
+                };
+            }
+            // El intent lo escribe el QA en espanol; el nombre logico va en
+            // ingles como el resto del codigo del framework.
+            let locatorName = translateToEnglish(intent).name || camel(intent, `element${sequence}`);
+            while (usedNames.has(locatorName)) locatorName = `${locatorName}${sequence}`;
+            usedNames.add(locatorName);
+            createdByLocator.set(identity, { name: locatorName, sequence });
+            return {
+                sequence, action: step.action, intent,
+                resolution: 'create', locatorName, selector: primary.selector,
+                confidence: 1,
+                reason: reason
+                    || `Selector primary verificado (${primary.candidateId}); se crea un locator lógico nuevo.`,
+            };
+        };
         const resolutions: ActionResolution[] = rawScenario.actions.map((step, index) => {
             const sequence = index + 1;
             const intent = actionIntent(step, sequence);
@@ -219,7 +259,10 @@ export class DeterministicResolver {
                 || left.locator.name.localeCompare(right.locator.name)
             );
             const [reused] = reuseMatches;
-            const materiallyTied = reused
+            // Con un selector sin predicado identificador la pregunta "cual
+            // de estos locators es el elemento" no tiene sentido: ninguno lo
+            // identifica. Se resuelve por modulo mas abajo, sin bloquear.
+            const materiallyTied = reused && !selectorIsUnspecific(reused.candidate.selector)
                 ? reuseMatches.filter(match =>
                     match.locator.scope === reused.locator.scope
                     && match.candidate.stability === reused.candidate.stability
@@ -243,12 +286,18 @@ export class DeterministicResolver {
                         'El QA debe elegir explícitamente cuál locator existente representa el elemento; el agente no puede decidirlo.',
                 });
             } else if (reused) {
+                // Un selector sin predicado identificador coincide con cualquier
+                // campo del mismo tipo: la coincidencia se anota, pero solo se
+                // adopta si el locator vive en el modulo que este caso extiende
+                // (se decide en cuanto se conoce ese modulo, mas abajo).
+                const unspecific = selectorIsUnspecific(reused.candidate.selector);
                 return {
                     sequence, action: step.action, intent,
                     resolution: 'reuse', locatorName: reused.locator.name,
                     selector: reused.locator.selector, confidence: 1,
                     matchedCandidateId: reused.candidate.candidateId,
                     matchedPrimaryCandidate: reused.candidate.primary,
+                    ...(unspecific ? { unspecificSelector: true as const } : {}),
                     source: {
                         file: reused.locator.file,
                         module: reused.locator.module,
@@ -260,34 +309,7 @@ export class DeterministicResolver {
                 };
             }
             const primary = selectorChoices.find(candidate => candidate.primary);
-            if (selector && primary) {
-                const pair = roundTrip(primary.selector, rawScenario.platform);
-                const identity = `${pair.type}\u0000${pair.value}`;
-                const already = createdByLocator.get(identity);
-                if (already) {
-                    // Se conserva `create`: el locator es nuevo, solo que una
-                    // sola vez. El generador colapsa las entradas por nombre.
-                    return {
-                        sequence, action: step.action, intent,
-                        resolution: 'create', locatorName: already.name, selector: primary.selector,
-                        confidence: 1,
-                        reason: `Mismo par TypeLocator/selector normalizado (${pair.type}) que la accion ` +
-                            `${already.sequence}: es el mismo elemento, no se duplica el locator.`,
-                    };
-                }
-                // El intent lo escribe el QA en espanol; el nombre logico va en
-                // ingles como el resto del codigo del framework.
-                let locatorName = translateToEnglish(intent).name || camel(intent, `element${sequence}`);
-                while (usedNames.has(locatorName)) locatorName = `${locatorName}${sequence}`;
-                usedNames.add(locatorName);
-                createdByLocator.set(identity, { name: locatorName, sequence });
-                return {
-                    sequence, action: step.action, intent,
-                    resolution: 'create', locatorName, selector: primary.selector,
-                    confidence: 1,
-                    reason: `Selector primary verificado (${primary.candidateId}); se crea un locator lógico nuevo.`,
-                };
-            }
+            if (selector && primary) return createFromPrimary(step, sequence, intent, primary);
             const intentCandidate = catalog.locators
                 .filter(locator => locator.scope === 'squad' || locator.scope === 'home')
                 .map(locator => ({ locator, score: similarity(intent, locator.name) }))
@@ -309,6 +331,57 @@ export class DeterministicResolver {
                 resolution: 'unresolved', confidence: 0,
                 gapId,
                 reason: gaps[gaps.length - 1].description,
+            };
+        });
+
+        // El Screen que este caso extiende se conoce antes de juzgar los
+        // selectores genericos: la eleccion no cuenta esas coincidencias, asi
+        // que el resultado es el mismo que se fija en el plan mas abajo.
+        const reusableBundle = bestArtifactBundle(catalog, rawScenario, resolutions);
+        resolutions.forEach((resolution, index) => {
+            if (resolution.resolution !== 'reuse' || !resolution.unspecificSelector || !resolution.source) return;
+            const declined = {
+                file: resolution.source.file,
+                module: resolution.source.module,
+                name: resolution.locatorName || '',
+            };
+            const step = rawScenario.actions[index];
+            const selectorChoices = candidateAllowlist(step, rawScenario.platform);
+            // Si el modulo que se extiende ya tiene un locator con ese mismo
+            // selector generico, es el mismo elemento de la misma pantalla.
+            const sameModule = reusableBundle
+                ? selectorChoices.flatMap(candidate =>
+                    exactLocators(catalog, candidate.selector).map(match => ({ ...match, candidate }))
+                ).find(match => match.locator.file === reusableBundle.locators)
+                : undefined;
+            if (sameModule) {
+                resolutions[index] = {
+                    ...resolution,
+                    locatorName: sameModule.locator.name,
+                    selector: sameModule.locator.selector,
+                    matchedCandidateId: sameModule.candidate.candidateId,
+                    matchedPrimaryCandidate: sameModule.candidate.primary,
+                    source: {
+                        file: sameModule.locator.file,
+                        module: sameModule.locator.module,
+                        scope: sameModule.locator.scope as 'squad' | 'home',
+                    },
+                    reason: `Mismo par TypeLocator/selector normalizado (${sameModule.strategy}) que ` +
+                        `${sameModule.locator.module}.${sameModule.locator.name}. El selector no lleva predicado ` +
+                        'identificador; se adopta porque el locator vive en el modulo que este caso extiende.',
+                };
+                return;
+            }
+            const primary = selectorChoices.find(candidate => candidate.primary);
+            if (!primary) return;
+            const created = createFromPrimary(step, resolution.sequence, resolution.intent, primary,
+                `El selector grabado (${primary.selector}) no lleva predicado identificador: coincide con ` +
+                `${declined.module}.${declined.name}, pero un selector generico no prueba que sea el mismo ` +
+                'elemento de otra pantalla. Se crea en el modulo de este caso con el selector grabado tal cual.');
+            resolutions[index] = {
+                ...created,
+                unspecificSelector: true,
+                declinedReuse: declined,
             };
         });
 
@@ -618,8 +691,6 @@ export class DeterministicResolver {
         });
         const behaviorChunks = memoryChunks.filter(chunk => !chunk.assertion && !chunk.memory).length;
         const assertionChunks = memoryChunks.filter(chunk => chunk.assertion && !chunk.memory).length;
-        let behaviorSeen = false;
-        let assertionSeen = false;
         memoryChunks.forEach(chunk => {
             const intents = chunk.entries.map(entry => entry.resolution.intent);
             const parameterizedActions = chunk.entries.map(({ step, resolution }) => {
@@ -655,10 +726,10 @@ export class DeterministicResolver {
                 // cuando no hay ninguna de las dos.
                 : domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName)
                     || (behaviorChunks === 1 ? qaSentence(rawScenario.objective) : undefined)
-                    || intentBehaviorText(chunk.entries.map(entry => entry.step), intents)
+                    || intentBehaviorText(parameterizedActions, intents)
                     || behaviorTemplate(technicalName);
             const assertionRow = domainAssertionText(intents)
-                || (assertionChunks === 1 ? qaSentence(rawScenario.acceptanceCriteria) : undefined)
+                || (assertionChunks === 1 ? qaSentence(rawScenario.acceptanceCriteria, 'assertion') : undefined)
                 || intentAssertionText(chunk.entries.map(entry => entry.step), intents)
                 || assertionTemplate(technicalName);
             const wording: 'domain' | 'qa' | 'template' = chunk.assertion
@@ -666,9 +737,10 @@ export class DeterministicResolver {
                     : assertionRow === assertionTemplate(technicalName) ? 'template' : 'qa')
                 : (domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName) ? 'domain'
                     : behavior === behaviorTemplate(technicalName) ? 'template' : 'qa');
-            const keyword = chunk.assertion
-                ? (assertionSeen ? 'And' : 'Then')
-                : (behaviorSeen ? 'And' : 'When');
+            // Provisional: el keyword definitivo lo fija semanticGherkinKeywords
+            // sobre las filas finales (tras reutilizar, consolidar y desambiguar),
+            // segun lo que ejecuta cada fila y la fila anterior.
+            const keyword = chunk.assertion ? 'Then' : 'When';
             scenarioRows.push(chunk.memory ? {
                 keyword,
                 text: chunk.memory.text,
@@ -687,8 +759,6 @@ export class DeterministicResolver {
                 wording,
                 actions: parameterizedActions,
             });
-            if (chunk.assertion) assertionSeen = true;
-            else behaviorSeen = true;
         });
         const usedCanonicals = new Set<string>();
         const uniqueScenarioRows = scenarioRows.map(row => {
@@ -724,8 +794,13 @@ export class DeterministicResolver {
                 rawScenario.acceptanceCriteria,
             )
             : undefined;
-        normalizedRequest.scenarioRows = consolidatedValidationRows
+        const finalRows = consolidatedValidationRows
             || (repetition ? attachRepetitionDataTable(uniqueScenarioRows, repetition) : uniqueScenarioRows);
+        // Given: contexto inicial. When: accion. Then: resultado esperado.
+        // And: complementa el paso anterior (hereda su tipo), asi que la
+        // accion que sigue a un Then vuelve a ser When.
+        const keywords = semanticGherkinKeywords(finalRows);
+        normalizedRequest.scenarioRows = finalRows.map((row, index) => ({ ...row, keyword: keywords[index] }));
         normalizedRequest.examples = examples;
         const scenario: AutomationScenario = { ...rawScenario, request: normalizedRequest };
         const candidates = frameworkCandidates(catalog, scenario, resolutions);
@@ -740,14 +815,13 @@ export class DeterministicResolver {
             selectorCoverage: reusable.selectorCoverage,
             paths: reusable.paths,
         } : undefined;
-        const reusableBundle = existingCase ? undefined : bestArtifactBundle(catalog, scenario, resolutions);
         const featurePrefix = featureScope ? `${scenario.squad}/${featureScope}` : scenario.squad;
-        const reuseTarget = reusableBundle ? {
+        const reuseTarget = reusableBundle && !existingCase ? {
             reason: reusableBundle.reason,
             score: reusableBundle.score,
             ...(reusableBundle.bundle.steps ? { steps: reusableBundle.bundle.steps } : {}),
             screen: reusableBundle.bundle.screens[0],
-            locators: reusableBundle.bundle.locators[0],
+            locators: reusableBundle.locators,
         } : undefined;
         // Cobertura de plataforma del modulo que se va a extender.
         //

@@ -85,6 +85,24 @@ if (locators) {
     }
 }
 
+const exampleValuesOf = scenario => {
+    const values = {};
+    const add = (column, value) => {
+        const text = String(value === undefined || value === null ? '' : value).trim();
+        if (!column || !text) return;
+        values[column] = values[column] || [];
+        if (!values[column].includes(text)) values[column].push(text);
+    };
+    const request = (scenario && scenario.request) || {};
+    for (const [column, value] of Object.entries(request.examples || {})) add(column, value);
+    for (const row of request.scenarioRows || []) {
+        const table = row && row.dataTable;
+        if (!table || !Array.isArray(table.headers)) continue;
+        for (const cells of table.rows || []) table.headers.forEach((header, index) => add(header, cells[index]));
+    }
+    return values;
+};
+
 if (screen && exists('framework-api.json')) {
     const api = readJson('framework-api.json');
     const contract = require('./${CONTRACT_FILE}');
@@ -122,6 +140,9 @@ if (screen && exists('framework-api.json')) {
             importSource: screenObject.existingImport ? screenObject.existingImport.source : screenObject.importSource,
             baseScreenClass: api.baseScreen ? api.baseScreen.className : undefined,
         } : undefined,
+        // Un valor de Examples escrito como literal en el Screen es el dato fijo
+        // de la grabacion: el step lo entrega por argumento.
+        exampleValues: exists('scenario.json') ? exampleValuesOf(readJson('scenario.json')) : undefined,
     };
     // Lo que el baseline ya traia no es del autor: se descuenta, como hace el validador.
     const baselineFile = screenPlan ? 'baselines/screen-' + String(screenPlan.path).split('/').pop() : null;

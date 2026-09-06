@@ -201,7 +201,9 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             "import { TypeLocator } from '@common/enums/locator-type.enum.js';",
     },
     'framework-locator-collision': {
-        requirement: 'Si un selector ya existe en el framework para el mismo elemento, debe reutilizarse y no duplicarse.',
+        requirement: 'Si un selector ya existe en el framework para el mismo elemento, debe reutilizarse y no duplicarse. ' +
+            'La excepción la fija el plan: un locator `create` marcado `unspecificSelector` (className, instance(n) o XPath ' +
+            'sin predicado) se crea en el módulo del caso aunque otro módulo tenga el mismo selector, porque no identifica al mismo elemento.',
         minimalExample:
             'resources/locators/payment/confirmacion-envio-email-movements.locator.json\n' +
             '"seeAllMovements": "new UiSelector().description(\\"Ver todos\\")"',
@@ -233,6 +235,61 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
         minimalExample:
             'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
             'When el usuario consulta todos sus movimientos',
+    },
+    'examples-unused-column': {
+        requirement: 'Cada columna de Examples debe nombrarse como <columna> en algún step del Scenario que la ' +
+            'emplea (por ejemplo «el usuario ingresa su correo <email>»), para que el dato llegue por argumento y ' +
+            'nunca quede fijo el valor de la grabación.',
+        minimalExample:
+            'features/yape-features/payment/send-movements-by-email.feature\n' +
+            'When el usuario ingresa su correo <email> y confirma el envío\n' +
+            'Examples:\n  | username   | email          |\n  | usuario_qa | qa@yape.com.pe |',
+    },
+    'parameter-not-forwarded': {
+        requirement: 'Cada parámetro que recibe una definition (captura del step) debe pasarse como argumento al ' +
+            'método del Screen Object; la definition nunca lo descarta.',
+        minimalExample:
+            'features/yape-steps-definitions/payment/send-movements-by-email.steps.ts\n' +
+            'When(/^el usuario ingresa su correo (.*) y confirma el envío$/, async (email: string) => {\n' +
+            '    await movementsScreen.enterEmailAndConfirm(email);\n});',
+    },
+    'parameter-unused': {
+        requirement: 'Cada parámetro que declara un método del Screen Object debe usarse en su cuerpo (es el dato ' +
+            'que se escribe o compara); un parámetro declarado y un literal en su lugar es el valor fijo de la grabación.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'public async enterEmailAndConfirm(email: string): Promise<void> {\n' +
+            '    await this.uiHelper.waitForElementExistByLocator(this.emailInput, true);\n' +
+            '    await this.emailInput.setValue(email);\n    await this.btnsend.click();\n}',
+    },
+    'example-value-hardcoded': {
+        requirement: 'Un valor de Examples o de una DataTable debe llegar al Screen Object y a los Steps como ' +
+            'argumento; nunca debe escribirse como literal en el código.',
+        minimalExample:
+            'screenobjects/payment/movements.screen.ts\n' +
+            'await this.emailInput.setValue(email); // nunca setValue(\'qa@yape.com.pe\')',
+    },
+    'gherkin-keyword': {
+        requirement: 'Cada step debe usar el keyword de su tipo: Given para el contexto o estado inicial, When para la ' +
+            'acción que ejecuta el usuario o el evento que ocurre, Then para el resultado esperado; And/But complementan ' +
+            'el paso anterior y heredan su tipo, así que la acción que sigue a un Then vuelve a ser When y el resultado ' +
+            'que sigue a un When es Then.',
+        minimalExample:
+            'features/yape-features/payment/send-movements-by-email.feature\n' +
+            'Given el usuario <username> inicia sesión en Yape\n' +
+            'When el usuario consulta todos sus movimientos\n' +
+            'Then se muestra la pantalla de movimientos\n' +
+            'When el usuario ingresa su correo <email> y confirma el envío\n' +
+            'Then se muestra el mensaje de correo enviado',
+    },
+    'gherkin-person': {
+        requirement: 'Cada step debe redactarse en tercera persona («el usuario consulta…») o de forma impersonal ' +
+            '(«se muestra…»); nunca en primera persona («ingreso mi correo») ni en imperativo o segunda persona ' +
+            '(«ingresa tu correo», «selecciona el botón»).',
+        minimalExample:
+            'features/yape-features/payment/send-movements-by-email.feature\n' +
+            'When el usuario ingresa su correo <email> y confirma el envío\n' +
+            'Then se muestra el mensaje de correo enviado',
     },
     'generic-template-gherkin': {
         requirement: 'Los ciclos repetidos deben expresarse como un comportamiento y una expectativa observables, sin una pareja generica de steps por cada variante.',

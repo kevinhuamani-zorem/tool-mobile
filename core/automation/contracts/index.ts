@@ -88,7 +88,9 @@ export type AgentProviderErrorCode =
     /** Tras un feedback dirigido, la sesión no entregó una salida nueva en el plazo. */
     | 'AGENT_FEEDBACK_IDLE'
     /** La sesión dejó de emitir eventos durante más tiempo del tolerado. */
-    | 'AGENT_IDLE';
+    | 'AGENT_IDLE'
+    /** Tras un feedback dirigido, la sesión entregó otra versión con exactamente los mismos errores: no converge. */
+    | 'AGENT_FEEDBACK_STUCK';
 
 export type AgentErrorCode = AgentDomainErrorCode | AgentProviderErrorCode;
 
@@ -119,6 +121,7 @@ export const DEFAULT_AGENT_FALLBACK_POLICY: AgentFallbackPolicy = {
     AGENT_OUTPUT_MISSING: false,
     AGENT_FEEDBACK_IDLE: false,
     AGENT_IDLE: false,
+    AGENT_FEEDBACK_STUCK: false,
 };
 
 export function isAgentFallbackAllowed(
@@ -237,6 +240,20 @@ export interface ActionResolution {
     /** Candidato verificado que justificó reuse; audita alternativas sin escribirlas. */
     matchedCandidateId?: string;
     matchedPrimaryCandidate?: boolean;
+    /**
+     * El selector grabado no lleva predicado identificador (solo className,
+     * `instance(n)`, XPath o class chain sin predicado). Se conserva tal cual,
+     * pero coincidir con un locator de otro modulo no prueba que sea el mismo
+     * elemento: no cuenta como evidencia para elegir que Screen extender y
+     * solo se reutiliza dentro del modulo que el caso extiende.
+     */
+    unspecificSelector?: true;
+    /** Locator de otro modulo con el mismo selector generico que no se adopto. */
+    declinedReuse?: {
+        file: string;
+        module: string;
+        name: string;
+    };
     /**
      * Locators existentes que el gap de duplicado ofrecio para esta accion.
      *

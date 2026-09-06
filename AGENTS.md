@@ -126,8 +126,9 @@ generadores, validadores o plantillas.
     eventos (`RECORDER_AGENT_IDLE_STOP_MS`, 10 min) o una ronda de feedback que
     no entrega corrección en el plazo (`RECORDER_AGENT_FEEDBACK_IDLE_MS`, 5 min;
     Derek relanza al autor con el feedback y, agotadas las rondas, falla con el
-    detalle). Ninguno de los tres es un presupuesto: detectan sesiones que no
-    avanzan. El objetivo por defecto es
+    detalle) o dos correcciones seguidas con exactamente los mismos errores
+    (`AGENT_FEEDBACK_STUCK`: no converge, se corta sin gastar rondas). Ninguno
+    es un presupuesto: detectan sesiones que no avanzan. El objetivo por defecto es
     120 000 bytes por etapa: un autor recibe legítimamente 40–110 KB. La reutilización completa
     la garantiza el resolver, que indexa todo el framework antes de que exista
     un agente: lo que un agente deja de recibir es siempre lo que ya está
@@ -140,7 +141,14 @@ generadores, validadores o plantillas.
 17. **Reutiliza por relaciones, no por basename.** Sigue Feature -> definición
     Gherkin -> import de Screen Object -> import de Locator. Si el plan marca
     `update`, conserva la ruta y el baseline, y añade únicamente APIs faltantes.
-    No borres ni renombres definitions, methods o locators existentes.
+    No borres ni renombres definitions, methods o locators existentes. El
+    Screen que se extiende lo fija la evidencia (`bestArtifactBundle`): la
+    proporción de locators reutilizados que le pertenecen y las intenciones
+    que ya cubre, nunca «tiene algún locator en común» ni la similitud de
+    palabras sueltas. Un selector sin predicado identificador (`className`,
+    `instance(n)`, XPath sin predicado) no identifica un elemento de otra
+    pantalla: se conserva tal cual, se crea en el módulo del caso y solo se
+    reutiliza dentro del módulo que se extiende.
 18. **Las sesiones headless se aíslan de la configuración personal.** Lorem,
     Zorem y Sumrak trabajan solo con view/edit/create/bash sobre su paquete;
     los MCP (builtin de GitHub, plugins como `workiq`) y las skills personales
@@ -160,6 +168,18 @@ generadores, validadores o plantillas.
 - El Gherkin es declarativo: expresa intención, capacidad y resultado de
   negocio. No replica el historial como una línea por click, botón, campo,
   scroll, swipe o espera.
+- Keywords por semántica: `Given` contexto o estado inicial; `When` acción
+  que ejecuta el usuario o evento que ocurre; `Then` resultado esperado;
+  `And`/`But` complementan el paso anterior y heredan su tipo (la acción que
+  sigue a un `Then` vuelve a ser `When`). Redacción en tercera persona («el
+  usuario consulta…») o impersonal («se muestra…»); nunca primera persona,
+  imperativo ni infinitivo. El validador lo exige (`gherkin-keyword`,
+  `gherkin-person`) y el borrador determinista lo cumple de origen.
+- Un dato parametrizado (Examples, DataTable) viaja por argumento hasta el
+  Screen Object: se nombra como `<columna>` en el step, la definition lo pasa
+  y el método lo usa. Nunca se escribe su literal en Steps ni en el Screen
+  (`examples-unused-column`, `parameter-not-forwarded`, `parameter-unused`,
+  `example-value-hardcoded`).
 - Las acciones técnicas consecutivas se engloban en un único step funcional.
   `actionTrace` conserva el orden completo permitiendo que varias secuencias
   apunten al mismo `gherkinStep`.

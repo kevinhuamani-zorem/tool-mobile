@@ -22,9 +22,12 @@ export interface AgentProviderRunInput {
          * Permite al recorder validar el artefacto materializado con su contrato
          * oficial antes de cerrar la sesión del agente. `true` significa que la
          * salida puede aceptarse (válida o derivada a QA); `false` mantiene el
-         * watcher activo hasta que el agente escriba una versión distinta.
+         * watcher activo hasta que el agente escriba una versión distinta;
+         * `'stuck'` indica que la versión nueva repite exactamente los errores
+         * de la anterior (no converge) y la sesión se corta con
+         * `AGENT_FEEDBACK_STUCK` sin esperar más correcciones.
          */
-        acceptOutput?: (output: unknown) => boolean;
+        acceptOutput?: (output: unknown) => boolean | 'stuck';
         /**
          * Tras rechazar una salida (`acceptOutput` false), plazo para que el
          * agente escriba una versión distinta; agotado, la sesión termina con

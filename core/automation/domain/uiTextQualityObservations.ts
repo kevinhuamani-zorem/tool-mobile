@@ -1,5 +1,5 @@
 import type { AutomationScenario, RecordedStep } from '../contracts';
-import { selectorCannotIdentifyElement } from '../../shared';
+import { selectorCannotIdentifyElement, selectorIsUnspecific } from '../../shared';
 
 export interface QaTextQualityObservation {
     id: string;
@@ -27,7 +27,26 @@ export interface QaWeakAssertionObservation {
     selector: string;
 }
 
-export type QaObservation = QaTextQualityObservation | QaWeakAssertionObservation;
+/**
+ * Accion sobre un elemento cuyo selector no lleva predicado identificador
+ * (className, `instance(n)`, XPath o class chain sin predicado). Se conserva
+ * tal cual; solo se avisa que coincidir con un locator de otra pantalla no
+ * cuenta como reutilizacion.
+ */
+export interface QaUnspecificSelectorObservation {
+    id: string;
+    type: 'unspecific-selector';
+    severity: 'warning';
+    platform: 'android' | 'ios';
+    message: string;
+    actionSequence: number;
+    selector: string;
+}
+
+export type QaObservation =
+    | QaTextQualityObservation
+    | QaWeakAssertionObservation
+    | QaUnspecificSelectorObservation;
 
 export interface QaObservationsArtifact {
     schemaVersion: 1;
@@ -100,6 +119,23 @@ export function analyzeUiTextQuality(
             platform: step.platform || defaultPlatform,
             message: `La verificación usa "${selector}", un XPath sin predicado que engancha el primer nodo de ese tipo. ` +
                 'Se conserva tal cual; si buscas un elemento concreto, refina el selector o pide al agente que lo haga en código.',
+            actionSequence,
+            selector,
+        });
+    });
+    steps.forEach((step, index) => {
+        if (/^VERIFICAR_/.test(String(step.action || ''))) return; // ya lo cubre weak-assertion
+        const selector = String(step.selector || '');
+        if (!selector || step.selectorVerified === false || !selectorIsUnspecific(selector)) return;
+        const actionSequence = Number(step.sequence || index + 1);
+        observations.push({
+            id: `unspecific-selector-${actionSequence}`,
+            type: 'unspecific-selector',
+            severity: 'warning',
+            platform: step.platform || defaultPlatform,
+            message: `La acción usa "${selector}", un selector sin predicado identificador (tipo o posición, ` +
+                'sin texto, descripción ni resource-id). Se conserva tal cual; un locator de otra pantalla con el ' +
+                'mismo selector no se da por el mismo elemento, así que solo se reutiliza dentro del módulo del caso.',
             actionSequence,
             selector,
         });

@@ -51,7 +51,7 @@
         {
           "name": "userViewAllMovementsMovementsCasesFilterContainer",
           "args": "filtroValues: string[]",
-          "hasLoop": false,
+          "hasLoop": true,
           "usesDynamicLocator": false
         },
         {
@@ -198,7 +198,7 @@
   "fingerprints": {
     "feature": "626ea7792b51659f4f4e5ec1e61e065ac8e5bd9b741df4ec02a1148f35797376",
     "steps": "c1a5f5b276ebd8c54b1518a6a3c308c6248eb03691a8ad1ea0c534f9898c4952",
-    "screen": "7cae6cb0f221c15fd3c5734024238b414df7bb2c045a529cd94d3bc7e3c2f2d8",
+    "screen": "c360c980da6fcf285791085412bcde9d991d0092f883ffc7d3a7811a866000ca",
     "locators": "bf38a7838a50b8a8a61bc6a47aca6a905e0b0fc272d4a3b737d776cb31a13441"
   }
 }

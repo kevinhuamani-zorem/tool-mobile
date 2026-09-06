@@ -504,7 +504,25 @@ export class CopilotCliAdapter implements AgentProvider {
                         rejectedAt = undefined;
                         const schemaValid = validateWithSchema(output, schema);
                         if (stopOnValidatedOutput.acceptOutput) {
-                            if (!stopOnValidatedOutput.acceptOutput(output)) {
+                            const verdict = stopOnValidatedOutput.acceptOutput(output);
+                            if (verdict === 'stuck') {
+                                // Otra version con exactamente los mismos errores: el
+                                // agente no converge y seguir esperando solo gasta
+                                // sesion. Se corta ya; la ultima version queda en disco.
+                                rejectedRounds += 1;
+                                appendTrace('feedback-stuck',
+                                    `La corrección repite los mismos errores que el feedback anterior (ronda ${rejectedRounds}).`);
+                                const pid = child.pid;
+                                this.killPidTree(pid, 'SIGTERM');
+                                killEscalationTimer = setTimeout(() => {
+                                    this.killPidTree(pid, 'SIGKILL');
+                                }, Math.max(1, this.killGraceMs));
+                                killEscalationTimer.unref?.();
+                                finish(false, null, 'AGENT_FEEDBACK_STUCK',
+                                    'La sesión entregó versiones consecutivas con exactamente los mismos errores.');
+                                return;
+                            }
+                            if (!verdict) {
                                 rejectedAt = Date.now();
                                 rejectedRounds += 1;
                                 appendTrace(

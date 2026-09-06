@@ -146,6 +146,9 @@ export function gapJudgment(packageDirectory: string, plan: GenerationPlan): Gap
 export const BEHAVIOR_RULE_CODES = new Set([
     'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
     'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
+    'gherkin-keyword', 'gherkin-person',
+    // El dato parametrizado en Examples viaja por el step y su definition.
+    'examples-unused-column', 'parameter-not-forwarded',
     'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
     'verbatim-context-hint', 'platform-tag', 'behavior-path',
     // El import del Screen Object y su alias viven en Steps: los escribe
@@ -172,6 +175,8 @@ export const INTERACTION_RULE_CODES = new Set([
     'json-import-attribute', 'locator-import-alias', 'locator-import-identifier', 'locator-bracket-notation',
     'getElement-arity', 'getElement-order', 'type-locator-import', 'helper-method',
     'screen-class-name', 'screen-singleton-name',
+    // El argumento que llega desde la definition es el dato que el Screen usa.
+    'parameter-unused', 'example-value-hardcoded',
 ]);
 
 export const INTEGRATION_RULE_CODES = new Set([

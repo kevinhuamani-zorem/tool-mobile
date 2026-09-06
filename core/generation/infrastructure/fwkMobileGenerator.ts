@@ -102,7 +102,36 @@ function locatorBlockName(moduleName: string, platform: MobilePlatform, naming?:
     return `${camel}${platform === 'android' ? 'Android' : 'Ios'}`;
 }
 
+/** Nombre de getter provisional de la vuelta variable de un ciclo con locators distintos. */
+const VARIANT_PLACEHOLDER = '__variantOption__';
+
+function variantOptionMethodName(itemVariable: string): string {
+    const base = itemVariable.replace(/Value$/, '') || 'option';
+    return `${base}OptionFor`;
+}
+
 export class FwkMobileGenerator {
+    /**
+     * Metodo privado que traduce cada valor de la DataTable al getter grabado
+     * para el: `case 'Solo hoy': return this.filterOnlyToday;`. Un valor que
+     * no se grabo falla al ejecutar con un mensaje claro, no en silencio.
+     */
+    private variantOptionMethod(
+        name: string,
+        parameter: string,
+        variants: Array<{ value: string; variableName: string }>,
+    ): string {
+        const argument = this.safeIdentifier(parameter, 'value');
+        return [
+            `    private ${name}(${argument}: string) {`,
+            `        switch (${argument}) {`,
+            ...variants.map(variant => `            case ${JSON.stringify(variant.value)}: return this.${variant.variableName};`),
+            `            default: throw new Error(\`Valor de ${parameter} no registrado en la grabación: \${${argument}}\`);`,
+            `        }`,
+            `    }`,
+        ].join('\n');
+    }
+
     preview(
         request: GenerationRequest,
         steps: RecordedStep[],
@@ -127,12 +156,19 @@ export class FwkMobileGenerator {
             featureScopeDirectory(projectPaths.features, normalized.squad, normalized.featureScope),
             `${normalized.fileName}.feature`
         );
+        const rawMissingRows = normalized.scenarioRows?.filter(row => row.status === 'missing') || [];
         const missingRows = this.normalizeScenarioRows(
-            normalized.scenarioRows?.filter(row => row.status === 'missing') || [],
+            rawMissingRows,
             Boolean(options.preserveDistinctActionLocators),
         );
+        // Un ciclo con un getter por vuelta se compacta en el metodo (recorre la
+        // DataTable), no en el JSON: sus locators salen de todas las vueltas
+        // grabadas. El ciclo sobre un unico locator parametrizable conserva el
+        // getter dinamico de la fila compactada.
+        const locatorRows = missingRows.map((row, index) =>
+            row.repetitionExecution?.variants ? rawMissingRows[index] : row);
         const generationActions = normalized.scenarioRows
-            ? missingRows.flatMap(row => row.actions || [])
+            ? locatorRows.flatMap(row => row.actions || [])
             : steps;
         this.validateGenerationActions(missingRows);
         const locatorEntries = this.collectLocators(generationActions)
@@ -177,7 +213,7 @@ export class FwkMobileGenerator {
             stepContent: stepPath && screenPath
                 ? withGeneratedFileMetadata(
                     'steps',
-                    this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath, options.existingMethods),
+                    this.buildStepDefinitions(normalized, missingRows, stepPath, screenPath, options.existingMethods, normalized.scenarioRows || missingRows),
                     createdAt
                 )
                 : undefined,
@@ -193,6 +229,7 @@ export class FwkMobileGenerator {
                         reusedByName,
                         options.existingMethods,
                         options.locatorNaming,
+                        locatorRows,
                     ),
                     createdAt
                 )
@@ -470,6 +507,7 @@ export class FwkMobileGenerator {
         stepPath: string,
         screenPath: string,
         existingMethods: Map<number, { name: string; args?: string[] }> = new Map(),
+        allRows: NonNullable<GenerationRequest['scenarioRows']> = rows,
     ): string {
         const importPath = this.frameworkAlias(
             screenPath,
@@ -477,7 +515,7 @@ export class FwkMobileGenerator {
             '@screenobjects'
         );
         const screenInstanceName = screenObjectNames(screenPath).instanceName;
-        const effectiveKeywords = this.effectiveStepKeywords(rows);
+        const effectiveKeywords = this.effectiveStepKeywords(rows, allRows);
         const imports = [...new Set([
             ...effectiveKeywords,
             ...(rows.some(row => Boolean(row.dataTable?.headers?.length)) ? ['DataTable'] : []),
@@ -535,15 +573,30 @@ export class FwkMobileGenerator {
         ].join('\n');
     }
 
+    /**
+     * Keyword de la definition de cada fila a generar. `And`/`But` heredan el
+     * del step anterior del Scenario completo: las definitions se generan solo
+     * para las filas `missing`, pero el step anterior de un `And` puede ser una
+     * fila reutilizada que no esta en esa lista.
+     */
     private effectiveStepKeywords(
-        rows: NonNullable<GenerationRequest['scenarioRows']>
+        rows: NonNullable<GenerationRequest['scenarioRows']>,
+        allRows: NonNullable<GenerationRequest['scenarioRows']> = rows,
     ): ('Given' | 'When' | 'Then')[] {
+        const isPrimary = (keyword: string): keyword is 'Given' | 'When' | 'Then' =>
+            keyword === 'Given' || keyword === 'When' || keyword === 'Then';
+        const byText = new Map<string, 'Given' | 'When' | 'Then'>();
         let previous: 'Given' | 'When' | 'Then' = 'Given';
+        for (const row of allRows) {
+            if (isPrimary(row.keyword)) previous = row.keyword;
+            if (!byText.has(row.text)) byText.set(row.text, previous);
+        }
+        let fallback: 'Given' | 'When' | 'Then' = 'Given';
         return rows.map(row => {
-            if (row.keyword === 'Given' || row.keyword === 'When' || row.keyword === 'Then') {
-                previous = row.keyword;
-            }
-            return previous;
+            if (isPrimary(row.keyword)) fallback = row.keyword;
+            const effective = byText.get(row.text) ?? fallback;
+            fallback = effective;
+            return effective;
         });
     }
 
@@ -555,6 +608,8 @@ export class FwkMobileGenerator {
         reused: Map<string, ReusedLocator> = new Map(),
         existingMethods: Map<number, { name: string; args?: string[] }> = new Map(),
         naming?: LocatorNaming,
+        /** Filas sin compactar: un ciclo con getters distintos necesita todos sus locators. */
+        locatorRows: NonNullable<GenerationRequest['scenarioRows']> = rows,
     ): string {
         // Resueltos contra el framework en disco, no fijos: si BaseScreen o
         // LocatorFactory se mueven, el import generado se mueve con ellos.
@@ -572,7 +627,7 @@ export class FwkMobileGenerator {
             : undefined;
         const className = screenObjectNames(screenPath).className;
         // Los reutilizados quedan fuera del bloque propio: se referencian, no se crean.
-        const locators = this.collectLocators(rows.flatMap(row => row.actions || []))
+        const locators = this.collectLocators(locatorRows.flatMap(row => row.actions || []))
             .filter(([name]) => !reused.has(name));
         const androidBlock = locatorBlockName(request.locatorModule, 'android', naming);
         const iosBlock = locatorBlockName(request.locatorModule, 'ios', naming);
@@ -580,7 +635,7 @@ export class FwkMobileGenerator {
         // Un locator reutilizado se referencia en su modulo de origen; copiarlo
         // aqui crearia una segunda fuente de verdad para el mismo elemento.
         const reusedInScreen = [...new Set(
-            rows.flatMap(row => row.actions || [])
+            locatorRows.flatMap(row => row.actions || [])
                 .map(action => action.variableName || '')
                 .filter(name => reused.has(name))
         )].map(name => reused.get(name)!);
@@ -665,6 +720,10 @@ export class FwkMobileGenerator {
                 existingMethods,
                 returnTextAssertion: returnsText,
             });
+            const variants = row.repetitionExecution?.variants;
+            const optionMethod = variants && dataTableBinding
+                ? this.variantOptionMethod(variantOptionMethodName(dataTableBinding.itemVariable), row.repetitionExecution!.parameter, variants)
+                : undefined;
             return {
                 name: methodName,
                 content: [
@@ -672,7 +731,8 @@ export class FwkMobileGenerator {
                 ...(hasTimeout && actions.some(line => /\btimeout\b/.test(line))
                     ? [`        const timeout: number = ${contract.timeoutHelperSymbol}();`] : []),
                 ...actions.map(line => `        ${line}`),
-                `    }`
+                `    }`,
+                ...(optionMethod ? ['', optionMethod] : []),
                 ].join('\n')
             };
         }).filter((method, index, all) =>
@@ -903,13 +963,39 @@ export class FwkMobileGenerator {
             const varyingNames = Array.from({ length: repetition.repetitions }, (_, round) =>
                 row.actions![cycleStart + round * repetition.length + repetition.varyingOffset]?.variableName || ''
             );
-            if (preserveDistinctActionLocators && new Set(varyingNames).size !== 1) return row;
             const parameter = row.dataTable.headers[0];
             if (!parameter) return row;
-            const selector = this.selectorTemplate(String(varying.selector || ''), parameter);
-            if (!selector) return row;
             const loopStart = cycleStart;
             const postStart = cycleStart + repetition.length * repetition.repetitions;
+            if (preserveDistinctActionLocators && new Set(varyingNames).size !== 1) {
+                // Cada vuelta tiene su propio getter: el metodo recorre la
+                // DataTable y elige el getter por valor. Repetir los clicks
+                // fijos dejaba el parametro sin usar y la tabla sin efecto.
+                const variants = varyingNames.map((variableName, round) => ({
+                    value: String(row.dataTable!.rows[round]?.[0] ?? '').trim(),
+                    variableName,
+                }));
+                if (variants.some(variant => !variant.value || !variant.variableName)) return row;
+                if (new Set(variants.map(variant => variant.value)).size !== variants.length) return row;
+                return {
+                    ...row,
+                    repetitionExecution: {
+                        loopStartIndex: loopStart,
+                        loopLength: repetition.length,
+                        parameter,
+                        variants,
+                    },
+                    actions: [
+                        ...row.actions.slice(0, cycleStart),
+                        ...loopActions.map((action, index) =>
+                            index === repetition.varyingOffset ? { ...action, variableName: VARIANT_PLACEHOLDER } : action
+                        ),
+                        ...row.actions.slice(postStart),
+                    ],
+                };
+            }
+            const selector = this.selectorTemplate(String(varying.selector || ''), parameter);
+            if (!selector) return row;
             const compactActions = [
                 ...row.actions.slice(0, cycleStart),
                 ...loopActions.map((action, index) =>
@@ -944,6 +1030,7 @@ export class FwkMobileGenerator {
                 loopStartIndex: number;
                 loopLength: number;
                 parameter: string;
+                variants?: Array<{ value: string; variableName: string }>;
             };
             existingMethods: Map<number, { name: string; args?: string[] }>;
             /** La fila termina en su única aserción de texto: el método devuelve la lectura y el Step compara. */
@@ -961,24 +1048,32 @@ export class FwkMobileGenerator {
                 })
             );
         }
-        const { loopStartIndex, loopLength, parameter } = options.repetitionExecution;
+        const { loopStartIndex, loopLength, parameter, variants } = options.repetitionExecution;
         const pre = rowActions.slice(0, loopStartIndex);
         const loop = rowActions.slice(loopStartIndex, loopStartIndex + loopLength);
         const post = rowActions.slice(loopStartIndex + loopLength);
         const loopVar = options.dataTableBinding.itemVariable;
         const loopParams = [...options.parameters, parameter];
+        const optionVar = `${loopVar}Option`;
+        const optionMethod = variantOptionMethodName(options.dataTableBinding.itemVariable);
         const preLines = pre.flatMap((action, actionIndex) =>
             this.existingMethodLines(action, options.existingMethods) || this.actionLines(action, options.parameters, actionIndex, {
                 hasTimeout: options.hasTimeout,
                 next: pre[actionIndex + 1] || loop[0],
             })
         );
-        const loopLines = loop.flatMap((action, actionIndex) =>
-            this.existingMethodLines(action, options.existingMethods) || this.actionLines(action, loopParams, actionIndex, {
+        const loopLines = loop.flatMap((action, actionIndex) => {
+            const lines = this.existingMethodLines(action, options.existingMethods) || this.actionLines(action, loopParams, actionIndex, {
                 hasTimeout: options.hasTimeout,
                 next: loop[actionIndex + 1] || post[0],
-            })
-        ).map(line => `    ${line.replace(new RegExp(`\\b${parameter}\\b`, 'g'), loopVar)}`);
+            });
+            if (!variants || action.variableName !== VARIANT_PLACEHOLDER) return lines;
+            // El getter de esta vuelta lo decide el valor de la DataTable.
+            return [
+                `const ${optionVar} = this.${optionMethod}(${loopVar});`,
+                ...lines.map(line => line.split(`this.${VARIANT_PLACEHOLDER}`).join(optionVar)),
+            ];
+        }).map(line => `    ${line.replace(new RegExp(`\\b${parameter}\\b`, 'g'), loopVar)}`);
         const postLines = post.flatMap((action, actionIndex) =>
             this.existingMethodLines(action, options.existingMethods) || this.actionLines(action, options.parameters, actionIndex, {
                 hasTimeout: options.hasTimeout,

@@ -740,9 +740,15 @@ export class LayeredGenerationOrchestrator {
             }
         }
         const repairFeedbackFile = path.join(stageDirectory, 'repair-feedback.json');
+        // Firma de los errores del ultimo feedback en vivo: dos rechazos seguidos
+        // con exactamente los mismos errores significan que el agente no converge
+        // y seguir esperando (o relanzando) solo gasta sesiones. El feedback de
+        // reparacion inicial no cuenta: la primera escritura de la sesion puede
+        // ser el archivo aun sin corregir.
+        let previousErrorSignature: string | undefined;
         const acceptOutput = repairErrors.length > 0
             && this.responseValidator
-            ? (output: unknown): boolean => {
+            ? (output: unknown): boolean | 'stuck' => {
                 if (typeof output === 'object' && output !== null
                     && normalizeAuthorResult(output as LayeredAgentResult, role, plan, scenarioNaming(packageDirectory))) {
                     writeJsonUtf8(outputFile, output);
@@ -800,15 +806,20 @@ export class LayeredGenerationOrchestrator {
                     }
                 }
                 const errors = [...new Set(candidateErrors.filter(Boolean))];
+                const signature = errors.join('\n');
+                const stuck = errors.length > 0 && previousErrorSignature === signature;
+                previousErrorSignature = errors.length ? signature : undefined;
                 writeJsonUtf8(repairFeedbackFile, {
                     schemaVersion: 1,
                     owner: LAYERED_GENERATION_AGENTS.owner.name,
                     assignee: identity.name,
                     attempt,
-                    status: errors.length ? 'correction-required' : 'accepted',
+                    status: errors.length ? (stuck ? 'stuck' : 'correction-required') : 'accepted',
                     errors,
+                    ...(stuck ? { repeatedErrors: true } : {}),
                 });
-                return errors.length === 0;
+                if (!errors.length) return true;
+                return stuck ? 'stuck' : false;
             }
             : undefined;
         let feedbackRound = 0;
@@ -845,9 +856,18 @@ export class LayeredGenerationOrchestrator {
             // una sesión nueva lo lee desde cero. Con las rondas agotadas, falla
             // con el detalle en vez de esperar al hang stop (TC-10239: 12 min).
             const feedbackIdle = run.errorCode === 'AGENT_FEEDBACK_IDLE';
+            // No converge: la ultima version repite los errores del feedback
+            // anterior. No se gastan las rondas restantes; se falla con el detalle
+            // y la version queda en disco para el QA.
+            if (run.errorCode === 'AGENT_FEEDBACK_STUCK') break;
             if ((!run.success && !feedbackIdle) || !fs.existsSync(outputFile) || !acceptOutput) break;
             const accepted = acceptOutput(readJsonUtf8<unknown>(outputFile));
-            if (accepted) break;
+            if (accepted === true) break;
+            if (accepted === 'stuck') {
+                run = { ...run, success: false, errorCode: 'AGENT_FEEDBACK_STUCK',
+                    errorMessage: 'La sesión cerró con una versión que repite exactamente los mismos errores.' };
+                break;
+            }
             feedbackRound += 1;
         } while (feedbackRound <= MAX_LIVE_FEEDBACK_ROUNDS);
         report.durationMs = totalDurationMs;
@@ -858,7 +878,17 @@ export class LayeredGenerationOrchestrator {
         report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, totalDurationMs);
         if (!run.success || !fs.existsSync(outputFile)) {
             report.state = 'failed';
-            if (run.errorCode === 'AGENT_FEEDBACK_IDLE') {
+            if (run.errorCode === 'AGENT_FEEDBACK_STUCK') {
+                const latestFeedback = fs.existsSync(repairFeedbackFile)
+                    ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
+                    : undefined;
+                report.error = [
+                    `${identity.name} no converge: entregó versiones consecutivas con exactamente los mismos errores `
+                    + `(ronda ${feedbackRound + 1} de ${MAX_LIVE_FEEDBACK_ROUNDS + 1}); se corta sin agotar las rondas `
+                    + `y su última versión queda en ${path.basename(outputFile)} para revisarla.`,
+                    ...(latestFeedback?.errors || []),
+                ].join(' | ');
+            } else if (run.errorCode === 'AGENT_FEEDBACK_IDLE') {
                 const latestFeedback = fs.existsSync(repairFeedbackFile)
                     ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
                     : undefined;
@@ -873,7 +903,7 @@ export class LayeredGenerationOrchestrator {
             options.onStageChange?.({ ...report });
             throw new Error(report.error);
         }
-        if (acceptOutput && !acceptOutput(readJsonUtf8<unknown>(outputFile))) {
+        if (acceptOutput && acceptOutput(readJsonUtf8<unknown>(outputFile)) !== true) {
             const latestFeedback = fs.existsSync(repairFeedbackFile)
                 ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
                 : undefined;

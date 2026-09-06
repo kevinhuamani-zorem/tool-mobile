@@ -285,7 +285,11 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
    (`RECORDER_AGENT_IDLE_STOP_MS`) y cinco minutos sin corrección tras un
    `output-rejected` (`RECORDER_AGENT_FEEDBACK_IDLE_MS`; el orquestador relanza
    al autor con el feedback hasta agotar las rondas). Un valor 0 desactiva los
-   dos últimos. Conserva los límites de reparación del plan; no los amplíes sin
+   dos últimos. Además, dos correcciones seguidas con exactamente los mismos
+   errores cortan la sesión con `AGENT_FEEDBACK_STUCK` (`acceptOutput` devuelve
+   `'stuck'`; traza `[feedback-stuck]`) y la etapa falla sin gastar las rondas
+   restantes: el agente no converge y más rondas solo costarían sesiones.
+   Conserva los límites de reparación del plan; no los amplíes sin
    decisión explícita y métricas.
 4. Añade pruebas de resolver, paquete, validator y memoria.
 5. Un resultado solo entra a memoria después de escritura revisada y score 100.

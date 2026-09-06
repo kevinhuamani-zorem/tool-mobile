@@ -517,6 +517,57 @@ test('adapter corta la sesi처n si tras rechazar la salida no llega una correcci�
     }
 });
 
+// Si el orquestador dictamina que la version nueva repite los mismos errores,
+// esperar mas correcciones solo gasta sesion: se corta con AGENT_FEEDBACK_STUCK.
+test('adapter corta la sesi처n cuando la correcci처n repite los mismos errores (stuck)', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-feedback-stuck-'));
+    fs.writeFileSync(path.join(root, 'response.schema.json'), JSON.stringify({ type: 'object' }));
+    let killed = false;
+    const adapter = new CopilotCliAdapter((_command, _args, _options) => {
+        const child = fakeChild();
+        child.pid = 4242;
+        return child;
+    }, 'copilot', ['-p']);
+    const originalKill = process.kill;
+    process.kill = (pid, signal) => { if (Math.abs(pid) === 4242) { killed = true; return true; } return originalKill(pid, signal); };
+    setTimeout(() => fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: false, attempt: 1 })), 20);
+    setTimeout(() => fs.writeFileSync(path.join(root, 'response.json'), JSON.stringify({ ok: false, attempt: 2 })), 120);
+    const verdicts = [];
+    const started = Date.now();
+    try {
+        const result = await adapter.execute({
+            cwd: root,
+            prompt: 'corrige',
+            timeoutMs: 10_000,
+            traceFile: './trace.log',
+            stopOnValidatedOutput: {
+                outputFile: './response.json',
+                schemaFile: './response.schema.json',
+                pollIntervalMs: 10,
+                feedbackIdleMs: 5_000,
+                acceptOutput: output => {
+                    const verdict = output.attempt === 1 ? false : 'stuck';
+                    verdicts.push(verdict);
+                    return verdict;
+                },
+            },
+        });
+        assert.deepEqual(verdicts, [false, 'stuck']);
+        assert.equal(result.success, false);
+        assert.equal(result.errorCode, 'AGENT_FEEDBACK_STUCK');
+        assert.match(result.errorMessage, /versiones consecutivas con exactamente los mismos errores/);
+        assert.equal(killed, true, 'la sesi처n se corta');
+        assert.ok(Date.now() - started < 2_000, 'no espera al plazo de inactividad');
+        const trace = fs.readFileSync(path.join(root, 'trace.log'), 'utf8');
+        assert.match(trace, /\[output-rejected\]/);
+        assert.match(trace, /\[feedback-stuck\] La correcci처n repite los mismos errores que el feedback anterior \(ronda 2\)/);
+        assert.match(trace, /errorCode=AGENT_FEEDBACK_STUCK/);
+    } finally {
+        process.kill = originalKill;
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('una correcci처n dentro del plazo reinicia la espera y la sesi처n termina aceptada', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-feedback-idle-ok-'));
     fs.writeFileSync(path.join(root, 'response.schema.json'), JSON.stringify({ type: 'object' }));

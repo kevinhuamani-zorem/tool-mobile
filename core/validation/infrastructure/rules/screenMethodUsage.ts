@@ -44,13 +44,33 @@ export function screenMethodGetterUsage(
         return undefined;
     };
     const selectorLiteral = /^(?:~|id=|android=|iosPredicate=|iosClassChain=|class=|\/|new\s+UiSelector\b|-ios\s)/;
+    // Metodos que devuelven un getter segun un valor (`case 'Solo hoy': return
+    // this.filterOnlyToday`): quien los invoca consume cualquiera de esos
+    // getters. Es la forma en que un ciclo con un locator por variante recorre
+    // la DataTable en vez de repetir clicks fijos.
+    const routerGetters = new Map<string, Set<string>>();
+    screenClass.members.forEach(member => {
+        if (!ts.isMethodDeclaration(member) || !member.body || !ts.isIdentifier(member.name)) return;
+        const returned = new Set<string>();
+        let onlyGetters = true;
+        const scan = (node: ts.Node): void => {
+            if (ts.isReturnStatement(node)) {
+                const getter = node.expression ? directGetter(node.expression) : undefined;
+                if (getter) returned.add(getter);
+                else onlyGetters = false;
+            }
+            if (!ts.isFunctionLike(node) || node === member) ts.forEachChild(node, scan);
+        };
+        scan(member.body);
+        if (onlyGetters && returned.size) routerGetters.set(member.name.text, returned);
+    });
     screenClass.members.forEach(member => {
         if (
             !ts.isMethodDeclaration(member)
             || !member.body
             || !(ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name))
         ) return;
-        const elementAliases = new Map<string, string>();
+        const elementAliases = new Map<string, Set<string>>();
         const derivedValues = new Map<string, string>();
         const usage = {
             getters: new Set<string>(),
@@ -81,7 +101,13 @@ export function screenMethodGetterUsage(
             expression = unwrap(expression);
             const getter = directGetter(expression);
             if (getter) return singleton(getter);
-            if (ts.isIdentifier(expression)) return singleton(elementAliases.get(expression.text));
+            if (ts.isIdentifier(expression)) return new Set(elementAliases.get(expression.text) || []);
+            if (ts.isCallExpression(expression)
+                && ts.isPropertyAccessExpression(expression.expression)
+                && expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword
+                && routerGetters.has(expression.expression.name.text)) {
+                return new Set(routerGetters.get(expression.expression.name.text));
+            }
             if (ts.isConditionalExpression(expression)) {
                 const origins = elementOrigins(expression.whenTrue);
                 elementOrigins(expression.whenFalse).forEach(origin => origins.add(origin));
@@ -133,22 +159,25 @@ export function screenMethodGetterUsage(
             }
             return new Set();
         };
-        member.body.statements.forEach(statement => {
-            if (
-                !ts.isVariableStatement(statement)
-                || (statement.declarationList.flags & ts.NodeFlags.Const) === 0
-            ) return;
-            statement.declarationList.declarations.forEach(declaration => {
-                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return;
-                const elementSource = elementOrigins(declaration.initializer);
-                if (elementSource.size === 1) {
-                    elementAliases.set(declaration.name.text, [...elementSource][0]);
-                    return;
-                }
-                const valueSource = readOrigins(declaration.initializer);
-                if (valueSource.size === 1) derivedValues.set(declaration.name.text, [...valueSource][0]);
-            });
-        });
+        // Los alias tambien viven dentro de bloques (`for (...) { const option = ... }`);
+        // no se entra en funciones anidadas.
+        const collectAliases = (node: ts.Node): void => {
+            if (node !== member.body && ts.isFunctionLike(node)) return;
+            if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.Const) !== 0) {
+                node.declarationList.declarations.forEach(declaration => {
+                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return;
+                    const elementSource = elementOrigins(declaration.initializer);
+                    if (elementSource.size >= 1) {
+                        elementAliases.set(declaration.name.text, elementSource);
+                        return;
+                    }
+                    const valueSource = readOrigins(declaration.initializer);
+                    if (valueSource.size === 1) derivedValues.set(declaration.name.text, [...valueSource][0]);
+                });
+            }
+            ts.forEachChild(node, collectAliases);
+        };
+        collectAliases(member.body);
         const uiHelperMethods = new Map<string, number[]>([
             ['waitForDisplayed', [0]],
             ['waitForElement', [0]],

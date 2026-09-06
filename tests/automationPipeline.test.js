@@ -959,7 +959,9 @@ test('resolver agrupa acciones técnicas en comportamiento y propone rutas compa
     assert.equal(result.scenario.request.scenarioRows.length, 3);
     assert.equal(result.scenario.request.scenarioRows[1].text, 'el usuario consulta todos sus movimientos');
     assert.equal(result.scenario.request.scenarioRows[1].actions.length, 4);
-    assert.equal(result.scenario.request.scenarioRows[2].text, 'se muestran los movimientos esperados');
+    // La verificación es sobre el filtro, no sobre los movimientos: el criterio
+    // del QA ("verificar que existe…") sale impersonal.
+    assert.equal(result.scenario.request.scenarioRows[2].text, 'se muestra el filtro de movimientos');
 });
 
 test('resolver usa contextHint como pista sin copiarlo literalmente al Gherkin', () => {

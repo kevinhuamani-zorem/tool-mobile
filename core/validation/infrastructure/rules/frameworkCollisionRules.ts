@@ -58,6 +58,13 @@ export function frameworkCollisionRules(context: PreviewRuleContext, report: Rul
             const proposedLocators = locatorBaseline
                 ? changedLocatorValues(locatorFile?.content || '', locatorBaseline)
                 : responseLocatorValues(locatorFile?.content || '');
+            // Locators que el plan crea a proposito aunque su selector exista en
+            // otro modulo: un selector sin predicado identificador (className,
+            // instance(n), XPath sin predicado) no prueba que sea el mismo
+            // elemento, asi que la coincidencia no es una colision.
+            const declinedByName = new Map((plan.resolutions || [])
+                .filter(resolution => resolution.resolution === 'create' && resolution.unspecificSelector && resolution.locatorName)
+                .map(resolution => [resolution.locatorName as string, resolution.declinedReuse]));
             for (const proposed of proposedLocators) {
                 const aliases = selectorNormalization.selectorAliases(proposed.selector, scenario.platform);
                 const collision = catalog.locators.find(existing =>
@@ -65,12 +72,21 @@ export function frameworkCollisionRules(context: PreviewRuleContext, report: Rul
                     [...selectorNormalization.selectorAliases(existing.selector, scenario.platform)]
                         .some(alias => aliases.has(alias))
                 );
-                if (collision) {
-                    errors.push({
-                        code: 'framework-locator-collision',
-                        message: `Selector de ${proposed.name} ya existe como ${collision.name} en ${collision.file}`,
-                        file: locatorFile?.path,
-                    });
+                if (!collision) continue;
+                if (declinedByName.has(proposed.name)) {
+                    const declined = declinedByName.get(proposed.name);
+                    warnings.push(
+                        `framework-locator-collision (aviso): el selector de ${proposed.name} coincide con ` +
+                        `${collision.name} en ${collision.file}, pero es un selector sin predicado identificador ` +
+                        'de otro módulo: el plan lo crea aquí a propósito' +
+                        `${declined ? ` (reutilización de ${declined.module}.${declined.name} descartada)` : ''}.`,
+                    );
+                    continue;
                 }
+                errors.push({
+                    code: 'framework-locator-collision',
+                    message: `Selector de ${proposed.name} ya existe como ${collision.name} en ${collision.file}`,
+                    file: locatorFile?.path,
+                });
             }
 }

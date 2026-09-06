@@ -26,6 +26,7 @@ export { locatorContractRules } from './locatorContractRules';
 export { existingAutomationRules } from './existingAutomationRules';
 export { outputRules } from './outputRules';
 export { gherkinQualityRules } from './gherkinQualityRules';
+export { parameterFlowRules } from './parameterFlowRules';
 export { codeStructureRules } from './codeStructureRules';
 export { updateSafetyRules } from './updateSafetyRules';
 export { frameworkCollisionRules } from './frameworkCollisionRules';

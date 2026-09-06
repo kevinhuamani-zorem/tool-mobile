@@ -7,6 +7,12 @@
  * viven en `gherkinQualityRules` y `frameworkCollisionRules`.
  */
 import { selectorNormalization } from '../../../shared';
+import {
+    gherkinKeywordAccepted,
+    gherkinPersonProblem,
+    gherkinStepKind,
+    expectedGherkinKeyword,
+} from '../../../automation/contracts';
 
 /** Expresiones de las definiciones Given/When/Then declaradas en Steps. */
 export function stepDefinitionExpressions(content: string): string[] {
@@ -67,6 +73,105 @@ export function genericTemplateGherkinSteps(content: string): string[] {
             ? [match[1].trim()]
             : [];
     });
+}
+
+/** Steps de cada Scenario con su keyword tal como estan escritos. */
+export function responseScenarioKeywordLines(content: string): Array<Array<{ keyword: string; text: string; raw: string }>> {
+    const scenarios: Array<Array<{ keyword: string; text: string; raw: string }>> = [];
+    let current: Array<{ keyword: string; text: string; raw: string }> | undefined;
+    for (const line of content.split(/\r?\n/)) {
+        if (/^\s*Scenario(?: Outline)?:/i.test(line)) {
+            current = [];
+            scenarios.push(current);
+            continue;
+        }
+        const match = line.match(/^\s*(Given|When|Then|And|But)\s+(.+)$/i);
+        if (current && match) {
+            current.push({
+                keyword: match[1][0].toUpperCase() + match[1].slice(1).toLowerCase(),
+                text: selectorNormalization.normalizeStepText(match[2]),
+                raw: match[2].trim(),
+            });
+        }
+    }
+    return scenarios;
+}
+
+export interface GherkinKeywordProblem {
+    step: string;
+    keyword: string;
+    expected: string;
+    kind: 'context' | 'behavior' | 'assertion';
+}
+
+/**
+ * Given: contexto inicial. When: accion. Then: resultado esperado. And/But:
+ * complementan el paso anterior (heredan su tipo). El tipo de cada step sale
+ * de lo que ejecuta segun `actionTrace`: un step cuya ultima accion es una
+ * verificacion es un resultado; con cualquier otra accion es un
+ * comportamiento; sin acciones trazadas es contexto y solo se admite antes
+ * del primer comportamiento (o no se juzga si ya empezo el flujo).
+ */
+export function gherkinKeywordProblems(
+    content: string,
+    actionTrace: ReadonlyArray<{ sequence: number; gherkinStep: string }>,
+    actions: ReadonlyArray<{ sequence: number; action: string }>,
+): GherkinKeywordProblem[] {
+    const actionBySequence = new Map(actions.map(action => [Number(action.sequence), action]));
+    const actionsByStep = new Map<string, Array<{ action: string }>>();
+    for (const trace of actionTrace) {
+        const text = selectorNormalization.normalizeStepText(
+            String(trace.gherkinStep || '').replace(/^\s*(?:Given|When|Then|And|But)\s+/i, ''),
+        );
+        const action = actionBySequence.get(Number(trace.sequence));
+        if (!text || !action) continue;
+        const list = actionsByStep.get(text) || [];
+        list.push({ action: action.action });
+        actionsByStep.set(text, list);
+    }
+    const problems: GherkinKeywordProblem[] = [];
+    for (const scenario of responseScenarioKeywordLines(content)) {
+        // Solo se juzga el Scenario que este caso escribe: en un Feature
+        // update los Scenarios anteriores no traen acciones trazadas.
+        if (!scenario.some(line => actionsByStep.has(line.text))) continue;
+        let previous: 'context' | 'behavior' | 'assertion' | undefined;
+        for (const line of scenario) {
+            const traced = actionsByStep.get(line.text);
+            // Un step sin acciones trazadas es contexto si abre el Scenario
+            // (el login reutilizado); dentro del flujo no se puede clasificar
+            // y no cambia el anterior.
+            if (!traced && previous !== undefined) continue;
+            const kind = traced ? gherkinStepKind(traced) : 'context';
+            if (!gherkinKeywordAccepted(line.keyword, kind, previous)) {
+                problems.push({
+                    step: `${line.keyword} ${line.raw}`,
+                    keyword: line.keyword,
+                    expected: expectedGherkinKeyword(kind, previous),
+                    kind,
+                });
+            }
+            previous = kind;
+        }
+    }
+    return problems;
+}
+
+export interface GherkinPersonProblem {
+    step: string;
+    problem: 'first-person' | 'second-person' | 'infinitive';
+}
+
+/** Steps en primera persona o en imperativo/segunda persona; `skip` excluye los reutilizados. */
+export function gherkinPersonProblems(content: string, skip: ReadonlySet<string> = new Set()): GherkinPersonProblem[] {
+    const problems: GherkinPersonProblem[] = [];
+    for (const scenario of responseScenarioKeywordLines(content)) {
+        for (const line of scenario) {
+            if (skip.has(line.text)) continue;
+            const problem = gherkinPersonProblem(line.raw);
+            if (problem) problems.push({ step: `${line.keyword} ${line.raw}`, problem });
+        }
+    }
+    return problems;
 }
 
 export function hasPlatformTag(content: string, platform: 'android' | 'ios'): boolean {

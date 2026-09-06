@@ -25,19 +25,80 @@ import { conceptSimilarity } from './selectorHeuristics';
  */
 export const REVIEW_METHOD_THRESHOLD = 0.3;
 
+export interface ArtifactBundleChoice {
+    bundle: ArtifactBundle;
+    score: number;
+    reason: string;
+    /** Locator JSON del bundle que este caso extiende (el de mas aciertos o el del Screen). */
+    locators: string;
+}
+
+/** Cobertura minima para que un acierto de locator adopte un Screen ajeno. */
+const HIT_INTENT_COVERAGE_THRESHOLD = 0.5;
+const STANDALONE_INTENT_COVERAGE_THRESHOLD = 0.5;
+const BUNDLE_ADOPTION_THRESHOLD = 0.45;
+
+function artifactBasename(file: string): string {
+    return path.basename(file).replace(/\.(?:screen\.ts|locator\.json|steps\.ts|ts|json)$/, '').toLowerCase();
+}
+
+/**
+ * Locator JSON del bundle que recibe las claves nuevas: el que mas locators
+ * reutilizados aporta; sin aciertos, el que lleva el nombre del Screen
+ * (`movements.screen.ts` -> `movements.locator.json`) antes que uno compartido
+ * como `home.locator.json`.
+ */
+export function bundleTargetLocator(bundle: ArtifactBundle, hitsByFile: Map<string, number>): string {
+    const screenName = artifactBasename(bundle.screens[0] || '');
+    return [...bundle.locators].sort((left, right) =>
+        (hitsByFile.get(right) || 0) - (hitsByFile.get(left) || 0)
+        || Number(artifactBasename(right) === screenName) - Number(artifactBasename(left) === screenName)
+        || left.localeCompare(right)
+    )[0];
+}
+
+/**
+ * Que Screen Object existente extender, si alguno.
+ *
+ * La evidencia manda, no la presencia. El caso "enviar movimientos por correo"
+ * (18167698) reutilizo cinco locators de `payment/movements` y uno de
+ * `payment/yapear-otp` (el campo del correo se grabo como `className(EditText)`,
+ * el mismo selector generico del campo del codigo OTP); con una formula de
+ * presencia (`hits > 0 -> 0.85`) el OTP gano por el solapamiento de "el", "de"
+ * y "boton", y el flujo de movimientos termino escrito en el Screen del OTP.
+ * Aqui un bundle con aciertos puntua por la proporcion de locators
+ * reutilizados que le pertenecen, por cuantas intenciones cubre su Screen y
+ * por cuanto usan sus Steps esos mismos locators; un selector sin predicado
+ * identificador no cuenta como acierto, y un unico acierto sin cobertura no
+ * adopta un Screen ajeno. Un Screen que importa varios locators (movements +
+ * home) sigue siendo candidato: recibe las claves en el locator con aciertos.
+ */
 export function bestArtifactBundle(
     catalog: SquadReuseCatalog,
     scenario: AutomationScenario,
     resolutions: ActionResolution[]
-): { bundle: ArtifactBundle; score: number; reason: string } | undefined {
-    const reusedFiles = new Set(resolutions
-        .filter(resolution => resolution.resolution === 'reuse' && resolution.source?.scope === 'squad')
-        .map(resolution => resolution.source!.file));
+): ArtifactBundleChoice | undefined {
+    const squadReuse = resolutions.filter(resolution =>
+        resolution.resolution === 'reuse' && resolution.source?.scope === 'squad');
+    const specificReuse = squadReuse.filter(resolution => !resolution.unspecificSelector);
+    // Una coincidencia por selector generico es evidencia debil: solo decide
+    // cuando no hay ninguna coincidencia que identifique de verdad un elemento
+    // (un caso de una accion sobre el mismo XPath que ya usa un modulo).
+    const evidenceReuse = specificReuse.length > 0 ? specificReuse : squadReuse;
+    const weakEvidence = specificReuse.length === 0 && squadReuse.length > 0;
+    const hitsByFile = new Map<string, number>();
+    for (const resolution of evidenceReuse) {
+        const file = resolution.source!.file;
+        hitsByFile.set(file, (hitsByFile.get(file) || 0) + 1);
+    }
+    const totalHits = evidenceReuse.length;
+    const reusedNames = new Set(evidenceReuse.map(resolution => resolution.locatorName).filter(Boolean));
     const semanticContext = [
         scenario.objective,
         scenario.acceptanceCriteria,
         ...resolutions.map(resolution => resolution.intent),
     ].join(' ');
+    const businessContext = [scenario.objective, scenario.acceptanceCriteria].join(' ');
     const connectedBundles = catalog.artifactBundles || [];
     // Un Screen Object puede existir antes de que algun Steps lo importe. Ese
     // es exactamente el estado de payment/movements: el Screen ya conoce los
@@ -53,16 +114,15 @@ export function bestArtifactBundle(
         methodsByScreen.set(method.file, methods);
     }
     for (const [screen, methods] of methodsByScreen) {
-        const locatorFiles = [...new Set(methods.flatMap(method => method.locatorFiles || []))];
-        for (const locator of locatorFiles) {
-            standaloneBundles.push({
-                steps: '',
-                screens: [screen],
-                locators: [locator],
-                stepExpressions: [],
-                screenMethods: methods.map(method => method.signature),
-            });
-        }
+        const locatorFiles = [...new Set(methods.flatMap(method => method.locatorFiles || []))].sort();
+        if (locatorFiles.length === 0) continue;
+        standaloneBundles.push({
+            steps: '',
+            screens: [screen],
+            locators: locatorFiles,
+            stepExpressions: [],
+            screenMethods: methods.map(method => method.signature),
+        });
     }
     const bundleKey = (bundle: ArtifactBundle) => [
         bundle.steps,
@@ -76,9 +136,23 @@ export function bestArtifactBundle(
         seen.add(key);
         return true;
     });
+    // Claves de locator que cada Steps alcanza a traves de los metodos que invoca.
+    const locatorKeysByMethod = new Map<string, string[]>();
+    for (const method of catalog.screenMethods || []) {
+        locatorKeysByMethod.set(`${method.file}#${method.name}`, method.locatorKeys || []);
+    }
+    const keysByStepsFile = new Map<string, Set<string>>();
+    for (const definition of catalog.stepDefinitions || []) {
+        const keys = keysByStepsFile.get(definition.file) || new Set<string>();
+        for (const call of definition.screenMethods || []) {
+            for (const key of locatorKeysByMethod.get(`${call.file}#${call.method}`) || []) keys.add(key);
+        }
+        keysByStepsFile.set(definition.file, keys);
+    }
     const ranked = bundles.flatMap(bundle => {
-        if (bundle.screens.length !== 1 || bundle.locators.length !== 1) return [];
-        const exactLocatorHits = bundle.locators.filter(file => reusedFiles.has(file)).length;
+        if (bundle.screens.length !== 1 || bundle.locators.length === 0) return [];
+        const hitCount = bundle.locators.reduce((sum, file) => sum + (hitsByFile.get(file) || 0), 0);
+        const hitShare = totalHits > 0 ? hitCount / totalHits : 0;
         const bundleContext = [bundle.steps, ...bundle.screens, ...bundle.locators,
             ...bundle.stepExpressions, ...bundle.screenMethods].join(' ');
         const semanticScore = similarity(semanticContext, bundleContext);
@@ -95,26 +169,57 @@ export function bestArtifactBundle(
             ? intentScores.reduce((sum, score) => sum + score, 0) / intentScores.length
             : 0;
         const standalone = !bundle.steps;
+        const locators = bundleTargetLocator(bundle, hitsByFile);
+        // Un acierto aislado no adopta un Screen ajeno: hace falta mas de un
+        // acierto, que su Screen cubra de verdad las intenciones del caso, o
+        // que ese acierto sea la mayoria de lo reutilizado y una parte
+        // apreciable de la grabacion (un caso corto sobre la misma pantalla).
+        const actionShare = actionable.length ? hitCount / actionable.length : 0;
+        const qualifiedHits = hitCount > 0 && (
+            hitCount >= 2
+            || intentCoverage >= HIT_INTENT_COVERAGE_THRESHOLD
+            || (hitShare >= 0.5 && actionShare >= 0.25)
+        );
+        if (qualifiedHits) {
+            // Entre Steps del mismo Screen gana el que ya ejerce esos locators y
+            // cuyo Gherkin habla del mismo objetivo de negocio.
+            const stepsKeys = keysByStepsFile.get(bundle.steps);
+            const stepsUsage = stepsKeys && reusedNames.size
+                ? [...reusedNames].filter(name => stepsKeys.has(name as string)).length / reusedNames.size
+                : 0;
+            const stepsAffinity = bundle.stepExpressions.length
+                ? conceptSimilarity(businessContext, bundle.stepExpressions.join(' '))
+                : 0;
+            const evidence = hitShare * 0.45 + intentCoverage * 0.25 + stepsUsage * 0.15 + stepsAffinity * 0.15;
+            return [{
+                bundle,
+                locators,
+                score: Number(Math.min(1, 0.85 + evidence * 0.15).toFixed(3)),
+                reason: `El Screen Object existente ya consume ${hitCount} de los ${totalHits} locators ` +
+                    `reutilizados por el recording${weakEvidence ? ' (coincidencia por selector sin predicado identificador)' : ''}.`,
+            }];
+        }
         // Un bundle parcial necesita evidencia funcional repetida, no solo un
         // basename parecido. Esto evita adoptar por accidente cualquier Screen
         // que contenga una palabra comun como `button` o `screen`.
-        if (standalone && (coveredIntents < 2 || intentCoverage < 0.5)) return [];
-        const score = Math.min(1, exactLocatorHits > 0
-            ? 0.85 + semanticScore * 0.15
-            : standalone
-                ? intentCoverage * 0.55 + averageIntentScore * 0.3 + semanticScore * 0.15
-                : semanticScore);
+        if (standalone && (coveredIntents < 2 || intentCoverage < STANDALONE_INTENT_COVERAGE_THRESHOLD)) return [];
+        const score = Math.min(1, standalone
+            ? intentCoverage * 0.55 + averageIntentScore * 0.3 + semanticScore * 0.15
+            : semanticScore);
         return [{
             bundle,
+            locators,
             score: Number(score.toFixed(3)),
-            reason: exactLocatorHits > 0
-                ? 'El Screen Object existente ya consume un locator reutilizado por el recording.'
-                : standalone
-                    ? 'El Screen Object y su Locator JSON cubren las intenciones del recording aunque todavía no exista un Steps que los conecte.'
+            reason: standalone
+                ? 'El Screen Object y su Locator JSON cubren las intenciones del recording aunque todavía no exista un Steps que los conecte.'
                 : 'Coincidencia semántica con métodos y archivos existentes del alcance.',
         }];
-    }).sort((left, right) => right.score - left.score);
-    return ranked[0]?.score >= 0.45 ? ranked[0] : undefined;
+    }).sort((left, right) =>
+        right.score - left.score
+        || left.bundle.steps.localeCompare(right.bundle.steps)
+        || left.locators.localeCompare(right.locators)
+    );
+    return ranked[0]?.score >= BUNDLE_ADOPTION_THRESHOLD ? ranked[0] : undefined;
 }
 
 export function plannedFile(
@@ -207,7 +312,7 @@ export function consolidateRepeatedValidationCycle(
     const intentBySequence = new Map(resolutions.map(resolution => [resolution.sequence, resolution.intent]));
     const intents = orderedActions.map(action => intentBySequence.get(Number(action.sequence)) || recordedStepContext(action));
     const domainText = domainAssertionText(intents);
-    const qaText = qaSentence(acceptanceCriteria);
+    const qaText = qaSentence(acceptanceCriteria, 'assertion');
     const cycleContext = orderedActions.map(recordedStepContext).join(' ');
     const parameter = /\bfiltr(?:o|ar|ado|ada|ados|adas)?\b/i.test(cycleContext)
         ? 'filtro'
