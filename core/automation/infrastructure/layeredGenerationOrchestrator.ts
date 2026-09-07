@@ -111,13 +111,16 @@ export type {
     RepairIssue,
 } from './layered/roles';
 
-function scenarioNaming(packageDirectory: string): { caseId: string; pathType: string } | undefined {
+function scenarioNaming(packageDirectory: string) {
     try {
-        const scenario = readJsonUtf8<{ request?: { caseId?: string; pathType?: string } }>(
+        const scenario = readJsonUtf8<{ actions?: Array<{ sequence: number; action: string }>; request?: { caseId?: string; pathType?: string; scenarioRows?: Array<{ status: string; text: string }> } }>(
             path.join(packageDirectory, 'scenario.json'),
         );
         if (!scenario.request?.caseId || !scenario.request?.pathType) return undefined;
-        return { caseId: scenario.request.caseId, pathType: scenario.request.pathType };
+        return { caseId: scenario.request.caseId, pathType: scenario.request.pathType,
+            actions: scenario.actions,
+            reusedStepTexts: scenario.request.scenarioRows?.filter(row => row.status === 'reused').map(row => row.text),
+        };
     } catch {
         return undefined;
     }
@@ -173,7 +176,7 @@ export class LayeredGenerationOrchestrator {
                     const existingResponseFile = path.join(root, 'agent-response.json');
                     if (fs.existsSync(existingResponseFile)) {
                         const response = readJsonUtf8<AutomationAgentResponse>(existingResponseFile);
-                        if (normalizeAutomationResponse(response)) {
+                        if (normalizeAutomationResponse(response, scenarioNaming(root))) {
                             writeJsonUtf8(existingResponseFile, response);
                         }
                         const reviewFile = path.join(root, 'test-design-review.json');
@@ -189,7 +192,7 @@ export class LayeredGenerationOrchestrator {
                 }
                 if (cachedEntry) {
                     rebindCachedResult(cachedEntry.response, plan);
-                    normalizeAutomationResponse(cachedEntry.response);
+                    normalizeAutomationResponse(cachedEntry.response, scenarioNaming(root));
                 }
                 if (cachedEntry
                     && cachedEntry.fingerprint === completeFingerprint

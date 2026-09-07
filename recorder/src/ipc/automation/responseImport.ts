@@ -13,6 +13,7 @@ import {
     parseGapResolutions,
     AgentRunStore,
     normalizeAgentResponseEnglishIdentifiers,
+    normalizeGeneratedGherkinKeywords,
     inheritedIdentifiersOf,
     enforceAgentResponsePlatformTags,
     AutomationApplicationReceipt,
@@ -152,12 +153,17 @@ export class AutomationResponseImporter {
         response = withGeneratedResponseMetadata(normalized.response, scenario.createdAt);
         const tagged = enforceAgentResponsePlatformTags(response, scenario.platform);
         response = withGeneratedResponseMetadata(tagged.response, scenario.createdAt);
+        const keywords = normalizeGeneratedGherkinKeywords(response, {
+            actions: scenario.actions,
+            reusedStepTexts: scenario.request.scenarioRows?.filter(row => row.status === 'reused').map(row => row.text),
+        });
+        response = keywords.response;
         // Red de seguridad general: el importador nunca convierte una
         // respuesta valida en invalida. Si tras normalizar (ES→EN, tags) el
         // validador rechaza lo que tal cual llego si pasaba, se conserva lo
         // entregado y se deja constancia de que fue la normalizacion.
         let normalizationReverted: string | undefined;
-        if (Object.keys(normalized.renamed).length || tagged.added.length) {
+        if (Object.keys(normalized.renamed).length || tagged.added.length || keywords.changed) {
             const afterNormalization = automationResponseValidator.validate(scenario, plan, response, 0);
             if (!afterNormalization.valid) {
                 const delivered = withGeneratedResponseMetadata(asDelivered, scenario.createdAt);
@@ -165,7 +171,7 @@ export class AutomationResponseImporter {
                 if (beforeNormalization.valid) {
                     normalizationReverted = 'La normalización del importador (ES→EN: '
                         + `${Object.keys(normalized.renamed).join(', ') || 'ninguno'}; tags: `
-                        + `${tagged.added.map(platform => `@${platform}`).join(', ') || 'ninguno'}) invalidaba una `
+                        + `${tagged.added.map(platform => `@${platform}`).join(', ') || 'ninguno'}; keywords: ${keywords.changed}) invalidaba una `
                         + 'respuesta correcta y se descartó. Revisa el normalizador: '
                         + afterNormalization.errors.map(error => error.message).join(' | ');
                     response = delivered;

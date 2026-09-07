@@ -18,6 +18,7 @@ import {
     sha256Text,
 } from '../../domain/layeredGenerationContracts';
 import { normalizeRecordedTextReader } from '../../domain/recordedTextReaderNormalizer';
+import { GherkinNormalizationContext, normalizeGeneratedGherkinKeywords } from '../../domain/gherkinKeywordNormalizer';
 import {
     readJsonUtf8,
     readUtf8File,
@@ -223,7 +224,7 @@ export function normalizeAuthorResult(
     result: LayeredAgentResult,
     role: 'behavior-author' | 'interaction-author',
     plan: Pick<GenerationPlan, 'recordingId' | 'planId' | 'files'>,
-    naming?: { caseId: string; pathType: string },
+    naming?: { caseId: string; pathType: string } & GherkinNormalizationContext,
 ): boolean {
     if (!result || typeof result !== 'object') return false;
     let changed = false;
@@ -256,6 +257,8 @@ export function normalizeAuthorResult(
         }
     }
     if (role === 'behavior-author' && Array.isArray(result.files)) {
+        const normalized = normalizeGeneratedGherkinKeywords(result, naming);
+        if (normalized.changed) { Object.assign(result, normalized.response); changed = true; }
         const screenPath = plan.files.find(file => file.layer === 'screen')?.path;
         for (const file of result.files) {
             if (typeof file.content !== 'string') continue;
@@ -273,8 +276,10 @@ export function normalizeAuthorResult(
     return changed;
 }
 
-export function normalizeAutomationResponse(response: AutomationAgentResponse): boolean {
-    let changed = false;
+export function normalizeAutomationResponse(response: AutomationAgentResponse, context?: GherkinNormalizationContext): boolean {
+    const normalized = normalizeGeneratedGherkinKeywords(response, context);
+    let changed = normalized.changed;
+    if (changed) Object.assign(response, normalized.response);
     for (const file of response.files || []) {
         if (file.layer !== 'steps') continue;
         const normalized = normalizeCucumberStepDefinitions(file.content);

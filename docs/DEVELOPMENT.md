@@ -55,6 +55,9 @@ copia el resultado a `node_modules/.cache`.
 | `npm run phase43:refresh-canonical` | Regenera los golden canónicos de `tests/fixtures/phase43/*` |
 | `npm run test:phase43:deterministic` | Ejecuta regresión determinística L1 sin agente real |
 | `npm run test:phase43:baseline` | Corre baseline completo y escribe clasificación en `runtime/phase43/` |
+| `npm run golden:save -- <grabación> [--executed passed] [--notes "…"]` | Guarda una grabación ya aplicada como caso golden (`tests/golden/`), igual que «Guardar como dataset» en la revisión |
+| `npm run golden:seed-memory` | Siembra `runtime/automation-memory` con los casos golden validados al 100 % que la memoria no tenga |
+| `npm run test:golden` | Reproduce cada caso de `tests/golden/`: mismo plan del resolver y archivos aceptados aún válidos |
 
 Flags útiles del pipeline agentic:
 

@@ -221,6 +221,7 @@ app.whenReady().then(async () => {
         automationApplier,
         generatedFileRegistry,
         fwkMobileGenerator,
+        reuseAnalyzer,
         syncRecording,
     });
     registerGenerationHandlers({

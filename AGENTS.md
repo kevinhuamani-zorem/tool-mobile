@@ -213,6 +213,11 @@ generadores, validadores o plantillas.
   plan crea Feature/Steps y marca Screen/Locators como `update`. `update` puede
   ser una referencia pura: conserva el baseline sin cambios cuando las APIs
   existentes cubren todas las acciones y añade únicamente símbolos faltantes.
+- El golden dataset (`tests/golden/`, `core/automation/infrastructure/goldenDataset.ts`)
+  congela casos que el QA aprobó: lo aceptado (con sus correcciones) manda sobre
+  lo que el agente entregó; el replay usa `catalog.json` y los baselines, nunca
+  el framework vivo. Un cambio que altere el plan o rechace un caso golden es
+  una regresión salvo que el QA vuelva a aprobar el caso.
 - Un gap `blocking` es un defecto de la grabación que solo el QA corrige
   (aserción ausente, candidato ambiguo, selector que el framework no compone):
   el paquete no se arma. El estado del framework (claves vacías del módulo que

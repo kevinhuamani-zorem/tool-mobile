@@ -56,6 +56,11 @@ export function createGenerationFeature(deps) {
     const lblGenerationFileCount = document.getElementById('lblGenerationFileCount');
     const reviewValidationIcon = document.getElementById('reviewValidationIcon');
     const reviewValidationTitle = document.getElementById('reviewValidationTitle');
+    const goldenDatasetPanel = document.getElementById('goldenDatasetPanel');
+    const cmbGoldenExecution = document.getElementById('cmbGoldenExecution');
+    const txtGoldenNotes = document.getElementById('txtGoldenNotes');
+    const btnSaveGolden = document.getElementById('btnSaveGolden');
+    const lblGoldenStatus = document.getElementById('lblGoldenStatus');
 
     const GENERATED_FILES_STORAGE_KEY = 'appiumVisualRecorder.generatedFiles.v1';
 
@@ -123,6 +128,85 @@ export function createGenerationFeature(deps) {
         if (cmbPreviewFile) cmbPreviewFile.style.display = 'none';
         if (codeReviewWorkspace) codeReviewWorkspace.style.display = 'none';
         if (codeFileTree) codeFileTree.innerHTML = '';
+        showGoldenDatasetPanel(false);
+    }
+
+    // ─── Golden dataset ───────────────────────────────────────────────────
+    // Aparece cuando el caso ya esta aplicado: el QA lo aprueba como caso de
+    // referencia (grabacion + plan + catalogo + archivos aceptados). Si
+    // corrigio un archivo en el editor tras ejecutar el caso, ese contenido
+    // es lo aceptado: el main lo revalida, lo escribe en el framework y lo
+    // guarda en el dataset.
+    function showGoldenDatasetPanel(visible) {
+        if (!goldenDatasetPanel) return;
+        goldenDatasetPanel.style.display = visible ? 'block' : 'none';
+        if (visible) setGoldenStatus('', '');
+    }
+
+    function setGoldenStatus(message, type) {
+        if (!lblGoldenStatus) return;
+        lblGoldenStatus.textContent = message;
+        lblGoldenStatus.className = 'wizard-help golden-dataset-status' + (type ? ' ' + type : '');
+    }
+
+    function editedReviewedContents() {
+        return Object.fromEntries(
+            state.previewDocuments
+                .filter(document => !document.readOnly && document.content !== document.originalContent)
+                .map(document => [document.path, document.content])
+        );
+    }
+
+    async function saveGoldenCase() {
+        if (!isAutomationWorkflow()) return;
+        const edited = editedReviewedContents();
+        const invalidDocuments = state.previewDocuments
+            .filter(document => Object.prototype.hasOwnProperty.call(edited, document.path))
+            .map(document => ({ document, validation: validatePreviewDocument(document) }))
+            .filter(item => !item.validation.valid);
+        if (invalidDocuments.length) {
+            setGoldenStatus(
+                '✕ Corrige los archivos inválidos antes de guardar: ' +
+                invalidDocuments.map(item => item.document.path.split(/[\\/]/).pop()).join(', '),
+                'err',
+            );
+            return;
+        }
+        disableBtn(btnSaveGolden, '⏳ Guardando...');
+        setGoldenStatus(Object.keys(edited).length
+            ? 'Validando la corrección y aplicándola al framework...'
+            : 'Guardando el caso de referencia...', '');
+        try {
+            const result = await api.saveGoldenCase({
+                executed: cmbGoldenExecution?.value || 'not-run',
+                notes: txtGoldenNotes?.value || '',
+                reviewedContents: edited,
+            });
+            if (!result.success) {
+                const details = Array.isArray(result.validation?.errors)
+                    ? '\n' + result.validation.errors.map(error => `• ${error.message}`).join('\n')
+                    : '';
+                setGoldenStatus(`✗ ${result.error}${details}`, 'err');
+                return;
+            }
+            const applied = result.appliedEdits?.length
+                ? ` Correcciones aplicadas al framework: ${result.appliedEdits.join(', ')}.`
+                : '';
+            state.previewDocuments.forEach(document => {
+                if (Object.prototype.hasOwnProperty.call(edited, document.path)) document.originalContent = document.content;
+            });
+            renderPreviewFileTree();
+            setGoldenStatus(
+                `✓ Caso guardado en ${result.directory} (${result.manifest.executed === 'passed'
+                    ? 'ejecutado en verde'
+                    : result.manifest.executed === 'failed' ? 'marcado como fallido' : 'sin ejecutar'}).${applied}`,
+                'ok',
+            );
+        } catch (error) {
+            setGoldenStatus(`✗ ${error?.message || error}`, 'err');
+        } finally {
+            enableBtn(btnSaveGolden);
+        }
     }
 
     function previewLayer(document) {
@@ -413,6 +497,8 @@ export function createGenerationFeature(deps) {
             lblCodeValidation.className = 'ok';
         });
 
+        on(btnSaveGolden, 'click', () => { void saveGoldenCase(); });
+
         on(btnResetCode, 'click', () => {
             const document = state.previewDocuments[state.activePreviewDocumentIndex];
             if (!document) return;
@@ -455,6 +541,7 @@ export function createGenerationFeature(deps) {
                     document.generated = true;
                 });
                 renderPreviewFileTree();
+                showGoldenDatasetPanel(true);
                 return;
             }
             // El estado del filesystem puede cambiar después de abrir la revisión.

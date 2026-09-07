@@ -247,6 +247,35 @@ export function ScenarioBuilderModal() {
               </div>
             </div>
             <div id="lblGenerateResult" className="generate-result review-generation-result" />
+            <section id="goldenDatasetPanel" className="qa-observations-panel golden-dataset-panel" style={{display: 'none'}}>
+              <div className="qa-observations-heading">
+                <div>
+                  <strong>📌 Guardar como dataset</strong>
+                  <small>
+                    Conserva este caso como referencia: grabación, plan, catálogo del framework y los archivos que
+                    aceptas. Si un step falló al ejecutar el caso, corrígelo arriba en el editor (o en el framework)
+                    y guarda: la corrección se valida, se escribe en el framework y queda en el dataset.
+                  </small>
+                </div>
+              </div>
+              <div className="golden-dataset-fields">
+                <label className="golden-dataset-field">
+                  <span>Ejecución en dispositivo</span>
+                  <select id="cmbGoldenExecution" className="field-select">
+                    <option value="not-run">Todavía no ejecutado</option>
+                    <option value="passed">Ejecutado en verde</option>
+                    <option value="failed">Falló al ejecutar (explica en notas)</option>
+                  </select>
+                </label>
+                <label className="golden-dataset-field golden-dataset-notes">
+                  <span>Notas</span>
+                  <input id="txtGoldenNotes" className="field-input" type="text"
+                    placeholder="p. ej. corregido el selector del botón cerrar en el step 5" />
+                </label>
+                <button type="button" className="btn btn-green" id="btnSaveGolden">Guardar como dataset</button>
+              </div>
+              <div id="lblGoldenStatus" className="wizard-help golden-dataset-status" />
+            </section>
           </section>
         </main>
 

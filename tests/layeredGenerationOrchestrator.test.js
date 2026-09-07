@@ -1023,6 +1023,51 @@ test('un import o alias de Screen Object inválido en Steps vuelve a Lorem, no a
 // actionTrace, import del Screen Object sin `.ts` o con otro alias) los
 // corrige Derek antes de juzgar: ningun modelo deberia pagar una ronda por
 // eso. gpt-5.5 entrego un behavior-result sin `role` y la corrida murio.
+test('Derek corrige el keyword de cierre antes del handoff y no consume otra ronda de Lorem', async () => {
+    const root = fixture();
+    const scenarioFile = path.join(root, 'scenario.json');
+    const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'));
+    scenario.actions = [{ sequence: 1, action: 'VERIFICAR_EXISTE' }, { sequence: 2, action: 'CLICK' }];
+    writeJson(scenarioFile, scenario);
+    const before = fs.readFileSync(scenarioFile, 'utf8');
+    const trace = [
+        { sequence: 1, gherkinStep: 'Then se muestra la confirmación', screenMethod: 'visible', locatorName: 'title' },
+        { sequence: 2, gherkinStep: 'And el usuario cierra la confirmación', screenMethod: 'close', locatorName: 'closeButton' },
+    ];
+    const calls = [];
+    const base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const result = await base.execute(input);
+        const filename = input.agentName === 'Lorem' ? 'behavior-result.json' : input.agentName === 'Zorem' ? 'interaction-result.json' : 'agent-response.json';
+        const file = path.join(input.cwd, filename);
+        const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+        output.actionTrace = trace;
+        if (input.agentName === 'Lorem') {
+            output.files[0].content = 'Feature: Caso\n  Scenario: Confirmación\n    Then se muestra la confirmación\n    And el usuario cierra la confirmación\n';
+            output.files[1].content = "import { Then, When } from '@wdio/cucumber-framework';\nimport caseScreen from '@screenobjects/payment/case.screen.ts';\nThen(/^se muestra la confirmación$/, async () => { await caseScreen.visible(); });\nWhen(/^el usuario cierra la confirmación$/, async () => { await caseScreen.close(); });";
+        } else if (input.agentName === 'Zorem') {
+            output.files[0].content = 'class CaseScreen { async visible() {} async close() {} } export default new CaseScreen();';
+        }
+        writeJson(file, output);
+        return result;
+    } };
+    const { gherkinKeywordProblems } = require('../dist/core/validation/infrastructure/rules/gherkinInspection');
+    const orchestrator = new LayeredGenerationOrchestrator(fake, fake, (_root, response) => {
+        const feature = response.files.find(file => file.layer === 'feature');
+        const errors = gherkinKeywordProblems(feature.content, response.actionTrace, scenario.actions)
+            .map(issue => ({ code: 'gherkin-keyword', file: feature.path, message: issue.step }));
+        return { valid: !errors.length, errors };
+    });
+    const result = await orchestrator.run(root);
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    const behavior = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/behavior-result.json'), 'utf8'));
+    assert.match(behavior.files[0].content, /When el usuario cierra/);
+    assert.equal(behavior.actionTrace[1].gherkinStep, 'When el usuario cierra la confirmación');
+    assert.equal(JSON.parse(fs.readFileSync(result.reportFile, 'utf8')).repairAttempts, 0);
+    assert.equal(fs.readFileSync(scenarioFile, 'utf8'), before);
+});
+
 test('Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir una ronda', async () => {
     const root = fixture();
     const calls = [];

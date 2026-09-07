@@ -486,10 +486,10 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             '{ "sequence": 1, "locatorName": "salesButton" }',
     },
     'trace-screen-method': {
-        requirement: 'actionTrace.screenMethod debe apuntar a un metodo del Screen Object que use el getter correcto.',
+        requirement: 'actionTrace.screenMethod debe consumir el getter correcto sin selectores literales. Varias acciones pueden compartir método si consume todos sus getters. En VERIFICAR_EXISTE puede devolver isDisplayed/isExisting (también const + && o await Promise.all + every(Boolean)), pero el Step trazado debe esperar y afirmar ese booleano con expect(...).toBe(true); una lectura descartada no cuenta.',
         minimalExample:
-            'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
-            'await confirmacionEnvioEmailMovementsScreen.tapSeeAllMovements();',
+            'Screen: async isContactDisplayed(): Promise<boolean> { return await this.contact.isDisplayed(); }\n' +
+            'Steps: const visible: boolean = await contactsScreen.isContactDisplayed(); expect(visible).toBe(true);',
     },
     'json-import-attribute': {
         requirement: 'Todo import de un .locator.json debe llevar el atributo de tipo `with { type: \'json\' }`; sin él Node lanza al cargar el módulo.',

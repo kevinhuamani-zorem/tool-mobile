@@ -11,6 +11,7 @@ export * from './domain/agentQueryContracts';
 export * from './domain/agentResponseEnglishNormalizer';
 export * from './domain/agentResponsePlatformTagEnforcer';
 export * from './domain/recordedTextReaderNormalizer';
+export * from './domain/gherkinKeywordNormalizer';
 export * from './domain/automationContextProjections';
 export * from './domain/automationPackageProvenance';
 export * from './domain/automationScenarioPackage';
@@ -42,6 +43,7 @@ export * from './infrastructure/deterministicResolver';
 export * from './infrastructure/gapQueryPolicy';
 export * from './infrastructure/layeredGenerationOrchestrator';
 export * from './infrastructure/generatedFileRegistry';
+export * from './infrastructure/goldenDataset';
 export * from './infrastructure/visibleCopilotProvider';
 
 export * from './ports/agentProvider';

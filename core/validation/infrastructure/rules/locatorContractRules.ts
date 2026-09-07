@@ -21,6 +21,7 @@ import {
     typeLocatorImportProblem,
 } from '../../../automation/contracts';
 import { frameworkContract, projectPaths } from '../../../workspace';
+import { frameworkModuleResolver } from '../../../generation';
 import {
     changedLocatorValues,
     completionTarget,
@@ -29,6 +30,7 @@ import {
 } from './locatorInspection';
 import { screenClassNameFor, screenLocatorTypes, screenMethodGetterUsage } from './screenInspection';
 import { ResponseRuleContext, RuleReport } from './ruleContext';
+import { screenReturnedBooleanGetters, stepBooleanAssertions } from './returnedBooleanUsage';
 
 export function locatorContractRules(context: ResponseRuleContext, report: RuleReport): void {
     const { scenario, plan, response, relaxedContract } = context;
@@ -132,6 +134,11 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
             : '';
         const referencedTypes = screenLocatorTypes(screenContent, contract, screenClassName);
         const methodUsage = screenMethodGetterUsage(screenContent, screenClassName);
+        const returnedBooleans = screenReturnedBooleanGetters(screenContent, screenClassName);
+        const stepsFile = response.files.find(file => file.layer === 'steps');
+        const assertsBoolean = stepBooleanAssertions(
+            stepsFile?.content || '', screenFile?.path || '', frameworkModuleResolver(stepsFile?.path || ''),
+        );
         const currentLocators = responseLocatorValues(locatorFile.content);
         const locatorTypesFor = (
             getterName: string,
@@ -290,6 +297,11 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
                 ? tracedGettersByMethod.get(trace.screenMethod)
                 : undefined;
             const action = actionBySequence.get(resolution.sequence);
+            const returned = trace?.screenMethod ? returnedBooleans.get(trace.screenMethod) : undefined;
+            const usesReturnedBoolean = action?.action === 'VERIFICAR_EXISTE' && trace?.screenMethod && returned?.size;
+            const assertedReturn = usesReturnedBoolean && assertsBoolean(trace!.screenMethod!, trace!.gherkinStep);
+            const consumedGetters = new Set(usage?.getters || []);
+            if (assertedReturn) returned!.forEach(getter => consumedGetters.add(getter));
             const candidates = action ? candidateAllowlist(action, scenario.platform) : [];
             const candidateLiterals = candidates
                 .flatMap(candidate => [candidate.selector, candidate.locatorValue]);
@@ -315,15 +327,21 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
                 || usage.hardcodedSelector
                 || literals.some(value => usage.literals.has(value))
                 || !completionMappingValid
-                || ![...usage.getters].some(getter => getterResolves(getter, new Set([expectedGetter])))
-                || [...usage.getters].some(getter => !getterResolves(getter, tracedGetters))
+                || ![...consumedGetters].some(getter => getterResolves(getter, new Set([expectedGetter])))
+                || [...consumedGetters].some(getter => !getterResolves(getter, tracedGetters))
             )) {
+                const missingStepAssertion = usesReturnedBoolean && !assertedReturn
+                    && [...returned!].some(getter => getterResolves(getter, new Set([expectedGetter])))
+                    && ![...(usage?.getters || [])].some(getter => getterResolves(getter, new Set([expectedGetter])));
                 errors.push({
                     code: 'trace-screen-method',
-                    message:
+                    message: missingStepAssertion
+                        ? `La acción ${resolution.sequence}: ${trace!.screenMethod} devuelve la verificación del getter ${expectedGetter}, `
+                            + `pero su Step no afirma ese retorno. Usa const visible = await <screen>.${trace!.screenMethod}(); expect(visible).toBe(true).`
+                        :
                         `La acción ${resolution.sequence} debe trazar un único screenMethod que consuma ` +
                         `el getter ${expectedGetter} sin selectores literales ni rutas alternativas.`,
-                    file: screenFile?.path,
+                    file: missingStepAssertion ? stepsFile?.path : screenFile?.path,
                 });
             }
         }

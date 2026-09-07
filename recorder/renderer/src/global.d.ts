@@ -45,6 +45,13 @@ declare global {
             getAutomationModelUsage(): Promise<{ requestedModel: string; actualModels: string[] } | null>;
             launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; inheritDesignReview?: boolean; model?: string }): Promise<any>;
             revalidateAutomationResponse(reviewedContents: Record<string, string>): Promise<any>;
+            saveGoldenCase(input: {
+                recordingId?: string;
+                squad?: string;
+                executed?: 'passed' | 'failed' | 'not-run';
+                notes?: string;
+                reviewedContents?: Record<string, string>;
+            }): Promise<any>;
         };
     }
 }

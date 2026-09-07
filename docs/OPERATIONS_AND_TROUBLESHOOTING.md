@@ -223,6 +223,21 @@ Confirma que el adaptador soporte `supportsLayerGeneration`, que cada fila
 Gherkin tenga acciones enlazadas y que Preview incluya Feature, Steps, Screen
 Object y Locators. Si el caso requiere capas nuevas, omitir alguna es un error.
 
+### Guardar un caso como referencia (golden dataset)
+
+Al aplicar la automatización en el paso 3 aparece «Guardar como dataset».
+Indica si ya ejecutaste el caso en el dispositivo (en verde, falló o todavía
+no) y una nota, y guarda: el caso queda en `tests/golden/<tc>-<rec>/` con la
+grabación, el plan, el catálogo del framework, los baselines y los archivos
+que aceptas. Si el caso falló en un step, corrígelo en el editor de la revisión
+y vuelve a guardar: la corrección se valida, se escribe en el framework y es la
+versión que queda en el dataset. Si lo corregiste días después en el framework,
+`npm run golden:save -- <carpeta o recordingId> --executed passed --notes "…"`
+toma lo que hay en disco. `npm run test:golden` reproduce los casos guardados y
+`npm run golden:seed-memory` los siembra en la memoria de otra máquina. Los
+datos de prueba de la grabación (usuarios QA, correos, celulares de ambiente)
+viajan con el caso: revísalos antes de commitear.
+
 ### Completar un recording que solo carece de iOS o Android
 
 Inicia una sesión en la plataforma faltante, elige **Completar una grabación** y
@@ -265,6 +280,24 @@ dirigido; la última se cortó por inactividad» más los errores pendientes; el
 los paquetes `agents/<rol>` y la proyección de memoria antes de aumentar contexto.
 
 ### El agente no converge: cada corrección trae los mismos errores
+
+Si Lorem repite `gherkin-keyword` por un cierre después de una verificación
+(`Then … / And el usuario cierra …`), el recorder normaliza ese `And` a `When`
+antes del feedback y durante la reimportación, siempre que la traza sea inequívoca.
+Actualiza/reinicia (reconstruye el `.app`) y reimporta una respuesta completa, o
+regenera si solo quedó la salida parcial del autor. No es necesario modificar
+acciones de la grabación. Una fila que mezcla validación y cierre necesita una
+corrección de redacción: el normalizador no la divide ni inventa pasos.
+
+Si los errores son `trace-screen-method` en verificaciones agrupadas que
+devuelven un booleano al Step (caso 85a9110f), versiones anteriores no seguían
+ese retorno y rechazaban getters que sí se usaban. El validador reconoce ahora
+`isDisplayed`/`isExisting`, conjunciones y `Promise.all` con `every(Boolean)`
+cuando el Step correspondiente espera y afirma el resultado. Actualiza y
+reinicia el recorder (reconstruye el `.app` si lo utilizas) y reimporta la
+respuesta existente. No edites ni vuelvas a grabar acciones para corregir este
+falso positivo. Si el retorno realmente se ignora, el error señala el Step
+que debe añadir la aserción.
 
 Ningún autor entra en bucle. Dentro de una sesión de reparación, cada versión
 que el autor escribe se valida al instante y el feedback va a

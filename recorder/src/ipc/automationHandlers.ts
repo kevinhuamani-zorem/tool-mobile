@@ -27,6 +27,8 @@ import { qaDecisionPromptsFromPlan, mergedResolutionsWithQa, applyQaDecisionsToP
 import { AutomationResponseImporter } from './automation/responseImport';
 import { AutomationAgentLaunchService, LaunchAutomationAgentInput } from './automation/agentLaunch';
 import { applyReviewedAutomation } from './automation/applyAutomation';
+import { saveGoldenCaseFromPackage, SaveGoldenCaseRequest } from './automation/goldenCase';
+import { ReuseAnalyzer } from '../../../core/indexing';
 
 /**
  * Dependencias del pipeline de automatización: preparar el paquete, resolver
@@ -52,6 +54,7 @@ export interface AutomationHandlersContext {
     automationApplier: AutomationApplier;
     generatedFileRegistry: GeneratedFileRegistry;
     fwkMobileGenerator: FwkMobileGenerator;
+    reuseAnalyzer: ReuseAnalyzer;
     syncRecording: () => void;
 }
 
@@ -69,6 +72,7 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         automationMemory,
         automationApplier,
         generatedFileRegistry,
+        reuseAnalyzer,
         syncRecording,
     } = context;
 
@@ -332,4 +336,36 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         success: true,
         stats: automationMemory.stats(),
     }));
+
+    // El QA aprueba el caso al terminar (o dias despues, tras ejecutarlo y
+    // corregir un step): se valida lo aceptado, se aplican sus correcciones
+    // al framework y el caso queda en el dataset de referencia.
+    ipcMain.handle('save-golden-case', async (_, input: SaveGoldenCaseRequest) => {
+        try {
+            const packageDirectory = input?.recordingId
+                ? path.join(
+                    recordingCoverageAnalyzer.findRecordingDirectory(
+                        input.squad || state.activeSquad,
+                        input.recordingId,
+                        state.activeEnvironment,
+                    ),
+                    'generation',
+                    'automation',
+                )
+                : state.activeAutomationPackage;
+            if (!packageDirectory || !fs.existsSync(path.join(packageDirectory, 'agent-response.json'))) {
+                throw new Error('No hay una automatización aplicada que guardar: aplica el caso primero.');
+            }
+            const saved = saveGoldenCaseFromPackage({
+                packageDirectory,
+                frameworkRoot: projectPaths.frameworkRoot,
+                reuseAnalyzer,
+                automationResponseValidator,
+                generatedFileRegistry,
+            }, input);
+            return { success: true, ...saved };
+        } catch (e: any) {
+            return { success: false, error: e.message, ...(e.validation ? { validation: e.validation } : {}) };
+        }
+    });
 }

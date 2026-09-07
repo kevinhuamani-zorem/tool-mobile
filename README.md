@@ -467,6 +467,16 @@ npm test -- --cucumberOpts.tagExpression='@miflujo'
 Confirma el comando exacto en el README y los scripts de la versión local de
 `fwk-mobile-test`, ya que el recorder no mantiene un runner alternativo.
 
+### Guardar el caso como dataset
+
+Cuando el caso ya está aplicado (y, idealmente, ejecutado en verde), «Guardar
+como dataset» en la revisión lo conserva como caso de referencia bajo
+`tests/golden/`: grabación, plan, catálogo del framework y los archivos que
+aceptas, con tus correcciones si tuviste que arreglar un step. Esos casos
+protegen al recorder de regresiones (`npm run test:golden`) y siembran la
+memoria de otra máquina (`npm run golden:seed-memory`). Ver
+`docs/GENERATION_CONTRACT.md` → «Golden dataset».
+
 ## Datos locales y seguridad
 
 No se versionan:

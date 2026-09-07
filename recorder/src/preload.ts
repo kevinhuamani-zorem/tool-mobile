@@ -120,6 +120,8 @@ contextBridge.exposeInMainWorld('api', {
     generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>) =>
         ipcRenderer.invoke('generate-automation-response', previewToken, reviewedContents),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
+    saveGoldenCase: (input: { recordingId?: string; squad?: string; executed?: 'passed' | 'failed' | 'not-run'; notes?: string; reviewedContents?: Record<string, string> }) =>
+        ipcRenderer.invoke('save-golden-case', input),
     generateFiles:       (f: string, s: string) => ipcRenderer.invoke('generate-files', f, s),
     // [visual-recorder] Continuar una grabacion existente (p. ej. para agregar el Then que falta).
     resumeRecording:     (i: any)                => ipcRenderer.invoke('resume-recording', i),

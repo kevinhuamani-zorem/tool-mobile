@@ -256,6 +256,18 @@ Examples:
 
 ## Step Definitions
 
+Antes de validar la salida de Lorem (incluidos caché y reparación) y al importar
+la propuesta, el recorder normaliza únicamente keywords inequívocos del Feature.
+Por ejemplo, `Then se muestra la confirmación` seguido de `And el usuario cierra
+la confirmación` pasa a `When el usuario cierra la confirmación`. Se conserva la
+frase, el orden y todos los métodos/selectores; una traza con prefijo actualiza
+solo ese prefijo y una sin prefijo permanece intacta. Los cuerpos de Steps no se
+reescriben: Cucumber resuelve por texto, no por keyword de la definición.
+No se adivina con trazas incompletas/duplicadas, textos repetidos entre escenarios,
+pasos reutilizados ni filas mixtas de acciones y resultados. Esos casos continúan
+por la validación existente. La función es pura y no modifica la grabación ni el
+plan; la propuesta normalizada sigue pasando por preview y validación completa.
+
 - Las expresiones deben coincidir con el texto Gherkin y capturar parámetros.
 - Un step solo transforma argumentos mínimos y delega al Screen Object.
 - Todo parámetro que la definition captura se pasa al método del Screen
@@ -552,6 +564,17 @@ actuales de `gestureHelper` usan texto o coordenadas y no prueban consumo de un
 getter. Logging, `Promise.resolve`, helpers o funciones desconocidos y argumentos
 no relevantes tampoco lo consumen.
 
+Para `VERIFICAR_EXISTE` también se reconoce el Page Object que devuelve un
+booleano de `isDisplayed()`/`isExisting()` y su Step lo afirma. La comprobación
+sigue const locales, `&&` de booleanos resueltos y `await Promise.all([...])`
+seguido de `every(Boolean)`. El Step debe importar ese Screen exacto, corresponder
+al `gherkinStep` trazado, esperar el retorno y compararlo positivamente
+(`toBe(true)`, `toEqual(true)`, `toStrictEqual(true)` o `toBeTruthy()`). No cuentan
+lecturas descartadas, retornos constantes, promesas sin esperar, OR, funciones
+anidadas sin ejecutar ni otro Screen con un método homónimo. Si falta la
+aserción del retorno, el diagnóstico apunta a Steps (Lorem), no a Screen
+(Zorem). Este análisis es de código propuesto: nunca reescribe la grabación.
+
 ## Acciones soportadas
 
 El modelo contempla abrir app, click, escribir, limpiar, scroll en ambas
@@ -847,6 +870,51 @@ de salida incompleta.
 - No enviar secretos, datasets ni el repositorio completo al proveedor de IA.
 - La IA solo resuelve gaps del plan y su salida nunca se escribe sin preview.
 - Si una validación falla, no debe quedar una generación parcial.
+
+## Golden dataset
+
+Un caso golden es una automatización que el QA **aprobó** al terminar el
+flujo: en el paso 3 de la revisión, una vez aplicado el caso, «Guardar como
+dataset» lo congela bajo `tests/golden/<tc>-<rec>/`; `npm run golden:save`
+hace lo mismo desde la terminal para una grabación aplicada días antes. Cada
+caso lleva lo que hace falta para volver a juzgar al recorder sin depender del
+framework vivo ni de la memoria de una máquina:
+
+- `package/`: `scenario.json`, `generation-plan.json` (y el efectivo tras las
+  decisiones de QA), `resolved/unresolved-context.json`, `gaps.json`,
+  `hints.json`, `reuse-context.json`, `collision-report.json`,
+  `validation.json`, `application-receipt.json`, `agent-run.json`.
+- `catalog.json`: el `SquadReuseCatalog` tal como lo vio el resolver, sin
+  telemetría. Con él el replay reproduce el plan aunque el framework haya
+  cambiado de rama.
+- `baselines/`: el contenido previo de los archivos `update`, para que el
+  replay del resolver y del validador partan del estado anterior a aplicar.
+- `expected/<capa>-<archivo>` y `agent-response.json`: los cuatro archivos
+  **aceptados**. Si el QA corrigió un step tras ejecutar el caso (en el editor
+  de la revisión o directamente en el framework), lo aceptado es esa versión:
+  la corrección se revalida, se escribe en el framework cuando viene del
+  editor, el recibo de aplicación y `config/generated-files.json` adoptan los
+  bytes nuevos, y el manifiesto lo marca con `edited: true` y
+  `validation.source: golden`. Una corrección que no pasa la validación no se
+  guarda ni toca el framework.
+- `manifest.json`: caso, grabación, squad, plataforma, fecha y autor,
+  `executed` (`passed` | `failed` | `not-run`, lo declara el QA: el recorder no
+  ejecuta el caso), notas, perfil de validación y el HEAD del framework.
+
+`tests/goldenDataset.test.js` reproduce cada caso: el resolver, con
+`catalog.json` y un snapshot de baselines, tiene que producir la misma
+proyección del plan (reuseTarget, archivos y operaciones, decisión y locator de
+cada acción, gaps y si bloquean); y el validador, sobre un framework aislado
+devuelto al estado previo (baselines aplicados, `create` retirados), tiene que
+aceptar los archivos aprobados con el mismo perfil de errores. Los datos de
+prueba de la grabación viajan con el caso: revísalos antes de versionarlo.
+
+El dataset también es la semilla portable de la memoria: `npm run
+golden:seed-memory` promueve a `runtime/automation-memory` los casos validados
+al 100 % que la memoria de esa máquina no tenga, con la respuesta aceptada
+(correcciones incluidas). Los agentes no reciben el dataset completo: la
+memoria sigue seleccionando por fingerprint y fragmentos, que es lo que
+mantiene el contexto acotado.
 
 ## Conformidad con el review de PR
 

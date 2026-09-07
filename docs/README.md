@@ -10,6 +10,9 @@
   sesiones, diagnósticos y fallos frecuentes.
 - [Aseguramiento de calidad](GENERATION_QUALITY_ASSURANCE.md): métricas,
   pruebas unitarias y controles manuales.
+- [Mejoras pendientes de evaluación de agentes](AGENT_EVALUATION_IMPROVEMENTS.md):
+  auditoría del 2026-09-07, backlog P0–P3 y criterios de aceptación;
+  propuestas pendientes, no contratos nuevos ya implementados.
 - [ADR-0001: Arquitectura modular](adr/0001-modular-core-architecture.md):
   módulos, APIs públicas, dependencias y secuencia de migración.
 

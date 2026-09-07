@@ -140,8 +140,10 @@ features; ninguna importa un archivo interno de otra ni de `core/`
   `qaDecisions` (prompts y aplicación de decisiones QA al plan),
   `responseImport` (`AutomationResponseImporter`: importar/validar la
   respuesta y rematerializar `gap-resolutions.json`), `agentLaunch`
-  (`AutomationAgentLaunchService`: manual, por capas o determinista) y
-  `applyAutomation` (aplicar la propuesta revisada sobre el framework).
+  (`AutomationAgentLaunchService`: manual, por capas o determinista),
+  `applyAutomation` (aplicar la propuesta revisada sobre el framework) y
+  `goldenCase` (guardar el caso aplicado como referencia: valida y escribe
+  las correcciones del QA y delega en `goldenDataset.ts` de core).
 - `recorder/src/ipc/generationHandlers.ts`: generación heredada de las cuatro
   capas sin pasar por el pipeline de automatización con agente, y el Gherkin
   con steps enlazados. Sus dos handlers de escritura final permanecen detrás
@@ -560,8 +562,10 @@ Las familias públicas son:
 - Inspector embebido (`recorder/src/ipc/inspectorHandlers.ts`): abrir/focalizar
   y eventos acotados de conexión, error y uso explícito del selector;
 - automatización (`recorder/src/ipc/automationHandlers.ts`): preparar paquete,
-  lanzar agente, importar respuesta, generar con token, preparar regeneración
-  y consultar memoria;
+  lanzar agente, importar respuesta, generar con token, preparar regeneración,
+  consultar memoria y guardar el caso aplicado como golden (`save-golden-case`,
+  orquestado en `ipc/automation/goldenCase.ts` sobre
+  `core/automation/infrastructure/goldenDataset.ts`);
 - generación heredada (`recorder/src/ipc/generationHandlers.ts`): preview
   Gherkin, preview de archivos y generación.
 

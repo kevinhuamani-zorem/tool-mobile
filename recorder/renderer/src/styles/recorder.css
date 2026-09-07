@@ -1821,6 +1821,25 @@ body {
 .qa-observations-panel ul { margin: 12px 0 4px; padding-left: 20px; }
 .qa-observations-panel li { margin: 7px 0; color: var(--text2); }
 .qa-observations-panel li small { display: block; margin-top: 2px; color: var(--text3); }
+.golden-dataset-panel {
+    border-color: rgba(76, 175, 130, .45);
+    background: rgba(76, 175, 130, .08);
+}
+.golden-dataset-panel .qa-observations-heading strong { color: #8fe3b4; }
+.golden-dataset-fields {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+.golden-dataset-field { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+.golden-dataset-field span { color: var(--text3); font-size: 12px; }
+.golden-dataset-notes { flex: 1 1 320px; }
+.golden-dataset-notes .field-input { width: 100%; }
+.golden-dataset-status { margin-top: 8px; white-space: pre-wrap; }
+.golden-dataset-status.ok { color: #8fe3b4; }
+.golden-dataset-status.err { color: #ff8a8a; }
 .code-review-workspace {
     grid-template-columns: minmax(210px, 26%) minmax(0, 1fr);
     height: clamp(420px, calc(100vh - 390px), 620px);
