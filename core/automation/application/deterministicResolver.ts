@@ -836,6 +836,14 @@ export class DeterministicResolver {
         // rellenarlas deja el getter apuntando a "" y el caso falla en
         // ejecucion, no al generar. El bundle no se descarta —reutilizar sigue
         // siendo lo correcto— pero las claves vacias se ponen sobre la mesa.
+        //
+        // Es un aviso para el autor de Screen/Locators, NO un gap bloqueante:
+        // el estado del modulo es del framework (cambia por rama y por
+        // equipo), no un defecto de la grabacion que el QA pueda corregir.
+        // Bloquear aqui dejaba el analisis en «No pudimos completar el
+        // analisis» en cualquier maquina cuya rama tuviera una clave vacia
+        // (payment/yapear-contact.inputContactToYapear en TC-10240). Derek lo
+        // firma como informativo y Sumrak no lo juzga (gapJudgment).
         if (reuseTarget?.locators) {
             const targetModule = reuseTarget.locators
                 .replace(/^resources\/locators\//, '')
@@ -851,16 +859,33 @@ export class DeterministicResolver {
                 })
                 .map(locator => locator.name);
             if (empty.length) {
+                // Solo las claves que una accion grabada puede rellenar tienen
+                // un completionTarget; el resto no corresponde a nada grabado.
+                const completable = new Set(resolutions.flatMap(resolution =>
+                    (resolution.completionTargets || [])
+                        .filter(target => target.module === targetModule)
+                        .map(target => target.name)
+                ));
+                const fillable = empty.filter(name => completable.has(name));
+                const orphan = empty.filter(name => !completable.has(name));
                 gaps.push({
                     id: 'gap-platform-coverage',
                     type: 'missing-selector',
-                    blocking: true,
                     description:
                         `El modulo ${targetModule} que este caso extiende tiene ${empty.length} clave(s) ` +
                         `sin valor en ${rawScenario.platform}: ${empty.join(', ')}. ` +
                         'Adoptar una de ellas sin rellenarla deja el getter apuntando a "" y el caso ' +
-                        'falla al ejecutar, no al generar.',
+                        'falla al ejecutar, no al generar. ' +
+                        (fillable.length
+                            ? `Una accion grabada captura ${fillable.join(', ')}: si la adoptas, declara su ` +
+                              'relleno en `completions` con el completionTarget del plan. '
+                            : '') +
+                        (orphan.length
+                            ? `Ninguna accion grabada corresponde a ${orphan.join(', ')}: no la adoptes; ` +
+                              'los locators de este caso se crean en su propio modulo.'
+                            : ''),
                     requiredOutput:
+                        'Aviso para el autor de Screen Object y Locators; no pide una decision. ' +
                         'Si adoptas alguna de esas claves, declara su relleno en `completions` de la ' +
                         'respuesta: `{ file, name, platform, sequence }`, donde `sequence` es la accion ' +
                         'de la grabacion que capturo ese elemento. El selector lo copia el recorder de ' +

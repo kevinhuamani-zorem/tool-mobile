@@ -73,9 +73,32 @@ export interface GapJudgment {
     informational: string[];
 }
 
-/** Gaps que los autores atienden al escribir; nunca requieren una decision de Sumrak. */
+/**
+ * Gaps que los autores atienden al escribir; nunca requieren una decision de
+ * Sumrak. `gap-platform-coverage` avisa a Zorem que el modulo que se extiende
+ * tiene claves sin valor en la plataforma grabada: no se adoptan salvo con un
+ * completionTarget del plan. Es estado del framework, no una decision.
+ */
 export function isAuthorInformationalGap(gapId: string): boolean {
-    return gapId === 'gap-english-naming' || /^gap-weak-assertion-\d+$/.test(gapId);
+    return gapId === 'gap-english-naming'
+        || gapId === 'gap-platform-coverage'
+        || /^gap-weak-assertion-\d+$/.test(gapId);
+}
+
+/** Gaps informativos que solo atañen a una capa: no viajan al otro autor. */
+export function informationalGapOwner(gapId: string): AuthorRole | undefined {
+    return gapId === 'gap-platform-coverage' ? 'interaction-author' : undefined;
+}
+
+function informationalGapReason(gapId: string, fixedDecision: string | undefined): string {
+    if (gapId === 'gap-english-naming') {
+        return 'Los autores nombran en inglés al escribir su capa; el normalizador aplica el diccionario y el validador advierte lo que quede en español.';
+    }
+    if (gapId === 'gap-platform-coverage') {
+        return 'Aviso para Zorem: el módulo que se extiende tiene claves sin valor en la plataforma grabada; ' +
+            'no se adoptan sin un completionTarget del plan y ninguna decisión cambia por ello.';
+    }
+    return `Aviso para los autores: la verificación usa un selector genérico que se conserva tal cual; Derek mantiene la decisión ${fixedDecision || 'del plan'}.`;
 }
 
 /**
@@ -107,10 +130,8 @@ export function gapJudgment(packageDirectory: string, plan: GenerationPlan): Gap
             const fixedDecision = expected.get(gapId);
             judgment.fixed.push({
                 gapId,
-                decision: fixedDecision || 'renamed-by-authors',
-                reason: gapId === 'gap-english-naming'
-                    ? 'Los autores nombran en inglés al escribir su capa; el normalizador aplica el diccionario y el validador advierte lo que quede en español.'
-                    : `Aviso para los autores: la verificación usa un selector genérico que se conserva tal cual; Derek mantiene la decisión ${fixedDecision || 'del plan'}.`,
+                decision: fixedDecision || (gapId === 'gap-platform-coverage' ? 'resolved' : 'renamed-by-authors'),
+                reason: informationalGapReason(gapId, fixedDecision),
             });
             continue;
         }

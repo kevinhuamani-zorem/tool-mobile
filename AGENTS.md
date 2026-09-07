@@ -213,6 +213,13 @@ generadores, validadores o plantillas.
   plan crea Feature/Steps y marca Screen/Locators como `update`. `update` puede
   ser una referencia pura: conserva el baseline sin cambios cuando las APIs
   existentes cubren todas las acciones y añade únicamente símbolos faltantes.
+- Un gap `blocking` es un defecto de la grabación que solo el QA corrige
+  (aserción ausente, candidato ambiguo, selector que el framework no compone):
+  el paquete no se arma. El estado del framework (claves vacías del módulo que
+  se extiende, `gap-platform-coverage`) nunca bloquea: es un aviso informativo
+  para el autor de la capa (`isAuthorInformationalGap`), Derek lo firma y solo
+  ese autor lo recibe (`informationalGapOwner`). El recorder tiene que funcionar
+  en cualquier máquina y rama del framework.
 - Cada línea del Feature resuelve a exactamente una step definition de todo
   el framework, como lo hace Cucumber (carga todos los squads, ignora el
   keyword, expande Examples). Reutilizar (`stepDefinitions`, squad + commons)

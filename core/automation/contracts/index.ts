@@ -434,6 +434,10 @@ export interface UnresolvedGap {
      * [visual-recorder] Gap bloqueante: no es algo que el agente pueda resolver
      * con mas contexto, sino un defecto de la grabacion que solo el QA puede
      * corregir. El paquete no se arma y el agente nunca arranca.
+     *
+     * Nunca se marca por el estado del framework (claves vacias del modulo que
+     * se extiende, definiciones ajenas): eso varia por rama y por maquina y el
+     * QA no puede corregirlo desde la grabacion; se avisa al autor de la capa.
      */
     blocking?: boolean;
     /** Campos opcionales de Fase 3; recordings anteriores siguen siendo válidos. */

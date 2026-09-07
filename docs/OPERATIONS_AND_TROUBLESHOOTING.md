@@ -310,6 +310,23 @@ en la raíz del paquete) y que `node_modules/typescript` esté instalado en el
 framework destino; sin él, `check.js` lo avisa como NOTA y la sintaxis se
 comprueba al importar el resultado.
 
+### «No pudimos completar el análisis» por claves sin valor del módulo que se extiende
+
+Síntoma (TC-10240, flujo de yapeo en otra máquina): el paso 2 del asistente
+termina con «El modulo payment/yapear-contact que este caso extiende tiene 1
+clave(s) sin valor en android: inputContactToYapear…» y no hay generación. La
+causa era `gap-platform-coverage` marcado como bloqueante: el paquete no se
+armaba porque el módulo de locators que el caso extiende declaraba una clave
+solo en el bloque iOS. Eso depende de la rama del framework de cada equipo, no
+de la grabación, así que el QA no tenía nada que corregir. Desde 07-09 el gap es
+informativo: el análisis continúa, Zorem recibe el aviso (qué claves puede
+rellenar con `completions` y cuáles no debe adoptar), Derek lo firma y Sumrak no
+lo juzga. Los gaps que sí bloquean siguen siendo defectos de la grabación:
+aserción ausente, candidato de locator ambiguo (decisión del QA) y selectores
+que el framework no puede componer. Si un análisis vuelve a fallar con un texto
+dirigido «al agente», es señal de que un gap del resolver tiene `blocking: true`
+sin ser un defecto de la grabación.
+
 ### El plan extiende un Screen Object que no corresponde al flujo
 
 Mira `generation-plan.json → reuseTarget.reason` y `resolutions[]`: el Screen

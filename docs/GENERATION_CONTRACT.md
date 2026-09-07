@@ -928,6 +928,17 @@ La salida es **completar en sitio**, no duplicar el elemento:
 - Un completion puede apuntar a un módulo externo aunque las cuatro capas del
   caso sean `create`; se procesa por su propio patch aditivo con escritura
   atómica y comprobación de baseline.
+- Cuando el módulo de locators que el caso **extiende** (`reuseTarget`) tiene
+  claves sin valor en la plataforma grabada, el resolver abre
+  `gap-platform-coverage`: un aviso **informativo** para Zorem que separa las
+  claves que una acción grabada puede rellenar (tienen `completionTargets` en
+  el plan) de las que no corresponden a nada grabado (no se adoptan). No es
+  bloqueante: el estado del módulo es del framework —cambia por rama y por
+  máquina—, no un defecto de la grabación que el QA pueda corregir. Derek lo
+  firma con `decision: resolved`, Sumrak no lo juzga y Lorem no lo recibe. En
+  TC-10240 (`payment/yapear-contact.inputContactToYapear`, declarada solo en
+  iOS) el gap era bloqueante y el análisis terminaba en «No pudimos completar
+  el análisis» en cualquier equipo cuya rama tuviera esa clave.
 
 Se comprueba en tres sitios: el gap de duplicado ya trae el `completions` de
 ejemplo con su `file` y `name`; el verificador del sandbox cruza identidad completa

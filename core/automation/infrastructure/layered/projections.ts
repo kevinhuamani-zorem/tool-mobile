@@ -21,6 +21,7 @@ import {
     GapJudgment,
     INTEGRATION_RULE_CODES,
     INTERACTION_RULE_CODES,
+    informationalGapOwner,
 } from './gapJudgment';
 
 export function ensureInside(root: string, candidate: string): string {
@@ -94,6 +95,17 @@ export function draftFileForInteraction(packageDirectory: string, file: any): an
 }
 
 export function projectRoleJson(relativePath: string, value: any, role: AuthorRole, packageDirectory: string): any {
+    if (relativePath === 'gaps.json') {
+        // Un aviso que solo atañe a una capa (claves vacias del modulo de
+        // locators que se extiende) no gasta contexto del otro autor.
+        return {
+            ...value,
+            gaps: (value.gaps || []).filter((gap: any) => {
+                const owner = informationalGapOwner(String(gap?.id || ''));
+                return !owner || owner === role;
+            }),
+        };
+    }
     if (relativePath === 'deterministic-draft.json') {
         const layers = new Set(ROLE_LAYERS[role]);
         const files = (value.files || []).filter((file: any) => layers.has(file.layer));
