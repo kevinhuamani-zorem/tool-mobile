@@ -2,8 +2,8 @@
 
 Fecha: 2026-09-08.
 
-Estado: **F0, F1, F2 y F3 implementadas y verificadas localmente**.
-La siguiente entrega es F4; F4–F7 conservan sus pendientes debajo. Ver
+Estado: **F0–F4 implementadas y verificadas localmente**.
+La siguiente entrega es F5; F5–F7 conservan sus pendientes debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -182,21 +182,21 @@ Contrato: [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).
 
 Objetivo: obtener exactamente lo que el QA corrigió, con o sin commit.
 
-- [ ] Añadir **Recuperar cambios del framework** al caso retomado.
-- [ ] Comparar baseline previo, versión exportada y contenido actual. Seguir
+- [x] Añadir **Recuperar cambios del framework** al caso retomado.
+- [x] Comparar baseline previo, versión exportada y contenido actual. Seguir
   Feature → Steps → Screen → Locators y dependencias reales, no todos los cambios
   de Git ni coincidencias de basename.
-- [ ] Reconocer rutas/símbolos movidos y permitir asociar los que no puedan
+- [x] Reconocer rutas/símbolos movidos y permitir asociar los que no puedan
   resolverse con certeza. Incluir helpers añadidos por el QA como dependencias
   del caso sin inventar una quinta capa obligatoria.
-- [ ] Mostrar un diff de los cambios vinculados al caso, distinguiendo ediciones
+- [x] Mostrar un diff de los cambios vinculados al caso, distinguiendo ediciones
   ajenas en módulos compartidos. No hace falta commitear para recuperarlos.
-- [ ] Crear una revisión con el código final y relaciones reconstruibles:
+- [x] Crear una revisión con el código final y relaciones reconstruibles:
   Gherkin, parámetros, métodos, locators y trazas. Conservar evidencia grabada
   original y registrar las correcciones de código como aportadas por el QA.
-- [ ] Mantener asociaciones no inferibles explícitamente pendientes; permitir
+- [x] Mantener asociaciones no inferibles explícitamente pendientes; permitir
   guardar los archivos recuperados sin inventar eventos ni verificaciones Appium.
-- [ ] Registrar referencia opcional al PR y contexto local de repo/rama/commit.
+- [x] Registrar referencia opcional al PR y contexto local de repo/rama/commit.
   No exigir conexión a GitHub ni aprobación/merge para recuperar o exportar.
 
 Superficie: `automationRecordingStore.ts`, `automationApplicationReceipt.ts`,
@@ -207,6 +207,8 @@ si el código existente no permite aislar esa responsabilidad.
 Salida comprobable: el QA cambia un parámetro, renombra un método y modifica una
 aserción en el framework; Recuperar muestra y conserva esos cambios en la nueva
 revisión del mismo recording, sin capturar trabajo ajeno ni alterar su historia.
+
+Contrato: [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).
 
 ## F5 — Regrabar, regenerar y reexportar durante el PR
 

@@ -6,9 +6,10 @@ Los planes y diagramas locales se publicaron en `64423280de47681e6fa782eb324b9e0
 El baseline y la retirada de memoria se publicaron en `8a2a4fa0a1ec9e8ad22a4d711a930342f1782d83`.
 El historial se publicó en `504e7eb40eb51254af134b2bc6d09f2bbe732987` (F1).
 Las dos pasadas se publicaron en `95322f1` (F2).
-La entrega actual completa F3, exportación con observaciones, de
+La exportación con observaciones se publicó en `30ae8e0` (F3).
+La entrega actual completa F4, recuperación de correcciones del framework, de
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
-F4–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
+F5–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
 hasta terminar el ciclo completo. La aprobación golden nueva aún no está habilitada.
 
 ## Punto de partida y medición
@@ -123,14 +124,14 @@ corresponde al pipeline `layered` predeterminado del wizard.
 | F1 — completada | Memoria antigua fuera del consumo; historial y recibos vinculados. Falta el piloto real, compartido con F7. |
 | F2 — completada | Dos pasadas comunes en layered, envelopes comprobados y Revisión de capas recuperables. Pruebas sin tercera llamada por rol, incluso con resincronización y fallos persistentes. |
 | F3 — completada | Exportación de bytes revisados y capas disponibles con observaciones. Se conservan rutas, contenido compartido, conflictos, rollback y comprobaciones concurrentes. Recibo parcial con hashes/símbolos, historial separado y botón disponible sin score 100. |
-| F4 — siguiente | Recuperar cambios del framework con comparación baseline/exportado/actual; seguir relaciones, renombres y helpers del caso. Mostrar diff y asociaciones pendientes; guardar revisión QA sin inventar eventos Appium. Registrar PR y repo/rama/commit opcionales, incluso con cambios sin commit. |
-| F5 — pendiente de F4 | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
+| F4 — completada | Recuperación por relaciones, comparación baseline/exportado/actual y diff del caso. Rutas/símbolos movidos, helpers, asociaciones pendientes y revisión QA con código sin modificar eventos Appium. PR opcional y contexto Git local; no exige commit ni dispositivo. |
+| F5 — siguiente | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
 | F6 — pendiente de F4/F5 | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
 | F7 — pendiente de F6 | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
 
 F2 sustituyó los contadores independientes del pipeline por capas.
 F3 retira los bloqueos de exportación por calidad. Los ciclos de regeneración y
-reexportación con correcciones externas se abordarán en F4/F5.
+reexportación con correcciones externas se abordarán en F5; F4 ya conserva esas correcciones en una revisión QA.
 
 ## Validación de la entrega inicial (`8a2a4fa`)
 
@@ -170,11 +171,11 @@ a F6/F7; no se ejecutó todavía el piloto con dispositivo/Copilot.
 
 ## Próxima entrega concreta
 
-Implementar F4: recuperar los cambios QA desde el framework comparando baseline,
-exportación y archivos actuales; mostrar diff y asociaciones del caso. Conservar
-identidad, revisiones, cambios sin commit y contexto opcional de PR/repo/rama/commit.
-F5 habilitará ciclos repetidos de regeneración/reexportación; F6 aprobación golden;
-F7 ejemplos, métricas y piloto real. Los checklists detallados siguen abiertos.
+Implementar F5: usar la revisión recuperada como baseline al regrabar/regenerar y
+reexportar durante el PR. Conciliar cambios compartidos, preservar correcciones QA
+y probar dos ciclos sucesivos, incluidos cambios de rama/rebase/merge. Después
+siguen F6 (aprobación y versiones golden) y F7 (ejemplos, métricas y piloto real).
+Los checklists detallados de esas fases siguen abiertos.
 
 ## Validación de F2
 
@@ -209,3 +210,21 @@ F7 ejemplos, métricas y piloto real. Los checklists detallados siguen abiertos.
   tipos, arquitectura, métricas y builds correctos. Log: `/private/tmp/recorder-f3-quality.log`.
 - El framework padre conserva sus cambios locales. No se ejecutó el piloto con
   dispositivo/Copilot ni la reapertura del `.app`; siguen pendientes en F7.
+
+## Implementación de F4
+
+- Recuperación accesible desde Configuración sin dispositivo, Revisión y selector
+  de grabaciones existentes. Comparación de baseline/exportado/actual, con cambios
+  propios y ajenos diferenciados.
+- Relaciones Gherkin/Examples, Steps, métodos, locators y helpers. Rutas movidas por
+  referencias de código, incluso sin conservar sufijos; asociaciones manuales y
+  pendientes guardables sin inventar eventos Appium.
+- Revisión `framework-import` con usuario/fecha, código QA, PR opcional y estado
+  local de repo/rama/commit. Mantiene el fallo original y no aprueba golden/memoria.
+- Token, hashes, límites de lectura y rollback de la vista mutable si falla el
+  evento. El framework solo se lee; sus cambios locales se conservan.
+- Contrato: [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).
+- Pruebas focalizadas: **71/71**. Log: `/private/tmp/recorder-f4-focused.log`.
+- `npm run quality`: **784/784 pruebas aprobadas**, sin omitidas ni canceladas;
+  tipos, arquitectura, métricas y builds correctos. Log:
+  `/private/tmp/recorder-f4-quality.log`.

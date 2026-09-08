@@ -129,6 +129,13 @@ generadores, validadores o plantillas.
     `agent-response.json` validado, crea una versión histórica, mantiene
     `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry
     sigue reconociendo como administrados y no modificados externamente.
+    **Recuperar código QA conserva la evidencia grabada.** F4 guarda correcciones
+    del framework como revisión `framework-import`, leyendo las relaciones del
+    caso y excluyendo cambios ajenos en módulos compartidos. Las asociaciones
+    inciertas quedan pendientes y no impiden guardar. No inventes eventos Appium
+    ni promociones golden; no uses la proyección de código compartido como
+    reemplazo directo del archivo actual. F5 hará esa reconciliación. Ver
+    `docs/AUTOMATION_FRAMEWORK_RECOVERY.md`.
 15. **Squad y ruta Feature son conceptos distintos.** `featureScope` puede
     limitar Features a una subruta como `tapp/payment`, pero Steps, Screen
     Objects y Locators mantienen como owner al squad seleccionado.

@@ -29,6 +29,8 @@ import { AutomationAgentLaunchService, LaunchAutomationAgentInput } from './auto
 import { applyReviewedAutomation } from './automation/applyAutomation';
 import { saveGoldenCaseFromPackage, SaveGoldenCaseRequest } from './automation/goldenCase';
 import { ReuseAnalyzer } from '../../../core/indexing';
+import { FrameworkRecoveryController } from './automation/frameworkRecovery';
+import type { FrameworkRecoveryRequest } from '../../../core/automation';
 
 /**
  * Dependencias del pipeline de automatización: preparar el paquete, resolver
@@ -76,6 +78,13 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         syncRecording,
     } = context;
 
+    const recovery = new FrameworkRecoveryController(context);
+    ipcMain.handle('preview-framework-recovery', async (_, input?: FrameworkRecoveryRequest) => {
+        try { return recovery.prepare(input); } catch (error: any) { return { success: false, error: error.message }; }
+    });
+    ipcMain.handle('save-framework-recovery', async (_, token: string) => {
+        try { return recovery.save(token); } catch (error: any) { return { success: false, error: error.message }; }
+    });
     const emitAutomationProgress = createAutomationProgressEmitter(state);
     const responseImporter = new AutomationResponseImporter({
         automationApplier,

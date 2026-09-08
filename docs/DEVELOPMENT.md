@@ -381,3 +381,11 @@ No uses `validation.valid` como permiso de exportación: depende del conjunto
 preparado y su token. Los cambios de calidad se conservan como diagnósticos; rutas,
 conflictos, protección compartida y rollback permanecen obligatorios. Contrato en
 [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).
+
+## Recuperación QA (F4)
+
+`frameworkRecovery.test.js` ejercita el servicio, IPC y UI con frameworks temporales:
+parámetros, aserciones, nombres/rutas movidas, helpers, contenido compartido,
+pendientes, reapertura, Git local, symlinks, concurrencia y publicación fallida.
+Las consultas al target son de lectura; las revisiones se escriben exclusivamente
+en el paquete del recording. Ejecuta esas pruebas antes de `npm run quality`.

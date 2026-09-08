@@ -1,3 +1,4 @@
+import type { FrameworkRecoveryRequest, FrameworkRecoveryPreview, FrameworkRecoverySaved } from './frameworkRecoveryContracts';
 import type { AutomationExportResult } from './automationExportContracts';
 import { contextBridge, ipcRenderer } from 'electron';
 
@@ -120,6 +121,10 @@ contextBridge.exposeInMainWorld('api', {
     resolveAutomationQaDecisions: (input: any) => ipcRenderer.invoke('resolve-automation-qa-decisions', input),
     generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>): Promise<AutomationExportResult> =>
         ipcRenderer.invoke('generate-automation-response', previewToken, reviewedContents),
+    previewFrameworkRecovery: (input?: FrameworkRecoveryRequest): Promise<{ success: boolean; error?: string; preview?: FrameworkRecoveryPreview }> =>
+        ipcRenderer.invoke('preview-framework-recovery', input),
+    saveFrameworkRecovery: (token: string): Promise<{ success: boolean; error?: string; result?: FrameworkRecoverySaved }> =>
+        ipcRenderer.invoke('save-framework-recovery', token),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
     saveGoldenCase: (input: { recordingId?: string; squad?: string; executed?: 'passed' | 'failed' | 'not-run'; notes?: string; reviewedContents?: Record<string, string> }) =>
         ipcRenderer.invoke('save-golden-case', input),

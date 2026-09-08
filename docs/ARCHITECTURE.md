@@ -81,6 +81,8 @@ permanecen en el proceso principal.
     `#qaObservationsPanel` muestra tanto erratas del texto de la app
     (`ui-text-quality`) como verificaciones con XPath genérico
     (`weak-assertion`), y el reporte copiable las incluye; ninguna bloquea.
+  - `framework-recovery/`: comparación de correcciones locales, asociaciones y
+    guardado de revisión QA. Tiene su propio token y está disponible sin dispositivo.
   - `shared/domHelpers.js`: helpers de DOM genéricos (`disableBtn`,
     `enableBtn`, `updateDeviceScreen`, `escapeHtml`, `setLabelState`) sin
     estado propio, reutilizados por varias features en vez de duplicarlos.
@@ -579,3 +581,12 @@ una frontera de seguridad.
 - `dist/` no se limpia automáticamente antes de `tsc`; nunca se usa para
   inferir la arquitectura vigente.
 - Los archivos de runtime son estado local, no fuente.
+
+### Recuperar correcciones del framework (F4)
+
+`FrameworkRecoveryService` sigue relaciones de código y compara baseline, exportación
+y checkout. El controller IPC confina el paquete a recordings. Los canales
+`preview-framework-recovery` y `save-framework-recovery` no escriben en el framework:
+publican una revisión `framework-import`, con code snapshot, pendientes y contexto
+Git/PR opcional. La evidencia grabada original permanece intacta. El renderer consume
+solo contratos de datos mediante preload. Ver [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).

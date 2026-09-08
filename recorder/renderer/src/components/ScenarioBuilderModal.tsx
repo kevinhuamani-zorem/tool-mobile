@@ -242,6 +242,7 @@ export function ScenarioBuilderModal() {
                 </div>
               </div>
               <div className="review-primary-actions">
+                <button className="btn btn-dark" id="btnRecoverFrameworkCurrent">Recuperar cambios del framework</button>
                 <button className="btn btn-navy" id="btnPreview">↻ Revalidar</button>
                 <button className="btn btn-green btn-generate-final" id="btnGenerate">Aplicar automatización</button>
               </div>

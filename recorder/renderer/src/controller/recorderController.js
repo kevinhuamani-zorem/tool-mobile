@@ -12,6 +12,7 @@ import { createInspectorFeature } from '../features/inspector/inspectorFeature.j
 import { createRecordingFeature } from '../features/recording/recordingFeature.js';
 import { createPlatformCompletionFeature } from '../features/platform-completion/platformCompletionFeature.js';
 import { createGenerationFeature } from '../features/generation/generationFeature.js';
+import { createFrameworkRecoveryFeature } from '../features/framework-recovery/frameworkRecoveryFeature.js';
 import { createReviewFeature } from '../features/review/reviewFeature.js';
 
 let activeFeatures = null;
@@ -206,7 +207,11 @@ export async function initializeRecorder() {
         stepSummary: step => recording.stepSummary(step),
     });
 
-    const features = [configuration, inspector, recording, platformCompletion, generation, review];
+    const frameworkRecovery = createFrameworkRecoveryFeature({ api,
+        getSquad: () => document.getElementById('cmbFrameworkSquad').value || 'payment',
+        onSaved: () => { state.lastPreviewToken = ''; document.getElementById('btnGenerate').disabled = true; },
+    });
+    const features = [configuration, inspector, recording, platformCompletion, generation, review, frameworkRecovery];
     features.forEach(feature => feature.mount());
     activeFeatures = features;
 

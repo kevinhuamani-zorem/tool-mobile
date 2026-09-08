@@ -156,6 +156,7 @@ export async function applyReviewedAutomation(
         // Last fallible operation: an export event is committed only after all files/metadata.
         history!.append({ ...history!.identity()!, kind: 'export-result', origin: 'qa', result: exportStatus, stage: 'apply' }, [
             { name: 'application-receipt.json', content: JSON.stringify(applicationReceipt, null, 2) + '\n' },
+            { name: 'exported-files.json', content: JSON.stringify(prepared.files, null, 2) + '\n' },
             { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
             { name: 'validation.json', content: JSON.stringify(validation, null, 2) + '\n' },
         ]);

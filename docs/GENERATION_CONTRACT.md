@@ -1073,3 +1073,12 @@ TypeScript/Gherkin/aserciones. Se mantienen destinos del plan, contenido compart
 comprobaciones concurrentes y rollback. La exportación conserva los bytes revisados
 sin otra normalización Unicode; registra faltantes y diagnósticos sin promover memoria.
 Ver [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).
+
+## Revisión QA recuperada (F4)
+
+Recuperar cambios del framework guarda una nueva revisión del recording con el
+código del caso, relaciones y asociaciones pendientes. Mantiene el baseline,
+exportación y hash del checkout separados; en módulos compartidos el código
+guardado excluye modificaciones actuales ajenas al caso. No modifica los eventos
+Appium ni sustituye la respuesta histórica del agente. F5 conciliará esta revisión
+al regenerar/reexportar. Ver [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).

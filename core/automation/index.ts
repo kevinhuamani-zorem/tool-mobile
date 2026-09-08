@@ -54,3 +54,6 @@ export * from './ports/agentProvider';
 export * from './ports/memoryFragmentsPort';
 export * from './domain/agentModel';
 export { CopilotModelEvents } from './infrastructure/copilotModelEvents';
+
+export * from './contracts/frameworkRecovery';
+export * from './infrastructure/frameworkRecovery/service';

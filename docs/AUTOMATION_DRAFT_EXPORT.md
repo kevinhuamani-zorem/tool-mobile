@@ -53,11 +53,11 @@ sin ellos se registra `exported`. Los avisos informativos siguen en validación.
 intento. El historial guarda un evento de exportación independiente y conserva
 `generation`, aprobación QA y verificación funcional como resultados separados.
 
-**Exportar no aprueba golden ni promueve memoria.** F4 recuperará las correcciones
-del framework; F5 permitirá los ciclos de regrabación/regeneración y reexportación
+**Exportar no aprueba golden ni promueve memoria.** F4 ya recupera las correcciones
+del framework en una revisión QA; F5 permitirá los ciclos de regrabación/regeneración y reexportación
 durante el PR; F6 incorporará aprobación golden explícita y versiones inmutables.
-Los cambios externos todavía se conservan mediante un conflicto hasta implementar
-esa reconciliación. F3 no certifica ejecución en dispositivo.
+Los cambios externos pueden recuperarse con F4; la reconciliación para
+reexportar se implementará en F5. F3 no certifica ejecución en dispositivo.
 
 ## Verificación
 

@@ -8,6 +8,7 @@ export function ConfigurationScreen() {
             <span className="logo">📱</span>
             <div><h1>Appium Recorder</h1><p>Graba flujos de pruebas visualmente</p></div>
           </div>
+          <button id="btnRecoverFramework" className="btn btn-dark">Recuperar cambios del framework</button>
           <button id="btnChangeFramework" className="btn btn-dark">⚙️ Ajustes</button>
         </header>
 

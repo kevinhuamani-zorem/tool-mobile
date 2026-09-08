@@ -493,3 +493,12 @@ abrir la app manualmente en Simulator; después debe volver al recorder y
 refrescar screenshot/XML antes de inspeccionar o grabar acciones.
 
 Si el simulador aparece como `apagado`, Appium lo arranca al iniciar la sesión.
+
+### El QA corrigió el caso en el framework o durante el PR
+
+Usa **Recuperar cambios del framework**, selecciona el recording y compara. No se
+necesita commit ni dispositivo conectado. Revisa el diff y guarda una revisión QA;
+si una ruta/símbolo no se reconoce, asócialo en el panel o déjalo pendiente. Si el
+checkout o los archivos cambiaron después de comparar, vuelve a recuperar. Esta
+operación conserva el trabajo externo; F5 incorporará la reconciliación al
+regenerar/reexportar. Ver [guía de recuperación](AUTOMATION_FRAMEWORK_RECOVERY.md).

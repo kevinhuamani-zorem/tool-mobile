@@ -1,3 +1,4 @@
+import type { FrameworkRecoveryRequest, FrameworkRecoveryPreview, FrameworkRecoverySaved } from '../../src/frameworkRecoveryContracts';
 import type { AutomationExportResult } from '../../src/automationExportContracts';
 export {};
 
@@ -47,6 +48,8 @@ declare global {
             launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; inheritDesignReview?: boolean; model?: string }): Promise<any>;
             generateAutomationResponse(previewToken: string, reviewedContents?: Record<string, string>): Promise<AutomationExportResult>;
             revalidateAutomationResponse(reviewedContents: Record<string, string>): Promise<any>;
+            previewFrameworkRecovery(input?: FrameworkRecoveryRequest): Promise<{ success: boolean; error?: string; preview?: FrameworkRecoveryPreview }>;
+            saveFrameworkRecovery(token: string): Promise<{ success: boolean; error?: string; result?: FrameworkRecoverySaved }>;
             saveGoldenCase(input: {
                 recordingId?: string;
                 squad?: string;

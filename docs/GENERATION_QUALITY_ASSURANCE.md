@@ -162,3 +162,12 @@ contradecir una decisión determinista del plan: `reuse` solo es válido con
 `TypeLocator` y selector normalizado idénticos.
 El modo anterior permanece disponible con
 `RECORDER_AGENT_PIPELINE=deterministic`.
+
+### Recuperación QA desde el framework (F4)
+
+La suite usa frameworks aislados para comprobar recuperación de las cuatro capas
+y dependencias sin capturar cambios ajenos, preservando historial y evidencia
+Appium. Prueba rutas movidas, asociación manual, guardado con pendientes y rechazo
+de snapshots obsoletos o checkout cambiado. El piloto del `.app` con QA/Copilot
+y ejecución en dispositivo sigue pendiente de F7; una revisión recuperada no lo
+sustituye ni acredita aprobación golden.

@@ -2521,3 +2521,19 @@ body {
 .automation-agent-stages li strong { color: var(--text1, #fff); }
 .automation-agent-stages li small { display: block; margin-top: 2px; color: var(--text3); }
 .automation-agent-stages li .agent-budget-warning { display: block; margin-top: 4px; color: #ffcd72; }
+
+/* QA code recovery, available without a device session. */
+.framework-recovery-overlay { position: fixed; inset: 0; z-index: 10000; background: #102139b8; padding: 28px; align-items: center; justify-content: center; }
+.framework-recovery-card { width: min(1150px, 100%); max-height: 94vh; overflow: auto; background: #fff; color: #172b4d; border-radius: 16px; padding: 24px; box-shadow: 0 20px 65px #0004; }
+.framework-recovery-card header { display: flex; align-items: start; gap: 20px; justify-content: space-between; }
+.framework-recovery-card h2 { margin-top: 0; }
+.framework-recovery-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+.framework-recovery-card label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.framework-recovery-actions { display: flex; gap: 12px; margin: 20px 0; }
+.framework-recovery-file { border: 1px solid #ccd6e3; border-radius: 8px; margin: 12px 0; padding: 14px; }
+.framework-recovery-card summary { cursor: pointer; overflow-wrap: anywhere; }
+.framework-recovery-card pre { max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #f4f7fb; font-size: 12px; }
+.framework-recovery-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.framework-recovery-diff section:first-child pre { border-left: 3px solid #ca5252; }
+.framework-recovery-diff section:last-child pre { border-left: 3px solid #329973; }
+@media (max-width: 720px) { .framework-recovery-fields, .framework-recovery-diff { grid-template-columns: 1fr; } .framework-recovery-overlay { padding: 8px; } }

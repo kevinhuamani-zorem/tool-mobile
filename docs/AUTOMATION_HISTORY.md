@@ -105,3 +105,13 @@ símbolos propios reconocibles, faltantes y validación. El evento `export-resul
 admite `exported-with-observations`. `agent-run.json` agrega `exportResult` y
 `exportedAt` conservando `result` del intento. Ninguna exportación transforma
 el fallo autónomo en éxito, aprobación QA o verificación funcional.
+
+## Recuperación del framework (F4)
+
+El evento `revision-created` con `source: framework-import` publica el artefacto
+`framework-recovery.json` con código QA, relaciones, pendientes, usuario/fecha y
+contexto local de Git/PR. El archivo del mismo nombre en el paquete es una vista
+mutable; si falla la publicación se restaura su versión previa. La grabación y
+respuesta originales no se sustituyen. Los cuerpos de cambios ajenos no entran
+en la revisión recuperada. Cada exportación nueva conserva además
+`exported-files.json` con bytes anteriores/exportados para futuras comparaciones.

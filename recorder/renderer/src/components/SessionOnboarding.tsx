@@ -67,6 +67,7 @@ export function SessionOnboarding() {
           </div>
           <div className="onboarding-actions">
             <button id="btnOnboardingBack" className="btn btn-dark">← Volver</button>
+            <button id="btnOnboardingRecoverFramework" className="btn btn-navy">Recuperar cambios del framework</button>
             <button id="btnOnboardingAnalyze" className="btn btn-green">
               Analizar y completar →
             </button>
