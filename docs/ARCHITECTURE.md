@@ -260,11 +260,15 @@ XML, screenshots, source, capabilities ni credenciales.
    `application-receipt.json` registra el hash posterior de cada ruta aplicada.
    Una corrección solo puede reemplazar esos archivos si continúan intactos; los
    patches sobre archivos compartidos se recalculan desde su baseline original.
-   Preparar nuevamente una grabación reinicia antes todos los artefactos
+   `AutomationHistoryStore` captura antes un checkpoint inmutable bajo
+   `history/v1`, conservando los bytes originales y el vínculo revisión/intento.
+   Los recibos v2 añaden `exportId`, `revisionId` y la procedencia del intento;
+   los v1 siguen siendo legibles sin inventar datos históricos.
+   Preparar nuevamente una grabación reinicia todos los artefactos
    mutables de la corrida anterior —respuesta, plan efectivo, consultas,
    reparación, validación, logs y baselines—. Solo `history/` se conserva;
-   por ello un fallo temprano del resolver nunca deja una respuesta antigua
-   disponible para importar.
+   también al solicitar limpieza explícita. Un fallo temprano del resolver
+   no deja una respuesta antigua disponible para importar, pero conserva su evidencia.
 6. Si existe un caso equivalente en el framework con sus cuatro capas, se
    conserva localmente y no se invoca al agente. La memoria legacy está
    deshabilitada: no aporta casos, fragmentos, vocabulario ni decisiones de gaps.

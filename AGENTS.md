@@ -113,7 +113,15 @@ generadores, validadores o plantillas.
     derivado de revisiones golden aprobadas por QA se implementará en F6;
     mientras tanto las lecturas legacy devuelven vacío. La reutilización exacta
     del framework permanece disponible y no acredita aprobación golden.
-14. **Regenerar conserva identidad y rutas.** Un refinamiento parte del último
+14. **El historial precede a las modificaciones.** `AutomationHistoryStore`
+    conserva eventos y blobs por hash en `generation/automation/history/v1`.
+    Antes de resetear, normalizar o aplicar una edición, captura sus originales.
+    `attemptId` es el `runId` existente; las revisiones conservan `recordingId`,
+    `caseId` y el vínculo al padre. Los archivos actuales son vistas mutables.
+    Limpiar el paquete no borra `history/`. Exportar o validar una edición QA
+    no transforma el fallo autónomo previo en éxito ni acredita aprobación o
+    ejecución funcional. Ver `docs/AUTOMATION_HISTORY.md`.
+    **Regenerar conserva identidad y rutas.** Un refinamiento parte del último
     `agent-response.json` validado, crea una versión histórica, mantiene
     `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry
     sigue reconociendo como administrados y no modificados externamente.

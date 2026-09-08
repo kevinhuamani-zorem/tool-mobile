@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { AutomationHistoryStore } from './automationHistoryStore';
 import path from 'path';
 import crypto from 'crypto';
 import type { CodeGraphBuildMetrics } from '../../indexing';
@@ -11,6 +12,11 @@ import type { AgentModelUsage } from '../domain/agentModel';
 export interface AgentRunArtifact {
     schemaVersion: 1;
     runId: string;
+    attemptId?: string;
+    revisionId?: string;
+    parentRevisionId?: string;
+    caseId?: string;
+    executionStarted?: boolean;
     recordingId: string;
     planId?: string;
     startedAt: string;
@@ -99,9 +105,14 @@ export class AgentRunStore {
 
     start(recordingId: string, planId?: string): AgentRunArtifact {
         const now = this.now();
+        const history = new AutomationHistoryStore(path.dirname(this.file));
+        history.captureFile(this.file, 'recorder', 'before-attempt-replacement');
+        const runId = `run-${crypto.randomUUID()}`;
+        const identity = history.startAttempt(recordingId, runId, planId);
         const run: AgentRunArtifact = {
             schemaVersion: 1,
-            runId: `run-${crypto.randomUUID()}`,
+            ...identity,
+            runId,
             recordingId,
             ...(planId ? { planId } : {}),
             startedAt: new Date(now).toISOString(),
@@ -233,7 +244,19 @@ export class AgentRunStore {
         }
     }
 
-    setPlan(planId: string): void { this.update(run => ({ ...run, planId })); }
+    claimExecution(recordingId: string, planId?: string): void {
+        const run = this.read();
+        const identity = new AutomationHistoryStore(path.dirname(this.file)).identity();
+        if (!run || run.executionStarted || identity?.attemptId !== run.runId) this.start(recordingId, planId);
+        this.update(current => ({ ...current, executionStarted: true }));
+    }
+
+    setPlan(planId: string): void {
+        this.update(run => ({ ...run, planId }));
+        const history = new AutomationHistoryStore(path.dirname(this.file));
+        const identity = history.identity();
+        if (identity) history.append({ ...identity, planId, kind: 'attempt-planned', origin: 'recorder' });
+    }
     addDuration(field: DurationField, durationMs: number): void {
         this.update(run => ({ ...run, [field]: run[field] + Math.max(0, durationMs) }));
     }
@@ -465,6 +488,9 @@ export class AgentRunStore {
             result,
             ...(terminal ? { finishedAt: new Date(this.now()).toISOString() } : {}),
         }));
+        if (terminal || result === 'ready-for-review' || result === 'needs-repair') {
+            new AutomationHistoryStore(path.dirname(this.file)).captureFile(this.file, 'recorder', `run-state:${result}`);
+        }
     }
 
     private finishTimer(timer: 'agentStartedAtMs' | 'repairStartedAtMs', field: DurationField): void {

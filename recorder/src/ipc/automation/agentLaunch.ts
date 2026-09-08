@@ -6,6 +6,7 @@ import {
     DEFAULT_AGENT_EXECUTION_MODE,
     AgentExecutionMode,
     AgentRunStore,
+    AutomationHistoryStore,
     AgentOrchestrator,
     LayeredGenerationOrchestrator,
     resolveAgentExecutionMode,
@@ -99,7 +100,13 @@ export class AutomationAgentLaunchService {
                 input?.mode || process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE
             );
             if (mode === 'manual') {
-                new AgentRunStore(state.activeAutomationPackage).markAgentStarted();
+                const runStore = new AgentRunStore(state.activeAutomationPackage);
+                const run = runStore.read();
+                if (run) {
+                    new AutomationHistoryStore(state.activeAutomationPackage).checkpoint('before-manual-execution');
+                    runStore.claimExecution(run.recordingId, run.planId);
+                }
+                runStore.markAgentStarted();
                 const launch = input?.autorun
                     ? automationAgentLauncher.openTerminalWithPrompt(
                         projectPaths.automationAgent,

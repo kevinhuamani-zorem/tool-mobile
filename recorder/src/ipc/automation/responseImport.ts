@@ -12,6 +12,7 @@ import {
     GenerationPlan,
     parseGapResolutions,
     AgentRunStore,
+    AutomationHistoryStore,
     normalizeAgentResponseEnglishIdentifiers,
     normalizeGeneratedGherkinKeywords,
     inheritedIdentifiersOf,
@@ -121,10 +122,14 @@ export class AutomationResponseImporter {
                 'Si abriste ejecución manual, completa el proveedor y luego usa "Importar resultado manual".'
             );
         }
+        const history = new AutomationHistoryStore(packageDirectory);
+        history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
+        history.captureFile(responsePath, options.manualCorrection ? 'qa' : 'agent', 'import:original');
         let response = withGeneratedResponseMetadata(
             readJsonUtf8<AutomationAgentResponse>(responsePath),
             scenario.createdAt
         );
+        const beforeQaEdit = JSON.stringify(response);
         if (options.reviewedContents) {
             response = {
                 ...response,
@@ -135,6 +140,11 @@ export class AutomationResponseImporter {
                     ] ?? file.content,
                 })),
             };
+        }
+        if (options.manualCorrection || (options.reviewedContents && JSON.stringify(response) !== beforeQaEdit)) {
+            history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'qa-edit' }, [
+                { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
+            ]);
         }
         response = normalizeJsonUnicode(response);
         const asDelivered = response;
@@ -180,6 +190,7 @@ export class AutomationResponseImporter {
         }
         runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
         writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), response);
+        history.captureFile(responsePath, 'recorder', 'import:normalized');
         const statusFile = path.join(packageDirectory, 'status.json');
         const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
         if (options.manualCorrection) {
@@ -242,6 +253,10 @@ export class AutomationResponseImporter {
         }
         runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
         writeJsonUtf8(path.join(packageDirectory, 'validation.json'), validation);
+        history.append({ ...history.identity()!, kind: options.manualCorrection || options.reviewedContents ? 'qa-validation-result' : 'generation-result', origin: 'recorder', stage: options.manualCorrection || options.reviewedContents ? 'qa-validation' : 'import-validation', result: validation.valid ? 'passed' : 'failed' }, [
+            { name: 'validation.json', content: JSON.stringify(validation, null, 2) + '\n' },
+            { name: 'prepared-response.json', content: JSON.stringify(response, null, 2) + '\n' },
+        ]);
         const draftPreview = Array.isArray(response.files) &&
             response.files.some(file =>
                 file?.layer === 'feature' &&

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { AutomationHistoryStore } from './automationHistoryStore';
 import fs from 'fs';
 import path from 'path';
 import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERSION } from '../contracts';
@@ -319,6 +320,15 @@ export class AutomationRecordingStore {
         const manifestFile = path.join(this.activeDirectory, 'manifest.json');
         const previousActions = fs.existsSync(actionsFile) ? readUtf8File(actionsFile) : undefined;
         const previousManifest = fs.existsSync(manifestFile) ? readUtf8File(manifestFile) : undefined;
+        const scenarioFile = path.join(this.activeDirectory, 'scenario.json');
+        if (fs.existsSync(scenarioFile)) {
+            const scenario = readJson<AutomationScenario>(scenarioFile);
+            const history = new AutomationHistoryStore(path.join(this.activeDirectory, 'generation', 'automation'));
+            history.ensureRevision(this.manifest!.recordingId, scenario?.request?.caseId);
+            if (previousActions) history.capture('recording-actions.json', previousActions, 'recording', 'before-recording-edit');
+            if (previousManifest) history.capture('recording-manifest.json', previousManifest, 'recording', 'before-recording-edit');
+            history.capture('recording-scenario.json', readUtf8File(scenarioFile), 'recording', 'before-recording-edit');
+        }
         try {
             atomicJson(actionsFile, normalized);
             atomicJson(manifestFile, nextManifest);
@@ -364,7 +374,12 @@ export class AutomationRecordingStore {
             prepareRecordedStep(step, index + 1, input.request.platform)
         );
         const createdAt = new Date().toISOString();
-        const request = { ...input.request, createdAt };
+        const request = {
+            ...input.request, createdAt, actions,
+            scenarioRows: input.request.scenarioRows?.map(row => ({
+                ...row, actions: (row.actions || []).map((step, index) => prepareRecordedStep(step, step.sequence || index + 1, input.request.platform)),
+            })),
+        };
         const scenario: AutomationScenario = {
             schemaVersion: AUTOMATION_SCHEMA_VERSION,
             pipelineVersion: AUTOMATION_PIPELINE_VERSION,

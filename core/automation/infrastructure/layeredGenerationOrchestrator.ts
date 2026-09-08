@@ -1,3 +1,5 @@
+import { AutomationHistoryStore } from './automationHistoryStore';
+import { AgentRunStore } from './agentRunStore';
 /**
  * Derek: orquesta Lorem, Zorem y Sumrak.
  *
@@ -134,6 +136,11 @@ export class LayeredGenerationOrchestrator {
     async run(packageDirectory: string, options: LayeredGenerationOptions = {}): Promise<LayeredGenerationResult> {
         const root = path.resolve(packageDirectory);
         const plan = readJsonUtf8<GenerationPlan>(path.join(root, 'generation-plan.json'));
+        const history = new AutomationHistoryStore(root);
+        const caseId = readJsonUtf8<{ request?: { caseId?: string } }>(path.join(root, 'scenario.json')).request?.caseId;
+        history.ensureRevision(plan.recordingId, caseId);
+        history.checkpoint('before-layered-execution');
+        new AgentRunStore(root).claimExecution(plan.recordingId, plan.planId);
         const startedAt = new Date().toISOString();
         const stages: LayeredGenerationStageReport[] = [];
         const agentsRoot = path.join(root, 'agents');
@@ -655,6 +662,7 @@ export class LayeredGenerationOrchestrator {
         const acceptOutput = repairErrors.length > 0
             && this.responseValidator
             ? (output: unknown): boolean | 'stuck' => {
+                new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:before-live-normalization`, attempt === 0 ? 1 : 2);
                 if (typeof output === 'object' && output !== null
                     && normalizeAuthorResult(output as LayeredAgentResult, role, plan, scenarioNaming(packageDirectory))) {
                     writeJsonUtf8(outputFile, output);
@@ -733,7 +741,10 @@ export class LayeredGenerationOrchestrator {
         let run: Awaited<ReturnType<AgentProvider['execute']>>;
         const actualModels = new Set<string>();
         do {
-            if (feedbackRound > 0 && fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+            if (feedbackRound > 0 && fs.existsSync(outputFile)) {
+                new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:before-feedback-${feedbackRound}`, attempt === 0 ? 1 : 2);
+                fs.unlinkSync(outputFile);
+            }
             run = await this.controlledProvider.execute({
                 cwd: stageDirectory,
                 prompt,
@@ -782,6 +793,7 @@ export class LayeredGenerationOrchestrator {
         report.actualModels = [...actualModels];
         report.timedOut = Boolean(run.timedOut);
         report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, totalDurationMs);
+        new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:provider-output`, attempt === 0 ? 1 : 2);
         if (!run.success || !fs.existsSync(outputFile)) {
             report.state = 'failed';
             if (run.errorCode === 'AGENT_FEEDBACK_STUCK') {
@@ -821,6 +833,7 @@ export class LayeredGenerationOrchestrator {
             options.onStageChange?.({ ...report });
             throw new Error(report.error);
         }
+        new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:before-normalization`, attempt === 0 ? 1 : 2);
         const result = readJsonUtf8<unknown>(outputFile);
         // Derek corrige lo mecanico antes de juzgar: sobre del contrato,
         // campos de mas en actionTrace, keywords e import del Screen Object.
@@ -993,6 +1006,7 @@ export class LayeredGenerationOrchestrator {
                 throw new Error(report.error);
             }
         }
+        new AutomationHistoryStore(packageDirectory).captureFile(outputFile, report.execution === 'deterministic' ? 'recorder' : 'agent', 'integration:before-assembly', attempt === 0 ? 1 : 2);
         const proposedResponse = readJsonUtf8<AutomationAgentResponse>(outputFile);
         const behavior = readJsonUtf8<LayeredAgentResult>(behaviorFile);
         const interaction = readJsonUtf8<LayeredAgentResult>(interactionFile);
@@ -1020,7 +1034,10 @@ export class LayeredGenerationOrchestrator {
         // encuentre observaciones. El importador oficial decide si puede
         // aplicarse; el QA siempre puede verlo y corregirlo.
         const finalResponse = path.join(packageDirectory, 'agent-response.json');
+        const history = new AutomationHistoryStore(packageDirectory);
+        history.captureFile(finalResponse, 'recorder', 'integration:before-replacement');
         fs.copyFileSync(outputFile, finalResponse);
+        history.captureFile(finalResponse, 'recorder', 'integration:assembled', attempt === 0 ? 1 : 2);
         const expectedFiles = new Map(plan.files.map(file => [file.layer, file.path]));
         const integratedFiles = new Map(response.files.map(file => [file.layer, file.path]));
         const fileContractErrors: RepairIssue[] = [...expectedFiles].flatMap(([layer, expectedPath]) =>
@@ -1100,5 +1117,11 @@ export class LayeredGenerationOrchestrator {
             startedAt,
             completedAt: new Date().toISOString(),
         } satisfies LayeredGenerationRunReport);
+        const history = new AutomationHistoryStore(path.dirname(reportFile));
+        const identity = history.identity();
+        if (identity) history.append({ ...identity, kind: 'generation-result', origin: 'recorder', stage: 'layered-result', result: state === 'completed' ? 'passed' : 'failed' }, [
+            { name: 'layered-generation-run.json', content: fs.readFileSync(reportFile) },
+        ]);
+        history.checkpoint('layered-finished');
     }
 }

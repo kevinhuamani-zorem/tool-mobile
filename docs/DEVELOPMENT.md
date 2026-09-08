@@ -371,3 +371,13 @@ que tenga la misma causa. `REGRESSION` exige que ese test haya pasado antes.
 Un test nuevo fallido queda `UNBASELINED`; omitir o saltar un test no lo resuelve.
 El comando conserva salida fallida aunque los fallos ya existieran. Un contexto
 distinto o una corrida cancelada no produce una comparación válida.
+
+## Historial de revisiones e intentos
+
+Los cambios de generación deben conservar evidencia mediante
+`AutomationHistoryStore` antes de sobrescribir las vistas del paquete. Los
+contratos y límites están en [AUTOMATION_HISTORY.md](AUTOMATION_HISTORY.md).
+Pruebas focalizadas: `automationHistoryStore`, `agentRunStore`,
+`preparedAutomation`, `automationPipeline`, `layeredGenerationOrchestrator` y
+`goldenDataset`. Comprueba también errores de publicación/rollback y que el
+historial no se copie a los workspaces de agentes por gap.

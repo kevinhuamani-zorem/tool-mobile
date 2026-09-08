@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import type { AutomationAgentResponse, AutomationScenario, GenerationPlan } from '../contracts';
+import type { AutomationAgentResponse, AutomationScenario, GenerationPlan, AutomationHistoryIdentity } from '../contracts';
 
-export const AUTOMATION_APPLICATION_RECEIPT_SCHEMA_VERSION = 1;
+export const AUTOMATION_APPLICATION_RECEIPT_SCHEMA_VERSION = 2;
 
 export interface AppliedAutomationFile {
     path: string;
@@ -12,7 +12,12 @@ export interface AppliedAutomationFile {
 }
 
 export interface AutomationApplicationReceipt {
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
+    exportId?: string;
+    revisionId?: string;
+    attemptId?: string;
+    basedOnAttemptId?: string;
+    caseId?: string;
     recordingId: string;
     planId: string;
     responseHash: string;
@@ -29,9 +34,11 @@ export function createAutomationApplicationReceipt(
     scenario: AutomationScenario,
     plan: GenerationPlan,
     response: AutomationAgentResponse,
+    identity?: AutomationHistoryIdentity,
 ): AutomationApplicationReceipt {
     return {
-        schemaVersion: AUTOMATION_APPLICATION_RECEIPT_SCHEMA_VERSION,
+        schemaVersion: identity ? AUTOMATION_APPLICATION_RECEIPT_SCHEMA_VERSION : 1,
+        ...(identity ? { exportId: `export-${crypto.randomUUID()}`, revisionId: identity.revisionId, attemptId: identity.attemptId, basedOnAttemptId: identity.basedOnAttemptId, caseId: identity.caseId } : {}),
         recordingId: scenario.recordingId,
         planId: plan.planId,
         responseHash: hash(JSON.stringify(response)),
@@ -57,9 +64,10 @@ export function requireUnchangedAppliedFiles(
     recordingId: string,
     planId: string,
 ): void {
-    if (receipt.schemaVersion !== AUTOMATION_APPLICATION_RECEIPT_SCHEMA_VERSION) {
+    if (receipt.schemaVersion !== 1 && receipt.schemaVersion !== AUTOMATION_APPLICATION_RECEIPT_SCHEMA_VERSION) {
         throw new Error(`Versión de application-receipt.json no soportada: ${receipt.schemaVersion}`);
     }
+    if (receipt.schemaVersion === 2 && (!receipt.exportId || !receipt.revisionId)) throw new Error('El recibo v2 no contiene identidad de exportación/revisión.');
     if (receipt.recordingId !== recordingId || receipt.planId !== planId) {
         throw new Error('application-receipt.json pertenece a otra grabación o plan.');
     }

@@ -4,6 +4,7 @@ import path from 'path';
 import { projectPaths } from '../../../../core/workspace';
 import {
     AutomationScenario,
+    AutomationHistoryStore,
     AutomationValidation,
     GeneratedFileRegistry,
     GenerationPlan,
@@ -86,8 +87,14 @@ export function saveGoldenCaseFromPackage(
     // Lo corregido en el editor se lleva al framework; lo corregido en el
     // framework ya esta ahi. En ambos casos el recibo y el registro deben
     // describir los bytes que quedan en disco.
+    const history = new AutomationHistoryStore(packageDirectory);
+    history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
     const appliedEdits: string[] = [];
     if (accepted.edited) {
+        history.checkpoint('before-golden-qa-edit');
+        history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'qa-edit' }, [
+            { name: 'agent-response.json', content: JSON.stringify(accepted.response, null, 2) + '\n' },
+        ]);
         for (const file of accepted.response.files) {
             if (!accepted.editedLayers.includes(file.layer)) continue;
             const absolute = path.join(frameworkRoot, file.path);
@@ -97,7 +104,7 @@ export function saveGoldenCaseFromPackage(
                 appliedEdits.push(file.layer);
             }
         }
-        const receipt = createAutomationApplicationReceipt(frameworkRoot, scenario, plan, accepted.response);
+        const receipt = createAutomationApplicationReceipt(frameworkRoot, scenario, plan, accepted.response, history.identity());
         writeJsonUtf8(path.join(packageDirectory, 'application-receipt.json'), receipt);
         writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), accepted.response);
         writeJsonUtf8(appliedValidation, validation);
@@ -125,5 +132,6 @@ export function saveGoldenCaseFromPackage(
         notes: request.notes,
         savedBy: os.userInfo().username,
     });
+    history.capture('golden-manifest.json', JSON.stringify(saved.manifest, null, 2) + '\n', 'qa', 'legacy-golden-saved');
     return { ...saved, appliedEdits };
 }

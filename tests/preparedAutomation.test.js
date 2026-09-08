@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { AutomationApplier, AutomationPatchWriter } = require('../dist/core/automation');
+const { AutomationApplier, AutomationPatchWriter, AutomationHistoryStore } = require('../dist/core/automation');
 
 function fixture(t, Applier = AutomationApplier) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-prepared-'));
@@ -175,6 +175,14 @@ test('handler aplica el preview final y registra el recibo sin aprender del resu
     for (const file of applied.files) assert.equal(file.content, fs.readFileSync(path.join(f.root, file.path), 'utf8'));
     assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'status.json'))).memoryVersion, undefined);
     assert.equal(result.memoryVersion, undefined);
+    const history = new AutomationHistoryStore(packageDirectory);
+    assert.equal(history.lifecycle().export, 'exported');
+    assert.equal(history.lifecycle().qaApproval, 'pending');
+    assert.equal(history.lifecycle().functionalVerification, 'not-reported');
+    const receipt = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'application-receipt.json')));
+    assert.equal(receipt.schemaVersion, 2);
+    assert.equal(receipt.revisionId, history.current().revisionId);
+    assert.ok(receipt.exportId);
     assert.equal(state.automationPreview, null);
 });
 
@@ -205,4 +213,93 @@ test('handler rechaza errores semánticos antes de escribir o promover memoria',
     assert.equal(fs.readFileSync(f.registryFile, 'utf8'), 'original registry');
     assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'framework-compilation.json'))).status, 'failed');
     assert.ok(state.automationPreview, 'QA retains editable preview');
+});
+
+test('fallar el evento de exportación revierte framework y recibo sin inventar éxito', async t => {
+    const f = fixture(t);
+    const { projectPaths } = require('../dist/core/workspace');
+    const originalRoot = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.root;
+    t.after(() => { projectPaths.frameworkRoot = originalRoot; });
+    fs.writeFileSync(path.join(f.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [], strict: true } }));
+    f.response.files[1].content = 'export const verified: number = 1;';
+    f.plan.planId = 'plan-a';
+    const prepared = f.applier.prepare(f.scenario, f.plan, f.response, f.preview);
+    const packageDirectory = path.join(f.root, 'package');
+    fs.mkdirSync(packageDirectory);
+    const state = { activeAutomationPackage: packageDirectory, automationPreview: {
+        token: 'token', scenario: f.scenario, plan: f.plan, response: prepared.response, prepared,
+    } };
+    const link = fs.linkSync;
+    fs.linkSync = (source, target) => {
+        if (target.includes(`${path.sep}events${path.sep}`)) {
+            const event = JSON.parse(fs.readFileSync(source));
+            if (event.kind === 'export-result' && event.result === 'exported') throw new Error('history disk full');
+        }
+        return link(source, target);
+    };
+    const { applyReviewedAutomation } = require('../dist/recorder/src/ipc/automation/applyAutomation');
+    let result;
+    try {
+        result = await applyReviewedAutomation({ state, automationApplier: f.applier,
+            generatedFileRegistry: { assess: () => ({ conflicts: [] }) },
+            automationResponseValidator: { validate: () => ({ valid: true, qualityScore: 100, errors: [], warnings: [] }),
+                toPreview: response => ({ ...f.preview, featureContent: response.files[0].content, stepContent: response.files[1].content }) },
+            emitProgress: () => {},
+        }, 'token');
+    } finally { fs.linkSync = link; }
+    assert.equal(result.success, false);
+    assert.match(result.error, /history disk full/);
+    assert.equal(fs.readFileSync(prepared.preview.featurePath, 'utf8'), f.original);
+    assert.equal(fs.existsSync(prepared.preview.stepPath), false);
+    assert.equal(fs.readFileSync(f.registryFile, 'utf8'), 'original registry');
+    assert.equal(fs.existsSync(path.join(packageDirectory, 'application-receipt.json')), false);
+    const history = new AutomationHistoryStore(packageDirectory);
+    assert.equal(history.lifecycle().export, 'failed');
+    assert.equal(history.events().some(event => event.kind === 'export-result' && event.result === 'exported'), false);
+});
+
+test('importar una corrección QA conserva los bytes previos a NFC y el fallo del intento original', async t => {
+    const f = fixture(t);
+    const { projectPaths } = require('../dist/core/workspace');
+    const { AgentRunStore } = require('../dist/core/automation');
+    const originalRoot = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.root;
+    t.after(() => { projectPaths.frameworkRoot = originalRoot; });
+    fs.writeFileSync(path.join(f.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [], strict: true } }));
+    f.response.files[1].content = 'export const verified: number = 1;';
+    f.response.files[0].content += '\n# Cafe\u0301\n';
+    f.scenario.platform = 'android';
+    f.scenario.request = { caseId: 'TC-1', scenarioRows: [] };
+    f.plan.planId = 'plan-a';
+    const recordingDirectory = path.join(f.root, 'recording');
+    const packageDirectory = path.join(recordingDirectory, 'generation/automation');
+    fs.mkdirSync(packageDirectory, { recursive: true });
+    fs.writeFileSync(path.join(recordingDirectory, 'scenario.json'), JSON.stringify(f.scenario));
+    fs.writeFileSync(path.join(packageDirectory, 'scenario.json'), JSON.stringify(f.scenario));
+    fs.writeFileSync(path.join(packageDirectory, 'generation-plan.json'), JSON.stringify(f.plan));
+    const raw = Buffer.from(JSON.stringify(f.response));
+    fs.writeFileSync(path.join(packageDirectory, 'agent-response.json'), raw);
+    const history = new AutomationHistoryStore(packageDirectory);
+    history.beginRevision({ recordingId: 'rec-a', caseId: 'TC-1', source: 'recording' });
+    new AgentRunStore(packageDirectory).start('rec-a', 'plan-a');
+    const identity = history.identity();
+    history.append({ ...identity, kind: 'generation-result', origin: 'recorder', result: 'failed' });
+    const { AutomationResponseImporter } = require('../dist/recorder/src/ipc/automation/responseImport');
+    const importer = new AutomationResponseImporter({ state: {}, automationApplier: f.applier,
+        automationPackageBuilder: { requireTrustedScenarioPackage: () => f.scenario },
+        generatedFileRegistry: { assess: () => ({ conflicts: [] }) },
+        automationResponseValidator: { validate: () => ({ valid: true, qualityScore: 100, errors: [], warnings: [] }),
+            toPreview: response => ({ ...f.preview, featureContent: response.files[0].content, stepContent: response.files[1].content }) },
+        emitProgress: () => {},
+    });
+    const result = await importer.importFromPackage(packageDirectory, { manualCorrection: true });
+    assert.equal(result.success, true, result.error);
+    const captured = history.events().find(event => event.stage === 'import:original');
+    assert.deepEqual(history.readArtifact(captured.artifacts[0]), raw);
+    assert.equal(history.current().source, 'qa-edit');
+    assert.equal(history.current().parentRevisionId, identity.revisionId);
+    assert.equal(history.lifecycle(identity.revisionId).generation, 'failed');
+    assert.equal(history.lifecycle().qaApproval, 'pending');
+    assert.equal(history.events().filter(event => event.revisionId === history.current().revisionId && event.kind === 'generation-result').length, 0);
 });

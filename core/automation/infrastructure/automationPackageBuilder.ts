@@ -41,6 +41,7 @@ import {
 } from '../domain/automationScenarioPackage';
 import type { PackagedAutomationScenario } from '../domain/automationScenarioPackage';
 import { AgentRunStore } from './agentRunStore';
+import { AutomationHistoryStore } from './automationHistoryStore';
 import { deriveAutomationContextProjections, ProjectionInput } from '../domain/automationContextProjections';
 import { emptyQueryResults, queryRequestsSchema } from '../domain/agentQueryContracts';
 import { resolveAgentExecutionMode, resolvePackageArtifactPath } from './agentRuntimeGuards';
@@ -64,18 +65,17 @@ function writeJson(file: string, value: unknown): void {
  * preparacion debe reconstruirlo: conservar respuestas, planes efectivos o
  * logs de una corrida anterior permite importar codigo que ya no corresponde
  * al scenario actual. El historial de refinamientos es auditoria inmutable y
- * se conserva salvo que el QA solicite una limpieza explicita.
+ * se conserva también cuando el QA solicita limpiar los derivados.
  */
 function resetAutomationPackage(
     packageDirectory: string,
-    preserveHistory = true,
 ): void {
     if (!fs.existsSync(packageDirectory)) {
         fs.mkdirSync(packageDirectory, { recursive: true });
         return;
     }
     for (const entry of fs.readdirSync(packageDirectory, { withFileTypes: true })) {
-        if (preserveHistory && entry.name === 'history' && entry.isDirectory()) continue;
+        if (entry.name === 'history' && entry.isDirectory()) continue;
         fs.rmSync(path.join(packageDirectory, entry.name), {
             recursive: entry.isDirectory(),
             force: true,
@@ -909,8 +909,9 @@ export class AutomationPackageBuilder {
         if (!scenario.actions.length) throw new Error('La grabación no contiene acciones para reprocesar');
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
         // prepare() siempre reinicia los artefactos de la corrida. La opcion
-        // explicita de limpieza tambien descarta el historial de refinamientos.
-        if (cleanPackage) resetAutomationPackage(packageDirectory, false);
+        // explícita de limpieza conserva toda la evidencia histórica.
+        // prepare realiza el checkpoint antes de limpiar, también con cleanPackage.
+        void cleanPackage;
         return this.prepare(scenario, recordingDirectory);
     }
 
@@ -1018,7 +1019,13 @@ export class AutomationPackageBuilder {
         // La propuesta anterior ya quedo versionada. A partir de aqui la nueva
         // iteracion no puede heredar ningun output mutable de Copilot ni de una
         // validacion/reparacion anterior.
-        resetAutomationPackage(packageDirectory, true);
+        const history = new AutomationHistoryStore(packageDirectory);
+        history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
+        history.checkpoint('before-regeneration');
+        history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'regeneration' }, [
+            { name: 'recording-scenario.json', content: JSON.stringify(scenario, null, 2) + '\n' },
+        ]);
+        resetAutomationPackage(packageDirectory);
 
         const packagedScenario = packageAutomationScenario(revisedScenario);
         writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario);
@@ -1128,6 +1135,7 @@ export class AutomationPackageBuilder {
             : undefined;
         runStore.setContextBytes(contextBytes);
         runStore.mark('ready-for-agent');
+        history.checkpoint('package-prepared');
         return {
             packageDirectory,
             recordingId: revisedScenario.recordingId,
@@ -1147,13 +1155,18 @@ export class AutomationPackageBuilder {
 
     prepare(scenario: AutomationScenario, recordingDirectory: string): AutomationPackageResult {
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
-        // El diccionario del proceso incorpora lo aprendido de casos validados
-        // antes de que el resolver ponga un solo nombre.
+        // Compatibilidad: la memoria legacy permanece deshabilitada.
         this.memory.loadLearnedVocabulary();
         // Aplica tanto a un caso nuevo como a una grabacion retomada. Se hace
         // antes del resolver para que incluso un fallo temprano invalide una
         // respuesta anterior y nunca pueda reimportarse por accidente.
-        resetAutomationPackage(packageDirectory, true);
+        const history = new AutomationHistoryStore(packageDirectory);
+        if (fs.existsSync(packageDirectory) && fs.readdirSync(packageDirectory).some(name => name !== 'history')) history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
+        history.checkpoint('before-package-reset');
+        history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'recording' }, [
+            { name: 'recording-scenario.json', content: JSON.stringify(scenario, null, 2) + '\n' },
+        ]);
+        resetAutomationPackage(packageDirectory);
         const runStore = new AgentRunStore(packageDirectory);
         runStore.start(scenario.recordingId);
         runStore.setExecutionMode(resolveAgentExecutionMode(process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE));
@@ -1384,6 +1397,8 @@ export class AutomationPackageBuilder {
             : undefined;
         runStore.setContextBytes(contextBytes);
         runStore.mark(response ? (validation?.valid ? 'ready-for-review' : 'needs-repair') : 'ready-for-agent');
+        history.checkpoint('package-prepared');
+        if (validation) history.append({ ...history.identity()!, kind: 'generation-result', origin: 'recorder', result: validation.valid ? 'passed' : 'failed', stage: 'deterministic-preparation' });
         return {
             packageDirectory,
             recordingId: result.scenario.recordingId,

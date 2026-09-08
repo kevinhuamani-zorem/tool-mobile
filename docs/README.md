@@ -5,6 +5,7 @@
 - [Arquitectura](ARCHITECTURE.md): componentes, límites y flujos principales.
 - [Contrato de generación](GENERATION_CONTRACT.md): archivos, nombres,
   validaciones y política de escritura.
+- [Historial de automatización](AUTOMATION_HISTORY.md): revisiones, intentos y recibos.
 - [Desarrollo](DEVELOPMENT.md): preparación, comandos y estrategia de cambios.
 - [Operación y troubleshooting](OPERATIONS_AND_TROUBLESHOOTING.md): modos,
   sesiones, diagnósticos y fallos frecuentes.

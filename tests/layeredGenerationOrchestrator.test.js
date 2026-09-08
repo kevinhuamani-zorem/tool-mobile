@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const {
     LayeredGenerationOrchestrator,
+    AutomationHistoryStore,
     validateLayeredAgentResult,
 } = require('../dist/core/automation');
 const { configureWorkspacePaths, projectPaths } = require('../dist/core/workspace');
@@ -1081,6 +1082,13 @@ test('Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir
     assert.doesNotMatch(steps, /await screen\./);
     const feature = behavior.files.find(entry => entry.layer === 'feature').content;
     assert.match(feature, /Scenario Outline: \[TC-1\]\[Happy Path\]\[AUTO-FRONT\] Caso/);
+    const history = new AutomationHistoryStore(root);
+    const event = history.events().find(event => event.stage === 'behavior-author:provider-output');
+    const delivered = JSON.parse(history.readArtifact(event.artifacts[0]));
+    assert.equal(delivered.role, undefined, 'conserva el sobre original antes de normalizar');
+    assert.match(delivered.files.find(file => file.layer === 'steps').content, /@cucumber\/cucumber/);
+    assert.equal(event.attemptId, JSON.parse(fs.readFileSync(path.join(root, 'agent-run.json'))).runId);
+    assert.equal(event.pass, 1);
 });
 
 // Solo Zorem ejecuta algo (screen-object-contract.js). Con `shell(node)` abierto,

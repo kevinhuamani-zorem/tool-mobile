@@ -1,3 +1,4 @@
+export * from './automationHistory';
 import type { RecordedStep } from './models';
 
 export type {

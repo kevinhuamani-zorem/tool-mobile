@@ -28,6 +28,8 @@ La puerta exige:
 - build completo de Electron y React;
 - reducción de contexto mínima para los grafos locales.
 - cuatro rutas exactas, traza completa y ausencia de aprendizaje por exportación;
+- historial inmutable por revisión/intento, originales previos a normalización,
+  recibos v2 y rollback del framework si falla publicar el evento de exportación;
 - medición de objetivos de 120 000 bytes y 300 000 ms por etapa (avisos, no
   cortes); hang stop independiente de una hora por defecto y reparación acotada
   según el plan;

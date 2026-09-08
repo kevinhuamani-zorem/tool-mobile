@@ -1,3 +1,4 @@
+import { AutomationHistoryStore } from './automationHistoryStore';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -60,6 +61,8 @@ import { runDeterministicPipeline } from './agent/deterministicRun';
 interface AgentRunExecutionOverrides {
     model?: string;
     budgetOverride?: Partial<AgentOperationalBudgets>;
+    /** Nested gap executions retain the parent attempt and evidence archive. */
+    historyDirectory?: string;
 }
 
 interface NestedGapExecutionArtifacts {
@@ -97,10 +100,15 @@ export class AgentOrchestrator {
         const statusFile = path.join(packageDirectory, 'status.json');
         const runStore = new AgentRunStore(packageDirectory);
         const executionMode = resolveAgentExecutionMode(mode);
-        runStore.setExecutionMode(executionMode);
         const plan = readJson<{ budgets?: Partial<AgentOperationalBudgets>; recordingId?: string; planId?: string }>(
             path.join(packageDirectory, 'generation-plan.json')
         );
+        const history = new AutomationHistoryStore(executionOverrides.historyDirectory || packageDirectory);
+        if (!executionOverrides.historyDirectory && plan.recordingId) {
+            history.checkpoint('before-agent-execution');
+            runStore.claimExecution(plan.recordingId, plan.planId);
+        }
+        runStore.setExecutionMode(executionMode);
         const planBudgets = normalizeAgentOperationalBudgets(plan.budgets || DEFAULT_AGENT_OPERATIONAL_BUDGETS);
         const budgets = normalizeAgentOperationalBudgets({
             ...planBudgets,
@@ -190,7 +198,9 @@ export class AgentOrchestrator {
                 const nested = await this.run(gapDirectory, mode, {
                     model: executionOverrides.model,
                     budgetOverride: { ...budgets },
+                    historyDirectory: history.packageDirectory,
                 });
+                history.captureFile(path.join(gapDirectory, 'agent-response.json'), 'agent', 'legacy:gap-result');
                 const nestedRun = readJson<Record<string, any>>(path.join(gapDirectory, 'agent-run.json'));
                 const nestedResponse = fs.existsSync(path.join(gapDirectory, 'agent-response.json'))
                     ? readJson<Record<string, any>>(path.join(gapDirectory, 'agent-response.json'))
@@ -368,7 +378,7 @@ export class AgentOrchestrator {
         runStore.setAgentMetadata(this.provider.name, version || undefined);
         runStore.markAgentStarted();
         runStore.incrementAgentInvocation();
-        clearAgentWritableOutputs(packageDirectory);
+        clearAgentWritableOutputs(packageDirectory, history.packageDirectory);
         updateStatus(statusFile, {
             state: 'running',
             agentExecutionMode: executionMode,
@@ -559,7 +569,7 @@ export class AgentOrchestrator {
             });
             runStore.incrementAgentInvocation();
             pass2Invocations += 1;
-            clearAgentWritableOutputs(packageDirectory);
+            clearAgentWritableOutputs(packageDirectory, history.packageDirectory);
             const pass2 = await this.provider.execute({
                 model: executionOverrides.model,
                 cwd: packageDirectory,
@@ -647,6 +657,7 @@ export class AgentOrchestrator {
             }
             responseBytes = fs.statSync(responseFile).size;
             runStore.setResponseBytes(responseBytes);
+            history.captureFile(responseFile, 'agent', 'legacy:before-response-processing');
             parsedResponse = readJson<Record<string, any>>(responseFile);
             const needs = pass2RepairAttempts < budgets.maxRepairAttempts
                 ? collectPass2Needs(parsedResponse, openGapIds)

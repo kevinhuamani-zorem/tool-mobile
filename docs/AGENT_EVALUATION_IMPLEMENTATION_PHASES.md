@@ -2,8 +2,8 @@
 
 Fecha: 2026-09-08.
 
-Estado: **implementación iniciada: baseline F0 y retirada de memoria en F1**.
-El historial de F1 y las fases siguientes siguen pendientes. Ver
+Estado: **F0 y F1 implementadas y verificadas localmente**.
+La siguiente entrega es F2; F2–F7 conservan sus pendientes debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -63,7 +63,7 @@ Objetivo: empezar desde el estado real del recorder y del framework.
 - [x] Fijar una referencia real del framework para CI y comparar fallos con la
   evidencia capturada, sustituyendo la clasificación por nombres hardcodeados
   de `phase43-baseline.js`. No inventar un SHA ni esconder fallos preexistentes.
-- [ ] Preparar fixtures aislados de borrador inválido, archivo compartido con
+- [x] Preparar fixtures aislados de borrador inválido, archivo compartido con
   cambios QA y recording ya exportado. No convertirlos en golden aprobado.
 
 Superficie: `.github/workflows/quality.yml`, `scripts/phase43-baseline.js`,
@@ -78,15 +78,15 @@ fase; no se reutilizan como resultado actual las 402 pruebas de la auditoría.
 Objetivo: poder reconstruir cada cambio y dejar de asumir que exportar demuestra
 un caso exitoso.
 
-- [ ] Introducir contratos versionados para revisión del recording, intento y
+- [x] Introducir contratos versionados para revisión del recording, intento y
   recibo de exportación. Reutilizar o mapear el `runId` existente a la identidad
   común del intento, sin crear dos identificadores con significado ambiguo.
-- [ ] Conservar `caseId` y `recordingId`; generar `revisionId`, `parentRevisionId`
+- [x] Conservar `caseId` y `recordingId`; generar `revisionId`, `parentRevisionId`
   y `attemptId` cuando corresponda. Registrar pasada 1/2 y origen de cada artefacto.
-- [ ] Guardar eventos y snapshots sin sobrescribir la primera respuesta al
+- [x] Guardar eventos y snapshots sin sobrescribir la primera respuesta al
   normalizarla, corregirla o recibir una edición humana. Los archivos actuales
   del paquete pueden seguir como vistas compatibles del historial.
-- [ ] Separar estados de generación, exportación, aprobación QA y verificación
+- [x] Separar estados de generación, exportación, aprobación QA y verificación
   funcional. Una exportación con observaciones no significa generación exitosa.
 - [x] Retirar la promoción automática desde `applyAutomation` y deshabilitar
   los lectores de casos, fragmentos, gaps y vocabulario de la memoria antigua,
@@ -108,6 +108,11 @@ Superficie: `automationRecordingStore.ts`, `agentRunStore.ts`,
 Salida comprobable: una entrada antigua con score 100 no llega al agente ni
 reaparece después de reiniciar; exportar no crea aprendizaje nuevo; todos los
 artefactos de un intento y las revisiones QA tienen un vínculo inequívoco.
+
+Contrato y límites de esta entrega: [AUTOMATION_HISTORY.md](AUTOMATION_HISTORY.md).
+El historial registra la pasada exterior actual; unificar los contadores todavía
+corresponde a F2. Los estados QA/funcional existen separados en el contrato,
+pero su captura desde la interfaz golden corresponde a F6.
 
 ## F2 — Dos pasadas y entrega automática del borrador
 

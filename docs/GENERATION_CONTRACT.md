@@ -644,9 +644,17 @@ La escritura usa una transacción recuperable para los archivos creados y
 actualizados, el registro, el recibo y el estado del paquete. Ante una excepción
 se restauran los anteriores y se retiran únicamente los archivos nuevos de esa
 operación. La respuesta aplicada queda registrada sin promoción de memoria ni
-aprobación golden automática. La recuperación cubre
-fallos capturados durante el proceso; no es un journal persistente contra un
-apagado abrupto del sistema.
+aprobación golden automática. El evento histórico de exportación se publica
+como última operación del commit: si falla, también se revierten framework,
+registro y recibo. La recuperación de la transacción cubre excepciones durante
+el proceso, no un apagado abrupto entre escrituras del framework.
+
+El historial persistente se describe en [AUTOMATION_HISTORY.md](AUTOMATION_HISTORY.md).
+Guarda respuestas antes de NFC/normalización, resultados de validación, revisiones
+QA y recibos por contenido. `agent-run.json`, `agent-response.json` y `status.json`
+siguen siendo vistas compatibles, no la única evidencia del resultado anterior.
+La limpieza del paquete conserva el historial. La ejecución funcional y la
+aprobación QA permanecen pendientes hasta que se registren explícitamente.
 
 El preview es la unidad de autorización:
 

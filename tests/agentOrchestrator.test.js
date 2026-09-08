@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const { AgentOrchestrator } = require('../dist/core/automation');
 const { AgentRunStore } = require('../dist/core/automation');
+const { AutomationHistoryStore } = require('../dist/core/automation');
 const { DEFAULT_AGENT_OPERATIONAL_BUDGETS } = require('../dist/core/automation');
 
 // Estos casos ejercitan deliberadamente el adapter legacy. Producción usa el
@@ -476,6 +477,15 @@ test('orchestrator particiona por gap y fusiona respuestas cuando hay múltiples
         const status = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf-8'));
         assert.equal(status.strategy, 'per-gap-parallel');
         const run = JSON.parse(fs.readFileSync(path.join(dir, 'agent-run.json'), 'utf-8'));
+        const history = new AutomationHistoryStore(dir);
+        const rawOutputs = history.events().filter(event => event.stage === 'legacy:before-response-processing');
+        assert.equal(rawOutputs.length, 2);
+        assert.ok(rawOutputs.every(event => event.attemptId === run.runId));
+        assert.deepEqual(rawOutputs.map(event => JSON.parse(history.readArtifact(event.artifacts[0])).resolutions[0].gapId).sort(), ['gap-one', 'gap-two']);
+        const queries = history.events().filter(event => event.stage === 'legacy:before-output-reset'
+            && event.artifacts.some(artifact => artifact.name.endsWith('query-requests.json')));
+        assert.equal(queries.length, 2);
+        assert.equal(fs.existsSync(path.join(dir, '.gap-runs', 'gap-one', 'history', 'v1', 'events')), false);
         assert.equal(run.agentInvocationCount, 4);
         assert.ok(run.pass1ContextBytes > 0);
         assert.ok(run.pass2ContextBytes > 0);

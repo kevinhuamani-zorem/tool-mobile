@@ -5,6 +5,7 @@
  * respuesta de fallo cuando el agente no dejó ninguna.
  */
 import fs from 'fs';
+import { AutomationHistoryStore } from '../automationHistoryStore';
 import path from 'path';
 import { AutomationGapsProjection } from '../../contracts';
 import { readJsonUtf8, writeJsonUtf8 } from '../../../shared';
@@ -101,7 +102,7 @@ export function copyGapWorkspace(packageDirectory: string, gapId: string): strin
     fs.mkdirSync(destination, { recursive: true });
     const entries = fs.readdirSync(packageDirectory, { withFileTypes: true });
     for (const entry of entries) {
-        if (entry.name === '.gap-runs') continue;
+        if (entry.name === '.gap-runs' || entry.name === 'history') continue;
         if (entry.name === 'query-requests.json') continue;
         if (entry.name === 'gap-resolutions.json') continue;
         if (entry.name === 'agent-response.json') continue;
@@ -116,10 +117,11 @@ export function copyGapWorkspace(packageDirectory: string, gapId: string): strin
     return destination;
 }
 
-export function clearAgentWritableOutputs(packageDirectory: string): void {
+export function clearAgentWritableOutputs(packageDirectory: string, historyDirectory = packageDirectory): void {
     for (const name of ['query-requests.json', 'gap-resolutions.json', 'agent-response.json', 'test-design-review.json']) {
         const file = path.join(packageDirectory, name);
         if (fs.existsSync(file)) {
+            new AutomationHistoryStore(historyDirectory).captureFile(file, 'agent', 'legacy:before-output-reset');
             fs.unlinkSync(file);
         }
     }

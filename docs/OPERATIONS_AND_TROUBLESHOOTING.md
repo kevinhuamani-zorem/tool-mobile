@@ -259,9 +259,10 @@ tenga validación 100 y que sus cuatro archivos todavía existan.
 Cada reproceso reconstruye automáticamente `generation/automation`: elimina la
 respuesta, plan efectivo, consultas, reparación, validación, logs y baselines de
 la corrida anterior. Conserva las acciones/evidencia del recording y el
-directorio histórico de refinamientos. No es necesario marcar una limpieza para
-evitar que Copilot reutilice una salida anterior; la limpieza explícita también
-descarta ese historial.
+directorio histórico de refinamientos. Antes de limpiar, guarda un checkpoint
+con las salidas disponibles en `history/v1`. La limpieza explícita también
+conserva ese historial; no hace falta borrar evidencia para evitar reutilizar
+respuestas anteriores. Ver [el contrato de historial](AUTOMATION_HISTORY.md).
 
 ### El agente consume demasiado contexto o excede cinco minutos
 

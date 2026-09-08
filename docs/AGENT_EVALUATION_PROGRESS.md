@@ -3,8 +3,11 @@
 Fecha: 2026-09-08. Rama: `feature/multi-agent-generation-pipeline`.
 
 Los planes y diagramas locales se publicaron en `64423280de47681e6fa782eb324b9e0de2006374`.
-Esta entrega inicia F0/F1 de [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
-No completa F1: falta el historial común por revisión e intento.
+El baseline y la retirada de memoria se publicaron en `8a2a4fa0a1ec9e8ad22a4d711a930342f1782d83`.
+La entrega del historial completa F1 de
+[las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
+F2–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
+hasta terminar el ciclo completo. La aprobación golden nueva aún no está habilitada.
 
 ## Punto de partida y medición
 
@@ -31,7 +34,7 @@ conocido conserva exit code fallido. Las cancelaciones, tests omitidos y nombres
 ambiguos no pueden contar como correcciones confirmadas. La clasificación es
 por test: la causa concreta se investiga con el log y los diagnósticos.
 
-## Implementado en esta entrega
+## Entrega inicial: baseline y retirada de memoria
 
 - Aplicar los archivos no llama a `AutomationMemory.promote`, no emite una nueva
   `memoryVersion` y elimina esa propiedad de un estado anterior al actualizarlo.
@@ -57,23 +60,56 @@ contratos, evidencia grabada y el índice actual del framework. La generación
 puede consumir más tiempo al dejar de reutilizar propuestas previas; todavía
 no se midió ese coste con un agente real.
 
-## Mapa de los siguientes cambios
+## F1 completada: historial por revisión e intento
 
-| Punto actual | Trabajo pendiente |
+- `AutomationHistoryStore` guarda eventos versionados y bytes por SHA-256 bajo
+  `generation/automation/history/v1/`. Conserva originales inválidos o parciales,
+  versiones normalizadas, diagnósticos, recibos y checkpoints antes de reemplazar
+  el paquete. Limpiar o reprocesar conserva ese historial.
+- Las revisiones mantienen `recordingId`/`caseId`, `revisionId` y padre. El intento
+  usa el `runId` existente, enlaza el plan y registra etapas, origen y pasada
+  exterior. Una nueva ejecución manual, heredada o por capas abre otro intento;
+  la primera usa el intento preparado. Los gaps conservan el vínculo al padre.
+- La importación conserva bytes anteriores a NFC. La edición del QA abre una
+  revisión hija con `basedOnAttemptId`; su validación no convierte el fallo
+  autónomo anterior en éxito. La solicitud de grabación guarda acciones
+  redactadas también en `request.actions` y filas de escenarios.
+- Los recibos v2 vinculan exportación y revisión, conservando lectura de v1.
+  El evento exitoso se publica al finalizar la transacción. Si falla esa
+  publicación, se restauran archivos, registry y metadatos del paquete.
+- Generación, exportación, aprobación QA y verificación funcional son estados
+  independientes. Exportar sigue sin crear aprendizaje ni afirmar ejecución móvil.
+  La interfaz que declarará aprobación/verificación se implementa en F6.
+
+Se consultó CodeGraph para `AutomationMemory` y `AgentRunStore`, además de leer
+los módulos afectados. Los fixtures aislados de `preparedAutomation` cubren
+borradores inválidos, cambios QA en archivos compartidos, casos ya exportados,
+escritura concurrente y rollback. `automationHistoryStore` añade contenido parcial
+y publicación fallida. Ninguno se promociona como golden aprobado.
+
+Contrato de almacenamiento, compatibilidad y límites:
+[AUTOMATION_HISTORY.md](AUTOMATION_HISTORY.md).
+
+## Pendientes hasta completar F7
+
+| Fase / estado | Trabajo por abordar y evidencia de cierre |
 | --- | --- |
-| `automationRecordingStore`, `agentRunStore`, `automationPackageBuilder` | Unir recording, revisión e intento; capturar originales antes del reset/normalización. |
-| `layeredGenerationOrchestrator`, `layered/roles` | Presupuesto común de dos pasadas. Hoy hay una reparación de integración, hasta dos rondas adicionales de feedback por autor y resincronización Lorem/Zorem; son contadores distintos. |
-| Importación/revisión IPC y `applyAutomation` | Conservar borradores y permitir exportación con diagnósticos de calidad; mantener rutas, conflictos y transacciones. |
-| `automationApplicationReceipt`, `generatedFileRegistry`, `goldenDataset` | Recuperar cambios del QA, registrar versiones, reexportar durante el PR y aprobar una revisión golden concreta. |
-| Resolver y contexto de autores | Incorporar el índice reconstruible de golden aprobados y medir mejoras contra casos reservados. |
+| F0 — completada | Baseline real, contexto CI fijado, comparación TAP y fixtures aislados disponibles. |
+| F1 — completada | Memoria antigua fuera del consumo; historial y recibos vinculados. Falta el piloto real, compartido con F7. |
+| F2 — siguiente | Un presupuesto de dos pasadas por solicitud para autores e integración, incluyendo feedback, relanzamientos y resincronización. Conservar capas recuperables ante timeout/error, validar envelopes antes de recorrerlos y abrir Revisión con diagnósticos y capas faltantes. Probar que no hay tercera pasada oculta. |
+| F3 — pendiente de F2 | Permitir exportar bytes revisados y capas disponibles pese a errores de calidad. Mantener rutas, contenido compartido, conflictos, rollback y comprobaciones concurrentes. Registrar exportación con observaciones y actualizar IPC/preload/UI. Probar un borrador inválido exportado y una escritura fallida revertida. |
+| F4 — pendiente de F3 | Recuperar cambios del framework con comparación baseline/exportado/actual; seguir relaciones, renombres y helpers del caso. Mostrar diff y asociaciones pendientes; guardar revisión QA sin inventar eventos Appium. Registrar PR y repo/rama/commit opcionales, incluso con cambios sin commit. |
+| F5 — pendiente de F4 | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
+| F6 — pendiente de F4/F5 | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
+| F7 — pendiente de F6 | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
 
-Se consultó CodeGraph para `AutomationMemory` y se inspeccionaron los puntos de
-validación, aplicación, memoria, caché y reparación. El helper existente
-`tests/helpers/isolatedFramework.js` y las pruebas de `preparedAutomation` dan
-la base aislada; los fixtures completos del ciclo revisión/exportación/retorno
-siguen pendientes junto con sus contratos, sin etiquetarlos como golden.
+Hoy aún existen una reparación de integración, rondas internas de feedback y
+resincronización Lorem/Zorem con contadores distintos. Registrar `pass: 1/2` en
+F1 no limita esas invocaciones: F2 debe sustituir los contadores independientes.
+También siguen vigentes los bloqueos de exportación/regeneración por calidad
+en el código actual; F3 y F5 los cambiarán según lo acordado.
 
-## Validación de esta entrega
+## Validación de la entrega inicial (`8a2a4fa`)
 
 - Pruebas focalizadas: 133/133, incluyendo los contratos modificados.
 - Migración extraída a infraestructura: 4/4 pruebas de archivo y rollback;
@@ -91,9 +127,28 @@ siguen pendientes junto con sus contratos, sin etiquetarlos como golden.
 La validación usa proveedores de agente simulados. No se ejecutó un caso en un
 dispositivo ni se verificó una corrida real de Copilot o CI remoto.
 
-## Próxima entrega
+## Validación del historial
 
-Completar F1 con contratos de revisión/intento y snapshots del original antes de
-cualquier normalización o edición. Después, F2 limita las pasadas y conserva los
-borradores; F3 habilita la exportación con diagnósticos. Recuperar correcciones,
-seguir el PR, regenerar/reexportar y aprobar golden corresponden a F4–F7.
+- Pruebas focalizadas de historial y orquestación heredada: **26/26**, incluyendo
+  revisiones, relanzamientos y conservación de entregas por gap.
+- `npm run quality`: **747/747 pruebas**, cero fallos, cancelaciones u omisiones;
+  tipos, arquitectura sin ciclos/violaciones, métricas y builds de Electron/React
+  aprobados. Log local: `/private/tmp/recorder-f1-history-quality.log`.
+- Pruebas de integración del historial: originales previos a normalización,
+  limpieza conservando evidencia, corrección QA sin reclasificar el fallo y
+  rollback si no se puede registrar la exportación.
+- Una corrida completa detectó diferencias `/var` y `/private/var` en macOS.
+  Se corrigió la comparación con rutas canónicas y se añadió regresión que sigue
+  rechazando enlaces hacia archivos fuera del paquete.
+
+Estos resultados no certifican que el agente real genere cuatro capas correctas
+ni eliminan los fallos. El corpus aprobado y la medición de ese efecto corresponden
+a F6/F7; no se ejecutó todavía el piloto con dispositivo/Copilot.
+
+## Próxima entrega concreta
+
+Implementar F2 en `layeredGenerationOrchestrator`, `layered/roles` y el adapter
+de sesiones, y conectar la entrega del borrador a `agentLaunch`, importación y
+Revisión. El criterio de cierre es un proveedor que falla persistentemente y
+se detiene después de la segunda pasada mostrando todos los archivos recuperables.
+Después abordar F3; no esperar al dataset golden para habilitar la salida al QA.

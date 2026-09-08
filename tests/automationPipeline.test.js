@@ -2948,6 +2948,15 @@ test('reprocesar una grabación siempre reconstruye el paquete y conserva eviden
     assert.equal(fs.existsSync(path.join(evidenceDirectory, 'screen.xml')), true);
     assert.equal(fs.existsSync(path.join(historyDirectory, 'agent-response.json')), true);
     assert.equal(fs.existsSync(path.join(result.packageDirectory, 'generation-plan.json')), true);
+    const { AutomationHistoryStore } = require('../dist/core/automation');
+    const journal = new AutomationHistoryStore(packageDirectory);
+    const snapshot = journal.events().find(event => event.stage === 'before-package-reset');
+    const originalResponse = snapshot.artifacts.find(file => file.name === 'agent-response.json');
+    assert.equal(journal.readArtifact(originalResponse).toString(), '{"stale":true}');
+    const previousRevision = journal.current().revisionId;
+    builder.prepareRecordedScenario(recording, true);
+    assert.equal(journal.current().parentRevisionId, previousRevision);
+    assert.equal(journal.readArtifact(originalResponse).toString(), '{"stale":true}', 'limpiar derivados conserva los originales');
     const status = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'status.json'), 'utf8'));
     const plan = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'generation-plan.json'), 'utf8'));
     assert.equal(status.planId, plan.planId);

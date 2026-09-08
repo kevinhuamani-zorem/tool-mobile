@@ -13,8 +13,8 @@ sustituye la tabla resumida de entregas de abajo para organizar la implementaci�
 
 ## Decisión de producto actualizada — 2026-09-08
 
-**Estado: implementación iniciada; baseline F0 y retirada de memoria en F1.**
-El historial y las entregas siguientes siguen pendientes; ver
+**Estado: F0 y F1 implementadas y verificadas localmente.**
+El historial conserva revisiones, intentos y originales; F2–F7 siguen pendientes. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Esta sección incorpora
 la decisión del usuario: limitar la iteración automática, entregar el borrador
 al QA sin bloquear su exportación por calidad y recuperar del framework la

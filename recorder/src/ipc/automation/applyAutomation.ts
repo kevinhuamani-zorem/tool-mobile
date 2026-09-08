@@ -8,6 +8,7 @@ import {
     AutomationApplier,
     AutomationAgentResponse,
     AgentRunStore,
+    AutomationHistoryStore,
     AutomationApplicationReceipt,
     createAutomationApplicationReceipt,
     requireUnchangedAppliedFiles,
@@ -46,6 +47,7 @@ export async function applyReviewedAutomation(
         emitProgress: emitAutomationProgress,
     } = deps;
     let runStore: AgentRunStore | undefined;
+    let history: AutomationHistoryStore | undefined;
     try {
         if (!state.automationPreview || state.automationPreview.token !== previewToken) {
             throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
@@ -60,6 +62,9 @@ export async function applyReviewedAutomation(
             if (!allowed.has(file)) throw new Error(`El editor intentó modificar un archivo fuera del preview: ${file}`);
         }
         runStore = new AgentRunStore(state.activeAutomationPackage);
+        history = new AutomationHistoryStore(state.activeAutomationPackage);
+        history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
+        history.capture('preview-response.json', JSON.stringify(state.automationPreview.response), 'recorder', 'apply:before-qa-edit');
         let response: AutomationAgentResponse = normalizeJsonUnicode({
             ...state.automationPreview.response,
             files: state.automationPreview.response.files.map(file => ({
@@ -67,6 +72,11 @@ export async function applyReviewedAutomation(
                 content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content,
             })),
         });
+        if (response.files.some((file, index) => file.content !== state.automationPreview!.response.files[index].content)) {
+            history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'qa-edit' }, [
+                { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
+            ]);
+        }
         const prepared = automationApplier.prepare(scenario, plan, response,
             automationResponseValidator.toPreview(response), state.automationPreview.correctionBaselines);
         // An edit must not be silently dropped by the additive merge.
@@ -107,7 +117,7 @@ export async function applyReviewedAutomation(
         // el archivo puede ser ajeno y solo debe recibir los símbolos nuevos.
         // El flujo completo vive en core (`AutomationApplier`), compartido
         // con las pruebas.
-        const metadataFiles = ['agent-response.json', 'validation.json', 'application-receipt.json', 'status.json']
+        const metadataFiles = ['agent-response.json', 'validation.json', 'application-receipt.json', 'status.json', 'agent-run.json']
             .map(file => path.join(state.activeAutomationPackage, file));
         const { generated, patched } = automationApplier.commit(prepared, scenario, plan, () => {
         writeJsonUtf8(metadataFiles[0], response);
@@ -117,6 +127,7 @@ export async function applyReviewedAutomation(
             scenario,
             plan,
             response,
+            history!.identity(),
         );
         for (const file of prepared.files) {
             if (!applicationReceipt.files.some(item => item.path === file.path)) {
@@ -139,16 +150,26 @@ export async function applyReviewedAutomation(
             generatedAt: new Date().toISOString(),
             lastMaterializedAgentResponseHash: sha256(fs.readFileSync(metadataFiles[0], 'utf8')),
         });
+        runStore!.mark('generated', true);
+        // Last fallible operation: an export event is committed only after all files/metadata.
+        history!.append({ ...history!.identity()!, kind: 'export-result', origin: 'qa', result: 'exported', stage: 'apply' }, [
+            { name: 'application-receipt.json', content: JSON.stringify(applicationReceipt, null, 2) + '\n' },
+            { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
+            { name: 'validation.json', content: JSON.stringify(validation, null, 2) + '\n' },
+        ]);
         }, metadataFiles);
         state.automationPreview = null;
-        runStore.mark('generated', true);
         emitAutomationProgress('COMPLETED', 'Automatización aplicada correctamente', 2, 2);
         return { success: true, generated, validation, patched: patched.outcomes };
     } catch (e: any) {
         emitAutomationProgress('FAILED', 'No pudimos aplicar la automatización', 0, 2, {
             error: e.message,
         });
-        runStore?.mark('generation-failed', true);
+        try {
+            const identity = history?.identity();
+            if (identity) history!.append({ ...identity, kind: 'export-result', origin: 'qa', result: 'failed', stage: 'apply' });
+            runStore?.mark('generation-failed', true);
+        } catch { /* Keep the original application error when recording it also fails. */ }
         return { success: false, error: e.message };
     }
 }
