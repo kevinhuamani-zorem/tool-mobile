@@ -9,6 +9,7 @@ export function GoldenModal() {
                 <div id="goldenFiles" />
                 <pre id="goldenDiagnostics" style={{ whiteSpace: 'pre-wrap' }} />
                 <label>Ejecución declarada por QA<select id="goldenExecution" className="field-select"><option value="not-run">Sin ejecutar</option><option value="passed">Ejecutado en verde</option><option value="failed">Falló al ejecutar</option></select></label>
+                <label>Uso del caso<select id="goldenUsage" className="field-select"><option value="reference">Referencia para los agentes</option><option value="evaluation">Reservado para evaluación</option></select></label>
                 <label>Notas<input id="goldenNotes" className="field-input" maxLength={4000} /></label>
                 <label><input id="goldenApproved" type="checkbox" /> He revisado estos archivos y apruebo esta versión como referencia golden.</label>
                 <button id="btnApproveGolden" className="btn btn-green" disabled>Guardar como golden verificado por QA</button>

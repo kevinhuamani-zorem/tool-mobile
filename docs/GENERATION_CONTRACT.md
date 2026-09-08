@@ -363,8 +363,11 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
 - No se recuperan respuestas de otro intento ni se usa un `agent-response.json`
   anterior como caché. Los cachés temporales de autores/revisión se ubican bajo
   `agents/derek/attempt-cache/`, que se reinicia en cada ejecución. El índice de
-  revisiones golden aprobadas existe desde F6; la selección y entrega de ejemplos
-  a los agentes corresponde a F7.
+  revisiones golden aprobadas existe desde F6. F7 entrega referencias compatibles
+  por capa y conserva sus hashes/versiones. Excluye casos reservados y el propio
+  caso; un ejemplo no autoriza rutas, métodos ni selectores actuales. El puerto
+  de fragmentos exige trazas/relaciones verificadas, datos exactos y una definición
+  única del framework. Ver [F7](AUTOMATION_GOLDEN_LEARNING.md).
 - La normalización nunca renombra identificadores heredados del framework (los
   declarados en el baseline de un archivo `update`, como `titleVentas`):
   traducirlos destruiría una API existente. Y el importador nunca convierte una

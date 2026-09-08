@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { projectPaths } from '../../../../core/workspace';
-import { AutomationHistoryStore, acceptedGoldenFiles, goldenDatasetRoot, saveGoldenCase, ApprovedGoldenStore, listLegacyGoldenCases, readGoldenCase, goldenHash, goldenPath } from '../../../../core/automation';
+import { AutomationHistoryStore, acceptedGoldenFiles, goldenDatasetRoot, goldenCaseUsage, saveGoldenCase, ApprovedGoldenStore, listLegacyGoldenCases, readGoldenCase, goldenHash, goldenPath } from '../../../../core/automation';
 import type { GoldenExecutionStatus, AcceptedGoldenFiles, AutomationValidation, AutomationScenario, GenerationPlan } from '../../../../core/automation';
 import { RecoveryWorkspace, recoveryGitContext } from '../../../../core/automation';
 import type { ReuseAnalyzer } from '../../../../core/indexing';
@@ -13,7 +13,7 @@ import type { AutomationHandlersContext } from '../automationHandlers';
 export interface SaveGoldenCaseRequest {
     recordingId?: string; squad?: string; source?: 'recovery' | 'review'; legacyId?: string;
     executed?: GoldenExecutionStatus; notes?: string; reviewedContents?: Record<string, string>;
-    token?: string; approved?: boolean;
+    token?: string; approved?: boolean; usage?: 'reference' | 'evaluation';
 }
 export interface SaveGoldenCaseDependencies {
     packageDirectory: string; frameworkRoot: string; reuseAnalyzer: ReuseAnalyzer;
@@ -25,6 +25,7 @@ function validateRequest(input: SaveGoldenCaseRequest) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud golden inválida.');
     for (const key of ['recordingId', 'squad', 'source', 'legacyId', 'token', 'notes'] as const)
         if (input[key] !== undefined && typeof input[key] !== 'string') throw new Error(`Campo inválido: ${key}`);
+    if (input.usage && !['reference', 'evaluation'].includes(input.usage)) throw new Error('Uso golden inválido.');
     if (input.source && !['recovery', 'review'].includes(input.source)) throw new Error('Origen golden inválido.');
     if (input.executed && !['passed', 'failed', 'not-run'].includes(input.executed)) throw new Error('Estado de ejecución inválido.');
     if ((input.notes?.length || 0) > 4000) throw new Error('Las notas admiten hasta 4000 caracteres.');
@@ -48,7 +49,7 @@ function packageDigest(root: string): string {
 export class GoldenCaseReview {
     private pending?: { token: string; accepted: AcceptedGoldenFiles; scenario: AutomationScenario; plan: GenerationPlan;
         recoverySnapshot?: string; dependencies: Array<{ path: string; content: string }>; validation: AutomationValidation; validationSource: 'apply' | 'golden'; catalog: any; revisionId: string;
-        packageDigest: string; target: RecoveryWorkspace; hashes: Map<string, string | null>; git: ReturnType<typeof recoveryGitContext>; source: string };
+        packageDigest: string; target: RecoveryWorkspace; hashes: Map<string, string | null>; git: ReturnType<typeof recoveryGitContext>; source: string; usage: 'reference' | 'evaluation' };
     constructor(private readonly deps: SaveGoldenCaseDependencies, private readonly root = goldenDatasetRoot()) {}
     prepare(input: SaveGoldenCaseRequest = {}) {
         this.pending = undefined; validateRequest(input);
@@ -85,12 +86,13 @@ export class GoldenCaseReview {
             catch (error: any) { validation = { valid: false, qualityScore: 0, errors: [{ code: 'golden-validation-unavailable', message: error.message }], warnings: [] } as unknown as AutomationValidation; }
         }
         const catalog = this.deps.reuseAnalyzer.getCatalog(scenario.squad, scenario.platform, scenario.request?.featureScope);
+        const usage = input.usage || goldenCaseUsage(scenario, this.root);
         const token = crypto.randomUUID();
-        this.pending = { token, accepted, dependencies, recoverySnapshot, scenario, plan, validation, validationSource, catalog, revisionId: revision.revisionId,
+        this.pending = { token, usage, accepted, dependencies, recoverySnapshot, scenario, plan, validation, validationSource, catalog, revisionId: revision.revisionId,
             packageDigest: packageDigest(packageDirectory), target, hashes: new Map(target.watched), git: recoveryGitContext(frameworkRoot), source: source.read('legacy-manifest.json') ? 'legacy-review' : recovery ? 'framework-recovery' : 'review' };
         return structuredClone({ token, recordingId: scenario.recordingId, caseId: scenario.request?.caseId, revisionId: revision.revisionId,
             files: [...accepted.response.files, ...dependencies.map(file => ({ ...file, layer: 'dependency' }))], diagnostics: validation, pending: recovery?.pending || [], context: recovery?.context || this.pending.git,
-            source: this.pending.source, automaticVerification: 'not-reported', executionDeclaration: input.executed || 'not-run', notes: input.notes || '' });
+            source: this.pending.source, usage, automaticVerification: 'not-reported', executionDeclaration: input.executed || 'not-run', notes: input.notes || '' });
     }
     save(input: SaveGoldenCaseRequest) {
         validateRequest(input);
@@ -102,7 +104,7 @@ export class GoldenCaseReview {
         for (const key of ['repository', 'branch', 'commit'] as const) if (git[key] !== pending.git[key]) throw new Error('Cambió el checkout. Revisa nuevamente.');
         const saved = saveGoldenCase({ root: this.root, ...this.deps, catalog: pending.catalog, accepted: pending.accepted, recoverySnapshot: pending.recoverySnapshot, dependencies: pending.dependencies,
             validation: pending.validation, validationSource: pending.validationSource, revisionId: pending.revisionId, approved: true,
-            executed: input.executed || 'not-run', notes: input.notes, savedBy: os.userInfo().username, source: pending.source });
+            usage: input.usage || pending.usage, executed: input.executed || 'not-run', notes: input.notes, savedBy: os.userInfo().username, source: pending.source });
         this.pending = undefined;
         // Publication is the commit point. A missing convenience history event cannot undo approval.
         let historyWarning: string | undefined;

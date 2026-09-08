@@ -57,7 +57,8 @@ límite de transporte de 4 MiB, hasta cuatro archivos, hasta 2000 trazas o
 resoluciones y las formas de los campos recorridos. Estos son límites del
 envelope recibido, independientes de los objetivos informativos de contexto.
 No se trunca el código para aceptarlo: los bytes originales quedan en disco y
-se informa el problema. El subconjunto completo del schema sigue en F7.
+se informa el problema. F7 valida el subconjunto declarado por los schemas del proyecto y rechaza
+palabras no soportadas; ver [F7](AUTOMATION_GOLDEN_LEARNING.md).
 
 ## Evidencia automatizada
 

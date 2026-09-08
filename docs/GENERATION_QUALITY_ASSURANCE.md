@@ -186,5 +186,23 @@ QA aprobado, ejecución declarada y diagnóstico automático son resultados dist
 Un golden con score bajo conserva el error para contrastar la regla. Aprobar la
 corrección no convierte el intento fallido previo en éxito del agente.
 `ApprovedGoldenStore` comprueba integridad y versiones activas; no mide éxito
-funcional. Corpus, selección por capa, denominadores y piloto real siguen en F7.
+funcional. La selección por capa y los denominadores se implementan en F7;
+el corpus revisado y el piloto real siguen pendientes.
 Ver [el contrato de F6](AUTOMATION_GOLDEN_APPROVAL.md).
+
+
+## Evaluación de agentes (F7)
+
+La cobertura solo contabiliza índices enteros dentro de las acciones grabadas.
+Los índices inválidos se informan y no pueden elevar el score por encima de 100.
+El helper de JSON Schema valida el subconjunto declarado por los contratos:
+tipos y restricciones combinadas, objetos/arrays, longitudes/rangos, composición
+y referencias locales. `unsupportedSchemaKeywords` identifica palabras no
+soportadas; el validador las rechaza. No se presenta como implementación completa
+de JSON Schema. Las pruebas inventarían una falsa garantía si ignoraran esas palabras.
+
+`agents:evaluate` mantiene fallos y timeouts en los denominadores y muestra los
+intentos sin evidencia como no evaluados. Los errores funcionales de la app no
+se clasifican como fallos del generador. El replay compara planes y diagnósticos
+sin corregir los golden aprobados. La medición causal requiere corpus QA y un
+piloto controlado: [procedimiento F7](AUTOMATION_GOLDEN_LEARNING.md).

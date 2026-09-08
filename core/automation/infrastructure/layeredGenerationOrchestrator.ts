@@ -1,3 +1,5 @@
+import { recordEvaluationPass } from './agentEvaluation';
+import { writeGoldenRoleExamples } from './goldenExamples';
 import { AutomationHistoryStore } from './automationHistoryStore';
 import { AgentRunStore } from './agentRunStore';
 /**
@@ -219,7 +221,7 @@ export class LayeredGenerationOrchestrator {
             for (let attempt = 0; attempt <= MAX_LAYERED_REPAIR_ATTEMPTS; attempt++) {
                 repairAttempts = attempt;
                 // A failed design review already consumed Lorem's first pass.
-                if (attempt === 0 && designReviewFailed) continue;
+                if (attempt === 0 && designReviewFailed) { recordEvaluationPass(root, 1, false, feedback); continue; }
                 const next = emptyFeedback();
                 const owned = async (role: AuthorRole, dependency?: string, origin: 'behavior-author' | 'recorder' = 'behavior-author') => {
                     claim(role, attempt);
@@ -265,6 +267,7 @@ export class LayeredGenerationOrchestrator {
                         const responseFile = await this.runIntegration(root, agentsRoot, plan, behavior, interaction,
                             options, stages, attempt, attempt > 0 ? feedback : undefined, attempt < MAX_LAYERED_REPAIR_ATTEMPTS);
                         if (!next.all.length) {
+                            recordEvaluationPass(root, attempt === 0 ? 1 : 2, true, next);
                             finishFeedback(next, attempt);
                             promoteAuthorCache(behavior, behaviorCache);
                             promoteAuthorCache(interaction, interactionCache);
@@ -280,6 +283,7 @@ export class LayeredGenerationOrchestrator {
                         if (stage) { stage.state = attempt === 0 ? 'repairing' : 'failed'; stage.error = issues.all.join(' | '); options.onStageChange?.({ ...stage }); }
                     }
                 }
+                recordEvaluationPass(root, attempt === 0 ? 1 : 2, false, next);
                 feedback = next;
                 if (attempt === MAX_LAYERED_REPAIR_ATTEMPTS) finishFeedback(next, attempt);
             }
@@ -302,6 +306,7 @@ export class LayeredGenerationOrchestrator {
     ): void {
         const identity = LAYERED_GENERATION_AGENTS[role];
         const report: LayeredGenerationStageReport = {
+            invoked: false,
             role,
             agentName: identity.name,
             sessionName: `${sessionName(plan.recordingId, role)}/framework`,
@@ -346,7 +351,8 @@ export class LayeredGenerationOrchestrator {
         fs.writeFileSync(path.join(stageDirectory, 'agent-task.md'), prompt, 'utf8');
         writeJsonUtf8(path.join(stageDirectory, 'result.schema.json'), designReviewSchema());
         writeAgentProfile(stageDirectory, role, prompt);
-        const inputs = ['scenario.json', 'generation-plan.json', 'behavior-result.json']
+        writeGoldenRoleExamples(packageDirectory, stageDirectory, role, 1);
+        const inputs = ['scenario.json', 'generation-plan.json', 'behavior-result.json', 'golden-examples.json']
             .map(file => path.join(stageDirectory, file))
             .filter(file => fs.existsSync(file));
         const inputArtifacts = inputs.map(file => artifact(file, stageDirectory));
@@ -365,6 +371,7 @@ export class LayeredGenerationOrchestrator {
         const namedSession = `${sessionName(plan.recordingId, role)}/design-review`;
         const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {
+            invoked: false,
             role,
             agentName: identity.name,
             sessionName: namedSession,
@@ -404,6 +411,7 @@ export class LayeredGenerationOrchestrator {
                 // Un caché ilegible se ignora y se vuelve a revisar.
             }
         }
+        report.invoked = true;
         const run = await this.controlledProvider.execute({
             cwd: stageDirectory,
             prompt,
@@ -502,7 +510,9 @@ export class LayeredGenerationOrchestrator {
                 errors: repairErrors,
             });
         }
+        const golden = writeGoldenRoleExamples(packageDirectory, stageDirectory, role, attempt === 0 ? 1 : 2);
         const inputArtifacts = [
+            golden.file,
             ...ROLE_INPUT_FILES[role]
             .map(file => path.join(stageDirectory, file))
             .filter(file => fs.existsSync(file)),
@@ -583,6 +593,7 @@ export class LayeredGenerationOrchestrator {
         if (attempt === 0 && repairErrors.length === 0) cacheTarget.file = cacheFile;
         const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {
+            invoked: false,
             role,
             agentName: identity.name,
             sessionName: namedSession,
@@ -643,6 +654,7 @@ export class LayeredGenerationOrchestrator {
         }
         // One materialized delivery per pass. Validation happens after the session
         // closes; a rejection is routed by the outer loop to the second pass.
+        report.invoked = true;
         const run = await this.controlledProvider.execute({
             cwd: stageDirectory, prompt, timeoutMs: budget.hangStopMs, model: options.model,
             agentName: identity.name, allowValidationScripts: role === 'interaction-author',
@@ -749,7 +761,9 @@ export class LayeredGenerationOrchestrator {
         const prompt = integrationPrompt(Boolean(repairFeedback));
         fs.writeFileSync(path.join(stageDirectory, 'agent-task.md'), prompt, 'utf8');
         writeAgentProfile(stageDirectory, role, prompt);
+        const golden = writeGoldenRoleExamples(packageDirectory, stageDirectory, role, attempt === 0 ? 1 : 2, [...(repairFeedback?.integration || []), ...judgment.open]);
         const integrationArtifacts = [
+            golden.file,
             ...INTEGRATION_INPUT_FILES.map(file => path.join(stageDirectory, file)),
             path.join(stageDirectory, path.basename(behaviorFile)),
             path.join(stageDirectory, path.basename(interactionFile)),
@@ -776,6 +790,7 @@ export class LayeredGenerationOrchestrator {
         const namedSession = sessionName(plan.recordingId, role, attempt);
         const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {
+            invoked: false,
             role,
             agentName: identity.name,
             sessionName: namedSession,
@@ -811,6 +826,7 @@ export class LayeredGenerationOrchestrator {
             report.sessionName = `${namedSession}/deterministic`;
         } else {
             report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!);
+            report.invoked = true;
             const run = await this.reviewProvider.execute({
                 cwd: stageDirectory,
                 prompt,
@@ -915,6 +931,10 @@ export class LayeredGenerationOrchestrator {
         if (officialValidation && !officialValidation.valid) {
             fileContractErrors.push(...officialValidation.errors.map(error => ({ code: error.code, message: error.message, file: error.file })));
         }
+        history.capture('evaluation-validation.json', JSON.stringify({ pass: attempt === 0 ? 1 : 2,
+            valid: fileContractErrors.length === 0, qualityScore: officialValidation?.qualityScore ?? null,
+            issues: fileContractErrors.map(issue => ({ ...issue, layer: plan.files.find(file => issue.file === file.path || issue.file?.endsWith('/' + file.path))?.layer || 'unknown' })) }),
+            'recorder', 'evaluation:validation', attempt === 0 ? 1 : 2);
         if (fileContractErrors.length) {
             report.state = allowRepair ? 'repairing' : 'failed';
             report.error = fileContractErrors.map(issue => issue.message).join(' | ');

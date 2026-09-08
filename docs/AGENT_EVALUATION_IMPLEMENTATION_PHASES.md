@@ -277,33 +277,33 @@ Un fallo de publicación no deja referencias activas a artefactos inexistentes.
 
 Objetivo: demostrar cómo los golden influyen en las nuevas generaciones.
 
-- [ ] Seleccionar ejemplos al preparar el paquete según intención/acciones,
+- [x] Seleccionar ejemplos al preparar el paquete según intención/acciones,
   plataforma, squad y contrato. Lorem recibe Feature/Steps; Zorem recibe patrones
   de Screen/Locators; Sumrak solo recibe lo necesario para sus gaps de integración.
-- [ ] Mantener evidencia del framework/recording como autoridad para rutas,
+- [x] Mantener evidencia del framework/recording como autoridad para rutas,
   métodos y selectores actuales. Un golden no autoriza copiar selectores a otro
   caso ni evita comprobar su compatibilidad. Las consultas nuevas siguen la
   política de gaps y el índice no reemplaza al resolver completo.
-- [ ] Reutilizar fragmentos determinísticos solo si tienen relaciones verificables.
+- [x] Reutilizar fragmentos determinísticos solo si tienen relaciones verificables.
   Un golden con trazas pendientes sigue guardado como referencia del QA, pero
   no fabrica asociaciones para cerrar gaps automáticamente.
-- [ ] Guardar diferencias y razones de corrección como lecciones por capa.
+- [x] Guardar diferencias y razones de corrección como lecciones por capa.
   Convertir errores recurrentes en reglas/pruebas revisadas; no publicar el
   código fallido como ejemplo positivo ni desactivar reglas globalmente.
 - [ ] Poblar un corpus inicial de 5–8 casos revisados: Android/iOS, parámetros,
   aserción de texto, reutilización y actualización compartida. Mantener casos
   reservados para evaluación sin entregar sus soluciones a los agentes.
-- [ ] Añadir negativos y equivalencias válidas. Corregir el helper de cobertura
+- [x] Añadir negativos y equivalencias válidas. Corregir el helper de cobertura
   fuera de rango y completar el subconjunto de schema utilizado por el proyecto,
   con pruebas para palabras clave no soportadas. Los errores son diagnósticos,
   no un bloqueo de exportación del borrador.
-- [ ] Medir primera/final respuesta autónoma, intervenciones QA, errores por
+- [x] Medir primera/final respuesta autónoma, intervenciones QA, errores por
   capa/regla, timeouts, reaparición de errores, invocaciones y tiempos de pared.
   Publicar numeradores/denominadores y versiones de contexto/contratos utilizados.
-- [ ] Conservar fallos en los denominadores correspondientes. Una corrección
+- [x] Conservar fallos en los denominadores correspondientes. Una corrección
   humana no convierte el intento previo en éxito del agente; una prueba que
   detecta un defecto real de la app no es automáticamente un fallo del generador.
-- [ ] Ejecutar replay con contexto/framework fijados, verificar integridad y
+- [x] Ejecutar replay con contexto/framework fijados, verificar integridad y
   reportar corpus vacío o casos irreproducibles explícitamente. Un golden que
   discrepa del validador conserva su aprobación QA y su resultado automático;
   no se cambia su código esperado para ocultar la discrepancia.
@@ -319,6 +319,11 @@ reportes de UI, suites de golden/regresión y scripts de evaluación mínimos.
 Salida comprobable: una corrección QA sustituye al ejemplo anterior en un caso
 compatible; una prueba detecta si el error regresa; el reporte distingue el éxito
 autónomo del asistido y demuestra qué referencias recibió cada agente.
+
+Implementación técnica y pruebas: [contrato F7](AUTOMATION_GOLDEN_LEARNING.md).
+El chequeo local encontró 0 golden aprobados y 7 intentos legacy sin evidencia
+suficiente: evaluación/replay `not-evaluated`. No se cierra la fase hasta curar
+el corpus y realizar el piloto/comparación reales de los puntos abiertos.
 
 ## Verificación por fase y entrega
 

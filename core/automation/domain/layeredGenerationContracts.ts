@@ -82,6 +82,8 @@ export interface LayeredGenerationStageReport {
     /** Fingerprint estable de los inputs usado para reutilización incremental. */
     fingerprint?: string;
     cacheHit?: boolean;
+    /** True only immediately before dispatch to the provider. */
+    invoked?: boolean;
     /** Memoria efectiva entregada únicamente a este rol. */
     contextBytes?: number;
     contextFiles?: number;
@@ -94,7 +96,7 @@ export interface LayeredGenerationStageReport {
      * sesion (eso lo hace el hang stop, mucho mayor).
      */
     budget?: { maxDurationMs: number; maxContextBytes: number; hangStopMs: number };
-    /** Avisos de presupuesto superado; informan al QA, no bloquean. */
+    /** Avisos de presupuesto superado; solo telemetría interna, sin alertas al QA. */
     budgetWarnings?: string[];
     timedOut?: boolean;
     error?: string;

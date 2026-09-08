@@ -2520,7 +2520,6 @@ body {
 .automation-agent-stages li.is-failed::before { background: #ff5c5c; }
 .automation-agent-stages li strong { color: var(--text1, #fff); }
 .automation-agent-stages li small { display: block; margin-top: 2px; color: var(--text3); }
-.automation-agent-stages li .agent-budget-warning { display: block; margin-top: 4px; color: #ffcd72; }
 
 /* QA code recovery, available without a device session. */
 .framework-recovery-overlay { position: fixed; inset: 0; z-index: 10000; background: #102139b8; padding: 28px; align-items: center; justify-content: center; }

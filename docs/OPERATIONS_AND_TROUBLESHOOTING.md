@@ -228,7 +228,9 @@ Object y Locators. Si el caso requiere capas nuevas, omitir alguna es un error.
 En la revisión, abre **Revisar versión golden**, inspecciona los archivos y marca
 la aprobación explícita. La declaración de ejecución y los diagnósticos se
 conservan por separado; no hay requisito de score ni de PR integrado. El guardado
-crea una versión del dataset sin escribir correcciones al framework.
+crea una versión del dataset sin escribir correcciones al framework. Elige su uso:
+referencia para agentes o reservado para evaluación. La reserva se conserva al
+aprobar nuevas versiones del mismo caso.
 
 Para un caso corregido externamente, incluso después del PR, abre **Recuperar
 cambios del framework**, guarda su revisión QA y pulsa **Revisar como golden**.
@@ -504,3 +506,16 @@ checkout o los archivos cambiaron después de comparar, vuelve a recuperar. Esta
 operación conserva el trabajo externo; F5 recupera el checkout al regenerar y
 reconcilia la reexportación. Si aparecen marcadores de conflicto, resuélvelos en
 el editor y revalida. Ver [guía de recuperación](AUTOMATION_FRAMEWORK_RECOVERY.md).
+
+
+### Evaluar referencias golden (F7)
+
+`agents:evaluate` publica resultados autónomos y asistencia QA separados.
+`golden:replay` comprueba el snapshot contra un commit local fijado. La salida 2
+significa que falta corpus/evidencia; no es un reporte de éxito. Si el replay
+señala una dependencia no reconstruible, conservar un snapshot completo o el
+commit correspondiente y revisar la publicación; no editar el esperado para
+silenciar el diagnóstico. Ver [F7 y piloto pendiente](AUTOMATION_GOLDEN_LEARNING.md).
+
+Los mensajes de contexto que excede el presupuesto ya no se muestran en Revisión.
+Permanecen en el reporte interno de etapas; los errores reales siguen visibles.

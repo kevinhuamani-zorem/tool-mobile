@@ -186,13 +186,10 @@ export function createReviewFeature(deps) {
                 context ? `${context} de evidencia` : '',
                 stage.timedOut ? 'se cortó por el hang stop' : '',
             ].filter(Boolean).join(' · ');
-            const warnings = (stage.budgetWarnings || []).map(warning =>
-                `<span class="agent-budget-warning">⚠ ${escapeHtml(warning)}</span>`
-            ).join('');
             const error = stage.error ? `<small>${escapeHtml(stage.error)}</small>` : '';
             return `<li data-agent="${escapeHtml(stage.agentName)}" class="is-${escapeHtml(stage.roleState || 'running')}">` +
                 `<div class="agent-stage-body"><strong>${escapeHtml(stage.agentName)}</strong> · ${escapeHtml(layers)}` +
-                `<small>${escapeHtml(details)}</small>${warnings}${error}</div></li>`;
+                `<small>${escapeHtml(details)}</small>${error}</div></li>`;
         }).join('');
     }
 
@@ -386,12 +383,11 @@ export function createReviewFeature(deps) {
         const processed = enlazarSteps.length;
         const unresolved = Number(result?.unresolvedGaps || 0);
         const reusable = Math.max(0, processed - unresolved);
-        // Memoria entre recordings: steps y decisiones heredados de otros
-        // casos validados a 100. El QA ve de dónde vienen; el agente no los
-        // vuelve a redactar ni a juzgar.
+        // El puerto golden solo aporta fragmentos con aprobación QA y relaciones
+        // verificadas. El nombre del campo mantiene compatibilidad con el historial.
         const recall = result?.memoryRecall;
         const recallText = recall && (recall.steps || recall.gaps)
-            ? ` · ${recall.steps} step(s) y ${recall.gaps} decisión(es) heredados de memoria` +
+            ? ` · ${recall.steps} step(s) y ${recall.gaps} decisión(es) reutilizados desde referencias QA` +
               (recall.cases?.length ? ` (${recall.cases.join(', ')})` : '')
             : '';
         automationAnalysisSummary.innerHTML = `<span class="generation-icon">✓</span><div>

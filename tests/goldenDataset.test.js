@@ -291,6 +291,10 @@ test('el replay reproduce el plan de un caso real desde catalog.json y los basel
     const provider = { getCatalog: () => catalog };
     const builder = new AutomationPackageBuilder(new DeterministicResolver(provider), new AutomationMemory(path.join(root, 'memory')));
     const prepared = builder.prepare(yapeoScenario(), root);
+    const { unsupportedSchemaKeywords } = require('../dist/core/automation');
+    for (const name of fs.readdirSync(prepared.packageDirectory).filter(name => name.endsWith('.schema.json'))) {
+        assert.deepEqual(unsupportedSchemaKeywords(JSON.parse(fs.readFileSync(path.join(prepared.packageDirectory, name), 'utf8'))), [], name);
+    }
     // El caso queda "aplicado" con los archivos que el paquete deja como
     // referencia: aqui basta con que existan para congelarlos.
     const plan = JSON.parse(fs.readFileSync(path.join(prepared.packageDirectory, 'generation-plan.json'), 'utf8'));
@@ -312,11 +316,27 @@ test('el replay reproduce el plan de un caso real desde catalog.json y los basel
     for (const file of goldenCase.effectivePlan.files) {
         assert.equal(snapshot.read(file.path).exists, file.operation === 'update', file.path);
     }
-    const replay = new DeterministicResolver({ getCatalog: () => goldenCase.catalog }, snapshot).resolve(goldenCase.scenario);
+    let snapshotReads = 0;
+    const replay = new DeterministicResolver({ getCatalog: () => goldenCase.catalog }, { read(file) { snapshotReads++; return snapshot.read(file); } }).resolve(goldenCase.scenario);
+    assert.ok(snapshotReads > 0, 'the infrastructure resolver must honor an explicitly supplied frozen baseline');
     assert.deepEqual(
         goldenPlanProjection(replay.plan, replay.unresolvedContext.gaps),
         goldenPlanProjection(goldenCase.plan, goldenCase.gaps),
     );
+    // Exercise the real CLI engine against a pinned local commit. This deliberately
+    // invalid synthetic response must remain discrepant; never rewrite expected files.
+    const frameworkRoot = require('./helpers/isolatedFramework').SOURCE_FRAMEWORK_ROOT;
+    const pinned = saveGoldenCase({
+        approved: true, savedBy: 'qa-fixture', revisionId: 'revision-pinned', root: path.join(root, 'pinned-golden'),
+        packageDirectory: prepared.packageDirectory, frameworkRoot, catalog, accepted,
+        validation: { valid: true, qualityScore: 100, errors: [], warnings: [] }, validationSource: 'apply', executed: 'not-run',
+    });
+    const expectedBefore = fs.readFileSync(expectedFile(pinned, 'steps'));
+    const report = require('../scripts/golden-replay').replayGoldenDataset({ root: path.join(root, 'pinned-golden'), frameworkRoot });
+    assert.equal(report.results[0].status, 'discrepant', JSON.stringify(report));
+    assert.equal(report.results[0].planEquivalent, true);
+    assert.equal(report.results[0].qaApproval.source, 'qa-declaration');
+    assert.deepEqual(fs.readFileSync(expectedFile(pinned, 'steps')), expectedBefore);
 });
 
 // ---- los casos del repositorio ---------------------------------------------
@@ -475,4 +495,122 @@ test('F6 context and diagnostics changes create a new immutable snapshot even wh
     assert.equal(readGoldenCase(second.directory).manifest.validation.errorCounts['new-rule'], 1);
     assert.equal(new ApprovedGoldenStore(root).index().entries[0].versionHash, second.manifest.versionHash);
     assert.equal(readGoldenCase(first.directory).manifest.validation.qualityScore, 100);
+});
+
+test('F7 selects compatible approved references by intention/actions, separates layers and hides failed original code', t => {
+    const { selectGoldenExamples, writeGoldenRoleExamples } = require('../dist/core/automation');
+    const f = appliedPackageFixture(t); withGoldenRoot(t, f);
+    const { projectPaths } = require('../dist/core/workspace'); const before = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.frameworkRoot; t.after(() => { projectPaths.frameworkRoot = before; });
+    const correction = '// QA corrected verification';
+    fs.writeFileSync(path.join(f.frameworkRoot, f.stepsPath), correction);
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true, notes: 'Añadir aserción del resultado' });
+    const scenario = { ...f.scenario, recordingId: 'rec-target', request: { ...f.scenario.request, caseId: 'TC-TARGET' } };
+    const selected = selectGoldenExamples(scenario);
+    assert.equal(selected.examples.length, 1); assert.equal(selected.examples[0].versionHash, saved.manifest.versionHash);
+    assert.equal(selected.examples[0].lessons[0].reason, 'Añadir aserción del resultado');
+    const pkg = path.join(f.root, 'target'); const stage = path.join(pkg, 'lorem'); fs.mkdirSync(stage, { recursive: true });
+    fs.writeFileSync(path.join(pkg, 'scenario.json'), JSON.stringify(scenario));
+    new AutomationHistoryStore(pkg).ensureRevision(scenario.recordingId, 'TC-TARGET');
+    const prepared = writeGoldenRoleExamples(pkg, stage, 'behavior-author', 1);
+    const payload = JSON.parse(fs.readFileSync(prepared.file));
+    assert.equal(payload.examples.length, 1); assert.deepEqual(payload.examples[0].files.map(file => file.layer), ['feature', 'steps']);
+    assert.doesNotMatch(fs.readFileSync(prepared.file, 'utf8'), /async \(\) => \{\}/, 'failed source is not a positive example');
+    assert.equal(payload.examples[0].automaticReuse, false);
+    assert.match(payload.instructions, /selectores autorizados/);
+    assert.equal(selectGoldenExamples({ ...scenario, objective: 'administrar tarjetas bloqueadas', acceptanceCriteria: 'tarjeta cerrada' }).examples.length, 0);
+    assert.equal(selectGoldenExamples({ ...scenario, platform: 'ios' }).examples.length, 0);
+    assert.equal(selectGoldenExamples(f.scenario).examples.length, 0, 'same recording/case solution is never disclosed');
+    const emptyIntegration = writeGoldenRoleExamples(pkg, stage, 'integration-reviewer', 1);
+    assert.equal(JSON.parse(fs.readFileSync(emptyIntegration.file)).examples.length, 0, 'no integration gap means no examples');
+});
+
+test('F7 reserved cases, disabled examples, superseded versions and changed framework never leak into new prompts', t => {
+    const { selectGoldenExamples, writeGoldenRoleExamples } = require('../dist/core/automation');
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const { projectPaths } = require('../dist/core/workspace'); const before = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.frameworkRoot; t.after(() => { projectPaths.frameworkRoot = before; });
+    const scenario = { ...f.scenario, recordingId: 'rec-target', request: { ...f.scenario.request, caseId: 'TC-TARGET' } };
+    const first = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    assert.equal(selectGoldenExamples(scenario).examples.length, 1);
+    assert.equal(selectGoldenExamples(scenario, { enabled: false }).examples.length, 0);
+    saveGoldenCaseFromPackage(f.deps(), { approved: true, usage: 'evaluation' });
+    assert.equal(selectGoldenExamples(scenario).examples.length, 0);
+    new ApprovedGoldenStore(root).revoke(first.manifest.goldenId, first.manifest.versionHash, 'qa');
+    const nextPreview = new GoldenCaseReview(f.deps()).prepare(); assert.equal(nextPreview.usage, 'evaluation');
+    saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    assert.equal(selectGoldenExamples(scenario).examples.length, 0, 'a new QA approval preserves the reserved split');
+    saveGoldenCaseFromPackage(f.deps(), { approved: true, usage: 'reference' });
+    fs.writeFileSync(path.join(f.frameworkRoot, f.stepsPath), '// QA new version');
+    assert.equal(selectGoldenExamples(scenario).examples.length, 0);
+    const second = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    assert.notEqual(second.manifest.versionHash, first.manifest.versionHash);
+    assert.equal(selectGoldenExamples(scenario).examples[0].versionHash, second.manifest.versionHash);
+    new ApprovedGoldenStore(root).revoke(second.manifest.goldenId, second.manifest.versionHash, 'qa');
+    assert.equal(selectGoldenExamples(scenario).examples.length, 0);
+});
+
+
+test('F7 deterministic golden fragments require preserved traces, exact data, unique current definitions and active approval', t => {
+    const { goldenFragmentMemory, selectGoldenExamples, writeGoldenRoleExamples } = require('../dist/core/automation');
+    const { actionIdentity } = require('../dist/core/automation/domain/memoryFragments');
+    const { projectPaths } = require('../dist/core/workspace');
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const previous = { ...projectPaths }; t.after(() => Object.assign(projectPaths, previous));
+    Object.assign(projectPaths, { frameworkRoot: f.frameworkRoot, stepDefinitions: path.join(f.frameworkRoot, 'features/yape-steps-definitions'),
+        features: path.join(f.frameworkRoot, 'features/yape-features'), screenobjects: path.join(f.frameworkRoot, 'screenobjects'),
+        locators: path.join(f.frameworkRoot, 'resources/locators'), codeGraphCache: path.join(f.root, 'graph.json') });
+    const stepPath = 'features/yape-steps-definitions/payment/result.steps.ts', screenPath = 'screenobjects/payment/result.screen.ts';
+    const files = [f.response.files[0], { layer: 'steps', path: stepPath,
+        content: "import { Then } from '@wdio/cucumber-framework';\nimport result from '@screenobjects/payment/result.screen';\nThen(/^new result$/, async () => { await result.checkResult(); });\n" },
+        { layer: 'screen', path: screenPath, content: 'class ResultScreen { async checkResult() {} }\nexport default new ResultScreen();\n' }];
+    for (const file of files) { fs.mkdirSync(path.dirname(path.join(f.frameworkRoot, file.path)), { recursive: true }); fs.writeFileSync(path.join(f.frameworkRoot, file.path), file.content); }
+    f.response.files = files; f.response.actionTrace[0].screenMethod = 'checkResult';
+    f.scenario.actions[0].action = 'ESCRIBIR'; f.scenario.actions[0].value = 'Exact QA value';
+    for (const [name, value] of [['scenario.json', f.scenario], ['agent-response.json', f.response]]) fs.writeFileSync(path.join(f.packageDirectory, name), JSON.stringify(value));
+    const history = new AutomationHistoryStore(f.packageDirectory); history.ensureRevision(f.scenario.recordingId, 'TC-1');
+    const recovery = { recordedTrace: f.response.actionTrace, traceAssociations: [{ sequence: 1, status: 'preserved' }],
+        relations: [{ from: { path: stepPath }, to: { path: screenPath, symbol: 'checkResult' } }], pending: [{ message: 'pending' }],
+        files: files.map(file => ({ ...file, currentHash: sha256(file.content) })) };
+    const publish = () => {
+        const content = JSON.stringify(recovery); fs.writeFileSync(path.join(f.packageDirectory, 'framework-recovery.json'), content);
+        history.beginRevision({ recordingId: f.scenario.recordingId, caseId: 'TC-1', source: 'framework-import' }, [{ name: 'framework-recovery.json', content }]);
+        return saveGoldenCaseFromPackage(f.deps(), { approved: true, source: 'recovery' });
+    };
+    publish();
+    const scenario = { ...f.scenario, recordingId: 'rec-target', request: { ...f.scenario.request, caseId: 'TC-TARGET' } };
+    assert.equal(selectGoldenExamples(scenario).examples.length, 1, 'pending trace remains a QA reference');
+    assert.equal(goldenFragmentMemory(scenario), undefined, 'pending trace cannot become deterministic reuse');
+    recovery.pending = []; const approved = publish();
+    const memory = goldenFragmentMemory(scenario); assert.ok(memory, 'unique imported framework relation permits exact fragment');
+    const identities = scenario.actions.map(action => actionIdentity(action, scenario.platform));
+    assert.equal(memory.recallInteractions('payment', identities)[0].fragment.text, 'new result');
+    assert.equal(memory.recallGap(), undefined);
+    assert.equal(goldenFragmentMemory({ ...scenario, actions: [{ ...scenario.actions[0], value: 'different input' }] }), undefined);
+    assert.equal(goldenFragmentMemory({ ...scenario, actions: [{ ...scenario.actions[0], selectorVerified: false }] }), undefined);
+    const pkg = path.join(f.root, 'target'), stage = path.join(pkg, 'integration'); fs.mkdirSync(stage, { recursive: true });
+    fs.writeFileSync(path.join(pkg, 'scenario.json'), JSON.stringify(scenario));
+    const unrelated = writeGoldenRoleExamples(pkg, stage, 'integration-reviewer', 1, ['unrelated gap']);
+    assert.equal(JSON.parse(fs.readFileSync(unrelated.file)).examples.length, 0);
+    const prepared = writeGoldenRoleExamples(pkg, stage, 'integration-reviewer', 1, ['[integration-contract] checkResult relation']);
+    const payload = JSON.parse(fs.readFileSync(prepared.file)); assert.equal(payload.examples.length, 1); assert.equal(payload.examples[0].files.length, 0);
+    const duplicate = path.join(projectPaths.stepDefinitions, 'payment/duplicate.steps.ts'); fs.copyFileSync(path.join(f.frameworkRoot, stepPath), duplicate);
+    assert.equal(goldenFragmentMemory(scenario), undefined, 'another current definition makes the phrase ambiguous');
+    assert.ok(!memory.recallInteractions('payment', identities)?.some(item => item.fragment), 'the existing port also rechecks newly added definitions');
+    fs.rmSync(duplicate);
+    new ApprovedGoldenStore(root).revoke(approved.manifest.goldenId, approved.manifest.versionHash, 'qa');
+    assert.equal(memory.recallInteractions('payment', identities), undefined);
+});
+
+test('F7 replay reports an empty corpus and unpinned snapshots explicitly without changing golden bytes', t => {
+    const { replayGoldenDataset } = require('../scripts/golden-replay');
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    assert.equal(replayGoldenDataset({ root, frameworkRoot: f.frameworkRoot }).status, 'not-evaluated');
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    const before = fs.readFileSync(expectedFile(saved, 'steps'));
+    const report = replayGoldenDataset({ root, frameworkRoot: f.frameworkRoot });
+    assert.equal(report.status, 'requires-review'); assert.equal(report.corpusSize, 1);
+    assert.equal(report.results[0].status, 'unreproducible'); assert.match(report.results[0].reason, /commit/);
+    assert.deepEqual(fs.readFileSync(expectedFile(saved, 'steps')), before);
+    assert.equal(readGoldenCase(saved.directory).manifest.approval.source, 'qa-declaration');
 });

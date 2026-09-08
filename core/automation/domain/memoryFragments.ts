@@ -1,35 +1,9 @@
 /**
- * Memoria de fragmentos: lo que una automatizacion validada a score 100
- * enseña y que otro recording puede reutilizar aunque el caso completo sea
- * distinto.
- *
- * La memoria de casos (`cases/<fingerprint>`) solo sirve cuando se regenera
- * exactamente la misma grabacion. Un QA no repite grabaciones: encadena casos
- * que comparten pantallas, elementos y verificaciones. Lo que se repite entre
- * recordings no es el caso sino la interaccion: "CLICK sobre ~Botón de
- * filtrar" fue redactado por Lorem como "el usuario filtra los movimientos por
- * rango de fechas" con el metodo `userSelectFiltersMovements`, y esa decision
- * ya paso el validador y la revision del QA. Repetirla no necesita agente.
- *
- * La identidad de una accion es (plataforma, accion, selector normalizado y,
- * para VERIFICAR_TEXTO, el texto esperado). El contextHint queda fuera a
- * proposito: el QA describe el mismo boton con palabras distintas en cada
- * grabacion y el selector grabado es la evidencia real.
- *
- * La memoria es transversal a squads (el elemento es el mismo lo grabe quien
- * lo grabe); al recordar se prefiere el fragmento del squad propio.
- *
- * Que se guarda:
- * - interacciones: la secuencia de identidades que cubre un mismo step
- *   Gherkin en el actionTrace validado, con su texto, keyword, metodo del
- *   Screen Object y locators.
- * - gaps: la decision aceptada para un gap ligado a un elemento
- *   (verification-semantics), para no volver a preguntarle al agente por la
- *   misma verificacion sobre el mismo elemento.
- *
- * Que NO se guarda: selectores (se conservan tal cual se grabaron, invariante
- * del recorder), nombres logicos (los reutiliza el indice del framework por
- * identidad TypeLocator+selector) ni gaps por caso (naming, extend-existing).
+ * Pure fragment format and matching helpers, retained for legacy history.
+ * They do not establish QA approval. Legacy AutomationMemory reads remain disabled.
+ * F7 uses goldenFragmentMemory to supply only current QA-approved interactions with
+ * verified recovery relations, exact input data and a unique framework definition.
+ * Stored legacy gaps and unverified historical fragments never authorize reuse.
  */
 import { normalizeSelector, normalizeStepText } from '../../shared';
 import {

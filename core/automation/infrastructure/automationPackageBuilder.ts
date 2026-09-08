@@ -1,3 +1,4 @@
+import { prepareGoldenExamples, goldenFragmentMemory } from './goldenExamples';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -852,6 +853,11 @@ export class AutomationPackageBuilder {
         private readonly frameworkRoot = projectPaths.frameworkRoot,
     ) {}
 
+    private memoryFor(scenario: AutomationScenario) {
+        try { return goldenFragmentMemory(scenario) || this.memory; }
+        catch { return this.memory; } // Unavailable references never block generation or revive legacy data.
+    }
+
     requireTrustedScenarioPackage(
         recordingScenario: AutomationScenario,
         packagedScenario: PackagedAutomationScenario,
@@ -887,7 +893,7 @@ export class AutomationPackageBuilder {
                     );
                 }
             }
-            const resolved = this.resolver.resolve(recordingScenario, { memory: this.memory });
+            const resolved = this.resolver.resolve(recordingScenario, { memory: this.memoryFor(recordingScenario) });
             if (packageDirectory) {
                 const run = new AgentRunStore(packageDirectory);
                 run.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - started) / 1_000_000);
@@ -982,7 +988,7 @@ export class AutomationPackageBuilder {
                 .filter(file => file.layer !== 'dependency' && file.current !== null && previousPlan.files.some(item => item.path === (file.previousPath || file.path)))
                 .map(file => ({ layer: file.layer as AgentGeneratedFile['layer'], path: file.path, content: file.current! })),
             actionTrace: recovered.recordedTrace as AutomationAgentResponse['actionTrace'], resolutions: [], };
-        const fresh = recordingOverride ? this.resolver.resolve(scenario, { memory: this.memory }) : undefined;
+        const fresh = recordingOverride ? this.resolver.resolve(scenario, { memory: this.memoryFor(scenario) }) : undefined;
         if (fresh?.unresolvedContext.gaps.some(gap => gap.blocking)) throw new BlockingGapError(fresh.unresolvedContext.gaps.filter(gap => gap.blocking));
         const statusFile = path.join(packageDirectory, 'status.json');
         const previousStatus = fs.existsSync(statusFile) ? read<any>('status.json') : {};
@@ -1188,6 +1194,7 @@ export class AutomationPackageBuilder {
             : undefined;
         runStore.setContextBytes(contextBytes);
         runStore.mark('ready-for-agent');
+        prepareGoldenExamples(packageDirectory);
         history.checkpoint('package-prepared');
         return {
             packageDirectory,
@@ -1229,7 +1236,7 @@ export class AutomationPackageBuilder {
         const resolverStarted = process.hrtime.bigint();
         let result: ResolverResult;
         try {
-            result = this.resolver.resolve(scenario, { memory: this.memory });
+            result = this.resolver.resolve(scenario, { memory: this.memoryFor(scenario) });
             runStore.addDuration('resolverDurationMs', Number(process.hrtime.bigint() - resolverStarted) / 1_000_000);
             runStore.recordFrameworkAccess(result.frameworkMetrics);
             runStore.setPlan(result.plan.planId);
@@ -1453,6 +1460,7 @@ export class AutomationPackageBuilder {
             : undefined;
         runStore.setContextBytes(contextBytes);
         runStore.mark(response ? (validation?.valid ? 'ready-for-review' : 'needs-repair') : 'ready-for-agent');
+        prepareGoldenExamples(packageDirectory);
         history.checkpoint('package-prepared');
         if (validation) history.append({ ...history.identity()!, kind: 'generation-result', origin: 'recorder', result: validation.valid ? 'passed' : 'failed', stage: 'deterministic-preparation' });
         return {

@@ -76,7 +76,7 @@ permanecen en el proceso principal.
     revisión/revalidación de una propuesta antes de aplicarla. El progreso se
     pinta por agente en `#automationAgentStages` (una fila por Lorem, Zorem y
     Sumrak con estado, evidencia en KB, ejecución por caché/determinista,
-    `budgetWarnings` y corte por hang stop); Lorem y Zorem pueden estar en
+    corte por hang stop; sin avisos técnicos de presupuesto); Lorem y Zorem pueden estar en
     curso a la vez y el resumen dice "trabajan en paralelo". El panel
     `#qaObservationsPanel` muestra tanto erratas del texto de la app
     (`ui-text-quality`) como verificaciones con XPath genérico
@@ -317,8 +317,8 @@ XML, screenshots, source, capabilities ni credenciales.
    Presupuesto por etapa: cada `LayeredGenerationStageReport` lleva `budget`
    (`maxDurationMs`, `maxContextBytes`, `hangStopMs`), `contextBytes` (todo lo
    que hay en la carpeta del agente), `evidenceBytes` (solo evidencia del
-   framework), `budgetWarnings` y `timedOut`. El presupuesto se reporta y se
-   muestra al QA; no recorta evidencia. La sesión de cada rol se corta al hang
+   framework), `budgetWarnings` y `timedOut`. Los avisos de presupuesto se
+   conservan como telemetría interna, sin mostrarlos en la UI; no recorta evidencia. La sesión de cada rol se corta al hang
    stop (`RECORDER_AGENT_HANG_STOP_MS`, 1 h), igual que en el pipeline
    mono-agente; antes cada etapa moría a los 300 s y una respuesta casi lista
    se perdía.
@@ -356,7 +356,7 @@ XML, screenshots, source, capabilities ni credenciales.
    Los artefactos temporales de autores y revisión permanecen bajo
    `agents/derek/attempt-cache/` y se reinician en cada `run`; el caché global
    anterior se archiva. Un score válido no permite reutilizar propuestas sin
-   aprobación del QA. F6 publica el índice derivado de golden aprobado; F7 conectará los ejemplos.
+   aprobación del QA. F6 publica el índice derivado de golden aprobado; F7 conecta las referencias compatibles por capa y registra su procedencia.
    Cuando existe `deterministic-draft.json`, Lorem y Zorem corren **en
    paralelo**: Derek publica el `actionTrace` del borrador como contrato
    provisional (`agents/derek/behavior-result.json`, con handoff verificado) y
@@ -601,3 +601,18 @@ Los canales `preview-golden-case`, `save-golden-case`, `list-golden-cases`,
 y verifica sus artefactos al leer. El índice sustituye referencias; el historial no
 se borra. La memoria legacy permanece deshabilitada.
 Contrato: [Versiones golden e índice aprobado](AUTOMATION_GOLDEN_APPROVAL.md).
+
+
+## Referencias golden y evaluación (F7)
+
+`goldenExamples.ts` selecciona publicaciones QA activas y compatibles al preparar
+el paquete y las reproyecta antes de cada etapa. Lorem recibe Feature/Steps y Zorem
+Screen/Locators; Sumrak recibe únicamente relaciones/lecciones para sus gaps.
+La selección excluye el propio caso y los reservados para evaluación; su hash y
+versiones quedan en el historial. El puerto `goldenFragmentMemory` exige relaciones
+verificadas, datos exactos y una definición única del framework actual.
+
+`agentEvaluation.ts` calcula métricas sobre intentos inmutables; `golden-replay.js`
+reproduce el contexto guardado en un checkout temporal de un commit fijado.
+Ambos declaran falta de evidencia. No convierten aprobaciones QA en éxito autónomo
+ni escriben en el framework. Ver [F7](AUTOMATION_GOLDEN_LEARNING.md).

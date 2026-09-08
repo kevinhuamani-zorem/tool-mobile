@@ -41,6 +41,8 @@ export const GOLDEN_PACKAGE_FILES = [
     'validation.json',
     'application-receipt.json',
     'agent-run.json',
+    'golden-examples.json',
+    'layered-generation-run.json',
 ] as const;
 
 export interface GoldenCaseFile {
@@ -98,6 +100,7 @@ export interface AcceptedGoldenFiles {
 export interface SaveGoldenCaseInput {
     recoverySnapshot?: string;
     dependencies?: Array<{ path: string; content: string }>;
+    usage?: 'reference' | 'evaluation';
     approved: boolean;
     revisionId: string;
     source?: string;
@@ -207,6 +210,14 @@ export function validationProfile(
 }
 
 /** Freeze exact reviewed bytes. Only an append-only QA publication activates a version. */
+const goldenIdentity = (scenario: AutomationScenario) => ({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId || '', squad: scenario.squad, platform: scenario.platform, featureScope: scenario.request?.featureScope || '', environment: scenario.environment || '' });
+/** Preserve the latest explicit split, including a temporarily revoked case. */
+export function goldenCaseUsage(scenario: AutomationScenario, root = goldenDatasetRoot()): 'reference' | 'evaluation' {
+    const goldenId = `golden-${sha256(JSON.stringify(goldenIdentity(scenario)))}`;
+    return fs.existsSync(goldenPath(root, `approved/${goldenId}/publications`))
+        ? new ApprovedGoldenStore(root).read(goldenId).publication.usage || 'reference' : 'reference';
+}
+
 export function saveGoldenCase(input: SaveGoldenCaseInput) {
     if (input.approved !== true || !input.savedBy?.trim() || !input.revisionId) throw new Error('Se requiere aprobación QA explícita de una revisión.');
     const workspace = new RecoveryWorkspace(input.packageDirectory);
@@ -227,7 +238,7 @@ export function saveGoldenCase(input: SaveGoldenCaseInput) {
     }
     const history = new AutomationHistoryStore(input.packageDirectory);
     const events = history.events().map(event => ({ ...event, artifacts: event.artifacts.filter(item =>
-        /(?:agent-response|response|interaction-result|behavior-result|design-review-result|integration-result|baseline-response|framework-recovery|framework-baseline|exported-files|validation|generation-plan|scenario)\.json$/.test(item.name)) }));
+        /(?:evaluation-pass|evaluation-validation|agent-response|response|interaction-result|behavior-result|design-review-result|integration-result|baseline-response|framework-recovery|framework-baseline|exported-files|validation|generation-plan|scenario)\.json$/.test(item.name) || item.name.startsWith('golden-examples/')) }));
     for (const event of events) for (const artifact of event.artifacts) add(`provenance/blobs/${artifact.sha256}`, history.readArtifact(artifact));
     addJson('provenance/events.json', events);
     const original = workspace.read('agent-response.json');
@@ -256,14 +267,15 @@ export function saveGoldenCase(input: SaveGoldenCaseInput) {
     });
     if (!files.length) throw new Error('No hay archivos para aprobar.');
     const contract = 'mobile-four-layers/v1';
-    const identity = { recordingId: scenario.recordingId, caseId: scenario.request?.caseId || '', squad: scenario.squad, platform: scenario.platform, featureScope: scenario.request?.featureScope || '', environment: scenario.environment || '' };
+    const identity = goldenIdentity(scenario);
     const goldenId = `golden-${sha256(JSON.stringify(identity))}`;
+    const previousUsage = goldenCaseUsage(scenario, input.root);
     const contextHash = sha256(JSON.stringify([...artifacts].filter(([name]) => !name.startsWith('provenance/') && !name.startsWith('expected/') && !['execution.json', 'agent-response.json', 'dependency-files.json'].includes(name)).map(([name, content]) => [name, sha256(content)]).sort(([a], [b]) => a.localeCompare(b))));
     const versionHash = sha256(JSON.stringify({ ...identity, contextHash, scenarioHash: sha256(artifacts.get('package/scenario.json')!), contract, dependencies, files: input.accepted.response.files.map(file => ({ layer: file.layer, path: file.path, content: file.content })).sort((a, b) => a.path.localeCompare(b.path)) }));
     const manifest = {
         schemaVersion: 2 as const, ...identity, goldenId, versionHash, revisionId: input.revisionId, contract, contextHash, catalogSource: 'approval-preview', source: input.source || 'review',
         objective: scenario.objective, savedAt: new Date().toISOString(), savedBy: input.savedBy, executed: input.executed,
-        notes: input.notes?.trim(), edited: input.accepted.edited, files, validation: validationProfile(input.validation, input.validationSource),
+        notes: input.notes?.trim(), usage: input.usage || previousUsage || 'reference', edited: input.accepted.edited, files, validation: validationProfile(input.validation, input.validationSource),
         framework: recoveryGitContext(input.frameworkRoot), package: copiedPackageFiles,
         artifacts: Object.fromEntries([...artifacts].map(([name, content]) => [name, { sha256: sha256(content), bytes: content.length }])),
     };

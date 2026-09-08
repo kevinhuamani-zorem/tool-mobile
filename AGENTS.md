@@ -115,7 +115,10 @@ generadores, validadores o plantillas.
     `runtime/automation-memory/legacy-v1/`, sin borrarlos ni convertirlos en
     golden. Ninguna generación recupera respuestas de otro intento. El índice
     derivado de revisiones golden aprobadas por QA existe desde F6;
-    las lecturas legacy siguen vacías y F7 conectará los ejemplos a los agentes. La reutilización exacta
+    las lecturas legacy siguen vacías. F7 selecciona referencias compatibles por
+    capa, excluye casos reservados y el propio caso, y registra sus versiones.
+    Los fragmentos exigen relaciones recuperadas verificadas y datos exactos;
+    no cierran gaps de verificación automáticamente. La reutilización exacta
     del framework permanece disponible y no acredita aprobación golden.
 14. **El historial precede a las modificaciones.** `AutomationHistoryStore`
     conserva eventos y blobs por hash en `generation/automation/history/v1`.
@@ -143,7 +146,8 @@ generadores, validadores o plantillas.
     Objects y Locators mantienen como owner al squad seleccionado.
 16. **El presupuesto informa; la completitud manda.** `maxContextBytes` y
     `maxDurationMs` del plan son objetivos de coste que se miden y se reportan
-    por etapa (`budgetWarnings`); nunca recortan evidencia ni cortan una
+    por etapa (`budgetWarnings`) como telemetría interna, sin avisos en la UI;
+    nunca recortan evidencia ni cortan una
     sesión. La sesión solo la cortan el hang stop
     (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto), el silencio total de
     eventos (`RECORDER_AGENT_IDLE_STOP_MS`, 10 min). En el pipeline por capas,

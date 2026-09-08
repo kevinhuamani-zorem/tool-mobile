@@ -61,3 +61,6 @@ export * from './infrastructure/frameworkRecovery/service';
 
 export * from './infrastructure/approvedGoldenStore';
 export { RecoveryWorkspace, recoveryGitContext } from './infrastructure/frameworkRecovery/files';
+
+export * from './infrastructure/goldenExamples';
+export * from './infrastructure/agentEvaluation';

@@ -1408,7 +1408,7 @@ test('con todo el caso reutilizado del framework Zorem no corre y Lorem solo rev
     );
     const lorem = report.stages.find(stage => stage.execution === 'design-review');
     assert.deepEqual(lorem.assignedLayers, []);
-    assert.equal(lorem.contextFiles, 3, 'scenario, plan y behavior-result: contexto mínimo');
+    assert.equal(lorem.contextFiles, 4, 'scenario, plan, behavior-result y referencias QA con procedencia');
     const review = JSON.parse(fs.readFileSync(path.join(root, 'test-design-review.json'), 'utf8'));
     assert.equal(review.status, 'suggestion');
     assert.equal(review.source, 'agent');

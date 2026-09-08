@@ -150,7 +150,7 @@ export interface LayeredGenerationResult {
 export type LayeredResponseValidator = (
     packageDirectory: string,
     response: AutomationAgentResponse,
-) => { valid: boolean; errors: Array<{ code?: string; message: string; file?: string }> };
+) => { valid: boolean; qualityScore?: number; errors: Array<{ code?: string; message: string; file?: string }> };
 
 export interface RepairIssue {
     code?: string;

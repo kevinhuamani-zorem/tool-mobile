@@ -1,6 +1,6 @@
 // [visual-recorder] El progreso del pipeline por capas se pinta por agente:
 // Lorem y Zorem pueden estar en curso a la vez, cada etapa muestra su
-// evidencia y sus avisos de presupuesto, y las observaciones para el QA
+// evidencia sin avisos técnicos de presupuesto, y las observaciones para el QA
 // distinguen erratas de la app de verificaciones con XPath generico.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,7 +25,7 @@ async function mountWithProgress() {
     return { fakeBrowser, emitProgress, disposeRecorder };
 }
 
-test('muestra Lorem y Zorem en curso a la vez con evidencia y avisos de presupuesto', async () => {
+test('muestra Lorem y Zorem en curso con evidencia, sin avisos técnicos de presupuesto', async () => {
     const { fakeBrowser, emitProgress, disposeRecorder } = await mountWithProgress();
     try {
         const stages = fakeBrowser.document.getElementById('automationAgentStages');
@@ -44,7 +44,7 @@ test('muestra Lorem y Zorem en curso a la vez con evidencia y avisos de presupue
         assert.match(stages.innerHTML, /data-agent="Zorem" class="is-running"/);
         assert.match(stages.innerHTML, /en curso, en paralelo/);
         assert.match(stages.innerHTML, /39,1 KB de evidencia/);
-        assert.match(stages.innerHTML, /agent-budget-warning">⚠ Lorem recibió 50000 bytes/);
+        assert.doesNotMatch(stages.innerHTML, /agent-budget-warning|costará más tokens|objetivo es|No se recortó/);
         assert.equal(status.textContent, 'Lorem y Zorem trabajan en paralelo');
 
         emitProgress({

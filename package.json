@@ -28,7 +28,9 @@
     "test:phase43:baseline": "node scripts/phase43-baseline.js",
     "golden:save": "npm run build:main --silent && node scripts/golden-save.js",
     "golden:seed-memory": "npm run build:main --silent && node scripts/golden-seed-memory.js",
-    "test:golden": "npm run build:main && node --test tests/goldenDataset.test.js"
+    "test:golden": "npm run build:main && node --test tests/goldenDataset.test.js",
+    "agents:evaluate": "npm run build:main --silent && node scripts/agent-evaluate.js",
+    "golden:replay": "npm run build:main --silent && node scripts/golden-replay.js"
   },
   "author": "Kevin Huamani",
   "license": "MIT",
@@ -55,7 +57,9 @@
       {
         "from": "node_modules/typescript/lib",
         "to": "app/node_modules/typescript/lib",
-        "filter": ["lib*.d.ts"]
+        "filter": [
+          "lib*.d.ts"
+        ]
       },
       {
         "from": "build/runtime-origin.json",

@@ -1,3 +1,5 @@
+import { validateWithSchema } from '../domain/jsonSchemaSubset';
+export { validateWithSchema, unsupportedSchemaKeywords } from '../domain/jsonSchemaSubset';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -142,42 +144,6 @@ function findCreditsCost(value: unknown): number | undefined {
     return undefined;
 }
 
-export function validateWithSchema(value: unknown, schema: unknown): boolean {
-    if (!isObject(schema)) return true;
-    if (schema.const !== undefined) return value === schema.const;
-    if (Array.isArray(schema.enum)) return schema.enum.includes(value);
-    const type = typeof schema.type === 'string' ? schema.type : '';
-    if (type === 'string') return typeof value === 'string';
-    if (type === 'integer') return Number.isInteger(value);
-    if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
-    if (type === 'array') {
-        if (!Array.isArray(value)) return false;
-        if (typeof schema.minItems === 'number' && value.length < schema.minItems) return false;
-        if (typeof schema.maxItems === 'number' && value.length > schema.maxItems) return false;
-        if (schema.items !== undefined) {
-            return value.every(item => validateWithSchema(item, schema.items));
-        }
-        return true;
-    }
-    if (type === 'object') {
-        if (!isObject(value)) return false;
-        const required = Array.isArray(schema.required) ? schema.required.filter(key => typeof key === 'string') : [];
-        for (const key of required) {
-            if (!(key in value)) return false;
-        }
-        const properties = isObject(schema.properties) ? schema.properties : {};
-        for (const [key, propertySchema] of Object.entries(properties)) {
-            if (key in value && !validateWithSchema(value[key], propertySchema)) return false;
-        }
-        if (schema.additionalProperties === false) {
-            for (const key of Object.keys(value)) {
-                if (!(key in properties)) return false;
-            }
-        }
-        return true;
-    }
-    return true;
-}
 
 function isInsideDirectory(candidatePath: string, cwd: string): boolean {
     const relative = path.relative(cwd, candidatePath);

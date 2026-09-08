@@ -57,6 +57,8 @@ copia el resultado a `node_modules/.cache`.
 | `npm run test:phase43:baseline` | Captura resultados y contexto en `runtime/phase43/`; `-- --baseline <reporte.json>` compara contra una captura compatible |
 | `npm run golden:save -- <grabación> [--approve <approvalDigest>] [--executed passed]` | Muestra el snapshot; con hash revisado y aprobación explícita publica golden v2 |
 | `npm run golden:seed-memory` | Reconstruye el índice desde publicaciones QA activas; nunca reactiva memoria legacy |
+| `npm run agents:evaluate -- --output <json>` | Métricas del historial inmutable; corpus/evidencia ausente se reporta explícitamente |
+| `npm run golden:replay -- --output <json>` | Replay en commit local fijado y temporal, sin modificar los esperados |
 | `npm run test:golden` | Reproduce cada caso de `tests/golden/`: mismo plan del resolver y archivos aceptados aún válidos |
 
 Flags útiles del pipeline agentic:
@@ -404,3 +406,17 @@ obsoleto, diagnósticos fallidos, historial de intentos, dependencias recuperada
 legacy, publicación fallida, reintento e índice corrupto/reconstruido. Comprueba
 también la interacción del panel sin dispositivo. Ver
 [AUTOMATION_GOLDEN_APPROVAL.md](AUTOMATION_GOLDEN_APPROVAL.md).
+
+
+## Pruebas de referencias y métricas (F7)
+
+`agentEvaluationF7`, `goldenDataset`, `generationQuality`, `rendererAgentStages`
+y `layeredGenerationOrchestrator` cubren selección por capa, reservas, sustitución,
+revocación, relaciones verificadas, datos exactos, ambigüedad, replay inmutable,
+negativos/equivalencias de schema/cobertura y denominadores autónomos. El modo
+`RECORDER_GOLDEN_EXAMPLES=0` deshabilita referencias y fragmentos golden para una
+comparación controlada; no deshabilita reutilización actual del framework.
+
+Los avisos técnicos de presupuesto permanecen en telemetría; no se renderizan.
+Corpus QA, piloto `.app` y comparación real están detallados en
+[AUTOMATION_GOLDEN_LEARNING.md](AUTOMATION_GOLDEN_LEARNING.md).

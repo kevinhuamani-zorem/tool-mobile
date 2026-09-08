@@ -6,12 +6,12 @@ export const goldenHash = (value: Buffer | string) => crypto.createHash('sha256'
 export interface GoldenApproval { status: 'approved'; actor: string; at: string; source: 'qa-declaration' }
 export interface GoldenPublication {
     schemaVersion: 1; sequence: number; previous: string | null; goldenId: string; versionHash: string;
-    manifestHash: string; revisionId: string; executed?: 'passed' | 'failed' | 'not-run'; notes?: string; action: 'approved' | 'revoked'; actor: string; at: string;
+    manifestHash: string; revisionId: string; executed?: 'passed' | 'failed' | 'not-run'; notes?: string; usage?: 'reference' | 'evaluation'; action: 'approved' | 'revoked'; actor: string; at: string;
 }
 export interface ApprovedGoldenIndex {
     schemaVersion: 1; fingerprint: string;
     entries: Array<{ goldenId: string; revisionId: string; versionHash: string; manifestHash: string; directory: string;
-        squad: string; platform: string; featureScope: string; environment: string; contract: string; recordingId: string; caseId: string; source: string; approval: GoldenApproval }>;
+        squad: string; platform: string; featureScope: string; environment: string; contract: string; recordingId: string; caseId: string; source: string; usage: 'reference' | 'evaluation'; approval: GoldenApproval }>;
     issues: string[]; versions: number;
 }
 export function goldenPath(root: string, relative: string): string {
@@ -93,7 +93,7 @@ export class ApprovedGoldenStore {
         const approved = [...publications].reverse().find(item => item.value.action === 'approved' && (!versionHash || item.value.versionHash === versionHash))?.value;
         if (!approved) throw new Error('La versión no tiene una aprobación QA publicada.');
         const result = this.verify(goldenId, approved.versionHash, approved.manifestHash);
-        return { ...result, manifest: { ...result.manifest, revisionId: approved.revisionId, executed: approved.executed || result.manifest.executed, notes: approved.notes, approval: { status: 'approved', actor: approved.actor, at: approved.at, source: 'qa-declaration' },
+        return { ...result, manifest: { ...result.manifest, revisionId: approved.revisionId, executed: approved.executed || result.manifest.executed, notes: approved.notes, usage: approved.usage || 'reference', approval: { status: 'approved', actor: approved.actor, at: approved.at, source: 'qa-declaration' },
             active: active?.action === 'approved' && active.versionHash === approved.versionHash }, publication: approved };
     }
     private locked<T>(run: () => T): T {
@@ -135,14 +135,14 @@ export class ApprovedGoldenStore {
             const version = this.verify(goldenId, versionHash, prior?.value.manifestHash);
             const manifestHash = goldenHash(fs.readFileSync(path.join(directory, 'manifest.json')));
             if (latest?.value.action === 'approved' && latest.value.versionHash === versionHash && latest.value.revisionId === revisionId && latest.value.actor === actor
-                && latest.value.executed === manifest.executed && (latest.value.notes || '') === (manifest.notes || '')) {
+                && (latest.value.usage || 'reference') === (manifest.usage || 'reference') && latest.value.executed === manifest.executed && (latest.value.notes || '') === (manifest.notes || '')) {
                 this.verify(goldenId, versionHash, latest.value.manifestHash);
                 return { ...this.read(goldenId, versionHash), duplicate: true };
             }
             const at = new Date().toISOString();
             this.publishRecord(goldenId, { schemaVersion: 1, sequence: publications.length + 1, previous: latest?.hash || null,
-                goldenId, versionHash, manifestHash, revisionId, executed: manifest.executed, notes: manifest.notes, action: 'approved', actor, at });
-            return { ...version, manifest: { ...version.manifest, revisionId, executed: manifest.executed, notes: manifest.notes, approval: { status: 'approved', actor, at, source: 'qa-declaration' } }, duplicate: Boolean(prior) };
+                goldenId, versionHash, manifestHash, revisionId, executed: manifest.executed, notes: manifest.notes, usage: manifest.usage || 'reference', action: 'approved', actor, at });
+            return { ...version, manifest: { ...version.manifest, revisionId, executed: manifest.executed, notes: manifest.notes, usage: manifest.usage || 'reference', approval: { status: 'approved', actor, at, source: 'qa-declaration' } }, duplicate: Boolean(prior) };
         });
         let indexWarning: string | undefined;
         try { this.rebuildIndex(); } catch { indexWarning = 'Golden aprobado; el índice local se reconstruirá desde las publicaciones.'; }
@@ -169,7 +169,7 @@ export class ApprovedGoldenStore {
                 const { manifest, directory } = this.read(name, latest.value.versionHash);
                 entries.push({ goldenId: name, revisionId: latest.value.revisionId, versionHash: latest.value.versionHash, manifestHash: latest.value.manifestHash,
                     directory, squad: manifest.squad, platform: manifest.platform, contract: manifest.contract, recordingId: manifest.recordingId,
-                    caseId: manifest.caseId, featureScope: manifest.featureScope, environment: manifest.environment, source: manifest.source || 'qa', approval: manifest.approval });
+                    caseId: manifest.caseId, featureScope: manifest.featureScope, environment: manifest.environment, source: manifest.source || 'qa', usage: manifest.usage || 'reference', approval: manifest.approval });
             } catch (error: any) { issues.push(`${name}: ${error.message}`); }
         }
         return { schemaVersion: 1, fingerprint: goldenHash(JSON.stringify({ heads, issues })), entries, issues, versions };

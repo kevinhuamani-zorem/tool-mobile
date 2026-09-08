@@ -54,8 +54,9 @@ framework antes de ofrecer referencias. Para una recuperación compartida verifi
 el hash completo observado por F4, conservando la proyección del caso como ejemplo.
 Es conservador: una edición externa exige recuperación/revisión. El fingerprint
 cambia al aprobar, sustituir, revocar o detectar corrupción; cualquier caché futura
-debe depender de él. Las lecturas legacy siguen vacías. La selección semántica de
-fragmentos y su entrega a Lorem/Zorem/Sumrak corresponden a F7.
+debe depender de él. Las lecturas legacy siguen vacías. F7 implementa la selección de
+referencias por capa y fragmentos con relaciones verificadas; ver
+[AUTOMATION_GOLDEN_LEARNING.md](AUTOMATION_GOLDEN_LEARNING.md).
 
 Desde terminal:
 
@@ -70,5 +71,5 @@ npm run test:golden
 `--source recovery` selecciona la revisión QA recuperada. `golden:seed-memory`
 conserva su nombre como alias de reconstrucción del índice aprobado; no reactiva
 memoria legacy. Informa conteos e integridad y falla si detecta corrupción.
-El replay completo de corpus curado, las equivalencias y el piloto real siguen
-pendientes en F7; guardar con aprobación QA no garantiza que el agente no falle.
+F7 incorpora negativos/equivalencias y el comando de replay. El corpus QA y
+el piloto real siguen pendientes; guardar con aprobación QA no garantiza que el agente no falle.

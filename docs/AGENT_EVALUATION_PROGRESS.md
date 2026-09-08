@@ -9,8 +9,9 @@ Las dos pasadas se publicaron en `95322f1` (F2).
 La exportación con observaciones se publicó en `30ae8e0` (F3).
 La recuperación QA se publicó en `25d412d` (F4).
 La reconciliación se publicó en `41bf2b4` (F5).
-La entrega actual completa F6: aprobación QA explícita, versiones inmutables e
-índice local reconstruible. F7 sigue abierta; su checklist en
+F6 se publicó en `c4f01aa`: aprobación QA explícita, versiones inmutables e
+índice local reconstruible. Esta entrega implementa el código y las pruebas de
+F7. Su cierre con corpus QA y piloto real sigue abierto; el checklist en
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md) conserva todos
 los pendientes hasta terminar el ciclo completo.
 
@@ -129,7 +130,7 @@ corresponde al pipeline `layered` predeterminado del wizard.
 | F4 — completada | Recuperación por relaciones, comparación baseline/exportado/actual y diff del caso. Rutas/símbolos movidos, helpers, asociaciones pendientes y revisión QA con código sin modificar eventos Appium. PR opcional y contexto Git local; no exige commit ni dispositivo. |
 | F5 — completada | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
 | F6 — completada | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
-| F7 — siguiente | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
+| F7 — código implementado; validación real pendiente | Selección por capa, lecciones, fragmentos verificados, negativos/schema/cobertura, métricas y replay implementados. Faltan 5–8 casos revisados por QA, casos reservados y el piloto real con/sin ejemplos, incluyendo reapertura y `.app`. No hay aún una tasa medida de mejora. |
 
 F2 sustituyó los contadores independientes del pipeline por capas.
 F3 retira los bloqueos de exportación por calidad. Los ciclos de regeneración y
@@ -173,10 +174,9 @@ a F7; F6 implementa su almacenamiento. No se ejecutó todavía el piloto con dis
 
 ## Próxima entrega concreta
 
-Implementar F7: seleccionar y entregar ejemplos compatibles por capa, convertir
-correcciones en lecciones, completar negativos/schema/cobertura y medir los fallos
-con denominadores. Curar 5–8 casos y ejecutar replay y piloto real con/sin ejemplos,
-incluyendo reapertura y runtime `.app`. Su checklist sigue abierto.
+Cerrar F7 con QA: curar 5–8 casos y reservar entradas de evaluación; ejecutar
+replay y piloto real con/sin ejemplos, incluyendo reapertura y runtime `.app`.
+La infraestructura está implementada; estos puntos de evidencia siguen abiertos.
 
 ## Validación de F2
 
@@ -263,4 +263,37 @@ incluyendo reapertura y runtime `.app`. Su checklist sigue abierto.
   `/private/tmp/recorder-f6-quality.log`.
 - Las pruebas usan frameworks aislados y un DOM de prueba. No se ejecutó el
   piloto con dispositivo/Copilot ni la reapertura de `.app`; siguen en F7.
-- F7 mantiene corpus, ejemplos por rol, medición de errores y piloto real pendientes.
+- Al cerrar F6 quedaban corpus, ejemplos por rol, medición y piloto para F7.
+  La entrega descrita a continuación implementa ejemplos y medición.
+
+
+## Implementación técnica de F7
+
+- Avisos de presupuesto retirados de la UI; telemetría, evidencia completa y
+  errores reales conservados.
+- Selección de publicaciones QA compatibles por intención/acciones y scope.
+  Proyecciones por rol, lecciones desde correcciones, reserva de evaluación,
+  exclusión del propio caso y procedencia de las referencias efectivamente usadas.
+- Fragmentos automáticos solo con relaciones/trazas preservadas, datos exactos
+  y definición única del framework. Memoria legacy y decisiones de gap antiguas
+  permanecen deshabilitadas.
+- Negativos/equivalencias de schema y cobertura fuera de rango. Denominadores,
+  primera/final pasada, QA, timeouts, recurrencia, capas/reglas, invocaciones,
+  contexto/modelos y tiempos desde artefactos inmutables.
+- Replay en commit local fijado con baselines explícitos: detecta discrepancia,
+  irreproducibilidad y corrupción sin modificar los esperados.
+- Chequeo sobre datos locales: **0 golden aprobados, 7 intentos legacy sin evidencia
+  suficiente**. `agents:evaluate` y `golden:replay` devolvieron código 2 y estado
+  `not-evaluated`. No equivale a 0 % de fallos ni certifica mejora.
+- Reportes locales: `/private/tmp/recorder-f7-evaluation.json` y
+  `/private/tmp/recorder-f7-replay.json`. Son datos observados; los casos sintéticos
+  de las pruebas no se promocionaron al corpus real.
+- `npm run quality`: **816/816 pruebas aprobadas**, sin omitidas ni canceladas;
+  tipos, arquitectura, métricas y builds correctos. Log:
+  `/private/tmp/recorder-f7-quality.log`. La prueba de replay fijado conserva
+  la discrepancia de un fixture inválido y no altera los archivos aprobados.
+- Cierre pendiente: corpus 5–8 QA, reserva, replay del corpus real y piloto de
+  dos pasadas/corrección/PR/recuperación/regeneración/reexportación, reapertura y
+  runtime `.app`; comparación controlada con/sin ejemplos.
+
+Contrato y procedimiento: [AUTOMATION_GOLDEN_LEARNING.md](AUTOMATION_GOLDEN_LEARNING.md).

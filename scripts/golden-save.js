@@ -15,6 +15,7 @@ function parseArguments(argv) {
     for (let index = 0; index < argv.length; index += 1) {
         const value = argv[index];
         if (value === '--approve') options.approve = argv[++index];
+        else if (value === '--usage') options.usage = argv[++index];
         else if (value === '--source') options.source = argv[++index];
         else if (value === '--executed') options.executed = argv[++index];
         else if (value === '--notes') options.notes = argv[++index] || '';
@@ -57,11 +58,11 @@ function main() {
         automationResponseValidator: new AutomationResponseValidator(),
         generatedFileRegistry: new GeneratedFileRegistry(),
     });
-    const preview = review.prepare({ source: options.source });
+    const preview = review.prepare({ source: options.source, usage: options.usage });
     const digest = goldenHash(JSON.stringify(preview.files));
     if (!options.approve) { console.log(JSON.stringify({ ...preview, token: undefined, approvalDigest: digest }, null, 2)); return; }
     if (options.approve !== digest) throw new Error('El contenido cambió o el hash no coincide. Revisa el preview y usa --approve <approvalDigest>.');
-    const saved = review.save({ token: preview.token, approved: true, executed: options.executed, notes: options.notes });
+    const saved = review.save({ token: preview.token, approved: true, usage: options.usage, executed: options.executed, notes: options.notes });
     console.log(`Caso guardado en ${saved.directory}`);
     console.log(`  ${saved.manifest.caseId} · ${saved.manifest.recordingId} · ejecución: ${saved.manifest.executed}` +
         `${saved.manifest.edited ? ' · con correcciones del QA' : ''}`);

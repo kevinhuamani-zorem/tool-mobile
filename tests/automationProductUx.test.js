@@ -213,9 +213,9 @@ test('la revisión de diseño se presenta sin roast ni sesión de presentación'
     assert.equal(fs.existsSync(path.join(root, 'core/automation/infrastructure/copilotQaRoastGenerator.ts')), false);
 });
 
-test('el resumen del análisis muestra lo heredado de la memoria de otros casos', () => {
+test('el resumen del análisis identifica las referencias QA reutilizadas', () => {
     assert.match(review, /memoryRecall/);
-    assert.match(review, /heredados de memoria/);
+    assert.match(review, /reutilizados desde referencias QA/);
     const builder = fs.readFileSync(path.join(root, 'core/automation/infrastructure/automationPackageBuilder.ts'), 'utf8');
     assert.match(builder, /wording === 'memory'/);
     assert.match(builder, /resolvedBy === 'memory'/);

@@ -12,6 +12,7 @@ test('obtiene calidad 100 cuando todas las acciones están enlazadas', () => {
 
     assert.deepEqual(metrics, {
         actionCoverage: 1,
+        invalidActionIndices: [],
         linkedRows: 2,
         totalRows: 2,
         duplicateRows: 0,

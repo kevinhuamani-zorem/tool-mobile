@@ -27,12 +27,13 @@ export function createGoldenFeature({ api }) {
                     '\nVerificación funcional automática: no reportada.';
                 el('goldenExecution').value = p.executionDeclaration;
                 el('goldenNotes').value = p.notes;
+                el('goldenUsage').value = p.usage || 'reference';
             } else {
                 status(`${result.index.entries.length} golden activo(s) · ${result.index.versions} versión(es) · ${result.index.issues.length} problema(s) de integridad.`);
                 el('goldenList').innerHTML = '';
                 for (const entry of result.index.entries) {
                     const row = document.createElement('p');
-                    row.textContent = `${entry.caseId || entry.recordingId} · ${entry.platform} · ${entry.versionHash.slice(0, 12)} · QA: ${entry.approval.actor} · ${entry.approval.at} `;
+                    row.textContent = `${entry.caseId || entry.recordingId} · ${entry.platform} · ${entry.versionHash.slice(0, 12)} · ${entry.usage === 'evaluation' ? 'reservado para evaluación' : 'referencia'} · QA: ${entry.approval.actor} · ${entry.approval.at} `;
                     const button = document.createElement('button'); button.className = 'btn btn-dark'; button.textContent = 'Retirar del índice';
                     button.onclick = async () => { button.disabled = true; try { const r = await api.revokeGoldenCase({ goldenId: entry.goldenId, versionHash: entry.versionHash }); if (!r.success) throw new Error(r.error); await open(); } catch (e) { status(e.message); button.disabled = false; } };
                     row.appendChild(button); el('goldenList').appendChild(row);
@@ -49,7 +50,7 @@ export function createGoldenFeature({ api }) {
         if (!token || !el('goldenApproved').checked || busy) return;
         busy = true; el('btnApproveGolden').disabled = true;
         try {
-            const result = await api.saveGoldenCase({ token, approved: true, executed: el('goldenExecution').value, notes: el('goldenNotes').value });
+            const result = await api.saveGoldenCase({ token, approved: true, usage: el('goldenUsage').value || 'reference', executed: el('goldenExecution').value, notes: el('goldenNotes').value });
             if (!result.success) throw new Error(result.error);
             invalidate();
             status(`Golden aprobado · ${result.manifest.versionHash.slice(0, 12)}${result.duplicate ? ' · Versión ya publicada' : ''}. ${result.indexWarning || ''} ${result.historyWarning || ''}`);
