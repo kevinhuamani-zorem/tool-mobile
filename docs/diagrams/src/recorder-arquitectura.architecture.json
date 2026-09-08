@@ -1,0 +1,361 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Appium Visual Recorder — arquitectura de ejecución",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "frontera",
+        "label": "Frontera de confianza",
+        "focus": [
+          "renderer",
+          "preload",
+          "main"
+        ],
+        "note": "El renderer solo alcanza la allowlist de preload; filesystem, driver y red viven en main."
+      },
+      {
+        "id": "sesion",
+        "label": "Sesión y dispositivo",
+        "focus": [
+          "main",
+          "session",
+          "appium",
+          "inspector"
+        ],
+        "note": "El recorder conserva la propiedad de la sesión; el Inspector se adjunta por un proxy efímero."
+      },
+      {
+        "id": "generacion",
+        "label": "Generación y escritura",
+        "focus": [
+          "core",
+          "agents",
+          "codegraph",
+          "registry",
+          "framework"
+        ],
+        "note": "Lo determinista manda: la IA solo ve gaps abiertos y nada se escribe sin pasar por el registro."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "renderer",
+      "type": "frontend",
+      "label": "Renderer React",
+      "sublabel": "features/ + root",
+      "pos": [
+        30,
+        440
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "tag": "sin Node"
+    },
+    {
+      "id": "preload",
+      "type": "security",
+      "label": "preload.ts",
+      "sublabel": "allowlist IPC",
+      "pos": [
+        270,
+        440
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "contextIsolation"
+    },
+    {
+      "id": "main",
+      "type": "backend",
+      "label": "Electron main",
+      "sublabel": "ipc/ + servicios",
+      "pos": [
+        530,
+        440
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "53 canales"
+    },
+    {
+      "id": "session",
+      "type": "backend",
+      "label": "Session managers",
+      "sublabel": "local / cloud",
+      "pos": [
+        530,
+        240
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "inspector",
+      "type": "security",
+      "label": "Appium Inspector",
+      "sublabel": "ventana aislada",
+      "pos": [
+        530,
+        640
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "protocolo v3"
+    },
+    {
+      "id": "appium",
+      "type": "external",
+      "label": "Appium / WebDriver",
+      "sublabel": "device o nube",
+      "pos": [
+        530,
+        40
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "core/ — dominio",
+      "sublabel": "dominio del recorder",
+      "pos": [
+        830,
+        440
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "agents",
+      "type": "cloud",
+      "label": "Pipeline layered",
+      "sublabel": "Derek y 3 roles",
+      "pos": [
+        830,
+        240
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "tag": "headless"
+    },
+    {
+      "id": "memory",
+      "type": "database",
+      "label": "runtime/ escribible",
+      "sublabel": "estado local",
+      "pos": [
+        830,
+        640
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "codegraph",
+      "type": "database",
+      "label": "CodeGraph",
+      "sublabel": "índice del fwk",
+      "pos": [
+        1120,
+        440
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "mtime + size"
+    },
+    {
+      "id": "registry",
+      "type": "security",
+      "label": "outputValidator",
+      "sublabel": "escritura segura",
+      "pos": [
+        1120,
+        640
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "framework",
+      "type": "external",
+      "label": "fwk-mobile-test",
+      "sublabel": "workspace destino",
+      "pos": [
+        1120,
+        840
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Proceso principal — filesystem, driver, red y sesiones del agente",
+      "wraps": [
+        "main",
+        "session",
+        "inspector",
+        "core",
+        "agents",
+        "memory",
+        "codegraph",
+        "registry"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ui-bridge",
+      "from": "renderer",
+      "to": "preload",
+      "label": "window.api"
+    },
+    {
+      "id": "ipc",
+      "from": "preload",
+      "to": "main",
+      "label": "IPC invoke",
+      "variant": "security"
+    },
+    {
+      "id": "driver",
+      "from": "main",
+      "to": "session",
+      "label": "crea el driver"
+    },
+    {
+      "id": "webdriver",
+      "from": "session",
+      "to": "appium",
+      "label": "WebDriver",
+      "variant": "emphasis",
+      "labelDy": -42
+    },
+    {
+      "id": "attach",
+      "from": "main",
+      "to": "inspector",
+      "label": "proxy loopback",
+      "labelDy": 24,
+      "labelDx": -105
+    },
+    {
+      "id": "selector",
+      "from": "inspector",
+      "to": "main",
+      "label": "selector confirmado",
+      "variant": "security",
+      "labelDx": -105,
+      "labelDy": -22
+    },
+    {
+      "id": "pipeline",
+      "from": "main",
+      "to": "core",
+      "label": "prepara y aplica"
+    },
+    {
+      "id": "delegate",
+      "from": "core",
+      "to": "agents",
+      "label": "contexto por rol",
+      "variant": "dashed",
+      "labelDx": -95
+    },
+    {
+      "id": "response",
+      "from": "agents",
+      "to": "core",
+      "label": "agent-response",
+      "variant": "dashed",
+      "labelDy": 24,
+      "labelDx": 95
+    },
+    {
+      "id": "queries",
+      "from": "core",
+      "to": "codegraph",
+      "label": "consultas acotadas",
+      "labelDy": -46
+    },
+    {
+      "id": "state",
+      "from": "core",
+      "to": "memory",
+      "label": "plan y memoria",
+      "labelDy": 24
+    },
+    {
+      "id": "preview",
+      "from": "core",
+      "to": "registry",
+      "label": "preview validado"
+    },
+    {
+      "id": "commit",
+      "from": "registry",
+      "to": "framework",
+      "label": "commit recuperable",
+      "variant": "emphasis",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Frontera de confianza",
+      "items": [
+        "El renderer corre sin Node y solo alcanza la allowlist de preload",
+        "Todo payload se valida en main: TypeScript del renderer no es una frontera",
+        "El Inspector embebido nunca entrega WebDriver ni credenciales al renderer"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Lo determinista manda",
+      "items": [
+        "El resolver decide reuse/create y fija las cuatro rutas antes de cualquier agente",
+        "La IA solo recibe los gaps abiertos y su mitad proyectada del borrador",
+        "La memoria por fingerprint y por fragmentos evita invocar al agente"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Escritura segura",
+      "items": [
+        "outputValidator fija rutas permitidas, sintaxis y hashes",
+        "Snapshots por destino: aplicar comprueba que sigan intactos",
+        "Solo artefactos aprobados salen del runtime hacia el framework"
+      ]
+    }
+  ]
+}

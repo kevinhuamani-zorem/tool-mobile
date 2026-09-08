@@ -1,0 +1,296 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Pipeline multi-agente — de la grabación al código aplicado",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "determinista",
+        "label": "Antes del agente",
+        "focus": [
+          "recording",
+          "resolver",
+          "draftmem",
+          "derek"
+        ],
+        "note": "El resolver fija reuse/create y las cuatro rutas; el borrador y la memoria ya dan forma al caso."
+      },
+      {
+        "id": "paralelo",
+        "label": "Lorem y Zorem en paralelo",
+        "focus": [
+          "derek",
+          "contract",
+          "lorem",
+          "zorem"
+        ],
+        "note": "El contrato provisional deja que Zorem implemente mientras Lorem redacta."
+      },
+      {
+        "id": "cierre",
+        "label": "Integración y cierre",
+        "focus": [
+          "sumrak",
+          "validator",
+          "review"
+        ],
+        "note": "Un solo validador oficial decide; el feedback vuelve dirigido a la capa culpable."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "qa",
+      "label": "QA y grabación"
+    },
+    {
+      "id": "plan",
+      "label": "Recorder — determinista"
+    },
+    {
+      "id": "behavior",
+      "label": "Lorem · comportamiento"
+    },
+    {
+      "id": "gate",
+      "label": "Integración (Sumrak)"
+    },
+    {
+      "id": "interaction",
+      "label": "Zorem · interacción"
+    }
+  ],
+  "phases": [
+    {
+      "id": "captura",
+      "label": "Captura",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "resolucion",
+      "label": "Plan y borrador",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "autoria",
+      "label": "Autoría y validación",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "recording",
+    "resolver",
+    "draftmem",
+    "derek",
+    "lorem",
+    "sumrak",
+    "validator",
+    "review"
+  ],
+  "nodes": [
+    {
+      "id": "recording",
+      "lane": "qa",
+      "col": 0,
+      "type": "external",
+      "label": "Grabación",
+      "sublabel": "acciones + intención",
+      "width": 138
+    },
+    {
+      "id": "review",
+      "lane": "qa",
+      "col": 5,
+      "type": "frontend",
+      "label": "Revisión del QA",
+      "sublabel": "diff y aplicar",
+      "width": 138
+    },
+    {
+      "id": "resolver",
+      "lane": "plan",
+      "col": 1,
+      "type": "backend",
+      "label": "Resolver",
+      "sublabel": "reuse · create",
+      "tag": "4 rutas",
+      "width": 138
+    },
+    {
+      "id": "draftmem",
+      "lane": "plan",
+      "col": 2,
+      "type": "database",
+      "label": "Borrador y memoria",
+      "sublabel": "draft + fragmentos",
+      "width": 138
+    },
+    {
+      "id": "derek",
+      "lane": "plan",
+      "col": 3,
+      "type": "security",
+      "label": "Derek — owner",
+      "sublabel": "proyecta y firma",
+      "width": 138
+    },
+    {
+      "id": "contract",
+      "lane": "gate",
+      "col": 3,
+      "type": "backend",
+      "label": "screen-api.json",
+      "sublabel": "contrato provisional",
+      "width": 138
+    },
+    {
+      "id": "lorem",
+      "lane": "behavior",
+      "col": 4,
+      "type": "cloud",
+      "label": "Lorem",
+      "sublabel": "Feature + Steps",
+      "tag": "sin shell",
+      "width": 138
+    },
+    {
+      "id": "zorem",
+      "lane": "interaction",
+      "col": 4,
+      "type": "cloud",
+      "label": "Zorem",
+      "sublabel": "Screen + Locators",
+      "tag": "shell acotada",
+      "width": 138
+    },
+    {
+      "id": "sumrak",
+      "lane": "gate",
+      "col": 4,
+      "type": "backend",
+      "label": "Sumrak",
+      "sublabel": "unifica 4 capas",
+      "width": 138
+    },
+    {
+      "id": "validator",
+      "lane": "plan",
+      "col": 5,
+      "type": "security",
+      "label": "Validador oficial",
+      "sublabel": "familias de reglas",
+      "width": 138
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-plan",
+      "from": "recording",
+      "to": "resolver",
+      "label": "acciones ordenadas",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-draft",
+      "from": "resolver",
+      "to": "draftmem",
+      "label": "materializa 4 capas"
+    },
+    {
+      "id": "e-derek",
+      "from": "draftmem",
+      "to": "derek",
+      "label": "paquete mínimo",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-contract",
+      "from": "derek",
+      "to": "contract",
+      "label": "publica actionTrace"
+    },
+    {
+      "id": "e-lorem",
+      "from": "derek",
+      "to": "lorem",
+      "label": "evidencia funcional"
+    },
+    {
+      "id": "e-zorem",
+      "from": "contract",
+      "to": "zorem",
+      "label": "interfaz tipada",
+      "variant": "dashed"
+    },
+    {
+      "id": "e-handoff-b",
+      "from": "lorem",
+      "to": "sumrak",
+      "label": "handoff SHA-256"
+    },
+    {
+      "id": "e-handoff-i",
+      "from": "zorem",
+      "to": "sumrak",
+      "label": "handoff SHA-256"
+    },
+    {
+      "id": "e-response",
+      "from": "sumrak",
+      "to": "validator",
+      "label": "agent-response",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-preview",
+      "from": "validator",
+      "to": "review",
+      "label": "preview + diff",
+      "variant": "emphasis",
+      "role": "return"
+    },
+    {
+      "id": "e-feedback",
+      "from": "validator",
+      "to": "derek",
+      "label": "feedback por capa",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Paralelismo real",
+      "items": [
+        "Derek publica el actionTrace del borrador como contrato provisional",
+        "Zorem implementa esa interfaz mientras Lorem redacta el Gherkin",
+        "Si la huella screenMethod/locatorName cambia, Zorem se sincroniza con el resultado real"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Memoria antes que modelo",
+      "items": [
+        "Caso equivalente por fingerprint: no se invoca al agente",
+        "Fragmentos por step: el tramo ya redactado sale como wording de memoria",
+        "Cuando todo viene de memoria, Zorem no corre y Lorem solo revisa el diseño"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Feedback dirigido",
+      "items": [
+        "Derek clasifica el error por el archivo al que apunta, luego por su código",
+        "Solo se reejecuta la capa culpable, en una ronda feedback-N",
+        "El recorder impone byte por byte lo publicado por Lorem y Zorem"
+      ]
+    }
+  ]
+}

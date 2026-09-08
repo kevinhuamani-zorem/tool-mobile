@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Ciclo de vida de un caso golden",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1080,
+      700
+    ],
+    "views": [
+      {
+        "id": "camino",
+        "label": "Camino principal",
+        "focus": [
+          "applied",
+          "saving",
+          "check",
+          "write",
+          "stored"
+        ],
+        "note": "Del paquete aplicado al caso guardado en tests/golden."
+      },
+      {
+        "id": "correccion",
+        "label": "Cuando el QA corrige",
+        "focus": [
+          "check",
+          "edited",
+          "invalid",
+          "saving"
+        ],
+        "note": "Una corrección obliga a revalidar; si falla, no se escribe nada."
+      },
+      {
+        "id": "reuso",
+        "label": "Qué se hace después",
+        "focus": [
+          "stored",
+          "seed"
+        ],
+        "note": "Solo los casos válidos al 100 % con fingerprint nuevo llegan a la memoria."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Ciclo del caso"
+    },
+    {
+      "id": "revision",
+      "label": "Corrección y rechazo"
+    },
+    {
+      "id": "memoria",
+      "label": "Reutilización"
+    }
+  ],
+  "states": [
+    {
+      "id": "applied",
+      "type": "start",
+      "label": "Paquete aplicado",
+      "sublabel": "4 capas en el fwk",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "saving",
+      "type": "active",
+      "label": "Guardar dataset",
+      "sublabel": "paso 3 o script",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "check",
+      "type": "decision",
+      "label": "¿Hubo corrección?",
+      "sublabel": "editor › disco",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "write",
+      "type": "active",
+      "label": "Escribe el caso",
+      "sublabel": "manifest y expected",
+      "lane": "main",
+      "col": 3,
+      "step": "04"
+    },
+    {
+      "id": "stored",
+      "type": "success",
+      "label": "Caso golden",
+      "sublabel": "listo para replay",
+      "lane": "main",
+      "col": 4,
+      "step": "05"
+    },
+    {
+      "id": "edited",
+      "type": "waiting",
+      "label": "Editado por el QA",
+      "sublabel": "arregló un step",
+      "lane": "revision",
+      "col": 0,
+      "tag": "revalida"
+    },
+    {
+      "id": "invalid",
+      "type": "failure",
+      "label": "Validación falla",
+      "sublabel": "no se toca nada",
+      "lane": "revision",
+      "col": 1,
+      "tag": "recuperable",
+      "yOffset": 84
+    },
+    {
+      "id": "seed",
+      "type": "external",
+      "label": "Memoria sembrada",
+      "sublabel": "seed-memory",
+      "lane": "memoria",
+      "col": 2,
+      "tag": "100 %"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t-save",
+      "from": "applied",
+      "to": "saving"
+    },
+    {
+      "id": "t-check",
+      "from": "saving",
+      "to": "check",
+      "route": "straight"
+    },
+    {
+      "id": "t-edit",
+      "from": "check",
+      "to": "edited",
+      "label": "sí",
+      "variant": "emphasis",
+      "labelAt": [
+        402,
+        202
+      ]
+    },
+    {
+      "id": "t-reuse",
+      "from": "check",
+      "to": "write",
+      "label": "no",
+      "route": "straight",
+      "labelAt": [
+        440,
+        202
+      ]
+    },
+    {
+      "id": "t-revalidate",
+      "from": "edited",
+      "to": "write",
+      "label": "revalida",
+      "variant": "emphasis"
+    },
+    {
+      "id": "t-fail",
+      "from": "edited",
+      "to": "invalid",
+      "variant": "security"
+    },
+    {
+      "id": "t-retry",
+      "from": "invalid",
+      "to": "saving",
+      "label": "corrige y reintenta",
+      "variant": "security",
+      "route": "bottom-channel",
+      "fromSide": "bottom",
+      "toSide": "bottom"
+    },
+    {
+      "id": "t-store",
+      "from": "write",
+      "to": "stored"
+    },
+    {
+      "id": "t-seed",
+      "from": "stored",
+      "to": "seed",
+      "label": "fingerprint nuevo",
+      "variant": "dashed",
+      "labelAt": [
+        710,
+        245
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Qué queda guardado",
+      "items": [
+        "manifest.json con squad, ejecución y notas del QA",
+        "package/ con la whitelist de archivos y las baselines del framework",
+        "catalog.json sin telemetría y la respuesta del agente ya aceptada",
+        "expected/<capa>-<archivo> con el contenido que debe volver a salir"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "La corrección manda",
+      "items": [
+        "El orden de verdad es editor › disco › agent-response",
+        "Con corrección se revalida antes de escribir: si falla, no se toca nada",
+        "Al aceptar se regeneran application-receipt, agent-response y validation"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Para qué sirve después",
+      "items": [
+        "golden:save toma lo que hay en disco, aunque la corrección sea de días después",
+        "golden:seed-memory promueve a memoria solo los casos válidos al 100 %",
+        "test:golden repite el caso resolviendo con catálogo y snapshot"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,286 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "De la grabación a las cuatro capas del framework",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "entradas",
+        "label": "Qué entra al plan",
+        "focus": [
+          "recording",
+          "intent",
+          "plan"
+        ],
+        "note": "Acciones ordenadas, selectores comprobados e intención escrita por el QA."
+      },
+      {
+        "id": "reutilizacion",
+        "label": "Reutilización",
+        "focus": [
+          "catalog",
+          "memory",
+          "plan"
+        ],
+        "note": "El catálogo del squad y la memoria del recorder deciden qué no hay que volver a redactar."
+      },
+      {
+        "id": "capas",
+        "label": "Cadena de las cuatro capas",
+        "focus": [
+          "feature",
+          "steps",
+          "screen",
+          "locators"
+        ],
+        "note": "Cada capa depende de la anterior: Feature → Steps → Screen Object → Locators."
+      }
+    ],
+    "viewBox": [
+      1080,
+      800
+    ]
+  },
+  "stages": [
+    {
+      "label": "Grabación"
+    },
+    {
+      "label": "Resolución"
+    },
+    {
+      "label": "Cuatro capas"
+    },
+    {
+      "label": "Validación"
+    },
+    {
+      "label": "Framework"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "recording",
+      "type": "frontend",
+      "label": "Grabación",
+      "sublabel": "acciones + selectores",
+      "stage": 0,
+      "row": 1,
+      "tag": "verificados"
+    },
+    {
+      "id": "intent",
+      "type": "external",
+      "label": "Intención del QA",
+      "sublabel": "objetivo y aceptación",
+      "stage": 0,
+      "row": 3
+    },
+    {
+      "id": "catalog",
+      "type": "database",
+      "label": "ReuseAnalyzer",
+      "sublabel": "catálogo del squad",
+      "stage": 1,
+      "row": 0,
+      "tag": "CodeGraph"
+    },
+    {
+      "id": "plan",
+      "type": "backend",
+      "label": "generation-plan",
+      "sublabel": "reuse · create · update",
+      "stage": 1,
+      "row": 2,
+      "tag": "4 rutas"
+    },
+    {
+      "id": "memory",
+      "type": "database",
+      "label": "Memoria",
+      "sublabel": "casos y fragmentos",
+      "stage": 1,
+      "row": 4,
+      "tag": "global"
+    },
+    {
+      "id": "feature",
+      "type": "backend",
+      "label": "Feature",
+      "sublabel": ".feature",
+      "stage": 2,
+      "row": 0
+    },
+    {
+      "id": "steps",
+      "type": "backend",
+      "label": "Steps",
+      "sublabel": ".steps.ts",
+      "stage": 2,
+      "row": 1
+    },
+    {
+      "id": "screen",
+      "type": "backend",
+      "label": "Screen Object",
+      "sublabel": ".screen.ts",
+      "stage": 2,
+      "row": 3
+    },
+    {
+      "id": "locators",
+      "type": "backend",
+      "label": "Locators",
+      "sublabel": "claves por plataforma",
+      "stage": 2,
+      "row": 4
+    },
+    {
+      "id": "validator",
+      "type": "security",
+      "label": "Validador",
+      "sublabel": "familias en orden fijo",
+      "stage": 3,
+      "row": 2,
+      "tag": "100 %"
+    },
+    {
+      "id": "fwk",
+      "type": "external",
+      "label": "fwk-mobile-test",
+      "sublabel": "workspace del squad",
+      "stage": 4,
+      "row": 2
+    }
+  ],
+  "flows": [
+    {
+      "id": "f-recording",
+      "from": "recording",
+      "to": "plan",
+      "label": "secuencia verificada",
+      "classification": "grabación"
+    },
+    {
+      "id": "f-intent",
+      "from": "intent",
+      "to": "plan",
+      "label": "objetivo y aceptación",
+      "classification": "texto del QA"
+    },
+    {
+      "id": "f-catalog",
+      "from": "catalog",
+      "to": "plan",
+      "label": "bundles reutilizables",
+      "classification": "índice del framework",
+      "variant": "dashed",
+      "labelAt": [
+        335,
+        300
+      ]
+    },
+    {
+      "id": "f-memory",
+      "from": "memory",
+      "to": "plan",
+      "label": "fragmentos por step",
+      "classification": "memoria global",
+      "variant": "dashed",
+      "labelAt": [
+        345,
+        505
+      ]
+    },
+    {
+      "id": "f-feature",
+      "from": "plan",
+      "to": "feature",
+      "label": "Scenario y Examples",
+      "classification": "capa 1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-steps",
+      "from": "feature",
+      "to": "steps",
+      "label": "una línea, una definición",
+      "classification": "capa 2",
+      "variant": "emphasis",
+      "labelAt": [
+        530,
+        214
+      ]
+    },
+    {
+      "id": "f-screen",
+      "from": "steps",
+      "to": "screen",
+      "label": "API tipada del Screen",
+      "classification": "capa 3",
+      "variant": "emphasis",
+      "labelAt": [
+        530,
+        385
+      ]
+    },
+    {
+      "id": "f-locators",
+      "from": "screen",
+      "to": "locators",
+      "label": "getter por clave",
+      "classification": "capa 4",
+      "variant": "emphasis",
+      "labelAt": [
+        530,
+        556
+      ]
+    },
+    {
+      "id": "f-validate",
+      "from": "locators",
+      "to": "validator",
+      "label": "las cuatro capas",
+      "classification": "agent-response",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-commit",
+      "from": "validator",
+      "to": "fwk",
+      "label": "commit recuperable",
+      "classification": "bytes finales",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Un solo plan efectivo",
+      "items": [
+        "El resolver fija las cuatro rutas antes de redactar nada",
+        "Reutilización, trazabilidad y validación leen ese mismo plan",
+        "Una decisión reuse elige {file, module, name} de candidatos autorizados"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Cada capa depende de la anterior",
+      "items": [
+        "Cada línea del Feature resuelve a exactamente una definición de step del framework",
+        "Los Steps declaran la API tipada que el Screen Object implementa",
+        "El dato de Examples viaja como parámetro: nunca queda fijo en el Screen"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Nada se escribe sin recibo",
+      "items": [
+        "Los rellenos de plataforma exigen la identidad determinista completa",
+        "El preview muestra los mismos bytes que se van a escribir",
+        "application-receipt.json registra el hash posterior de cada ruta aplicada"
+      ]
+    }
+  ]
+}
