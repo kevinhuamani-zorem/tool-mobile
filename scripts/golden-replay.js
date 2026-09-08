@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { projectPaths, configureWorkspacePaths } = require('../dist/core/workspace');
-const { ApprovedGoldenStore, goldenDatasetRoot, goldenPath, readGoldenCase, goldenBaselineSnapshotPort, goldenPlanProjection, DeterministicResolver } = require('../dist/core/automation');
+const { ApprovedGoldenStore, GoldenSnapshotReader, goldenDatasetRoot, goldenPath, readGoldenCase, goldenBaselineSnapshotPort, goldenPlanProjection, DeterministicResolver } = require('../dist/core/automation');
 const { AutomationResponseValidator } = require('../dist/core/validation');
 
 function replayGoldenDataset({ root = goldenDatasetRoot(), frameworkRoot = projectPaths.frameworkRoot } = {}) {
@@ -31,7 +31,7 @@ function replayGoldenDataset({ root = goldenDatasetRoot(), frameworkRoot = proje
                     fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, baseline);
                 } else if (file.operation === 'create') fs.rmSync(destination, { force: true });
             }
-            for (const dependency of JSON.parse(fs.readFileSync(goldenPath(entry.directory, 'dependency-files.json'), 'utf8'))) {
+            for (const dependency of new GoldenSnapshotReader(entry.directory).json('dependency-files.json')) {
                 const destination = goldenPath(target, dependency.path);
                 // A projected helper cannot replace a shared committed module safely.
                 if (fs.existsSync(destination) && fs.readFileSync(destination, 'utf8') !== dependency.content)

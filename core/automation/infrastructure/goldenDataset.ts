@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { GoldenSnapshotReader } from './goldenSnapshot';
 import { ApprovedGoldenStore, goldenPath } from './approvedGoldenStore';
 import { AutomationHistoryStore } from './automationHistoryStore';
 import { RecoveryWorkspace, recoveryGitContext } from './frameworkRecovery/files';
@@ -294,29 +295,18 @@ export function readGoldenCase(directory: string): GoldenCase {
         if (path.resolve(verified.directory) !== path.resolve(directory)) throw new Error('Directorio golden inválido.');
         manifest = verified.manifest;
     } else if (manifest.schemaVersion !== 1) throw new Error('Versión golden no soportada.');
-    const packageDirectory = path.join(directory, 'package');
-    const { plan, effectivePlan } = planOf(packageDirectory);
-    const unresolvedFile = path.join(packageDirectory, 'unresolved-context.json');
-    const gaps = fs.existsSync(unresolvedFile)
-        ? (readJsonUtf8<{ gaps?: UnresolvedGap[] }>(unresolvedFile).gaps || [])
-        : [];
+    const reader = new GoldenSnapshotReader(directory);
+    const plan = reader.json<GenerationPlan>('package/generation-plan.json');
+    const effectivePlan = reader.read('package/effective-generation-plan.json')
+        ? reader.json<GenerationPlan>('package/effective-generation-plan.json') : plan;
+    const gaps = reader.read('package/unresolved-context.json') ? reader.json<{ gaps?: UnresolvedGap[] }>('package/unresolved-context.json').gaps || [] : [];
     const baselines = new Map<string, string>();
-    const baselinesDirectory = path.join(directory, 'baselines');
     for (const file of effectivePlan.files.filter(item => item.operation === 'update')) {
-        const baseline = path.join(baselinesDirectory, `${file.layer}-${path.basename(file.path)}`);
-        if (fs.existsSync(baseline)) baselines.set(file.path, new RecoveryWorkspace(baselinesDirectory).read(path.basename(baseline))!);
+        const value = reader.read(`baselines/${file.layer}-${path.basename(file.path)}`);
+        if (value !== null) baselines.set(file.path, new TextDecoder('utf-8', { fatal: true }).decode(value));
     }
-    return {
-        directory,
-        manifest,
-        scenario: JSON.parse(new RecoveryWorkspace(packageDirectory).read('scenario.json')!),
-        plan,
-        effectivePlan,
-        gaps,
-        catalog: readJsonUtf8<SquadReuseCatalog>(path.join(directory, 'catalog.json')),
-        response: JSON.parse(new RecoveryWorkspace(directory).read('agent-response.json')!),
-        baselines,
-    };
+    return { directory, manifest, scenario: reader.json<AutomationScenario>('package/scenario.json'), plan, effectivePlan, gaps,
+        catalog: reader.json<SquadReuseCatalog>('catalog.json'), response: reader.json<AutomationAgentResponse>('agent-response.json'), baselines };
 }
 
 /**

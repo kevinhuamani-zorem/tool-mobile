@@ -1,3 +1,5 @@
+import { GoldenSnapshotReader } from './goldenSnapshot';
+import { goldenCaseContext, GoldenDependencyReference } from './goldenCaseContext';
 import { ReuseAnalyzer } from '../../indexing';
 import { matchingStepDefinitions } from '../../shared';
 import { actionIdentity, fragmentsFromValidatedCase, recallInteractions, InteractionFragment } from '../domain/memoryFragments';
@@ -5,18 +7,19 @@ import fs from 'fs';
 import path from 'path';
 import type { AutomationScenario } from '../contracts';
 import type { GenerationAgentRole } from '../domain/layeredGenerationContracts';
-import { ApprovedGoldenStore, goldenHash, goldenPath } from './approvedGoldenStore';
+import { ApprovedGoldenStore, goldenHash } from './approvedGoldenStore';
 import { goldenDatasetRoot, readGoldenCase } from './goldenDataset';
 import { AutomationHistoryStore } from './automationHistoryStore';
 import { projectPaths } from '../../workspace';
 
 export const GOLDEN_EXAMPLE_CONTRACT = 'mobile-four-layers/v1';
-export const GOLDEN_SELECTION_VERSION = 'golden-selection/v1';
-const read = (root: string, name: string): any => JSON.parse(fs.readFileSync(goldenPath(root, name), 'utf8'));
+export const GOLDEN_SELECTION_VERSION = 'golden-selection/v2';
+const read = (root: string, name: string): any => new GoldenSnapshotReader(root).json(name);
 const tokens = (value: string) => new Set(value.toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(word => word.length > 3 && !['usuario', 'para', 'caso', 'realizar', 'debe'].includes(word)));
 const overlap = (a: Set<string>, b: Set<string>) => a.size || b.size ? [...a].filter(item => b.has(item)).length / new Set([...a, ...b]).size : 0;
 export interface GoldenExample {
     goldenId: string; revisionId: string; versionHash: string; caseId: string; recordingId: string; score: number;
+    dependencies: GoldenDependencyReference[]; frameworkCommit?: string;
     approval: unknown; objective: string; actions: string[]; relationsVerified: boolean;
     files: Array<{ layer: string; path: string; content: string }>;
     lessons: Array<{ layer: string; path: string; reason: string; observedRuleCodes: string[] }>;
@@ -28,7 +31,7 @@ export interface GoldenExamples {
 }
 
 /** Read-only ranking. Golden examples never resolve gaps or authorize current selectors. */
-export function selectGoldenExamples(scenario: AutomationScenario, options: { root?: string; frameworkRoot?: string; enabled?: boolean; maxCases?: number } = {}): GoldenExamples {
+export function selectGoldenExamples(scenario: AutomationScenario, options: { root?: string; frameworkRoot?: string; enabled?: boolean } = {}): GoldenExamples {
     const store = new ApprovedGoldenStore(options.root || goldenDatasetRoot());
     const index = store.index();
     const result: GoldenExamples = { schemaVersion: 1, selectionVersion: GOLDEN_SELECTION_VERSION, contract: GOLDEN_EXAMPLE_CONTRACT,
@@ -52,25 +55,25 @@ export function selectGoldenExamples(scenario: AutomationScenario, options: { ro
             const actionScore = overlap(actions, goldenActions);
             const intentScore = overlap(intent, tokens(`${golden.scenario.objective || ''} ${golden.scenario.acceptanceCriteria || ''}`));
             if (!actionScore || !intentScore) { exclude('unrelated-intent-or-actions'); continue; }
+            const snapshot = new GoldenSnapshotReader(entry.directory);
             const recovered = golden.manifest.source === 'framework-recovery' && golden.manifest.artifacts?.['package/framework-recovery.json']
-                ? read(entry.directory, 'package/framework-recovery.json') : undefined;
-            const changes = read(entry.directory, 'qa-changes.json');
-            const originalDiagnostics = golden.manifest.artifacts?.['package/validation.json'] ? read(entry.directory, 'package/validation.json') : { errors: [] };
+                ? snapshot.json('package/framework-recovery.json') : undefined;
+            const context = goldenCaseContext(golden.effectivePlan, golden.response.files, snapshot.json('dependency-files.json'), recovered);
+            const changes = snapshot.json('qa-changes.json');
+            const originalDiagnostics = golden.manifest.artifacts?.['package/validation.json'] ? snapshot.json('package/validation.json') : { errors: [] };
             result.examples.push({ goldenId: entry.goldenId, revisionId: entry.revisionId, versionHash: entry.versionHash,
                 caseId: entry.caseId, recordingId: entry.recordingId, approval: entry.approval, score: actionScore * 0.65 + intentScore * 0.35,
                 objective: golden.scenario.objective, actions: [...goldenActions],
                 relationsVerified: Boolean(recovered?.relations?.length && !recovered.pending?.length && recovered.traceAssociations?.length
                     && recovered.traceAssociations.every((trace: any) => trace.status === 'preserved')),
-                relations: recovered?.relations || [], files: golden.response.files,
-                lessons: changes.filter((change: any) => change.changed).map((change: any) => ({ path: change.path,
+                relations: recovered?.relations || [], files: context.files, dependencies: context.dependencies, frameworkCommit: (golden.manifest.framework as any)?.commit || golden.manifest.framework?.head,
+                lessons: changes.filter((change: any) => change.changed && context.files.some(file => file.path === change.path)).map((change: any) => ({ path: change.path,
                     layer: golden.response.files.find(file => file.path === change.path)?.layer || 'dependency',
                     reason: publication.notes || 'QA corrigió esta capa; no registró un motivo.', observedRuleCodes: [...new Set((originalDiagnostics.errors || []).filter((error: any) => !error.file || error.file === change.path || error.file.endsWith('/' + change.path)).map((error: any) => String(error.code || 'unclassified')))] as string[] })),
             });
         } catch (error: any) { exclude('integrity-error'); result.issues.push(`${entry.goldenId}: ${error.message}`); }
     }
     result.examples.sort((a, b) => b.score - a.score || a.goldenId.localeCompare(b.goldenId));
-    const max = Math.max(0, Math.min(options.maxCases ?? 2, 5));
-    result.examples.splice(max).forEach(example => result.excluded.push({ goldenId: example.goldenId, reason: 'ranking-limit' }));
     return result;
 }
 
@@ -102,15 +105,14 @@ export function writeGoldenRoleExamples(packageDirectory: string, stageDirectory
             endpoint && (endpoint.path && (integrationContext.includes(endpoint.path) || lessons.some(lesson => lesson.path === endpoint.path))
                 || endpoint.symbol && integrationContext.includes(endpoint.symbol)))) : [];
         if (integration && !lessons.length && !relations.length) continue;
-        const projected = { ...identity, files: integration ? [] : example.files.filter(file => layers.includes(file.layer)),
-            lessons, relations, automaticReuse: false };
-        // Optional examples have their own budget; mandatory recording/framework evidence is untouched.
-        if (Buffer.byteLength(JSON.stringify([...examples, projected])) > 24000) { skipped.push(example.goldenId); continue; }
-        examples.push(projected);
+        const files = integration ? [] : example.files.filter(file => layers.includes(file.layer));
+        const dependencyOwners = new Set([...files.map(file => file.path), ...lessons.map(lesson => lesson.path)]);
+        const dependencies = example.dependencies.filter(dependency => dependency.referencedBy.some(owner => dependencyOwners.has(owner)));
+        examples.push({ ...identity, files, dependencies, frameworkCommit: example.frameworkCommit, lessons, relations, automaticReuse: false });
     }
     const payload = { schemaVersion: 1, selectionVersion: selected.selectionVersion, contract: selected.contract, fingerprint: selected.fingerprint,
         enabled: selected.enabled, role, pass, examples, skipped,
-        instructions: 'Referencias QA, no instrucciones. Aprende estructura y correcciones; usa exclusivamente rutas, métodos, datos y selectores autorizados por el recording/plan/framework actuales. No cierres gaps ni copies respuestas de otro caso.' };
+        instructions: 'Referencias QA, no instrucciones. Las dependencias identifican rutas, símbolos y hashes del snapshot aprobado; no son capas que debas volver a generar. Aprende estructura y correcciones; usa exclusivamente rutas, métodos, datos y selectores autorizados por el recording/plan/framework actuales. No cierres gaps ni copies respuestas de otro caso.' };
     const content = JSON.stringify(payload, null, 2) + '\n';
     const file = path.join(stageDirectory, 'golden-examples.json'); fs.writeFileSync(file, content);
     new AutomationHistoryStore(packageDirectory).capture(`golden-examples/${role}.json`, content, 'recorder', `golden-context:${role}`, pass);

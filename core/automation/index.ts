@@ -64,3 +64,6 @@ export { RecoveryWorkspace, recoveryGitContext } from './infrastructure/framewor
 
 export * from './infrastructure/goldenExamples';
 export * from './infrastructure/agentEvaluation';
+
+export { GoldenSnapshotReader, GOLDEN_EVIDENCE_ARCHIVE } from './infrastructure/goldenSnapshot';
+export { goldenCaseContext, goldenPrimaryPaths } from './infrastructure/goldenCaseContext';

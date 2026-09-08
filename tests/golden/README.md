@@ -1,8 +1,8 @@
 # Golden dataset compartido del recorder
 
 Esta carpeta pertenece al repositorio Git del recorder. Desarrollo y la app
-instalada leen y guardan aquí los casos aprobados por QA. El corpus empieza vacío:
-los fixtures de las pruebas no se convierten en aprobaciones reales.
+instalada leen y guardan aquí los casos aprobados por QA. Los fixtures de las
+pruebas no se convierten en aprobaciones reales.
 
 ## Conectar la app
 
@@ -54,6 +54,9 @@ ocultar cambios en el código aprobado.
 
 - `approved/<goldenId>/versions/<versionHash>/`: código esperado por capa, paquete
   del caso, baselines, dependencias, diagnósticos y correcciones QA con procedencia.
+  Físicamente conserva `manifest.json`, el código propio en `expected/` y
+  `evidence.pack.gz` con el resto de los artefactos deduplicados y comprimidos.
+  Se recuperan sus bytes originales mediante `GoldenSnapshotReader`.
 - `approved/<goldenId>/publications/`: aprobaciones y revocaciones inmutables,
   con versión, revisión, autor, fecha, uso y declaración de ejecución.
 - Este README y `.gitattributes`: preservan los bytes aprobados entre sistemas,
@@ -86,3 +89,7 @@ cambian los pesos del modelo ni quedan libres de fallos. Deben seguir respetando
 las evidencias, las cuatro capas y el máximo de dos pasadas. Para métricas y
 compatibilidad, consulta [F7](../../docs/AUTOMATION_GOLDEN_LEARNING.md) y el
 [contrato de aprobación](../../docs/AUTOMATION_GOLDEN_APPROVAL.md).
+
+`npm run golden:compact` reduce los archivos físicos de versiones anteriores
+sin cambiar sus aprobaciones ni hashes. Actualiza la app antes de consumir el
+formato compacto. Consulta [lectura y migración](../../docs/AUTOMATION_GOLDEN_APPROVAL.md).

@@ -252,6 +252,13 @@ generadores, validadores o plantillas.
   incluso desde la app empaquetada. `core/workspace` detecta o persiste el checkout;
   la selección local no se versiona. No escribas golden nuevos en runtime ni en
   el bundle. Snapshots/publicaciones viajan por commit/PR; el índice es local.
+  Los snapshots compactos mantienen `manifest.json` y las capas propias legibles;
+  la evidencia completa vive en `evidence.pack.gz`, deduplicada y sin pérdida.
+  Lee artefactos con `GoldenSnapshotReader`, no con rutas físicas asumidas.
+  `golden:compact` preserva manifiestos, publicaciones y bytes lógicos aprobados.
+  Los ejemplos no tienen topes de bytes/cantidad; cada rol recibe código propio
+  completo y referencias de dependencias por ruta, símbolos y hash. Se mantienen
+  pertinencia, compatibilidad, reservas de evaluación y las dos pasadas.
   Conserva `.gitattributes` para no cambiar bytes/hash entre máquinas. Sin checkout,
   la generación/exportación sigue disponible sin referencias golden.
   Los legacy solo se promueven tras revisión explícita. Ver

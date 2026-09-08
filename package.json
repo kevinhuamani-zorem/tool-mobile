@@ -27,6 +27,7 @@
     "test:phase43:deterministic": "npm run build:main && node --test tests/phase43DeterministicRegression.test.js",
     "test:phase43:baseline": "node scripts/phase43-baseline.js",
     "golden:save": "npm run build:main --silent && node scripts/golden-save.js",
+    "golden:compact": "npm run build:main --silent && node scripts/golden-compact.js",
     "golden:seed-memory": "npm run build:main --silent && node scripts/golden-seed-memory.js",
     "test:golden": "npm run build:main && node --test tests/goldenDataset.test.js",
     "agents:evaluate": "npm run build:main --silent && node scripts/agent-evaluate.js",

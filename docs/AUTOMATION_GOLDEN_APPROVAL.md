@@ -83,3 +83,44 @@ conserva su nombre como alias de reconstrucción del índice aprobado; no reacti
 memoria legacy. Informa conteos e integridad y falla si detecta corrupción.
 F7 incorpora negativos/equivalencias y el comando de replay. El corpus QA y
 el piloto real siguen pendientes; guardar con aprobación QA no garantiza que el agente no falle.
+
+## Almacenamiento compacto, sin cambiar la aprobación
+
+Cada versión conserva físicamente `manifest.json`, los archivos propios del caso
+bajo `expected/` y un `evidence.pack.gz`. Las publicaciones permanecen fuera de la
+versión. Los archivos planificados, asociados al recibo o renombrados desde una
+ruta planificada son propios; recorrer relaciones de login o helpers no los
+convierte en nuevas capas del caso.
+
+El archivo comprimido contiene un inventario de nombres lógicos y blobs por SHA-256,
+codificados en base64 y comprimidos con gzip. Contenidos idénticos se guardan una
+sola vez. Conserva catálogo, baselines, dependencias, respuestas, correcciones y
+procedencia completos. El manifiesto sigue describiendo todos los artefactos
+lógicos originales, aunque ya no exista un archivo físico por cada entrada.
+
+`GoldenSnapshotReader` lee ambos formatos y verifica los hashes. Un archivo suelto
+alterado no se oculta recurriendo a una copia comprimida. No cambian los bytes del
+manifiesto, la versión, los eventos, las fechas, la declaración QA ni sus hashes.
+La migración no es una nueva aprobación y tampoco activa versiones retiradas.
+
+```sh
+npm run golden:compact
+npm run golden:seed-memory
+```
+
+`golden:compact -- --root <dataset>` permite indicar otro dataset. Verifica cada
+versión aprobada, prepara y comprueba el archivo comprimido, lo publica antes de
+retirar duplicados y vuelve a verificar. Es repetible y conserva versiones
+históricas. Los nuevos golden se guardan compactos de origen. Actualiza el recorder
+antes de recibir snapshots compactos: versiones anteriores no saben leerlos.
+
+Para inspeccionar un artefacto lógico desde el repositorio compilado:
+
+```sh
+node -e "const {GoldenSnapshotReader}=require('./dist/core/automation'); process.stdout.write(new GoldenSnapshotReader(process.argv[1]).require(process.argv[2]))" <directorio-version> qa-changes.json
+```
+
+La compactación comprueba integridad; no acredita equivalencia de replay. El
+catálogo de aprobación puede diferir del catálogo del plan original y los módulos
+compartidos pueden estar guardados como proyecciones. Conserva y reporta esas
+discrepancias con `golden:replay`, sin ajustar los esperados aprobados.

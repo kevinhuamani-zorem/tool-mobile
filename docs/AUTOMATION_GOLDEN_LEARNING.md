@@ -18,8 +18,8 @@ Ver [configuración, versionado y actualizaciones](../tests/golden/README.md).
 `goldenExamples.ts` verifica publicaciones y hashes, exige squad, plataforma,
 ambiente, subruta Feature y contrato compatibles, y comprueba los bytes actuales
 del framework. Ordena por coincidencia de acciones (65 %) e intención (35 %),
-con coincidencia no nula en ambas. Usa como máximo dos referencias. Esta política
-es conservadora: cambiar un módulo compartido puede excluir el ejemplo hasta que
+con coincidencia no nula en ambas. Incluye todas las referencias pertinentes, sin
+recortarlas por cantidad o bytes. La compatibilidad sigue siendo conservadora: cambiar un módulo compartido puede excluir el ejemplo hasta que
 QA revise y publique su versión actualizada.
 
 El modal permite elegir **Referencia para los agentes** o **Reservado para evaluación**.
@@ -37,8 +37,15 @@ revocación retira la referencia.
 
 Los archivos `golden-examples.json` de cada workspace se registran en el manifiesto
 y en `history/v1`: rol, pasada, hash, versión de selección, fingerprint del índice
-y versiones efectivamente entregadas. Los ejemplos tienen un presupuesto opcional
-de 24 KB; se omiten ejemplos completos que no caben. La evidencia obligatoria del
+y versiones efectivamente entregadas. Desde `golden-selection/v2` no hay límite
+de 24 KB ni de cantidad de ejemplos. Cada autor recibe íntegros los archivos propios
+de sus capas. Login, Home y helpers reutilizados se identifican como dependencias
+por ruta, símbolos y hashes del código aprobado y del framework observado, junto
+con el commit del framework cuando existe. Las relaciones determinan qué autor
+necesita cada referencia; los renombrados recuperados conservan su identidad de
+archivo propio. Los cuerpos de las dependencias permanecen en la evidencia del
+golden, sin presentarse como código que el agente deba volver a generar.
+Las dos pasadas por solicitud QA se mantienen. La evidencia obligatoria del
 recording/framework no se recorta. Los avisos técnicos `budgetWarnings` quedan en
 telemetría interna y no se muestran en la interfaz; fallos y timeouts siguen visibles.
 
@@ -135,3 +142,21 @@ no existe aún una tasa observada atribuible a referencias golden.
    Repetir tras cerrar/reabrir el recorder y en el runtime empaquetado `.app`.
 5. Publicar tamaño de muestra, numeradores/denominadores y hallazgos. Solo entonces
    cerrar el piloto de F7; con pocos casos no extrapolar una tasa general de éxito.
+
+## Compactación del almacenamiento
+
+Los snapshots mantienen su manifiesto y código propio legibles; el resto de los
+artefactos se conserva en `evidence.pack.gz`, sin pérdida y deduplicado por hash.
+La selección, el índice y el replay admiten tanto el formato anterior como el
+compacto. Ver [migración y lectura de evidencia](AUTOMATION_GOLDEN_APPROVAL.md).
+
+La primera referencia QA compartida, `TC-10239`, conserva su aprobación original.
+Su migración pasa de 72 archivos (1 413 673 bytes) a 7 (253 925 bytes), comprobando
+los 72 hashes originales. En un caso similar, Lorem recibe los dos archivos de
+comportamiento y Zorem los dos de interacción. Esto demuestra entrega de contexto,
+no ejecución de agentes ni mejora medida de su tasa de éxito.
+
+El replay de esta referencia ya discrepaba con el código anterior a la compactación:
+el catálogo del preview no reproduce el plan original. La prueba del corpus sigue
+reportándolo; no se cambiaron el expected, los diagnósticos ni la aprobación para
+silenciar el fallo. Resolver esta reproducibilidad permanece pendiente del piloto.

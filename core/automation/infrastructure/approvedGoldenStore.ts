@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { goldenHash, goldenPath } from './goldenFiles';
+import { GoldenSnapshotReader, writeGoldenSnapshot, GOLDEN_EVIDENCE_ARCHIVE } from './goldenSnapshot';
+export { goldenHash, goldenPath } from './goldenFiles';
 
-export const goldenHash = (value: Buffer | string) => crypto.createHash('sha256').update(value).digest('hex');
 export interface GoldenApproval { status: 'approved'; actor: string; at: string; source: 'qa-declaration' }
 export interface GoldenPublication {
     schemaVersion: 1; sequence: number; previous: string | null; goldenId: string; versionHash: string;
@@ -14,24 +16,11 @@ export interface ApprovedGoldenIndex {
         squad: string; platform: string; featureScope: string; environment: string; contract: string; recordingId: string; caseId: string; source: string; usage: 'reference' | 'evaluation'; approval: GoldenApproval }>;
     issues: string[]; versions: number;
 }
-export function goldenPath(root: string, relative: string): string {
-    if (!relative || path.isAbsolute(relative) || relative.includes('\\') || relative.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('Ruta golden inválida.');
-    const target = path.resolve(root, relative);
-    let cursor = target;
-    while (cursor !== path.resolve(root)) {
-        try { if (fs.lstatSync(cursor).isSymbolicLink()) throw new Error('El dataset no admite symlinks.'); }
-        catch (error: any) { if (error.code !== 'ENOENT') throw error; }
-        cursor = path.dirname(cursor);
-    }
-    if (fs.existsSync(root) && fs.lstatSync(root).isSymbolicLink()) throw new Error('El dataset no admite symlinks.');
-    return target;
-}
 function bytes(root: string, file: string): Buffer {
     const target = goldenPath(root, file); const stat = fs.statSync(target);
     if (!stat.isFile() || stat.size > 32 * 1024 * 1024) throw new Error('Artefacto golden inválido o demasiado grande.');
     return fs.readFileSync(target);
 }
-const json = (root: string, file: string): any => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes(root, file)));
 function atomic(file: string, content: string) {
     const temp = `${file}.${crypto.randomUUID()}.tmp`;
     try { fs.writeFileSync(temp, content, { flag: 'wx' }); fs.renameSync(temp, file); }
@@ -57,35 +46,37 @@ export class ApprovedGoldenStore {
             previous = match[2]; return { value, hash: match[2] };
         });
     }
-    private verify(goldenId: string, versionHash: string, manifestHash?: string): { directory: string; manifest: any } {
+    private verify(goldenId: string, versionHash: string, manifestHash?: string, stagedDirectory?: string): { directory: string; manifest: any } {
         if (!/^[a-f0-9]{64}$/.test(versionHash)) throw new Error('Versión golden inválida.');
         const relative = `approved/${goldenId}/versions/${versionHash}`;
-        const manifestBytes = bytes(this.root, `${relative}/manifest.json`);
+        const directory = stagedDirectory || goldenPath(this.root, relative);
+        const reader = new GoldenSnapshotReader(directory);
+        const manifestBytes = bytes(directory, 'manifest.json');
         if (manifestHash && goldenHash(manifestBytes) !== manifestHash) throw new Error('El manifiesto golden fue alterado.');
         const manifest = JSON.parse(manifestBytes.toString('utf8'));
         if (manifest.schemaVersion !== 2 || manifest.goldenId !== goldenId || manifest.versionHash !== versionHash || !manifest.artifacts) throw new Error('Identidad de versión golden inválida.');
         for (const [file, expected] of Object.entries(manifest.artifacts) as Array<[string, { sha256: string; bytes: number }]>) {
-            const content = bytes(this.root, `${relative}/${file}`);
+            const content = reader.require(file);
             if (content.length !== expected.bytes || goldenHash(content) !== expected.sha256) throw new Error(`Artefacto golden alterado: ${file}`);
         }
         for (const required of ['agent-response.json', 'package/scenario.json', 'package/generation-plan.json', 'catalog.json', 'diagnostics.json', 'execution.json', 'qa-changes.json', 'provenance/events.json', 'dependency-files.json']) if (!manifest.artifacts[required]) throw new Error('Inventario golden incompleto.');
-        const response = json(this.root, `${relative}/agent-response.json`);
-        const scenario = json(this.root, `${relative}/package/scenario.json`);
+        const response = reader.json('agent-response.json');
+        const scenario = reader.json('package/scenario.json');
         const contextHash = goldenHash(JSON.stringify(Object.entries(manifest.artifacts).filter(([name]) => !name.startsWith('provenance/') && !name.startsWith('expected/') && !['execution.json', 'agent-response.json', 'dependency-files.json'].includes(name)).map(([name, value]: [string, any]) => [name, value.sha256]).sort(([a], [b]) => a.localeCompare(b))));
         if (contextHash !== manifest.contextHash) throw new Error('Contexto golden alterado.');
         const contentKey = { recordingId: scenario.recordingId, caseId: scenario.request?.caseId || '', squad: scenario.squad, platform: scenario.platform,
             featureScope: scenario.request?.featureScope || '', environment: scenario.environment || '',
-            contextHash, scenarioHash: goldenHash(bytes(this.root, `${relative}/package/scenario.json`)), contract: manifest.contract, dependencies: json(this.root, `${relative}/dependency-files.json`), files: response.files.map((file: any) => ({ layer: file.layer, path: file.path, content: file.content })).sort((a: any, b: any) => a.path.localeCompare(b.path)) };
+            contextHash, scenarioHash: goldenHash(reader.require('package/scenario.json')), contract: manifest.contract, dependencies: reader.json('dependency-files.json'), files: response.files.map((file: any) => ({ layer: file.layer, path: file.path, content: file.content })).sort((a: any, b: any) => a.path.localeCompare(b.path)) };
         const { contract: _, files: __, dependencies: ___, scenarioHash: ____, contextHash: _____, ...identity } = contentKey;
         if (`golden-${goldenHash(JSON.stringify(identity))}` !== goldenId || Object.entries(identity).some(([key, value]) => manifest[key] !== value)) throw new Error('Ámbito golden alterado.');
         if (manifest.files.length !== response.files.length || new Set(response.files.map((file: any) => file.path)).size !== response.files.length) throw new Error('Inventario de capas inválido.');
         if (goldenHash(JSON.stringify(contentKey)) !== versionHash) throw new Error('El contenido golden no corresponde a su versión.');
         for (const file of manifest.files) {
             if (!manifest.artifacts[`expected/${file.expected}`]) throw new Error('Falta hash de capa golden.');
-            const expected = bytes(this.root, `${relative}/expected/${file.expected}`);
+            const expected = reader.require(`expected/${file.expected}`);
             if (goldenHash(expected) !== file.sha256 || !response.files.some((item: any) => item.path === file.path && item.layer === file.layer && Buffer.from(item.content).equals(expected))) throw new Error('Las capas golden no coinciden con lo aprobado.');
         }
-        return { directory: goldenPath(this.root, relative), manifest };
+        return { directory, manifest };
     }
     read(goldenId: string, versionHash?: string) {
         const publications = this.publications(goldenId);
@@ -126,8 +117,8 @@ export class ApprovedGoldenStore {
                 const staging = goldenPath(this.root, `approved/${goldenId}/versions/.pending-${crypto.randomUUID()}`);
                 fs.mkdirSync(staging, { recursive: true });
                 try {
-                    for (const [file, content] of artifacts) { const target = goldenPath(staging, file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, content, { flag: 'wx' }); }
-                    fs.writeFileSync(path.join(staging, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
+                    writeGoldenSnapshot(staging, Buffer.from(JSON.stringify(manifest, null, 2) + '\n'), manifest, artifacts);
+                    this.verify(goldenId, versionHash, undefined, staging);
                     fs.renameSync(staging, directory);
                 } finally { if (fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true }); }
             }
@@ -147,6 +138,47 @@ export class ApprovedGoldenStore {
         let indexWarning: string | undefined;
         try { this.rebuildIndex(); } catch { indexWarning = 'Golden aprobado; el índice local se reconstruirá desde las publicaciones.'; }
         return { ...result, indexWarning };
+    }
+    /** Repack only verified approved snapshots. Publication, manifest, version and every logical byte stay identical. */
+    compact() {
+        return this.locked(() => {
+            const approved = goldenPath(this.root, 'approved');
+            const results: Array<{ goldenId: string; versionHash: string; removedFiles: number }> = [];
+            for (const goldenId of fs.existsSync(approved) ? fs.readdirSync(approved).filter(name => name.startsWith('golden-')).sort() : []) {
+                const versions = new Set(this.publications(goldenId).filter(item => item.value.action === 'approved').map(item => item.value.versionHash));
+                for (const versionHash of versions) {
+                    const { directory, manifest, publication } = this.read(goldenId, versionHash);
+                    const reader = new GoldenSnapshotReader(directory);
+                    const artifacts = new Map<string, Buffer>(Object.keys(manifest.artifacts).map(name => [name, reader.require(name)]));
+                    const originalManifest = bytes(directory, 'manifest.json');
+                    const staging = goldenPath(this.root, `approved/${goldenId}/versions/.pending-${crypto.randomUUID()}`);
+                    fs.mkdirSync(staging, { recursive: true });
+                    let removedFiles = 0;
+                    try {
+                        const keep = writeGoldenSnapshot(staging, originalManifest, manifest, artifacts);
+                        this.verify(goldenId, versionHash, publication.manifestHash, staging);
+                        // Materialize readable layers first, then publish the complete archive before removing duplicates.
+                        for (const name of keep) {
+                            const target = goldenPath(directory, name);
+                            if (!fs.existsSync(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(goldenPath(staging, name), target, fs.constants.COPYFILE_EXCL); }
+                        }
+                        fs.renameSync(goldenPath(staging, GOLDEN_EVIDENCE_ARCHIVE), goldenPath(directory, GOLDEN_EVIDENCE_ARCHIVE));
+                        for (const [name, content] of artifacts) {
+                            if (keep.has(name)) continue;
+                            const file = goldenPath(directory, name);
+                            if (!fs.existsSync(file)) continue;
+                            if (!fs.readFileSync(file).equals(content)) throw new Error('El golden cambió durante la compactación.');
+                            fs.unlinkSync(file); removedFiles++;
+                            let parent = path.dirname(file);
+                            while (parent !== directory && fs.readdirSync(parent).length === 0) { fs.rmdirSync(parent); parent = path.dirname(parent); }
+                        }
+                        this.verify(goldenId, versionHash, publication.manifestHash);
+                        results.push({ goldenId, versionHash, removedFiles });
+                    } finally { fs.rmSync(staging, { recursive: true, force: true }); }
+                }
+            }
+            return results;
+        });
     }
     revoke(goldenId: string, versionHash: string, actor: string) {
         this.locked(() => {
@@ -185,8 +217,9 @@ export class ApprovedGoldenStore {
             try {
                 const { directory, manifest } = this.read(entry.goldenId, entry.versionHash);
                 if (manifest.featureScope !== (scope.featureScope || '') || manifest.environment !== (scope.environment || '')) return false;
-                const recovery = manifest.source === 'framework-recovery' && manifest.artifacts['package/framework-recovery.json'] ? json(directory, 'package/framework-recovery.json') : undefined;
-                const files = [...json(directory, 'agent-response.json').files, ...json(directory, 'dependency-files.json')];
+                const reader = new GoldenSnapshotReader(directory);
+                const recovery = manifest.source === 'framework-recovery' && manifest.artifacts['package/framework-recovery.json'] ? reader.json('package/framework-recovery.json') : undefined;
+                const files = [...reader.json('agent-response.json').files, ...reader.json('dependency-files.json')];
                 return files.every((file: any) => {
                     const expected = recovery?.files.find((item: any) => item.path === file.path)?.currentHash || goldenHash(file.content);
                     return goldenHash(bytes(frameworkRoot, file.path)) === expected;

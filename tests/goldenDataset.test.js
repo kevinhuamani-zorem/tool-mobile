@@ -8,6 +8,8 @@ const {
     AutomationMemory,
     AutomationHistoryStore,
     ApprovedGoldenStore,
+    GoldenSnapshotReader,
+    GOLDEN_EVIDENCE_ARCHIVE,
     AutomationPackageBuilder,
     DeterministicResolver,
     acceptedGoldenFiles,
@@ -123,8 +125,8 @@ test('F6 approval freezes exact bytes, context and diagnostics without altering 
     assert.equal(reread.baselines.get(f.featurePath), f.baseline);
     assert.deepEqual(reread.gaps.map(gap => gap.id), ['gap-english-naming']);
     assert.equal(fs.readFileSync(expectedFile(saved, 'feature'), 'utf8'), f.appliedFeature);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(saved.directory, 'catalog.json'))).frameworkMetrics, undefined);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(saved.directory, 'execution.json'))).automaticVerification, 'not-reported');
+    assert.equal(new GoldenSnapshotReader(saved.directory).json('catalog.json').frameworkMetrics, undefined);
+    assert.equal(new GoldenSnapshotReader(saved.directory).json('execution.json').automaticVerification, 'not-reported');
     assert.deepEqual(listGoldenCases(root), [saved.directory]);
 });
 
@@ -139,7 +141,7 @@ test('F6 accepts explicit QA approval with failing diagnostics, keeping original
     assert.equal(fs.readFileSync(path.join(f.frameworkRoot, f.stepsPath), 'utf8'), f.appliedSteps);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.packageDirectory, 'agent-response.json'))), f.response);
     assert.equal(f.registry.registered, 0);
-    const changes = JSON.parse(fs.readFileSync(path.join(saved.directory, 'qa-changes.json')));
+    const changes = new GoldenSnapshotReader(saved.directory).json('qa-changes.json');
     assert.equal(changes.find(file => file.path === f.stepsPath).before, f.appliedSteps);
     assert.equal(readGoldenCase(saved.directory).response.files[1].content, fixed, 'NFD and CRLF survive read');
 });
@@ -404,11 +406,11 @@ test('F6 recovered QA revision uses immutable code and helpers, preserves failed
     assert.equal(preview.context.prUrl, recovery.context.prUrl); assert.equal(preview.pending.length, 1);
     const saved = review.save({ token: preview.token, approved: true, executed: 'passed' });
     assert.equal(fs.readFileSync(expectedFile(saved, 'steps'), 'utf8'), fixed);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(saved.directory, 'dependency-files.json')))[0].content, helper.content);
+    assert.equal(new GoldenSnapshotReader(saved.directory).json('dependency-files.json')[0].content, helper.content);
     assert.equal(history.lifecycle(failed.revisionId).generation, 'failed');
     assert.equal(history.lifecycle().qaApproval, 'approved');
     assert.equal(history.lifecycle().functionalVerification, 'not-reported');
-    const events = JSON.parse(fs.readFileSync(path.join(saved.directory, 'provenance/events.json')));
+    const events = new GoldenSnapshotReader(saved.directory).json('provenance/events.json');
     const delivered = events.find(event => event.stage === 'interaction-author:provider-output');
     assert.equal(delivered.pass, 2); assert.equal(delivered.artifacts.length, 1);
     const store = new ApprovedGoldenStore(root); const scope = { squad: 'payment', platform: 'android', contract: saved.manifest.contract };
@@ -446,7 +448,7 @@ test('F6 legacy cases remain excluded until explicit review and approval; contex
     const saved = controller.save({ token: preview.token, approved: true });
     assert.equal(saved.success, true); assert.equal(controller.list().index.entries.length, 1);
     assert.deepEqual(fs.readFileSync(path.join(legacyDir, 'manifest.json')), original);
-    assert.ok(fs.existsSync(path.join(saved.directory, 'package/legacy-manifest.json')));
+    assert.ok(new GoldenSnapshotReader(saved.directory).read('package/legacy-manifest.json') !== null);
     assert.throws(() => controller.prepare({ legacyId: '../old-case' }), /no encontrado/);
 });
 
@@ -714,4 +716,115 @@ test('changing the shared recorder repository invalidates a pending approval on 
     assert.equal(fresh.datasetRoot, nextRoot);
     assert.equal(controller.save({ token: fresh.token, approved: true }).success, true);
     assert.equal(controller.list().datasetRoot, nextRoot);
+});
+
+test('compact goldens preserve all approved bytes, publications and revocations across migration', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f); const store = new ApprovedGoldenStore(root);
+    const first = saveGoldenCaseFromPackage(f.deps(), { approved: true, executed: 'passed' });
+    const second = saveGoldenCaseFromPackage(f.deps(), { approved: true, reviewedContents: { [f.stepsPath]: '// Cafe\u0301\r\n' } });
+    const snapshots = [first, second].map(saved => {
+        const manifest = fs.readFileSync(path.join(saved.directory, 'manifest.json'));
+        const reader = new GoldenSnapshotReader(saved.directory);
+        const artifacts = new Map(Object.keys(saved.manifest.artifacts).map(name => [name, reader.require(name)]));
+        assert.ok(fs.statSync(path.join(saved.directory, GOLDEN_EVIDENCE_ARCHIVE)).size < [...artifacts.values()].reduce((sum, bytes) => sum + bytes.length, 0));
+        // Reconstruct the previous loose layout without changing logical content.
+        for (const [name, bytes] of artifacts) {
+            const target = path.join(saved.directory, name); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes);
+        }
+        fs.unlinkSync(path.join(saved.directory, GOLDEN_EVIDENCE_ARCHIVE));
+        assert.deepEqual(readGoldenCase(saved.directory).response, reader.json('agent-response.json'));
+        return { saved, manifest, artifacts };
+    });
+    store.revoke(second.manifest.goldenId, second.manifest.versionHash, 'qa');
+    const index = store.index();
+    const publicationDir = path.join(root, 'approved', first.manifest.goldenId, 'publications');
+    const publications = fs.readdirSync(publicationDir).map(name => [name, fs.readFileSync(path.join(publicationDir, name))]);
+    assert.equal(store.compact().length, 2, 'historical and revoked versions are preserved too');
+    assert.deepEqual(store.index(), index);
+    for (const { saved, manifest, artifacts } of snapshots) {
+        const reader = new GoldenSnapshotReader(saved.directory);
+        assert.deepEqual(fs.readFileSync(path.join(saved.directory, 'manifest.json')), manifest);
+        for (const [name, bytes] of artifacts) assert.deepEqual(reader.require(name), bytes, name);
+        assert.equal(fs.existsSync(path.join(saved.directory, 'catalog.json')), false);
+        assert.ok(fs.existsSync(expectedFile(saved, 'feature')));
+        assert.equal(store.read(saved.manifest.goldenId, saved.manifest.versionHash).manifest.active, false);
+    }
+    assert.deepEqual(fs.readdirSync(publicationDir), publications.map(([name]) => name));
+    for (const [name, bytes] of publications) assert.deepEqual(fs.readFileSync(path.join(publicationDir, name)), bytes);
+    const archives = snapshots.map(({ saved }) => fs.readFileSync(path.join(saved.directory, GOLDEN_EVIDENCE_ARCHIVE)));
+    assert.ok(store.compact().every(result => result.removedFiles === 0));
+    snapshots.forEach(({ saved }, i) => assert.deepEqual(fs.readFileSync(path.join(saved.directory, GOLDEN_EVIDENCE_ARCHIVE)), archives[i]));
+});
+
+test('packed evidence rejects corruption, missing layers and symlinks without masking altered loose files', t => {
+    const { gzipSync, gunzipSync } = require('node:zlib');
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    const archivePath = path.join(saved.directory, GOLDEN_EVIDENCE_ARCHIVE);
+    const original = fs.readFileSync(archivePath); const archive = JSON.parse(gunzipSync(original));
+    archive.blobs[archive.artifacts['catalog.json']] = Buffer.from('{}').toString('base64');
+    fs.writeFileSync(archivePath, gzipSync(Buffer.from(JSON.stringify(archive))));
+    assert.throws(() => readGoldenCase(saved.directory), /alterado/);
+    assert.equal(new ApprovedGoldenStore(root).index().entries.length, 0);
+    fs.writeFileSync(archivePath, original);
+    const looseCatalog = path.join(saved.directory, 'catalog.json'); fs.writeFileSync(looseCatalog, '{}');
+    assert.throws(() => readGoldenCase(saved.directory), /alterado/, 'never fall back to a correct packed copy');
+    fs.unlinkSync(looseCatalog);
+    const feature = expectedFile(saved, 'feature'); const featureBytes = fs.readFileSync(feature);
+    fs.unlinkSync(feature); assert.throws(() => readGoldenCase(saved.directory), /Falta artefacto/);
+    fs.writeFileSync(feature, featureBytes);
+    const externalArchive = path.join(f.root, 'external.pack.gz'); fs.writeFileSync(externalArchive, original);
+    fs.unlinkSync(archivePath); fs.symlinkSync(externalArchive, archivePath);
+    assert.throws(() => readGoldenCase(saved.directory), /symlink/);
+    assert.throws(() => new GoldenSnapshotReader(saved.directory).read('../external.pack.gz'), /Ruta/);
+    fs.unlinkSync(archivePath); fs.writeFileSync(archivePath, original);
+    assert.equal(new ApprovedGoldenStore(root).index().entries.length, 1);
+});
+
+test('golden context keeps renamed owned layers and references transitive helpers without their code', () => {
+    const { goldenCaseContext } = require('../dist/core/automation');
+    const files = [
+        { path: 'case.feature', layer: 'feature', content: 'Feature: own' },
+        { path: 'renamed.steps.ts', layer: 'steps', content: '// owned steps' },
+        { path: 'login.steps.ts', layer: 'steps', content: '// private reused login body' },
+        { path: 'case.screen.ts', layer: 'screen', content: '// owned screen' },
+    ];
+    const helper = { path: 'helper.ts', layer: 'dependency', content: '// helper body' };
+    const recovery = { files: [{ path: 'renamed.steps.ts', previousPath: 'old.steps.ts' }, { path: helper.path, symbols: ['waitReady'], currentHash: 'a'.repeat(64) }], relations: [
+        { from: { path: 'case.feature' }, to: { path: 'login.steps.ts', symbol: 'login' } },
+        { from: { path: 'login.steps.ts' }, to: { path: helper.path, symbol: 'waitReady' } },
+    ] };
+    const context = goldenCaseContext({ files: [{ path: 'case.feature' }, { path: 'old.steps.ts' }, { path: 'case.screen.ts' }] }, files, [helper], recovery);
+    assert.deepEqual(context.files.map(file => file.path), ['case.feature', 'renamed.steps.ts', 'case.screen.ts']);
+    assert.deepEqual(context.dependencies.map(file => file.path), ['helper.ts', 'login.steps.ts']);
+    assert.deepEqual(context.dependencies[0].referencedBy, ['case.feature']);
+    assert.deepEqual(context.dependencies[0].symbols, ['waitReady']);
+    assert.equal(context.dependencies[0].sha256, sha256(helper.content));
+    assert.equal(context.dependencies[0].frameworkHash, 'a'.repeat(64));
+    assert.doesNotMatch(JSON.stringify(context), /private reused login body|helper body/);
+});
+
+test('all pertinent golden examples reach authors in full beyond former byte and count caps', t => {
+    const { selectGoldenExamples, writeGoldenRoleExamples } = require('../dist/core/automation');
+    const f = appliedPackageFixture(t); withGoldenRoot(t, f);
+    const { projectPaths } = require('../dist/core/workspace'); const before = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.frameworkRoot; t.after(() => { projectPaths.frameworkRoot = before; });
+    const content = '/*' + 'precise QA evidence '.repeat(4000) + '*/\n';
+    fs.writeFileSync(path.join(f.frameworkRoot, f.stepsPath), content);
+    const scenario = { ...f.scenario, recordingId: 'rec-target', request: { ...f.scenario.request, caseId: 'TC-TARGET' } };
+    for (let i = 0; i < 6; i++) {
+        const source = { ...f.scenario, recordingId: 'rec-source-' + i, request: { ...f.scenario.request, caseId: 'TC-SOURCE-' + i } };
+        const sourceFixture = appliedPackageFixture(t);
+        fs.writeFileSync(path.join(sourceFixture.frameworkRoot, sourceFixture.stepsPath), content);
+        fs.writeFileSync(path.join(sourceFixture.packageDirectory, 'scenario.json'), JSON.stringify(source));
+        saveGoldenCaseFromPackage(sourceFixture.deps(), { approved: true });
+    }
+    assert.equal(selectGoldenExamples(scenario).examples.length, 6);
+    const pkg = path.join(f.root, 'target'), stage = path.join(pkg, 'lorem'); fs.mkdirSync(stage, { recursive: true });
+    fs.writeFileSync(path.join(pkg, 'scenario.json'), JSON.stringify(scenario));
+    const prepared = writeGoldenRoleExamples(pkg, stage, 'behavior-author', 1);
+    const payload = JSON.parse(fs.readFileSync(prepared.file));
+    assert.equal(payload.examples.length, 6); assert.equal(prepared.references.length, 6);
+    assert.deepEqual(payload.skipped, []);
+    for (const example of payload.examples) assert.equal(example.files.find(file => file.layer === 'steps').content, content);
 });
