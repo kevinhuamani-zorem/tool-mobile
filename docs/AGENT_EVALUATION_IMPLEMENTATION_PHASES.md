@@ -2,8 +2,8 @@
 
 Fecha: 2026-09-08.
 
-Estado: **F0 y F1 implementadas y verificadas localmente**.
-La siguiente entrega es F2; F2–F7 conservan sus pendientes debajo. Ver
+Estado: **F0, F1 y F2 implementadas y verificadas localmente**.
+La siguiente entrega es F3; F3–F7 conservan sus pendientes debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -110,26 +110,26 @@ reaparece después de reiniciar; exportar no crea aprendizaje nuevo; todos los
 artefactos de un intento y las revisiones QA tienen un vínculo inequívoco.
 
 Contrato y límites de esta entrega: [AUTOMATION_HISTORY.md](AUTOMATION_HISTORY.md).
-El historial registra la pasada exterior actual; unificar los contadores todavía
-corresponde a F2. Los estados QA/funcional existen separados en el contrato,
+El historial registra las pasadas comunes del pipeline por capas de F2.
+Los estados QA/funcional existen separados en el contrato,
 pero su captura desde la interfaz golden corresponde a F6.
 
 ## F2 — Dos pasadas y entrega automática del borrador
 
 Objetivo: terminar la intervención automática y permitir continuar al QA.
 
-- [ ] Implementar un presupuesto común de dos pasadas por solicitud del QA:
+- [x] Implementar un presupuesto común de dos pasadas por solicitud del QA:
   generación inicial y una corrección. Cada agente participa como máximo una
   vez por pasada, solo si hace falta; no son dos llamadas globales al modelo.
-- [ ] Contar las correcciones entregadas dentro de la sesión, relanzamientos
+- [x] Contar las correcciones entregadas dentro de la sesión, relanzamientos
   y resincronizaciones. Ningún contador interno puede abrir una tercera pasada.
-- [ ] Dirigir el feedback al autor responsable con código, archivo/símbolo,
+- [x] Dirigir el feedback al autor responsable con código, archivo/símbolo,
   esperado y observado. Reutilizar el catálogo de reglas existente.
-- [ ] Mantener originales y últimas entregas recuperables por capa. Un fallo de
+- [x] Mantener originales y últimas entregas recuperables por capa. Un fallo de
   Sumrak o un timeout no descarta las salidas de Lorem/Zorem.
-- [ ] Abrir Revisión automáticamente al terminar, con diagnóstico, procedencia
+- [x] Abrir Revisión automáticamente al terminar, con diagnóstico, procedencia
   y capas faltantes. Ofrecer borrador determinístico si existe, identificado.
-- [ ] Validar tamaño y forma de los envelopes antes de recorrer/normalizar sus
+- [x] Validar tamaño y forma de los envelopes antes de recorrer/normalizar sus
   campos. Un JSON malformado no permite inventar rutas: se conserva como evidencia
   y se ofrece la última entrega recuperable si la hay.
 
@@ -140,6 +140,11 @@ Superficie: `layeredGenerationOrchestrator.ts`, `layered/roles.ts`,
 Salida comprobable: proveedores simulados que fallan repetidamente no reciben
 una tercera pasada; la UI muestra los archivos y errores sin requerir otro
 relanzamiento. Repetir voluntariamente la generación crea un intento nuevo.
+
+Contrato y alcance de F2 en el pipeline por capas:
+[AGENT_TWO_PASS_GENERATION.md](AGENT_TWO_PASS_GENERATION.md). Las sesiones
+terminan en la primera entrega estable: las correcciones se procesan en la
+segunda pasada común, sin rondas internas adicionales.
 
 ## F3 — Exportar con observaciones
 

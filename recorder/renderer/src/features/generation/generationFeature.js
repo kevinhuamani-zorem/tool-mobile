@@ -275,6 +275,11 @@ export function createGenerationFeature(deps) {
         lblCodeFileState.textContent = modified
             ? '✎ Editado'
             : document.generated ? '✓ Generado' : '● Nuevo';
+        if (document.provenance) {
+            const source = document.provenance.origin === 'deterministic' ? 'Borrador determinista'
+                : document.provenance.origin === 'qa' ? 'Corrección QA' : `Agente · pasada ${document.provenance.pass || '?'}`;
+            lblCodeFileState.textContent += ` · ${source}`;
+        }
         lblCodeFileState.className =
             `code-file-state${modified ? ' edited' : document.generated ? ' generated' : ''}`;
         lblCodeValidation.textContent = validation.message;
@@ -329,7 +334,19 @@ export function createGenerationFeature(deps) {
 
     function showPreviewDocument(index) {
         const document = state.previewDocuments[index];
-        if (!document || !txtGherkin) return;
+        if (!txtGherkin) return;
+        if (!document) {
+            state.activePreviewDocumentIndex = -1;
+            txtGherkin.value = '';
+            txtGherkin.readOnly = true;
+            lblCodeFileName.textContent = 'Sin archivos recuperables';
+            lblCodeFilePath.textContent = '';
+            lblCodeFilePath.title = '';
+            lblCodeFileState.textContent = '';
+            lblCodeValidation.textContent = '';
+            if (preparedDiffPanel) preparedDiffPanel.style.display = 'none';
+            return;
+        }
         state.activePreviewDocumentIndex = index;
         cmbPreviewFile.value = String(index);
         txtGherkin.value = document.content;
@@ -417,7 +434,7 @@ export function createGenerationFeature(deps) {
             : new Map();
         state.lastPreviewToken = result.previewToken || '';
         const proposedDocuments = [
-            { path: result.preview.featurePath, content: result.preview.featureContent },
+            ...(result.preview.featurePath ? [{ path: result.preview.featurePath, content: result.preview.featureContent }] : []),
             ...(result.preview.locatorPath ? [{ path: result.preview.locatorPath, content: result.preview.locatorContent }] : []),
             ...(result.preview.stepPath ? [{ path: result.preview.stepPath, content: result.preview.stepContent }] : []),
             ...(result.preview.screenPath ? [{ path: result.preview.screenPath, content: result.preview.screenContent }] : []),
@@ -425,6 +442,7 @@ export function createGenerationFeature(deps) {
         ];
         state.previewDocuments = proposedDocuments.map(document => ({
             ...document,
+            provenance: result.preview.provenance?.[document.path],
             before: result.preview.beforeContents?.[document.path],
             originalContent: document.content,
             content: reviewedByPath.get(document.path) ?? document.content
@@ -449,9 +467,13 @@ export function createGenerationFeature(deps) {
             btnGenerate.disabled = true;
             if (reviewValidationIcon) reviewValidationIcon.textContent = '⚠';
             if (reviewValidationTitle) reviewValidationTitle.textContent = 'Borrador con observaciones';
+            const missing = result.missingLayers?.length ? ` · Capas faltantes: ${result.missingLayers.join(', ')}` : '';
+            const sources = [...new Set(Object.values(result.preview.provenance || {}).map(item =>
+                item.origin === 'deterministic' ? 'borrador determinista' : item.origin === 'qa' ? 'corrección QA' : `agente, pasada ${item.pass || '?'}`))];
             lblGenerationFileCount.textContent =
-                `${state.previewDocuments.length} archivo(s) importados con observaciones · puedes editarlos o reimportarlos.`;
-            setGenerate('⚠ Borrador disponible para revisión. Revalida únicamente cuando quieras aplicarlo.', 'err');
+                `${state.previewDocuments.length} archivo(s) con observaciones${missing}${sources.length ? ` · Origen: ${sources.join('; ')}` : ''}`;
+            const diagnostics = (result.validation?.errors || []).map(error => error.message).join('\n');
+            setGenerate(`⚠ Borrador disponible para revisión. Revalida únicamente cuando quieras aplicarlo.${diagnostics ? `\n${diagnostics}` : ''}`, 'err');
         }
     }
 

@@ -882,9 +882,10 @@ export function createReviewFeature(deps) {
                     const recovered = await importAutomationResponse(true, true);
                     if (!recovered.reviewAvailable) setWizardPage(3);
                 } else {
+                    generation.showPreviewDocuments(launched.draft, false, false);
                     setCorrectionReimportVisible(
                         true,
-                        'El borrador está disponible. Puedes editarlo o pedir una corrección al agente y reimportarla.'
+                        'La ejecución automática terminó. Revisa los archivos y las observaciones. Volver a generar inicia una nueva solicitud.'
                     );
                     setWizardPage(3);
                 }

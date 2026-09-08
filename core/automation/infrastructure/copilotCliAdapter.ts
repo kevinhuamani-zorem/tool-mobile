@@ -476,6 +476,7 @@ export class CopilotCliAdapter implements AgentProvider {
                 let lastEvaluatedOutput: string | null = fs.existsSync(outputPath)
                     ? readUtf8File(outputPath)
                     : null;
+                let firstDeliverySignature: string | undefined;
                 outputWatchTimer = setInterval(() => {
                     if (settled || timedOut) return;
                     // Ronda de correccion sin salida nueva en el plazo: la sesion no
@@ -496,46 +497,58 @@ export class CopilotCliAdapter implements AgentProvider {
                     }
                     if (!fs.existsSync(outputPath) || !fs.existsSync(schemaPath)) return;
                     try {
-                        const raw = readUtf8File(outputPath);
-                        if (raw === lastEvaluatedOutput) return;
-                        const output = readJsonUtf8<unknown>(outputPath);
-                        const schema = readJsonUtf8<unknown>(schemaPath);
-                        lastEvaluatedOutput = raw;
-                        rejectedAt = undefined;
-                        const schemaValid = validateWithSchema(output, schema);
-                        if (stopOnValidatedOutput.acceptOutput) {
-                            const verdict = stopOnValidatedOutput.acceptOutput(output);
-                            if (verdict === 'stuck') {
-                                // Otra version con exactamente los mismos errores: el
-                                // agente no converge y seguir esperando solo gasta
-                                // sesion. Se corta ya; la ultima version queda en disco.
-                                rejectedRounds += 1;
-                                appendTrace('feedback-stuck',
-                                    `La corrección repite los mismos errores que el feedback anterior (ronda ${rejectedRounds}).`);
-                                const pid = child.pid;
-                                this.killPidTree(pid, 'SIGTERM');
-                                killEscalationTimer = setTimeout(() => {
-                                    this.killPidTree(pid, 'SIGKILL');
-                                }, Math.max(1, this.killGraceMs));
-                                killEscalationTimer.unref?.();
-                                finish(false, null, 'AGENT_FEEDBACK_STUCK',
-                                    'La sesión entregó versiones consecutivas con exactamente los mismos errores.');
+                        if (stopOnValidatedOutput.stopAfterFirstOutput) {
+                            // Wait for two equal observations, including malformed JSON. Do
+                            // not ask for another version inside the same budgeted pass.
+                            const stat = fs.lstatSync(outputPath);
+                            const signature = `${stat.size}:${stat.mtimeMs}`;
+                            if (firstDeliverySignature !== signature) {
+                                firstDeliverySignature = signature;
                                 return;
                             }
-                            if (!verdict) {
+                            appendTrace('output-delivered', 'Primera entrega estable; la validación corresponde al orquestador.');
+                        } else {
+                            const raw = readUtf8File(outputPath);
+                            if (raw === lastEvaluatedOutput) return;
+                            const output = readJsonUtf8<unknown>(outputPath);
+                            const schema = readJsonUtf8<unknown>(schemaPath);
+                            lastEvaluatedOutput = raw;
+                            rejectedAt = undefined;
+                            const schemaValid = validateWithSchema(output, schema);
+                            if (stopOnValidatedOutput.acceptOutput) {
+                                const verdict = stopOnValidatedOutput.acceptOutput(output);
+                                if (verdict === 'stuck') {
+                                    // Otra version con exactamente los mismos errores: el
+                                    // agente no converge y seguir esperando solo gasta
+                                    // sesion. Se corta ya; la ultima version queda en disco.
+                                    rejectedRounds += 1;
+                                    appendTrace('feedback-stuck',
+                                        `La corrección repite los mismos errores que el feedback anterior (ronda ${rejectedRounds}).`);
+                                    const pid = child.pid;
+                                    this.killPidTree(pid, 'SIGTERM');
+                                    killEscalationTimer = setTimeout(() => {
+                                        this.killPidTree(pid, 'SIGKILL');
+                                    }, Math.max(1, this.killGraceMs));
+                                    killEscalationTimer.unref?.();
+                                    finish(false, null, 'AGENT_FEEDBACK_STUCK',
+                                        'La sesión entregó versiones consecutivas con exactamente los mismos errores.');
+                                    return;
+                                }
+                                if (!verdict) {
+                                    rejectedAt = Date.now();
+                                    rejectedRounds += 1;
+                                    appendTrace(
+                                        schemaValid ? 'output-rejected' : 'schema-rejected',
+                                        'El recorder solicitó una corrección automática.',
+                                    );
+                                    return;
+                                }
+                            } else if (!schemaValid) {
                                 rejectedAt = Date.now();
                                 rejectedRounds += 1;
-                                appendTrace(
-                                    schemaValid ? 'output-rejected' : 'schema-rejected',
-                                    'El recorder solicitó una corrección automática.',
-                                );
+                                appendTrace('schema-rejected', 'La salida no cumple el schema esperado.');
                                 return;
                             }
-                        } else if (!schemaValid) {
-                            rejectedAt = Date.now();
-                            rejectedRounds += 1;
-                            appendTrace('schema-rejected', 'La salida no cumple el schema esperado.');
-                            return;
                         }
                     } catch {
                         return;

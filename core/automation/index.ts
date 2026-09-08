@@ -31,6 +31,8 @@ export * from './infrastructure/agentContextEnvelope';
 export * from './infrastructure/agentOrchestrator';
 export * from './infrastructure/agentRunStore';
 export * from './infrastructure/automationHistoryStore';
+export { readLayeredOutput, assertLayeredEnvelope } from './infrastructure/layered/outputEnvelope';
+export { RecoverableDraftStore } from './infrastructure/layered/recoverableDraft';
 export * from './infrastructure/agentRuntimeGuards';
 export * from './infrastructure/automationAgentLauncher';
 export * from './infrastructure/automationApplicationReceipt';

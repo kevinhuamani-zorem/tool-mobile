@@ -18,6 +18,7 @@ import { readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
 import { RecorderRuntimeState } from '../runtimeState';
 import { AutomationProgressEmitter, ProductStage } from './progress';
 import { AutomationResponseImporter } from './responseImport';
+import { layeredDraftPreview } from './layeredDraftPreview';
 
 export interface LaunchAutomationAgentInput {
     mode?: string;
@@ -251,16 +252,18 @@ export class AutomationAgentLaunchService {
                     }
                 }
                 if (!layered.success) {
-                    const layeredResponseFile = path.join(
-                        state.activeAutomationPackage,
-                        'agent-response.json',
-                    );
-                    const inspected = fs.existsSync(layeredResponseFile)
+                    // Recovery must not validate a partial envelope or reclassify
+                    // an autonomous failure as a successful generation.
+                    const recovered = layered.draft ? layeredDraftPreview(layered.draft, projectPaths.frameworkRoot) : undefined;
+                    const inspected = recovered ? { validation: recovered.validation, draft: recovered }
+                        : fs.existsSync(path.join(state.activeAutomationPackage, 'agent-response.json'))
                         ? await importAutomationResponseFromPackage(
                             state.activeAutomationPackage,
                             { trackRepair: false },
                         )
                         : { success: false, validation: undefined, draft: undefined };
+                    state.automationPreview = null;
+                    if (inspected.draft) emitAutomationProgress('READY_FOR_REVIEW', 'Archivos disponibles para revisión', 6, 6);
                     return {
                         success: false,
                         mode,

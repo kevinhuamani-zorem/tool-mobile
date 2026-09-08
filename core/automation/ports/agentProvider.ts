@@ -18,6 +18,8 @@ export interface AgentProviderRunInput {
         outputFile: string;
         schemaFile: string;
         pollIntervalMs?: number;
+        /** End on the first stable delivery, even invalid JSON. The owner validates and budgets any correction. */
+        stopAfterFirstOutput?: boolean;
         /**
          * Permite al recorder validar el artefacto materializado con su contrato
          * oficial antes de cerrar la sesión del agente. `true` significa que la

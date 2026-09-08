@@ -121,6 +121,12 @@ export interface LayeredDraftReport {
     reason?: string;
 }
 
+export interface RecoverableLayeredDraft {
+    files: Array<AgentGeneratedFile & { origin: 'agent' | 'deterministic' | 'qa'; pass?: 1 | 2 }>;
+    missingLayers: AgentGeneratedFile['layer'][];
+    diagnostics: string[];
+}
+
 export interface LayeredGenerationRunReport {
     schemaVersion: 1;
     recordingId: string;

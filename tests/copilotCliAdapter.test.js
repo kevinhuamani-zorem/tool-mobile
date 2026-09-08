@@ -626,3 +626,21 @@ test('idleStopMs y feedbackIdleMs en 0 desactivan los cortes por inactividad', a
     assert.equal(result.success, true);
     assert.equal(result.errorCode, undefined);
 });
+
+test('una pasada presupuestada termina con la primera entrega estable incluso si el JSON es ilegible', async t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-first-delivery-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const output = path.join(root, 'response.json');
+    fs.writeFileSync(path.join(root, 'response.schema.json'), JSON.stringify({ type: 'object' }));
+    const adapter = new CopilotCliAdapter(() => fakeChild(), 'copilot', ['-p']);
+    const timer = setTimeout(() => fs.writeFileSync(output, '{ incomplete'), 30);
+    t.after(() => clearTimeout(timer));
+    const result = await adapter.execute({ cwd: root, prompt: 'una entrega', timeoutMs: 3000,
+        stopOnValidatedOutput: { outputFile: './response.json', schemaFile: './response.schema.json',
+            pollIntervalMs: 50, stopAfterFirstOutput: true,
+            acceptOutput() { assert.fail('El adapter no solicita correcciones dentro de esta pasada'); } },
+    });
+    assert.equal(result.success, true);
+    assert.equal(result.timedOut, false);
+    assert.equal(fs.readFileSync(output, 'utf8'), '{ incomplete');
+});

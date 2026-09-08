@@ -158,15 +158,12 @@ tres delegados usan Copilot CLI headless con perfiles propios y permisos
 limitados al workspace de su etapa; no se abre Terminal ni se espera
 interacción del QA. Sumrak no es propietario del código: el recorder
 reconstruye sus cuatro archivos desde los resultados protegidos de Lorem y
-Zorem. Cada
-versión JSON completa se entrega también al validador oficial aunque incumpla el schema:
-este publica `validation-feedback.json` y mantiene la sesión abierta hasta que
-Copilot escriba una corrección o se alcance el límite de reparación.
-En el pipeline por capas, `repair-feedback.json` cumple ese mismo papel para
-Lorem y Zorem. Derek vuelve a comprobar la última escritura incluso si Copilot
-ya cerró y, si continúa inválida, relanza solo ese autor como
-`.../repair-1/feedback-N`. La traza provisional siempre sale del resultado
-vigente de Lorem, nunca de un borrador anterior de Sumrak.
+Zorem. Cada sesión entrega una versión estable y termina. Derek valida el
+sobre antes de normalizarlo y dirige los diagnósticos a la segunda pasada.
+`repair-feedback.json` conserva código/archivo/mensaje disponibles y finaliza
+con `accepted` o `requires-qa`. No se abren rondas internas de feedback.
+`layered-draft.json` conserva las capas recuperables de la ejecución; al fallar,
+IPC abre Revisión con ellas, su origen y las faltantes, incluso sin Feature.
 
 El pipeline no reutiliza respuestas entre generaciones. El caché temporal de
 la ejecución vive en `agents/derek/attempt-cache/`; el arranque de cada `run`
@@ -276,18 +273,13 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
 1. Mantén los contratos JSON versionados en `automationContracts.ts`.
 2. Resuelve localmente selector, reuse, rutas y trazabilidad antes del agente.
 3. Mide los objetivos de 120 000 bytes y 300 000 ms por etapa; excederlos
-   produce avisos, no cancela la sesión. Los cortes son detectores de sesión
-   que no avanza, no presupuestos: hang stop de una hora
-   (`RECORDER_AGENT_HANG_STOP_MS`), silencio total de eventos de diez minutos
-   (`RECORDER_AGENT_IDLE_STOP_MS`) y cinco minutos sin corrección tras un
-   `output-rejected` (`RECORDER_AGENT_FEEDBACK_IDLE_MS`; el orquestador relanza
-   al autor con el feedback hasta agotar las rondas). Un valor 0 desactiva los
-   dos últimos. Además, dos correcciones seguidas con exactamente los mismos
-   errores cortan la sesión con `AGENT_FEEDBACK_STUCK` (`acceptOutput` devuelve
-   `'stuck'`; traza `[feedback-stuck]`) y la etapa falla sin gastar las rondas
-   restantes: el agente no converge y más rondas solo costarían sesiones.
-   Conserva los límites de reparación del plan; no los amplíes sin
-   decisión explícita y métricas.
+   produce avisos. Conserva hang stop e idle stop y las dos pasadas comunes de
+   `layered`: inicial y corrección, cada rol como máximo una vez por pasada.
+   El adapter usa `stopAfterFirstOutput` para cerrar tras dos observaciones
+   estables del archivo, incluso JSON ilegible. No confundir entrega del proceso
+   con validación correcta. Los modos de diagnóstico heredados conservan su
+   protocolo de queries; no se usan para generar las cuatro capas en el wizard.
+
 4. Añade pruebas de resolver, paquete, validator y memoria.
 5. Aplicar o alcanzar score 100 no enseña a los agentes. No reintroduzcas lectores
    ni promoción de memoria legacy; el índice derivado de golden corresponde a F6.

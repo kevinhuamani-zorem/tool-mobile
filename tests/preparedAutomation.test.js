@@ -269,6 +269,8 @@ test('importar una corrección QA conserva los bytes previos a NFC y el fallo de
     fs.writeFileSync(path.join(f.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [], strict: true } }));
     f.response.files[1].content = 'export const verified: number = 1;';
     f.response.files[0].content += '\n# Cafe\u0301\n';
+    f.response.actionTrace = [];
+    f.response.resolutions = [];
     f.scenario.platform = 'android';
     f.scenario.request = { caseId: 'TC-1', scenarioRows: [] };
     f.plan.planId = 'plan-a';
@@ -302,4 +304,36 @@ test('importar una corrección QA conserva los bytes previos a NFC y el fallo de
     assert.equal(history.lifecycle(identity.revisionId).generation, 'failed');
     assert.equal(history.lifecycle().qaApproval, 'pending');
     assert.equal(history.events().filter(event => event.revisionId === history.current().revisionId && event.kind === 'generation-result').length, 0);
+});
+
+test('importar un envelope inválido devuelve sus capas seguras sin normalizar null ni habilitar aplicación', async t => {
+    const f = fixture(t);
+    f.scenario.request = { caseId: 'TC-1' };
+    Object.assign(f.plan, { recordingId: 'rec-a', planId: 'plan-a' });
+    const recordingDirectory = path.join(f.root, 'recording');
+    const packageDirectory = path.join(recordingDirectory, 'generation/automation');
+    fs.mkdirSync(packageDirectory, { recursive: true });
+    for (const [file, value] of [[path.join(recordingDirectory, 'scenario.json'), f.scenario],
+        [path.join(packageDirectory, 'scenario.json'), f.scenario],
+        [path.join(packageDirectory, 'generation-plan.json'), f.plan]]) fs.writeFileSync(file, JSON.stringify(value));
+    const raw = JSON.stringify({ recordingId: 'rec-a', planId: 'plan-a', files: [null, f.response.files[1]], actionTrace: [null] });
+    fs.writeFileSync(path.join(packageDirectory, 'agent-response.json'), raw);
+    const { AutomationResponseImporter } = require('../dist/recorder/src/ipc/automation/responseImport');
+    const state = { automationPreview: { token: 'old' } };
+    const importer = new AutomationResponseImporter({ state,
+        automationPackageBuilder: { requireTrustedScenarioPackage: () => f.scenario },
+        automationResponseValidator: { validate() { assert.fail('No recorrer campos de un envelope inválido'); } },
+        emitProgress() {},
+    });
+    const result = await importer.importFromPackage(packageDirectory);
+    assert.equal(result.success, false);
+    assert.match(result.error, /output-envelope/);
+    assert.equal(result.draft.preview.stepContent, f.response.files[1].content);
+    assert.equal(result.draft.preview.featurePath, undefined);
+    assert.deepEqual(result.draft.missingLayers, ['feature']);
+    assert.equal(state.automationPreview, null);
+    assert.equal(fs.readFileSync(path.join(f.root, f.relative), 'utf8'), f.original);
+    const history = new AutomationHistoryStore(packageDirectory);
+    const original = history.events().find(event => event.stage === 'import:original');
+    assert.equal(history.readArtifact(original.artifacts[0]).toString(), raw);
 });

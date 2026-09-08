@@ -234,7 +234,10 @@ export function classifyValidationErrors(
     issues: Array<RepairIssue | string>,
     plan?: Pick<GenerationPlan, 'files'>,
 ): LayeredRepairFeedback {
-    const normalized = issues.map(issue => typeof issue === 'string' ? { message: issue } : issue);
+    const normalized = issues.map(issue => typeof issue === 'string' ? { message: issue } : ({
+        ...issue,
+        message: `${issue.code ? `[${issue.code}] ` : ''}${issue.file ? `${issue.file}: ` : ''}${issue.message}`,
+    }));
     const owners = layerOwnersOf(plan);
     const feedback: LayeredRepairFeedback = {
         all: [...new Set(normalized.map(issue => issue.message).filter(Boolean))],

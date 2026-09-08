@@ -51,9 +51,9 @@ recuperación del framework ante un apagado entre escrituras.
    conserva acciones, manifest y escenario. La solicitud guardada usa las
    acciones redactadas para no duplicar credenciales en `request.actions`.
 3. Autores: guarda lo entregado antes de la normalización mecánica y antes de
-   sustituir salidas de feedback. Registra etapa y pasada exterior 1/2.
-   **F2 todavía debe unificar los límites de feedback y resincronización**;
-   registrar una pasada no implica que ese presupuesto ya esté aplicado.
+   sustituir salidas. Registra etapa y pasada común 1/2.
+   F2 unifica feedback y resincronización en esas dos pasadas; conserva además
+   las capas recuperables en `layered-draft.json` para la revisión.
 4. Integración: conserva propuesta y ensamblado; guarda el reporte de resultado
    vinculado al intento y un checkpoint del paquete terminado/fallido.
 5. Importación: captura bytes antes de leer/normalizar NFC, la versión

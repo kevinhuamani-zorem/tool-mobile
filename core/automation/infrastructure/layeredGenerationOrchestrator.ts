@@ -47,14 +47,12 @@ import {
     LayeredResponseValidator,
     LayeredValidationError,
     MAX_LAYERED_REPAIR_ATTEMPTS,
-    MAX_LIVE_FEEDBACK_ROUNDS,
     ROLE_INPUT_FILES,
     ROLE_LAYERS,
     ROLE_OUTPUTS,
     RepairIssue,
 } from './layered/roles';
 import {
-    alignResolutionsWithPlan,
     classifyValidationErrors,
     expectedGapDecisions,
     gapJudgment,
@@ -86,7 +84,6 @@ import {
     memoryIdentity,
     rebindCachedResult,
     filesInside,
-    normalizeAutomationResponse,
     normalizeAuthorResult,
     promoteAuthorCache,
     sessionName,
@@ -101,7 +98,9 @@ import {
     stageBudget,
     stageContextBytes,
 } from './layered/budget';
-import { buildScreenApi, screenApiInputErrors, validateScreenApi } from './layered/screenApi';
+import { buildScreenApi, validateScreenApi } from './layered/screenApi';
+import { assertLayeredEnvelope, readLayeredOutput } from './layered/outputEnvelope';
+import { RecoverableDraftStore } from './layered/recoverableDraft';
 
 export type {
     LayeredGenerationOptions,
@@ -141,6 +140,9 @@ export class LayeredGenerationOrchestrator {
         history.ensureRevision(plan.recordingId, caseId);
         history.checkpoint('before-layered-execution');
         new AgentRunStore(root).claimExecution(plan.recordingId, plan.planId);
+        for (const name of ['agent-response.json', 'layered-draft.json', 'test-design-review.json']) {
+            fs.rmSync(path.join(root, name), { force: true });
+        }
         const startedAt = new Date().toISOString();
         const stages: LayeredGenerationStageReport[] = [];
         const agentsRoot = path.join(root, 'agents');
@@ -166,144 +168,128 @@ export class LayeredGenerationOrchestrator {
         }
         writeOwnerManifest(agentsRoot, plan, 'running', draft);
 
+        // A new QA request owns two passes. No helper/session may open another.
         let repairAttempts = 0;
+        const recoverable = new RecoverableDraftStore(root, plan);
+        recoverable.capture(draftFile, 'deterministic');
+        const claims = new Set<string>();
+        const claim = (role: GenerationAgentRole, attempt: number) => {
+            const key = `${attempt}:${role}`;
+            if (attempt > MAX_LAYERED_REPAIR_ATTEMPTS || claims.has(key)) throw new Error(`Se agotó la pasada ${attempt + 1} para ${role}.`);
+            claims.add(key);
+        };
+        const emptyFeedback = (): LayeredRepairFeedback => ({ all: [], behavior: [], interaction: [], integration: [] });
+        const finishFeedback = (next: LayeredRepairFeedback, attempt: number) => {
+            for (const [role, key] of [['behavior-author', 'behavior'], ['interaction-author', 'interaction']] as const) {
+                const file = path.join(agentsRoot, LAYERED_GENERATION_AGENTS[role].directory, 'repair-feedback.json');
+                if (fs.existsSync(file)) writeJsonUtf8(file, {
+                    schemaVersion: 1, owner: 'Derek', assignee: LAYERED_GENERATION_AGENTS[role].name,
+                    attempt, status: next[key].length ? 'requires-qa' : 'accepted', errors: next[key],
+                });
+            }
+        };
+        let feedback = emptyFeedback();
+        let behavior: string | undefined;
+        let interaction: string | undefined;
+        const behaviorCache: AuthorCacheTarget = {};
+        const interactionCache: AuthorCacheTarget = {};
         try {
-            const behaviorCache: AuthorCacheTarget = {};
-            const interactionCache: AuthorCacheTarget = {};
-            const draftContract = options.parallelAuthors === false
-                ? undefined
-                : writeDraftBehaviorContract(root, agentsRoot, plan);
-            let behavior: string | undefined;
-            let interaction: string | undefined;
-            // Todo el caso se reutiliza del framework y no hay gaps
-            // abiertos: Zorem no tiene nada que escribir y Lorem no redacta.
-            // Lorem sí revisa el diseño del caso, salvo que el QA pida heredar
-            // esa revisión. Si la revisión falla, se vuelve al flujo normal.
+            const draftContract = options.parallelAuthors === false ? undefined : writeDraftBehaviorContract(root, agentsRoot, plan);
             const needs = authoringNeeds(root, plan, options);
+            let designReviewFailed = false;
             if (needs.interaction === 'deterministic') {
                 interaction = writeDeterministicAuthorResult(root, agentsRoot, plan, 'interaction-author', needs.memoryCases);
                 this.pushDeterministicStage(stages, plan, 'interaction-author', needs, options);
                 behavior = writeDeterministicAuthorResult(root, agentsRoot, plan, 'behavior-author', needs.memoryCases);
+                recoverable.capture(interaction, 'deterministic', 'interaction-author');
+                recoverable.capture(behavior, 'deterministic', 'behavior-author');
                 if (needs.behavior === 'deterministic') {
                     writeJsonUtf8(path.join(root, 'test-design-review.json'), inheritedDesignReview(needs.memoryCases));
                     this.pushDeterministicStage(stages, plan, 'behavior-author', needs, options);
                 } else {
+                    claim('behavior-author', 0);
+                    try { await this.runDesignReview(root, agentsRoot, plan, options, stages, needs.memoryCases); }
+                    catch (error: any) {
+                        designReviewFailed = true;
+                        behavior = interaction = undefined;
+                        feedback = { all: [error.message], behavior: [error.message], interaction: [error.message], integration: [] };
+                    }
+                }
+            }
+            for (let attempt = 0; attempt <= MAX_LAYERED_REPAIR_ATTEMPTS; attempt++) {
+                repairAttempts = attempt;
+                // A failed design review already consumed Lorem's first pass.
+                if (attempt === 0 && designReviewFailed) continue;
+                const next = emptyFeedback();
+                const owned = async (role: AuthorRole, dependency?: string, origin: 'behavior-author' | 'recorder' = 'behavior-author') => {
+                    claim(role, attempt);
+                    const key = role === 'behavior-author' ? 'behavior' : 'interaction';
                     try {
-                        await this.runDesignReview(root, agentsRoot, plan, options, stages, needs.memoryCases);
-                    } catch {
-                        behavior = undefined;
-                        interaction = undefined;
+                        return await this.runAuthor(root, agentsRoot, plan, role, options, stages, attempt,
+                            dependency, feedback[key], role === 'behavior-author' ? behaviorCache : interactionCache, origin);
+                    } catch (error: any) {
+                        const message = `[author-output] ${LAYERED_GENERATION_AGENTS[role].name}: ${error?.message || error}`;
+                        next[key].push(message); next.all.push(message);
+                        const stage = stages.filter(item => item.role === role && item.attempt === attempt).at(-1);
+                        if (stage) { stage.state = 'failed'; stage.error = message; options.onStageChange?.({ ...stage }); }
+                        return undefined;
+                    } finally {
+                        recoverable.capture(path.join(agentsRoot, LAYERED_GENERATION_AGENTS[role].directory, ROLE_OUTPUTS[role]), 'agent', role, attempt === 0 ? 1 : 2);
+                    }
+                };
+                const needsBehavior = !behavior || feedback.behavior.length > 0;
+                let needsInteraction = !interaction || feedback.interaction.length > 0;
+                if (attempt === 0 && draftContract && needsBehavior && needsInteraction) {
+                    // Await both failures too, so the slower author is never discarded.
+                    const settled = await Promise.allSettled([
+                        owned('behavior-author'), owned('interaction-author', draftContract, 'recorder'),
+                    ]);
+                    behavior = settled[0].status === 'fulfilled' ? settled[0].value : undefined;
+                    interaction = settled[1].status === 'fulfilled' ? settled[1].value : undefined;
+                    if (behavior && actionInterfaceFingerprint(behavior) !== actionInterfaceFingerprint(draftContract)) {
+                        const message = '[screen-api] Lorem cambió la interfaz provisional; Zorem debe implementar los métodos y firmas entregados.';
+                        next.interaction.push(message); next.all.push(message);
+                    }
+                } else {
+                    const previousInterface = behavior ? actionInterfaceFingerprint(behavior) : undefined;
+                    if (needsBehavior) behavior = await owned('behavior-author');
+                    if (behavior && needsBehavior && interaction && previousInterface !== actionInterfaceFingerprint(behavior)) {
+                        needsInteraction = true;
+                        feedback.interaction.push('[screen-api] Lorem cambió la interfaz; implementa los métodos y firmas entregados.');
+                    }
+                    if (needsInteraction) interaction = await owned('interaction-author', behavior);
+                }
+                if (behavior && interaction) {
+                    try {
+                        claim('integration-reviewer', attempt);
+                        const responseFile = await this.runIntegration(root, agentsRoot, plan, behavior, interaction,
+                            options, stages, attempt, attempt > 0 ? feedback : undefined, attempt < MAX_LAYERED_REPAIR_ATTEMPTS);
+                        if (!next.all.length) {
+                            finishFeedback(next, attempt);
+                            promoteAuthorCache(behavior, behaviorCache);
+                            promoteAuthorCache(interaction, interactionCache);
+                            writeOwnerManifest(agentsRoot, plan, 'completed', draft);
+                            this.writeReport(reportFile, plan, startedAt, 'completed', stages, repairAttempts, draft);
+                            return { success: true, responseFile, reportFile };
+                        }
+                    } catch (error: any) {
+                        const issues = error instanceof LayeredValidationError ? error.feedback
+                            : { all: [error?.message || String(error)], behavior: [], interaction: [], integration: [error?.message || String(error)] };
+                        for (const key of ['all', 'behavior', 'interaction', 'integration'] as const) next[key].push(...issues[key]);
+                        const stage = stages.filter(item => item.role === 'integration-reviewer' && item.attempt === attempt).at(-1);
+                        if (stage) { stage.state = attempt === 0 ? 'repairing' : 'failed'; stage.error = issues.all.join(' | '); options.onStageChange?.({ ...stage }); }
                     }
                 }
+                feedback = next;
+                if (attempt === MAX_LAYERED_REPAIR_ATTEMPTS) finishFeedback(next, attempt);
             }
-            if (behavior && interaction) {
-                // Nada que autorizar: ambos resultados ya están materializados.
-            } else if (draftContract) {
-                // Zorem no depende de la prosa de Lorem, solo de la interfaz
-                // screenMethod/locatorName y tipos de screen-api, fijados por el borrador. Ambos
-                // arrancan a la vez; si Lorem se aparta del contrato, Zorem se
-                // sincroniza con el resultado real como en una reparación.
-                [behavior, interaction] = await Promise.all([
-                    this.runAuthor(
-                        root, agentsRoot, plan, 'behavior-author', options, stages, 0,
-                        undefined, [], behaviorCache,
-                    ),
-                    this.runAuthor(
-                        root, agentsRoot, plan, 'interaction-author', options, stages, 0,
-                        draftContract, [], interactionCache, 'recorder',
-                    ),
-                ]);
-                if (actionInterfaceFingerprint(behavior) !== actionInterfaceFingerprint(draftContract)) {
-                    interaction = await this.runAuthor(
-                        root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
-                        ['Lorem entregó una interfaz actionTrace/screen-api distinta del contrato provisional; sincroniza únicamente los métodos y firmas afectados.'],
-                        interactionCache,
-                    );
-                }
-            } else {
-                behavior = await this.runAuthor(
-                    root, agentsRoot, plan, 'behavior-author', options, stages, 0,
-                    undefined, [], behaviorCache,
-                );
-                interaction = await this.runAuthor(
-                    root, agentsRoot, plan, 'interaction-author', options, stages, 0, behavior,
-                    [], interactionCache,
-                );
-            }
-            let integrationFeedback: LayeredRepairFeedback | undefined;
-            while (true) {
-                try {
-                    const responseFile = await this.runIntegration(
-                        root,
-                        agentsRoot,
-                        plan,
-                        behavior!,
-                        interaction!,
-                        options,
-                        stages,
-                        repairAttempts,
-                        integrationFeedback,
-                        repairAttempts < MAX_LAYERED_REPAIR_ATTEMPTS,
-                    );
-                    // Solo una respuesta completa validada promueve sus capas.
-                    // Si hubo reparación, estas rutas apuntan al resultado final.
-                    promoteAuthorCache(behavior!, behaviorCache);
-                    promoteAuthorCache(interaction!, interactionCache);
-                    writeOwnerManifest(agentsRoot, plan, 'completed', draft);
-                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, repairAttempts, draft);
-                    return { success: true, responseFile, reportFile };
-                } catch (error) {
-                    if (!(error instanceof LayeredValidationError)
-                        || repairAttempts >= MAX_LAYERED_REPAIR_ATTEMPTS) {
-                        throw error;
-                    }
-                    repairAttempts += 1;
-                    const feedback = error.feedback;
-                    integrationFeedback = feedback;
-                    const previousBehaviorInterface = feedback.behavior.length
-                        ? actionInterfaceFingerprint(behavior!)
-                        : undefined;
-                    if (feedback.behavior.length) {
-                        behavior = await this.runAuthor(
-                            root,
-                            agentsRoot,
-                            plan,
-                            'behavior-author',
-                            options,
-                            stages,
-                            repairAttempts,
-                            undefined,
-                            feedback.behavior,
-                            behaviorCache,
-                        );
-                    }
-                    const behaviorInterfaceChanged = previousBehaviorInterface !== undefined
-                        && previousBehaviorInterface !== actionInterfaceFingerprint(behavior!);
-                    // Un ajuste de redacción Gherkin no invalida Screen/Locators.
-                    // Zorem se relanza solo con feedback propio o si Lorem cambió
-                    // el contrato screenMethod/locatorName que debe implementar.
-                    if (feedback.interaction.length || behaviorInterfaceChanged) {
-                        interaction = await this.runAuthor(
-                            root,
-                            agentsRoot,
-                            plan,
-                            'interaction-author',
-                            options,
-                            stages,
-                            repairAttempts,
-                            behavior!,
-                            feedback.interaction.length
-                                ? feedback.interaction
-                                : ['Lorem cambió la interfaz actionTrace; sincroniza únicamente los métodos afectados.'],
-                            interactionCache,
-                        );
-                    }
-                }
-            }
+            throw new Error(`Finalizaron las dos pasadas automáticas. ${feedback.all.join(' | ')}`);
         } catch (error: any) {
+            const errorMessage = error?.message || String(error);
+            const recoveredDraft = recoverable.save([errorMessage]);
             writeOwnerManifest(agentsRoot, plan, 'failed', draft);
             this.writeReport(reportFile, plan, startedAt, 'failed', stages, repairAttempts, draft);
-            return { success: false, reportFile, error: error?.message || String(error) };
+            return { success: false, reportFile, error: errorMessage, draft: recoveredDraft };
         }
     }
 
@@ -430,7 +416,7 @@ export class LayeredGenerationOrchestrator {
             traceLabel: 'design-review',
             stopOnValidatedOutput: {
                 outputFile: './test-design-review.json',
-                schemaFile: './result.schema.json',
+                schemaFile: './result.schema.json', stopAfterFirstOutput: true,
             },
         });
         report.durationMs = run.durationMs;
@@ -439,7 +425,8 @@ export class LayeredGenerationOrchestrator {
         report.actualModels = run.modelUsage?.actualModels || [];
         report.timedOut = Boolean(run.timedOut);
         report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, run.durationMs);
-        const review = run.success && fs.existsSync(outputFile) ? readJsonUtf8<unknown>(outputFile) : undefined;
+        new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', 'design-review:provider-output', 1);
+        const review = run.success && fs.existsSync(outputFile) ? readLayeredOutput(outputFile) : undefined;
         if (!review || !accept(review)) {
             report.state = 'failed';
             report.error = run.errorMessage
@@ -468,6 +455,7 @@ export class LayeredGenerationOrchestrator {
     ): Promise<string> {
         const identity = LAYERED_GENERATION_AGENTS[role];
         const stageDirectory = path.join(agentsRoot, identity.directory);
+        new AutomationHistoryStore(packageDirectory).captureFile(path.join(stageDirectory, ROLE_OUTPUTS[role]), 'agent', `${role}:before-stage-reset`, attempt === 0 ? 1 : 2);
         fs.rmSync(stageDirectory, { recursive: true, force: true });
         fs.mkdirSync(stageDirectory, { recursive: true });
         const judgment = gapJudgment(packageDirectory, plan);
@@ -617,7 +605,8 @@ export class LayeredGenerationOrchestrator {
         if (attempt === 0 && repairErrors.length === 0 && fs.existsSync(cacheFile)) {
             try {
                 fs.copyFileSync(cacheFile, outputFile);
-                const cached = readJsonUtf8<unknown>(outputFile);
+                const cached = readLayeredOutput(outputFile);
+                assertLayeredEnvelope(cached);
                 if (typeof cached === 'object' && cached !== null) {
                     rebindCachedResult(cached as { recordingId?: string; planId?: string }, plan);
                     normalizeAuthorResult(cached as LayeredAgentResult, role, plan, scenarioNaming(packageDirectory));
@@ -652,189 +641,32 @@ export class LayeredGenerationOrchestrator {
                 try { fs.unlinkSync(outputFile); } catch {}
             }
         }
-        const repairFeedbackFile = path.join(stageDirectory, 'repair-feedback.json');
-        // Firma de los errores del ultimo feedback en vivo: dos rechazos seguidos
-        // con exactamente los mismos errores significan que el agente no converge
-        // y seguir esperando (o relanzando) solo gasta sesiones. El feedback de
-        // reparacion inicial no cuenta: la primera escritura de la sesion puede
-        // ser el archivo aun sin corregir.
-        let previousErrorSignature: string | undefined;
-        const acceptOutput = repairErrors.length > 0
-            && this.responseValidator
-            ? (output: unknown): boolean | 'stuck' => {
-                new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:before-live-normalization`, attempt === 0 ? 1 : 2);
-                if (typeof output === 'object' && output !== null
-                    && normalizeAuthorResult(output as LayeredAgentResult, role, plan, scenarioNaming(packageDirectory))) {
-                    writeJsonUtf8(outputFile, output);
-                }
-                const candidateErrors = authorContractErrors(output, role, plan);
-                if (!candidateErrors.length) {
-                    try {
-                        const priorResponseFile = path.join(packageDirectory, 'agent-response.json');
-                        if (fs.existsSync(priorResponseFile)) {
-                            const priorResponse = readJsonUtf8<AutomationAgentResponse>(priorResponseFile);
-                            const candidate = output as LayeredAgentResult;
-                            const behaviorLayers = new Set(['feature', 'steps']);
-                            const interactionLayers = new Set(['screen', 'locators']);
-                            const files = role === 'behavior-author'
-                                ? [
-                                    ...candidate.files,
-                                    ...priorResponse.files.filter(file => interactionLayers.has(file.layer)),
-                                ]
-                                : [
-                                    ...(dependencyFile
-                                        ? readJsonUtf8<LayeredAgentResult>(dependencyFile).files
-                                        : priorResponse.files.filter(file => behaviorLayers.has(file.layer))),
-                                    ...candidate.files,
-                                ];
-                            const provisionalResponse: AutomationAgentResponse = {
-                                ...priorResponse,
-                                resolutions: alignResolutionsWithPlan(
-                                    packageDirectory,
-                                    plan,
-                                    priorResponse.resolutions,
-                                ),
-                                actionTrace: role === 'behavior-author'
-                                    ? candidate.actionTrace
-                                    : (dependencyFile
-                                        ? readJsonUtf8<LayeredAgentResult>(dependencyFile).actionTrace
-                                        : priorResponse.actionTrace),
-                                files,
-                            };
-                            const validation = this.responseValidator!(packageDirectory, provisionalResponse);
-                            const apiErrors = validateScreenApi(
-                                { files: provisionalResponse.files, actionTrace: provisionalResponse.actionTrace },
-                                { files: provisionalResponse.files, actionTrace: provisionalResponse.actionTrace },
-                            );
-                            if (!validation.valid || apiErrors.length) {
-                                const classified = classifyValidationErrors([
-                                    ...(validation.valid ? [] : validation.errors), ...apiErrors,
-                                ], plan);
-                                candidateErrors.push(...classified[role === 'behavior-author'
-                                    ? 'behavior'
-                                    : 'interaction']);
-                            }
-                        }
-                    } catch (error: any) {
-                        candidateErrors.push(error?.message || String(error));
-                    }
-                }
-                const errors = [...new Set(candidateErrors.filter(Boolean))];
-                const signature = errors.join('\n');
-                const stuck = errors.length > 0 && previousErrorSignature === signature;
-                previousErrorSignature = errors.length ? signature : undefined;
-                writeJsonUtf8(repairFeedbackFile, {
-                    schemaVersion: 1,
-                    owner: LAYERED_GENERATION_AGENTS.owner.name,
-                    assignee: identity.name,
-                    attempt,
-                    status: errors.length ? (stuck ? 'stuck' : 'correction-required') : 'accepted',
-                    errors,
-                    ...(stuck ? { repeatedErrors: true } : {}),
-                });
-                if (!errors.length) return true;
-                return stuck ? 'stuck' : false;
-            }
-            : undefined;
-        let feedbackRound = 0;
-        let totalDurationMs = 0;
-        let run: Awaited<ReturnType<AgentProvider['execute']>>;
-        const actualModels = new Set<string>();
-        do {
-            if (feedbackRound > 0 && fs.existsSync(outputFile)) {
-                new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:before-feedback-${feedbackRound}`, attempt === 0 ? 1 : 2);
-                fs.unlinkSync(outputFile);
-            }
-            run = await this.controlledProvider.execute({
-                cwd: stageDirectory,
-                prompt,
-                timeoutMs: budget.hangStopMs,
-                model: options.model,
-                agentName: identity.name,
-                // Solo Zorem tiene algo que ejecutar (screen-object-contract.js
-                // contra su Screen Object). Un shell abierto para Lorem seria
-                // la unica via que le queda para explorar el framework.
-                allowValidationScripts: role === 'interaction-author',
-                sessionName: feedbackRound > 0
-                    ? `${namedSession}/feedback-${feedbackRound}`
-                    : namedSession,
-                traceFile: './agent-execution.log',
-                traceLabel: feedbackRound > 0 ? `${role}-feedback-${feedbackRound}` : role,
-                stopOnValidatedOutput: {
-                    outputFile: `./${ROLE_OUTPUTS[role]}`,
-                    schemaFile: './result.schema.json',
-                    acceptOutput,
-                },
-            });
-            totalDurationMs += run.durationMs;
-            for (const model of run.modelUsage?.actualModels || []) actualModels.add(model);
-            // Una ronda cortada por inactividad tras el feedback se trata como
-            // "Copilot cerró antes de corregir": el feedback ya está escrito y
-            // una sesión nueva lo lee desde cero. Con las rondas agotadas, falla
-            // con el detalle en vez de esperar al hang stop (TC-10239: 12 min).
-            const feedbackIdle = run.errorCode === 'AGENT_FEEDBACK_IDLE';
-            // No converge: la ultima version repite los errores del feedback
-            // anterior. No se gastan las rondas restantes; se falla con el detalle
-            // y la version queda en disco para el QA.
-            if (run.errorCode === 'AGENT_FEEDBACK_STUCK') break;
-            if ((!run.success && !feedbackIdle) || !fs.existsSync(outputFile) || !acceptOutput) break;
-            const accepted = acceptOutput(readJsonUtf8<unknown>(outputFile));
-            if (accepted === true) break;
-            if (accepted === 'stuck') {
-                run = { ...run, success: false, errorCode: 'AGENT_FEEDBACK_STUCK',
-                    errorMessage: 'La sesión cerró con una versión que repite exactamente los mismos errores.' };
-                break;
-            }
-            feedbackRound += 1;
-        } while (feedbackRound <= MAX_LIVE_FEEDBACK_ROUNDS);
-        report.durationMs = totalDurationMs;
-        report.model = [...actualModels][0] || run.modelUsage?.requestedModel;
+        // One materialized delivery per pass. Validation happens after the session
+        // closes; a rejection is routed by the outer loop to the second pass.
+        const run = await this.controlledProvider.execute({
+            cwd: stageDirectory, prompt, timeoutMs: budget.hangStopMs, model: options.model,
+            agentName: identity.name, allowValidationScripts: role === 'interaction-author',
+            sessionName: namedSession, traceFile: './agent-execution.log', traceLabel: role,
+            stopOnValidatedOutput: {
+                outputFile: `./${ROLE_OUTPUTS[role]}`, schemaFile: './result.schema.json', stopAfterFirstOutput: true,
+            },
+        });
+        report.durationMs = run.durationMs;
+        report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
         report.requestedModel = run.modelUsage?.requestedModel;
-        report.actualModels = [...actualModels];
+        report.actualModels = run.modelUsage?.actualModels || [];
         report.timedOut = Boolean(run.timedOut);
-        report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, totalDurationMs);
+        report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, run.durationMs);
         new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:provider-output`, attempt === 0 ? 1 : 2);
         if (!run.success || !fs.existsSync(outputFile)) {
             report.state = 'failed';
-            if (run.errorCode === 'AGENT_FEEDBACK_STUCK') {
-                const latestFeedback = fs.existsSync(repairFeedbackFile)
-                    ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
-                    : undefined;
-                report.error = [
-                    `${identity.name} no converge: entregó versiones consecutivas con exactamente los mismos errores `
-                    + `(ronda ${feedbackRound + 1} de ${MAX_LIVE_FEEDBACK_ROUNDS + 1}); se corta sin agotar las rondas `
-                    + `y su última versión queda en ${path.basename(outputFile)} para revisarla.`,
-                    ...(latestFeedback?.errors || []),
-                ].join(' | ');
-            } else if (run.errorCode === 'AGENT_FEEDBACK_IDLE') {
-                const latestFeedback = fs.existsSync(repairFeedbackFile)
-                    ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
-                    : undefined;
-                report.error = [
-                    `${identity.name} no corrigió su capa tras ${MAX_LIVE_FEEDBACK_ROUNDS + 1} rondas de feedback dirigido; `
-                    + `la última se cortó por inactividad (${run.errorMessage || 'sin corrección en el plazo'}).`,
-                    ...(latestFeedback?.errors || []),
-                ].join(' | ');
-            } else {
-                report.error = run.errorMessage || `No se generó ${ROLE_OUTPUTS[role]}.`;
-            }
-            options.onStageChange?.({ ...report });
-            throw new Error(report.error);
-        }
-        if (acceptOutput && acceptOutput(readJsonUtf8<unknown>(outputFile)) !== true) {
-            const latestFeedback = fs.existsSync(repairFeedbackFile)
-                ? readJsonUtf8<{ errors?: string[] }>(repairFeedbackFile)
-                : undefined;
-            report.state = 'failed';
-            report.error = [
-                `${identity.name} no corrigió su capa tras ${MAX_LIVE_FEEDBACK_ROUNDS + 1} rondas de feedback dirigido.`,
-                ...(latestFeedback?.errors || []),
-            ].join(' | ');
+            report.error = run.errorMessage || `No se generó ${ROLE_OUTPUTS[role]}.`;
             options.onStageChange?.({ ...report });
             throw new Error(report.error);
         }
         new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:before-normalization`, attempt === 0 ? 1 : 2);
-        const result = readJsonUtf8<unknown>(outputFile);
+        const result = readLayeredOutput(outputFile);
+        assertLayeredEnvelope(result);
         // Derek corrige lo mecanico antes de juzgar: sobre del contrato,
         // campos de mas en actionTrace, keywords e import del Screen Object.
         if (typeof result === 'object' && result !== null
@@ -887,6 +719,7 @@ export class LayeredGenerationOrchestrator {
         const role: GenerationAgentRole = 'integration-reviewer';
         const identity = LAYERED_GENERATION_AGENTS[role];
         const stageDirectory = path.join(agentsRoot, identity.directory);
+        new AutomationHistoryStore(packageDirectory).captureFile(path.join(stageDirectory, ROLE_OUTPUTS[role]), 'agent', `${role}:before-stage-reset`, attempt === 0 ? 1 : 2);
         fs.rmSync(stageDirectory, { recursive: true, force: true });
         fs.mkdirSync(stageDirectory, { recursive: true });
         verifyOutputHandoff(behaviorFile);
@@ -990,7 +823,7 @@ export class LayeredGenerationOrchestrator {
                 traceLabel: role,
                 stopOnValidatedOutput: {
                     outputFile: './agent-response.json',
-                    schemaFile: './agent-response.schema.json',
+                    schemaFile: './agent-response.schema.json', stopAfterFirstOutput: true,
                 },
             });
             report.durationMs = run.durationMs;
@@ -1007,7 +840,9 @@ export class LayeredGenerationOrchestrator {
             }
         }
         new AutomationHistoryStore(packageDirectory).captureFile(outputFile, report.execution === 'deterministic' ? 'recorder' : 'agent', 'integration:before-assembly', attempt === 0 ? 1 : 2);
-        const proposedResponse = readJsonUtf8<AutomationAgentResponse>(outputFile);
+        const proposed = readLayeredOutput(outputFile);
+        assertLayeredEnvelope(proposed, true);
+        const proposedResponse = proposed as AutomationAgentResponse;
         const behavior = readJsonUtf8<LayeredAgentResult>(behaviorFile);
         const interaction = readJsonUtf8<LayeredAgentResult>(interactionFile);
         // Los autores son propietarios exclusivos del código. El integrador

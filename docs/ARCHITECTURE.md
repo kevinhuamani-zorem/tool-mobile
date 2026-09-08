@@ -337,10 +337,11 @@ XML, screenshots, source, capabilities ni credenciales.
    Zorem recibe esa interfaz junto con el handoff. Derek comprueba las llamadas
    contra el Screen realmente exportado y atribuye incompatibilidades a Zorem.
    Los imports/dependencias externos quedan para la compilación de fase 3.
-   Ante un fallo, Derek clasifica el feedback por propietario y reejecuta solo
-   la capa afectada. Durante una reparación, cada escritura se valida en vivo;
-   si Copilot cierra con feedback pendiente, Derek relanza únicamente ese autor
-   en una ronda `feedback-N`. Derek dirige cada error por el `code` de la regla
+   Cada solicitud QA tiene dos pasadas comunes. Ante un fallo, Derek clasifica
+   el feedback por propietario y usa la segunda pasada solo para los roles
+   afectados. La resincronización y el fallback de revisión de diseño consumen
+   ese mismo límite. No se solicitan correcciones dentro de la sesión ni se
+   abren rondas `feedback-N`. Derek dirige cada error por el `code` de la regla
    (la misma tabla por capa con la que proyecta `validation-contract.json`),
    pero antes que la tabla decide el archivo al que apunta el error: un
    error emitido sobre Steps es de Lorem aunque hable de Screen Object, y

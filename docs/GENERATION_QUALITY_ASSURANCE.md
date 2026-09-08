@@ -152,8 +152,10 @@ usan perfiles custom-agent y sesiones nombradas bajo Derek, y el pipeline es
 la estrategia predeterminada. El recorder reemplaza cualquier
 contenido reescrito por el integrador con las salidas exactas de los autores.
 Lorem entrega a Zorem la interfaz de métodos por handoff. Si el validador
-rechaza una capa, Derek actualiza el feedback y mantiene o relanza únicamente
-al autor responsable hasta el límite controlado. La integración tampoco puede
+rechaza una capa, Derek dirige el feedback al autor responsable en la segunda
+pasada. Cada rol participa como máximo una vez por pasada; no hay correcciones
+internas de sesión ni relanzamientos adicionales. Las pruebas cubren fallos de
+autores/integración, JSON inválido, límites de tamaño y recuperación sin Feature. La integración tampoco puede
 contradecir una decisión determinista del plan: `reuse` solo es válido con
 `TypeLocator` y selector normalizado idénticos.
 El modo anterior permanece disponible con

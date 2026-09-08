@@ -133,12 +133,13 @@ generadores, validadores o plantillas.
     por etapa (`budgetWarnings`); nunca recortan evidencia ni cortan una
     sesión. La sesión solo la cortan el hang stop
     (`RECORDER_AGENT_HANG_STOP_MS`, 1 h por defecto), el silencio total de
-    eventos (`RECORDER_AGENT_IDLE_STOP_MS`, 10 min) o una ronda de feedback que
-    no entrega corrección en el plazo (`RECORDER_AGENT_FEEDBACK_IDLE_MS`, 5 min;
-    Derek relanza al autor con el feedback y, agotadas las rondas, falla con el
-    detalle) o dos correcciones seguidas con exactamente los mismos errores
-    (`AGENT_FEEDBACK_STUCK`: no converge, se corta sin gastar rondas). Ninguno
-    es un presupuesto: detectan sesiones que no avanzan. El objetivo por defecto es
+    eventos (`RECORDER_AGENT_IDLE_STOP_MS`, 10 min). En el pipeline por capas,
+    cada solicitud QA tiene dos pasadas: inicial y una corrección, con cada rol
+    como máximo una vez por pasada. Feedback, revisión de diseño fallida y
+    resincronización comparten ese límite. La sesión termina con la primera
+    entrega estable, incluso JSON inválido; Derek valida fuera de la sesión.
+    No hay rondas `feedback-N`. Al finalizar, Revisión recibe las capas
+    recuperables, su procedencia, faltantes y diagnósticos. El objetivo de coste es
     120 000 bytes por etapa: un autor recibe legítimamente 40–110 KB. La reutilización completa
     la garantiza el resolver, que indexa todo el framework antes de que exista
     un agente: lo que un agente deja de recibir es siempre lo que ya está

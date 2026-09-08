@@ -792,14 +792,14 @@ framework); no sustituye la compilación semántica de fase 3 para dependencias,
 APIs heredadas externas ni otros patrones TypeScript. El borrador con errores
 sigue disponible para revisión: esta comprobación no ejecuta pruebas móviles.
 
-Durante una
-reparación, Derek valida cada resultado parcial con el validador oficial y
-actualiza `repair-feedback.json` con `awaiting-output`, `correction-required` o
-`accepted`. Si el proceso termina antes de alcanzar `accepted`, solo ese autor
-se relanza en una ronda `feedback-N`; no se repiten capas sanas. Para las
-resoluciones ligadas a una secuencia, Sumrak conserva `create` o `reuse` fijado
-por `generation-plan.json`. `reuse` requiere el mismo `TypeLocator`, el selector
-normalizado idéntico y un candidato autorizado.
+La solicitud QA tiene como máximo dos pasadas por capas, incluida cualquier
+resincronización. Cada sesión entrega una versión; la validación y el feedback
+se procesan al terminarla. `repair-feedback.json` deja `accepted` o `requires-qa`
+al cierre. No existen rondas `feedback-N`. Los errores de calidad no eliminan
+las capas recuperables: `layered-draft.json` las ofrece a Revisión, con origen,
+pasada y capas faltantes. Su exportación con observaciones se habilitará en F3.
+Para las resoluciones ligadas a una secuencia, Sumrak conserva `create` o `reuse`
+fijado por `generation-plan.json`; no inventa selectores ni candidatos.
 
 Antes de materializar esa respuesta, la pasada semántica escribe también
 `testDesignReview` dentro de `gap-resolutions.json`. Su contrato es cerrado:

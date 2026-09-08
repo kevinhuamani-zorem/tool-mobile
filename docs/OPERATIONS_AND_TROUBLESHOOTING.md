@@ -269,17 +269,12 @@ respuestas anteriores. Ver [el contrato de historial](AUTOMATION_HISTORY.md).
 Revisa `layered-generation-run.json`: duración, `contextBytes`, `cacheHit` y
 `budgetWarnings` por etapa. Los objetivos predeterminados son 120 000 bytes y
 300 000 ms por etapa; excederlos informa al QA, no cancela el trabajo ni recorta
-evidencia. El recorder controla las sesiones headless y aplica tres cortes que
-no son presupuesto sino detectores de sesión que no avanza: el hang stop de una
-hora (`RECORDER_AGENT_HANG_STOP_MS`), el silencio total de eventos durante diez
-minutos (`RECORDER_AGENT_IDLE_STOP_MS`, `AGENT_IDLE`) y cinco minutos sin una
-corrección nueva tras un `output-rejected` (`RECORDER_AGENT_FEEDBACK_IDLE_MS`,
-`AGENT_FEEDBACK_IDLE`). En el último caso Derek relanza al autor en una sesión
-nueva con el `repair-feedback.json` ya escrito (`.../feedback-N`) y, agotadas las
-rondas, la etapa falla con «no corrigió su capa tras 3 rondas de feedback
-dirigido; la última se cortó por inactividad» más los errores pendientes; el
-`agent-execution.log` marca el momento con `[feedback-idle]` o `[idle]`. Comprueba
-los paquetes `agents/<rol>` y la proyección de memoria antes de aumentar contexto.
+evidencia. Hang stop e idle stop siguen detectando sesiones sin avance. En
+`layered` la primera entrega estable termina la sesión, incluso si está mal
+formada. La corrección consume la segunda y última pasada común. No se abre
+`feedback-N` ni se aumenta el límite por un timeout. Consulta los roles, intentos
+0/1 y diagnósticos en `layered-generation-run.json`; los originales están en
+`history/v1` y los archivos recuperables en `layered-draft.json`.
 
 ### El agente no converge: cada corrección trae los mismos errores
 
@@ -301,20 +296,12 @@ respuesta existente. No edites ni vuelvas a grabar acciones para corregir este
 falso positivo. Si el retorno realmente se ignora, el error señala el Step
 que debe añadir la aserción.
 
-Ningún autor entra en bucle. Dentro de una sesión de reparación, cada versión
-que el autor escribe se valida al instante y el feedback va a
-`repair-feedback.json`; si dos versiones seguidas repiten exactamente los
-mismos errores (mismos códigos y mensajes), Derek considera que no va a
-converger: el adapter corta la sesión (`AGENT_FEEDBACK_STUCK`, traza
-`[feedback-stuck]`), no se gastan las rondas restantes y la etapa falla con «no
-converge: entregó versiones consecutivas con exactamente los mismos errores
-(ronda N de 3)» más los errores. `repair-feedback.json` queda con
-`status: stuck` y `repeatedErrors: true`, y la última versión del autor se
-conserva en `agents/<rol>/<rol>-result.json` para revisarla. Topes en total por
-autor: 3 sesiones de feedback en vivo por intento de reparación, 1 intento de
-reparación tras la integración, 5 min sin corrección tras un rechazo, 10 min
-sin eventos, 1 h por sesión. Desde ahí el QA decide: **Corregir con Copilot**
-(sesión visible), corregir a mano y **Reimportar corrección**, o regenerar.
+El pipeline por capas termina después de dos pasadas, aunque el error cambie
+entre versiones. `repair-feedback.json` queda en `requires-qa` si persisten los
+diagnósticos. Revisión muestra la última entrega recuperable por capa y su
+procedencia; si solo existe borrador determinista, lo indica. Un JSON ilegible
+se conserva como evidencia, sin deducir de él destinos. Volver a generar es una
+nueva solicitud QA con otro intento. Exportar con observaciones corresponde a F3.
 
 ### La sesión tarda en arrancar o el log muestra MCP y skills que el recorder no usa
 

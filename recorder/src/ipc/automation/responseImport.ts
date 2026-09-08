@@ -13,6 +13,9 @@ import {
     parseGapResolutions,
     AgentRunStore,
     AutomationHistoryStore,
+    readLayeredOutput,
+    assertLayeredEnvelope,
+    RecoverableDraftStore,
     normalizeAgentResponseEnglishIdentifiers,
     normalizeGeneratedGherkinKeywords,
     inheritedIdentifiersOf,
@@ -31,6 +34,7 @@ import { DeterministicGenerator } from '../../../../core/generation';
 import { normalizeJsonUnicode, readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
 import { RecorderRuntimeState } from '../runtimeState';
 import { AutomationProgressEmitter } from './progress';
+import { layeredDraftPreview } from './layeredDraftPreview';
 
 const DIRECT_AGENT_RESPONSE_EDIT_ERROR =
     'Copilot modificó agent-response.json directamente, pero en modo determinista ese archivo '
@@ -125,8 +129,25 @@ export class AutomationResponseImporter {
         const history = new AutomationHistoryStore(packageDirectory);
         history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
         history.captureFile(responsePath, options.manualCorrection ? 'qa' : 'agent', 'import:original');
+        let delivered: unknown;
+        try {
+            delivered = readLayeredOutput(responsePath);
+            assertLayeredEnvelope(delivered, true);
+        } catch (error: any) {
+            const recovery = new RecoverableDraftStore(packageDirectory, plan);
+            recovery.capture(path.join(packageDirectory, 'deterministic-draft.json'), 'deterministic');
+            recovery.capture(responsePath, options.manualCorrection ? 'qa' : 'agent');
+            const draft = layeredDraftPreview(recovery.save([error.message]), projectPaths.frameworkRoot);
+            state.automationPreview = null;
+            history.append({ ...history.identity()!, kind: options.manualCorrection ? 'qa-validation-result' : 'generation-result',
+                origin: 'recorder', stage: 'import-envelope', result: 'failed' }, [
+                { name: 'validation.json', content: JSON.stringify(draft.validation) },
+            ]);
+            return { success: false, failureKind: 'generated-output-validation', error: error.message,
+                validation: draft.validation, draft, repairAvailable: true };
+        }
         let response = withGeneratedResponseMetadata(
-            readJsonUtf8<AutomationAgentResponse>(responsePath),
+            delivered as AutomationAgentResponse,
             scenario.createdAt
         );
         const beforeQaEdit = JSON.stringify(response);

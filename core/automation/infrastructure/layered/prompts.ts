@@ -62,10 +62,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
         'En VERIFICAR_TEXTO con textAssertion explícito, value es el esperado, source indica element (getText) o container (texto propio y descendientes en orden, unidos por salto de línea), y operator es contains o equals. El XPath SOLO localiza: jamás infieras de él el esperado, la comparación ni un contenedor padre. Conserva mayúsculas, tildes y espacios. No sustituyas la comparación por existencia.',
         'Para estas aserciones el Screen es un Page Object puro y la expectativa vive en el Step. Zorem: copia el helper readRecordedText exactamente como lo entrega framework-api.json.textAssertion.helper (coincide con el del deterministic-draft cuando existe) y, en el método trazado, lee desde el getter y devuelve la lectura: `const actual = await this.readRecordedText(this.<locatorName>, source); return actual;` (Promise<string>), sin comparar. Lorem: el Step recibe ese texto y compara con el valor grabado: `const actualText: string = await <screen>.<screenMethod>(); expect(actualText).toContain(<valor>)`, importando expect desde @wdio/globals; contains usa toContain y equals usa toBe. No cambies el helper ni su límite de lectura; ninguno de los dos infiere el esperado del XPath.',
         `Escribe solo ${outputFile} y cumple result.schema.json.`,
-        ...(repair ? [
-            'Después de escribir el resultado, vuelve a leer repair-feedback.json: Derek puede actualizarlo con status correction-required.',
-            'Si aparecen errores nuevos, corrígelos y vuelve a escribir el mismo resultado; termina solo cuando el status sea accepted.',
-        ] : []),
+        'Esta sesión entrega una sola versión. Al terminar de escribirla, finaliza: Derek validará y decidirá la única pasada de corrección disponible.',
         'No explores el framework ni escribas fuera de esta carpeta.',
     ].join(' ');
 }

@@ -85,8 +85,6 @@ export const DELEGATES = [
 
 export const MAX_LAYERED_REPAIR_ATTEMPTS = 1;
 
-export const MAX_LIVE_FEEDBACK_ROUNDS = 2;
-
 export const LAYERED_CACHE_SCHEMA_VERSION = 3;
 
 export type AuthorRole = LayeredAgentResult['role'];
@@ -115,12 +113,12 @@ export interface LayeredGenerationOptions {
     /**
      * Lorem y Zorem en paralelo usando el `actionTrace` del borrador
      * determinista como contrato de interfaz. Si Lorem cambia esa interfaz,
-     * Zorem se relanza con el resultado real. Activo por defecto cuando existe
+     * Zorem usa su segunda pasada con el resultado real. Activo por defecto cuando existe
      * el borrador; `false` fuerza la secuencia Lorem -> Zorem.
      */
     parallelAuthors?: boolean;
     /**
-     * Cuando todo el caso viene de memoria o del framework y no hay gaps
+     * Cuando todo el caso viene del framework y no hay gaps
      * abiertos, Zorem no corre y Lorem solo revisa el diseño. Con `true` el
      * QA hereda además esa revisión de los casos de origen y ningún autor
      * corre: la decisión es suya, nunca del recorder por defecto.
@@ -143,6 +141,7 @@ export interface LayeredGenerationResult {
     responseFile?: string;
     reportFile: string;
     error?: string;
+    draft?: import('../../domain/layeredGenerationContracts').RecoverableLayeredDraft;
 }
 
 export type LayeredResponseValidator = (

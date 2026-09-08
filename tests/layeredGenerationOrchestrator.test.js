@@ -454,14 +454,15 @@ test('Derek devuelve una observación de locator solo a Zorem y reintenta Sumrak
     assert.equal(report.stages.at(-1).state, 'completed');
 });
 
-test('una incompatibilidad tipada repara solo Zorem y se valida en vivo aunque el validador general apruebe', async () => {
+test('una incompatibilidad tipada usa solo la segunda pasada de Zorem aunque el validador general apruebe', async () => {
     const root = fixture();
     const calls = [];
     const base = provider(calls);
-    let liveChecks = 0;
     const fake = {
         ...base,
         async execute(input) {
+            assert.equal(input.stopOnValidatedOutput.stopAfterFirstOutput, true);
+            assert.equal(input.stopOnValidatedOutput.acceptOutput, undefined);
             const result = await base.execute(input);
             if (input.agentName === 'Lorem') {
                 const file = path.join(input.cwd, 'behavior-result.json');
@@ -471,13 +472,8 @@ test('una incompatibilidad tipada repara solo Zorem y se valida en vivo aunque e
             } else if (input.agentName === 'Zorem') {
                 const file = path.join(input.cwd, 'interaction-result.json');
                 const output = JSON.parse(fs.readFileSync(file, 'utf8'));
-                output.files.find(entry => entry.layer === 'screen').content = 'class CaseScreen { async executeAction(value: string) {} } export default new CaseScreen();';
-                if (/repair-1$/.test(input.sessionName)) {
-                    assert.equal(input.stopOnValidatedOutput.acceptOutput(output), false);
-                    output.files.find(entry => entry.layer === 'screen').content = 'class CaseScreen { async executeAction(value: number) {} } export default new CaseScreen();';
-                    assert.equal(input.stopOnValidatedOutput.acceptOutput(output), true);
-                    liveChecks += 2;
-                }
+                const type = /repair-1$/.test(input.sessionName) ? 'number' : 'string';
+                output.files.find(entry => entry.layer === 'screen').content = `class CaseScreen { async executeAction(value: ${type}) {} } export default new CaseScreen();`;
                 writeJson(file, output);
             }
             return result;
@@ -485,187 +481,97 @@ test('una incompatibilidad tipada repara solo Zorem y se valida en vivo aunque e
     };
     const result = await new LayeredGenerationOrchestrator(fake, fake, () => ({ valid: true, errors: [] })).run(root);
     assert.equal(result.success, true, result.error);
-    assert.equal(liveChecks, 2);
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Zorem', 'Sumrak']);
 });
 
-test('Derek valida la reparación de Zorem en vivo y mantiene la misma sesión hasta aceptarla', async () => {
+test('la segunda entrega corrige la capa sin feedback dentro de la sesión', async () => {
     const root = fixture();
     const calls = [];
     const base = provider(calls);
-    let liveChecks = 0;
-    const liveRepairProvider = {
+    const fake = {
         ...base,
         async execute(input) {
             const result = await base.execute(input);
             if (input.agentName === 'Zorem' && /repair-1$/.test(input.sessionName)) {
+                assert.equal(input.stopOnValidatedOutput.acceptOutput, undefined);
                 const outputFile = path.join(input.cwd, 'interaction-result.json');
                 const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
-                assert.equal(input.stopOnValidatedOutput.acceptOutput(candidate), false);
                 candidate.files.find(file => file.layer === 'screen').content = 'export class CaseScreen { /* FIXED */ }';
                 writeJson(outputFile, candidate);
-                assert.equal(input.stopOnValidatedOutput.acceptOutput(candidate), true);
-                liveChecks += 2;
             }
             return result;
         },
     };
-    const validator = (_packageDirectory, response) => ({
+    const validator = (_root, response) => ({
         valid: response.files.some(file => file.layer === 'screen' && file.content.includes('FIXED')),
-        errors: [{ message: 'El locator debe conservar el selector primary.' }],
+        errors: [{ code: 'trace-locator', message: 'El locator debe conservar el selector primary.' }],
     });
-
-    const result = await new LayeredGenerationOrchestrator(
-        liveRepairProvider,
-        liveRepairProvider,
-        validator,
-    ).run(root);
-
+    const result = await new LayeredGenerationOrchestrator(fake, fake, validator).run(root);
     assert.equal(result.success, true);
-    assert.equal(liveChecks, 2);
-    const feedback = JSON.parse(fs.readFileSync(
-        path.join(root, 'agents', 'zorem', 'repair-feedback.json'),
-        'utf8',
-    ));
+    assert.equal(calls.filter(call => call.agentName === 'Zorem').length, 2);
+    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
     assert.equal(feedback.status, 'accepted');
-    assert.deepEqual(feedback.errors, []);
 });
 
-test('Derek relanza solo el autor con feedback pendiente cuando Copilot cerró antes de corregir', async () => {
+test('errores persistentes terminan en dos pasadas y conservan originales y última entrega', async () => {
     const root = fixture();
     const calls = [];
     const base = provider(calls);
-    const feedbackProvider = {
+    const fake = {
         ...base,
         async execute(input) {
             const result = await base.execute(input);
-            if (input.agentName === 'Lorem' && /feedback-1$/.test(input.sessionName)) {
-                const outputFile = path.join(input.cwd, 'behavior-result.json');
-                const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
-                candidate.files.find(file => file.layer === 'feature').content = [
-                    'Feature: Caso',
-                    'Scenario: [TC-1][Happy Path][AUTO-FRONT] Caso válido',
-                ].join('\n');
-                writeJson(outputFile, candidate);
+            if (input.agentName === 'Lorem' && /repair-1$/.test(input.sessionName)) {
+                const file = path.join(input.cwd, 'behavior-result.json');
+                const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+                output.files[0].content = 'Feature: Última entrega con observaciones';
+                writeJson(file, output);
             }
             return result;
         },
     };
-    const validator = (_packageDirectory, response) => {
-        const feature = response.files.find(file => file.layer === 'feature')?.content || '';
-        return feature.includes('Scenario: [TC-1][Happy Path][AUTO-FRONT]')
-            ? { valid: true, errors: [] }
-            : { valid: false, errors: [{ message: 'Scenario sin formato [TC-1][Path][AUTO-FRONT]' }] };
-    };
-
-    const result = await new LayeredGenerationOrchestrator(
-        feedbackProvider,
-        feedbackProvider,
-        validator,
-    ).run(root);
-
-    assert.equal(result.success, true);
-    assert.equal(calls.some(call => call.sessionName.endsWith('/Lorem/repair-1/feedback-1')), true);
-    const feedback = JSON.parse(fs.readFileSync(
-        path.join(root, 'agents', 'lorem', 'repair-feedback.json'),
-        'utf8',
-    ));
-    assert.equal(feedback.status, 'accepted');
-});
-
-// Una ronda de feedback que no cierra ya no espera al hang stop de una hora:
-// el adapter la corta por inactividad (AGENT_FEEDBACK_IDLE) y Derek relanza al
-// autor con el feedback escrito; agotadas las rondas, falla con el detalle.
-test('una ronda cortada por inactividad se relanza con el feedback y, agotadas las rondas, falla con detalle', async () => {
-    // El mensaje incluye la primera línea del Feature: cada ronda entrega una
-    // versión con un error distinto, así que no se activa el corte por no
-    // convergencia y se ejercita el camino de inactividad.
-    const validator = (_packageDirectory, response) => {
-        const feature = response.files.find(file => file.layer === 'feature')?.content || '';
-        return feature.includes('Scenario: [TC-1][Happy Path][AUTO-FRONT]')
-            ? { valid: true, errors: [] }
-            : { valid: false, errors: [{ message: `Scenario sin formato [TC-1][Path][AUTO-FRONT] en "${feature.split('\n')[0]}"` }] };
-    };
-    const idleProvider = (calls, { fixOnRound } = {}) => {
-        const base = provider(calls);
-        return {
-            ...base,
-            async execute(input) {
-                const result = await base.execute(input);
-                const round = /feedback-(\d+)$/.exec(input.sessionName)?.[1];
-                if (input.agentName !== 'Lorem' || !/repair-1/.test(input.sessionName)) return result;
-                const outputFile = path.join(input.cwd, 'behavior-result.json');
-                const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
-                if (fixOnRound !== undefined && Number(round) === fixOnRound) {
-                    candidate.files.find(file => file.layer === 'feature').content = 'Feature: Caso\nScenario: [TC-1][Happy Path][AUTO-FRONT] Caso válido';
-                    writeJson(outputFile, candidate);
-                    return result;
-                }
-                candidate.files.find(file => file.layer === 'feature').content = `Feature: Caso intento ${round || 0}`;
-                writeJson(outputFile, candidate);
-                // La salida rechazada sigue en disco y la sesión se cortó por inactividad.
-                return { ...result, success: false, errorCode: 'AGENT_FEEDBACK_IDLE', errorMessage: 'La sesión no entregó una corrección en 1 s tras el feedback dirigido.' };
-            },
-        };
-    };
-
-    const recovered = fixture();
-    const recoveredCalls = [];
-    const recoveredProvider = idleProvider(recoveredCalls, { fixOnRound: 1 });
-    const result = await new LayeredGenerationOrchestrator(recoveredProvider, recoveredProvider, validator).run(recovered);
-    assert.equal(result.success, true, result.error);
-    assert.equal(recoveredCalls.some(call => call.sessionName.endsWith('/Lorem/repair-1/feedback-1')), true, 'se relanzó con el feedback');
-
-    const exhausted = fixture();
-    const exhaustedCalls = [];
-    const exhaustedProvider = idleProvider(exhaustedCalls);
-    const failed = await new LayeredGenerationOrchestrator(exhaustedProvider, exhaustedProvider, validator).run(exhausted);
+    const failed = await new LayeredGenerationOrchestrator(fake, fake, () => ({ valid: false,
+        errors: [{ code: 'gherkin-keyword', file: 'features/payment/case.feature', message: 'Se esperaba Then; se observó When.' }] })).run(root);
     assert.equal(failed.success, false);
-    assert.match(failed.error, /Lorem no corrigió su capa tras 3 rondas de feedback dirigido; la última se cortó por inactividad/);
-    assert.match(failed.error, /Scenario sin formato/);
-    assert.equal(exhaustedCalls.filter(call => /Lorem\/repair-1/.test(call.sessionName)).length, 3, 'una sesión inicial y dos rondas de feedback');
-    const report = JSON.parse(fs.readFileSync(failed.reportFile, 'utf8'));
-    assert.equal(report.state, 'failed');
+    assert.match(failed.error, /dos pasadas/);
+    assert.match(failed.error, /gherkin-keyword.*case.feature.*esperaba Then/);
+    assert.equal(calls.filter(call => call.agentName === 'Lorem').length, 2);
+    assert.equal(calls.some(call => /feedback-/.test(call.sessionName)), false);
+    assert.match(failed.draft.files.find(file => file.layer === 'feature').content, /Última entrega/);
+    assert.deepEqual(failed.draft.missingLayers, []);
+    const history = new AutomationHistoryStore(root);
+    const original = history.events().find(event => event.stage === 'behavior-author:provider-output' && event.pass === 1);
+    assert.equal(JSON.parse(history.readArtifact(original.artifacts[0])).files[0].content, 'Feature: Caso');
+    assert.equal(history.lifecycle().generation, 'failed');
 });
 
-// Una version que repite exactamente los errores del feedback anterior no va
-// a converger con mas rondas: Derek corta ya, con el detalle y sin gastar las
-// dos sesiones restantes; la ultima version del agente queda en disco.
-test('una corrección que repite los mismos errores corta sin agotar las rondas y conserva la última versión', async () => {
-    const validator = (_packageDirectory, response) => {
-        const feature = response.files.find(file => file.layer === 'feature')?.content || '';
-        return feature.includes('Scenario: [TC-1][Happy Path][AUTO-FRONT]')
-            ? { valid: true, errors: [] }
-            : { valid: false, errors: [{ message: 'Scenario sin formato [TC-1][Path][AUTO-FRONT]' }] };
-    };
+test('timeout durante la segunda pasada no relanza y JSON ilegible conserva la primera entrega recuperable', async () => {
     const root = fixture();
     const calls = [];
     const base = provider(calls);
-    const stubbornProvider = {
+    const fake = {
         ...base,
         async execute(input) {
             const result = await base.execute(input);
-            if (input.agentName !== 'Lorem' || !/repair-1/.test(input.sessionName)) return result;
-            // "Corrige" cambiando algo irrelevante: el error sigue siendo el mismo.
-            const outputFile = path.join(input.cwd, 'behavior-result.json');
-            const candidate = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
-            candidate.files.find(file => file.layer === 'feature').content = 'Feature: Caso\n# intento sin formato';
-            writeJson(outputFile, candidate);
+            if (input.agentName === 'Lorem' && /repair-1$/.test(input.sessionName)) {
+                fs.writeFileSync(path.join(input.cwd, 'behavior-result.json'), '{ incomplete');
+                return { ...result, success: false, errorCode: 'AGENT_FEEDBACK_IDLE', errorMessage: 'Sin entrega final.', timedOut: true };
+            }
             return result;
         },
     };
-    const failed = await new LayeredGenerationOrchestrator(stubbornProvider, stubbornProvider, validator).run(root);
+    const failed = await new LayeredGenerationOrchestrator(fake, fake, () => ({ valid: false,
+        errors: [{ code: 'gherkin-keyword', message: 'Falta Then en Feature.' }] })).run(root);
     assert.equal(failed.success, false);
-    assert.match(failed.error, /Lorem no converge: entregó versiones consecutivas con exactamente los mismos errores \(ronda 2 de 3\)/);
-    assert.match(failed.error, /queda en behavior-result\.json/);
-    assert.match(failed.error, /Scenario sin formato/);
-    assert.equal(calls.filter(call => /Lorem\/repair-1/.test(call.sessionName)).length, 2, 'dos rechazos idénticos: no se gasta la tercera ronda');
-    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents', 'lorem', 'repair-feedback.json'), 'utf8'));
-    assert.equal(feedback.status, 'stuck');
-    assert.equal(feedback.repeatedErrors, true);
-    assert.ok(fs.existsSync(path.join(root, 'agents', 'lorem', 'behavior-result.json')), 'la última versión se conserva para el QA');
-    const report = JSON.parse(fs.readFileSync(failed.reportFile, 'utf8'));
-    assert.equal(report.state, 'failed');
+    assert.match(failed.error, /Sin entrega final/);
+    assert.equal(calls.filter(call => call.agentName === 'Lorem').length, 2);
+    const feature = failed.draft.files.find(file => file.layer === 'feature');
+    assert.equal(feature.content, 'Feature: Caso');
+    assert.equal(feature.pass, 1);
+    assert.equal(failed.draft.files.length, 4);
+    const history = new AutomationHistoryStore(root);
+    const raw = history.events().find(event => event.stage === 'behavior-author:provider-output' && event.pass === 2);
+    assert.equal(history.readArtifact(raw.artifacts[0]).toString(), '{ incomplete');
 });
 
 test('Sumrak no puede omitir gaps abiertos aunque el JSON cumpla el schema', async () => {
@@ -1270,11 +1176,12 @@ test('si Lorem cambia la interfaz del contrato, Zorem se sincroniza con el resul
     const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
 
     assert.equal(result.success, true, result.error);
-    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Zorem', 'Sumrak']);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Zorem', 'Sumrak']);
     const handoff = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/lorem-handoff.json'), 'utf8'));
     assert.equal(handoff.from, 'behavior-author', 'la segunda pasada de Zorem parte del resultado real de Lorem');
     const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
-    assert.match(feedback.errors.join(' '), /interfaz actionTrace\/screen-api distinta del contrato provisional/);
+    assert.equal(feedback.attempt, 1);
+    assert.equal(feedback.status, 'accepted');
 });
 
 test('parallelAuthors:false conserva la secuencia Lorem -> Zorem aunque exista borrador', async () => {
@@ -1772,4 +1679,106 @@ test('wording legacy no permite omitir autores aunque el paquete diga reused', a
     const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
     assert.equal(result.success, true, result.error);
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem']);
+});
+
+test('un autor fallido espera al autor paralelo y conserva sus capas sin lanzar integración', async () => {
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    let zoremFinished = false;
+    const fake = { ...base, async execute(input) {
+        if (input.agentName === 'Zorem') await new Promise(resolve => setTimeout(resolve, 40));
+        const result = await base.execute(input);
+        if (input.agentName === 'Lorem') {
+            fs.writeFileSync(path.join(input.cwd, 'behavior-result.json'), '{ incomplete');
+            return { ...result, success: false, errorMessage: 'Lorem no terminó' };
+        }
+        zoremFinished = true;
+        return result;
+    } };
+    const failed = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
+    assert.equal(failed.success, false);
+    assert.equal(zoremFinished, true);
+    assert.equal(calls.filter(call => call.agentName === 'Lorem').length, 2);
+    assert.equal(calls.filter(call => call.agentName === 'Zorem').length, 1);
+    assert.equal(calls.some(call => call.agentName === 'Sumrak'), false);
+    assert.equal(failed.draft.files.find(file => file.layer === 'screen').origin, 'agent');
+    assert.equal(failed.draft.files.find(file => file.layer === 'feature').origin, 'deterministic');
+});
+
+test('resincronización y feedback comparten las dos pasadas sin una tercera llamada por autor', async () => {
+    const root = fixture();
+    const calls = [];
+    const changed = [{ sequence: 1, gherkinStep: 'When acción', screenMethod: 'tapPrimary', locatorName: 'primaryButton' }];
+    const fake = timedProvider(calls, changed);
+    const failed = await new LayeredGenerationOrchestrator(fake, fake, () => ({ valid: false,
+        errors: [{ code: 'trace-locator', message: 'Se esperaba primary; se observó un selector distinto.' }] }), draftBuilderWith(DRAFT_TRACE)).run(root);
+    assert.equal(failed.success, false);
+    assert.equal(calls.filter(call => call.agentName === 'Zorem').length, 2);
+    assert.equal(calls.filter(call => call.agentName === 'Sumrak').length, 2);
+    const report = JSON.parse(fs.readFileSync(failed.reportFile, 'utf8'));
+    assert.deepEqual(report.stages.filter(stage => stage.agentName === 'Zorem').map(stage => stage.attempt), [0, 1]);
+    assert.equal(failed.draft.files.length, 4);
+});
+
+test('envelopes inválidos se diagnostican antes de normalizar y no ocultan la entrega de la otra capa', async () => {
+    for (const malformed of [null, { files: [null], actionTrace: [] }, { files: [], actionTrace: [null] },
+        { files: [], actionTrace: 'invalid' }, { files: [], actionTrace: Array(2001).fill({ sequence: 1, gherkinStep: 'When acción' }) }]) {
+        const root = fixture();
+        const calls = [];
+        const base = provider(calls);
+        const fake = { ...base, async execute(input) {
+            const result = await base.execute(input);
+            if (input.agentName === 'Lorem') writeJson(path.join(input.cwd, 'behavior-result.json'), malformed);
+            return result;
+        } };
+        const failed = await new LayeredGenerationOrchestrator(fake).run(root);
+        assert.equal(failed.success, false);
+        assert.match(failed.error, /output-envelope/);
+        assert.doesNotMatch(failed.error, /Cannot read properties|not iterable/);
+        assert.equal(calls.filter(call => call.agentName === 'Lorem').length, 2);
+        assert.deepEqual(failed.draft.missingLayers, ['feature', 'steps']);
+        assert.deepEqual(failed.draft.files.map(file => file.layer).sort(), ['locators', 'screen']);
+    }
+});
+
+test('un integrador con resolutions ilegibles termina y devuelve los cuatro archivos de los autores', async () => {
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const result = await base.execute(input);
+        if (input.agentName === 'Sumrak') {
+            const file = path.join(input.cwd, 'agent-response.json');
+            const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+            output.resolutions = [null];
+            writeJson(file, output);
+        }
+        return result;
+    } };
+    const failed = await new LayeredGenerationOrchestrator(fake).run(root);
+    assert.equal(failed.success, false);
+    assert.match(failed.error, /output-envelope.*resolutions/);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Sumrak']);
+    assert.equal(failed.draft.files.length, 4);
+});
+
+test('si Lorem se recupera en la segunda pasada, Zorem recibe por primera vez su contrato definitivo', async () => {
+    const root = fixture();
+    const calls = [];
+    const base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const result = await base.execute(input);
+        if (input.agentName === 'Lorem' && !/repair-1$/.test(input.sessionName)) {
+            fs.writeFileSync(path.join(input.cwd, 'behavior-result.json'), '{ incomplete');
+            return { ...result, success: false, errorMessage: 'Primera entrega incompleta' };
+        }
+        return result;
+    } };
+    const result = await new LayeredGenerationOrchestrator(fake).run(root);
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Lorem', 'Zorem', 'Sumrak']);
+    const zorem = calls.filter(call => call.agentName === 'Zorem');
+    assert.equal(zorem[0].hasBehaviorDependency, false);
+    assert.equal(zorem[1].hasBehaviorDependency, true);
 });

@@ -13,8 +13,8 @@ sustituye la tabla resumida de entregas de abajo para organizar la implementaci�
 
 ## Decisión de producto actualizada — 2026-09-08
 
-**Estado: F0 y F1 implementadas y verificadas localmente.**
-El historial conserva revisiones, intentos y originales; F2–F7 siguen pendientes. Ver
+**Estado: F0, F1 y F2 implementadas y verificadas localmente.**
+El historial y las dos pasadas por capas están implementados; F3–F7 siguen pendientes. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Esta sección incorpora
 la decisión del usuario: limitar la iteración automática, entregar el borrador
 al QA sin bloquear su exportación por calidad y recuperar del framework la
