@@ -180,7 +180,7 @@ otras capacidades y conserva sandbox, CSP y orígenes distintos.
 | Workspace | `projectPaths`, `workspaceAdapter`, `frameworkScanner` | Resolver la raíz padre y el catálogo del framework |
 | Automatización | `automationRecordingStore`, `deterministicResolver`, `automationContextProjections`, `automationPackageBuilder` | Recording, plan, hints/gaps derivados y contexto mínimo |
 | IA acotada | `LayeredGenerationOrchestrator`, `copilotCliAdapter`, `automationAgentLauncher` | Pipeline layered automático/headless por defecto; manual y determinista conservados para diagnóstico |
-| Validación/memoria | `automationResponseValidator` + `rules/` (familias), `automationMemory` | Validar, dirigir reparación acotada a la capa afectada y promocionar solo resultados aprobados |
+| Validación/memoria | `automationResponseValidator` + `rules/` (familias), `automationMemory` | Validar, dirigir reparación acotada y mantener retirada la memoria legacy |
 | Aplicación | `automationApplier` | Preparar bytes finales y snapshots antes del preview; commit recuperable de `create`/`update`, completions externos y registro |
 | Generación | `fwkMobileGenerator`, `generationQuality` | Construir previews y contenidos |
 | Seguridad de salida | `outputValidator`, `generatedFileRegistry` | Rutas permitidas, sintaxis, hashes y escritura segura |
@@ -265,36 +265,16 @@ XML, screenshots, source, capabilities ni credenciales.
    reparación, validación, logs y baselines—. Solo `history/` se conserva;
    por ello un fallo temprano del resolver nunca deja una respuesta antigua
    disponible para importar.
-6. Si existe un caso equivalente con sus cuatro capas, se conserva localmente y
-   no se invoca al agente. La memoria de calidad 100 también se reutiliza, y
-   no solo para la misma grabación: `runtime/automation-memory/` es global y
-   guarda, además del caso completo por fingerprint (`cases/`), **fragmentos**
-   (`fragments.json`, ver `automation/domain/memoryFragments`): por cada step
-   validado, la secuencia de elementos que cubre (identidad plataforma +
-   acción + selector normalizado, sin contextHint) con su texto, keyword y
-   método de Screen; y por cada gap de verificación sobre un elemento, la
-   decisión aceptada. Al preparar otro recording el resolver parte cada
-   bloque en tramos: el tramo que otro caso ya redactó sale como fila
-   `wording: memory` (con `methodName` y `memory.caseId`) y el gap repetido
-   nace `status: resolved, resolvedBy: memory` sin abrir el paquete al
-   agente. Un caso B = A + un paso hereda los steps de A y solo redacta el
-   nuevo. La memoria no guarda selectores ni nombres lógicos (eso lo
-   reutiliza el índice del framework); wordings distintos de la misma
-   secuencia conviven (la segunda pulsación del mismo botón usa el que aún no
-   se gastó) y un texto idéntico se sustituye por el más reciente. La memoria
-   es transversal a squads: el elemento es el mismo lo grabe quien lo grabe;
-   al recordar se prefiere el fragmento del squad propio y el destino de los
-   archivos lo fija el plan.
-   Cuando todas las filas vienen de memoria o del framework y no hay gaps
-   abiertos (`layered/memoryReuse.authoringNeeds`), **Zorem no corre** (su
-   resultado se materializa desde el borrador) y **Lorem corre en modo
-   revisión** (`execution: design-review`): contexto mínimo (escenario, plan
-   y el behavior-result ya materializado), no redacta y solo escribe
-   `test-design-review.json`, cacheado por identidad de inputs. Si esa
-   revisión falla, el caso vuelve al flujo normal con ambos autores. Solo con
-   `inheritDesignReview` (preferencia explícita del QA en Ajustes) se hereda
-   la revisión de los casos de origen y ningún autor corre; el
-   `test-design-review.json` resultante lleva `source: memory` y lo dice.
+6. Si existe un caso equivalente en el framework con sus cuatro capas, se
+   conserva localmente y no se invoca al agente. La memoria legacy está
+   deshabilitada: no aporta casos, fragmentos, vocabulario ni decisiones de gaps.
+   Electron mueve sus entradas conocidas a `runtime/automation-memory/legacy-v1/`
+   al iniciar; un fallo de archivo mantiene deshabilitadas las lecturas.
+   Si todas las filas se reutilizan del framework y no hay gaps abiertos,
+   Zorem no corre y Lorem revisa el diseño con contexto mínimo. Una fila
+   `wording: memory` no habilita ese atajo. Con `inheritDesignReview`, decisión
+   explícita del QA, la revisión registra `source: framework` y declara que el
+   objetivo del caso actual no se ha revisado. No acredita aprobación golden.
 7. Según `RECORDER_AGENT_EXECUTION_MODE`, la UI abre Terminal en handoff manual
    o ejecuta el orquestador automático. El flujo predeterminado tiene un owner
    explícito, **Derek**, que conserva el orden y los handoffs definidos por el
@@ -364,15 +344,11 @@ XML, screenshots, source, capabilities ni credenciales.
    capa ajena. Solo un error sin archivo ni código se clasifica por su
    texto, y uno que nadie reconoce llega a los tres. Sumrak debe conservar las decisiones deterministas
    del plan: no puede convertir `create` en `reuse` por similitud de nombre.
-   Para evitar repetir minutos de inferencia, Lorem, Zorem y el pipeline
-   completo mantienen un caché en la memoria del recorder
-   (`runtime/automation-memory/agent-cache/`), indexado por la identidad de
-   los inputs sin `recordingId`, `planId` ni fechas (`memoryIdentity`), el
-   prompt y el modelo. Un resultado verificado sirve así a cualquier
-   recording con los mismos inputs (una regrabación del mismo caso, una
-   regeneración desde otra carpeta); al restaurarlo se le ponen los ids del
-   paquete actual (`rebindCachedResult`) y los handoffs se vuelven a
-   verificar.
+   Las respuestas de generaciones anteriores no se recuperan como caché.
+   Los artefactos temporales de autores y revisión permanecen bajo
+   `agents/derek/attempt-cache/` y se reinician en cada `run`; el caché global
+   anterior se archiva. Un score válido no permite reutilizar propuestas sin
+   aprobación del QA. El índice derivado de golden se implementará en F6.
    Cuando existe `deterministic-draft.json`, Lorem y Zorem corren **en
    paralelo**: Derek publica el `actionTrace` del borrador como contrato
    provisional (`agents/derek/behavior-result.json`, con handoff verificado) y
@@ -416,7 +392,7 @@ XML, screenshots, source, capabilities ni credenciales.
    resultados de queries y reglas de validación se proyectan por ownership,
    sin copiar el catálogo completo del framework. El reporte por etapa publica
    `contextBytes`, `contextFiles` y `assignedLayers`. La respuesta completa se
-   cachea solo después de superar el validador oficial, por lo que reducir
+   conserva artefactos temporales solo después de superar el validador oficial, por lo que reducir
    memoria nunca relaja el contrato ni cambia silenciosamente el resultado.
    El orquestador anterior de dos pasadas (`query-requests/query-results` y
    respuesta semántica) se conserva como estrategia `deterministic` de
@@ -452,7 +428,7 @@ XML, screenshots, source, capabilities ni credenciales.
 10. El importador prepara el resultado final del patch sin escribir y valida
     esa respuesta. El usuario revisa esos mismos bytes y su diff; el token
     conserva snapshots de todos los destinos. Aplicar comprueba que sigan
-    intactos, escribe el resultado exacto y registra/promueve memoria dentro de
+    intactos, escribe el resultado exacto y registra el recibo dentro de
     una operación recuperable. Las correcciones cargan baselines en memoria,
     sin restaurarlas temporalmente sobre el framework. Los completions externos
     se muestran como archivos adicionales de solo lectura y entran al recibo.
@@ -545,8 +521,8 @@ se valida determinísticamente; todavía no existe orquestador ni integración C
 5. La nueva propuesta atraviesa el mismo validator, preview y revisión. Solo
    archivos administrados, sin cambios externos, pueden reemplazarse
    atómicamente en el target.
-6. Una generación válida crea una nueva versión de memoria y deja el estado
-   del recording en `generated`, permitiendo futuras iteraciones.
+6. Aplicar deja el estado del recording en `generated`, permitiendo futuras
+   iteraciones. No crea memoria ni convierte el resultado en golden.
 
 ## Contrato IPC
 

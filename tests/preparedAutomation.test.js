@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { AutomationApplier, AutomationPatchWriter, AutomationMemory } = require('../dist/core/automation');
+const { AutomationApplier, AutomationPatchWriter } = require('../dist/core/automation');
 
 function fixture(t, Applier = AutomationApplier) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-prepared-'));
@@ -147,24 +147,7 @@ test('corrección se prepara desde baseline sin restaurarlo sobre el framework',
     assert.equal(fs.readFileSync(p.preview.featurePath, 'utf8'), next.preview.featureContent);
 });
 
-test('memoria revierte una promoción parcial si falla el índice', t => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-memory-tx-'));
-    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-    const memory = new AutomationMemory(root);
-    const scenario = { fingerprint: 'test', squad: 'payment', actions: [], request: { scenarioRows: [] } };
-    const original = fs.renameSync;
-    fs.renameSync = (from, to) => {
-        if (to === path.join(root, 'index.json')) throw new Error('index failed');
-        return original(from, to);
-    };
-    try {
-        assert.throws(() => memory.promote(scenario, { resolutions: [] }, { files: [], actionTrace: [] }, { valid: true, qualityScore: 100 }), /index failed/);
-    } finally { fs.renameSync = original; }
-    assert.equal(fs.existsSync(path.join(root, 'cases/test/v1/agent-response.json')), false);
-    assert.equal(fs.existsSync(path.join(root, 'fragments.json')), false);
-});
-
-test('handler aplica el preview final y entrega esos mismos bytes a memoria y recibo', async t => {
+test('handler aplica el preview final y registra el recibo sin aprender del resultado', async t => {
     const f = fixture(t);
     fs.writeFileSync(path.join(f.root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [], strict: true } }));
     f.response.files[1].content = 'export const verified: number = 1;';
@@ -180,19 +163,18 @@ test('handler aplica el preview final y entrega esos mismos bytes a memoria y re
     const state = { activeAutomationPackage: packageDirectory, automationPreview: {
         token: 'token', scenario: f.scenario, plan: f.plan, response: prepared.response, prepared,
     } };
-    let memorized;
+    fs.writeFileSync(path.join(packageDirectory, 'status.json'), JSON.stringify({ memoryVersion: 7 }));
     const result = await applyReviewedAutomation({ state, automationApplier: f.applier,
         generatedFileRegistry: { assess: () => ({ conflicts: [] }) },
         automationResponseValidator: { validate: () => ({ valid: true, qualityScore: 100, errors: [], warnings: [] }),
             toPreview: response => ({ ...f.preview, featureContent: response.files[0].content, stepContent: response.files[1].content }) },
-        automationMemory: { promote: (scenario, plan, response, validation, gaps, callback) => {
-            memorized = response; callback({ version: 1 }); return { version: 1 };
-        } }, emitProgress: () => {},
+        automationMemory: { promote: () => assert.fail('exportar no es aprobación golden') }, emitProgress: () => {},
     }, 'token', Object.fromEntries(prepared.files.map(file => [path.join(f.root, file.path), file.content])));
     assert.equal(result.success, true, result.error);
-    for (const file of memorized.files) assert.equal(file.content, fs.readFileSync(path.join(f.root, file.path), 'utf8'));
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'agent-response.json'))), memorized);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'status.json'))).memoryVersion, 1);
+    const applied = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'agent-response.json')));
+    for (const file of applied.files) assert.equal(file.content, fs.readFileSync(path.join(f.root, file.path), 'utf8'));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'status.json'))).memoryVersion, undefined);
+    assert.equal(result.memoryVersion, undefined);
     assert.equal(state.automationPreview, null);
 });
 

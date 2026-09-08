@@ -23,6 +23,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: yaperos/fwk-mobile-test
+          # Baseline F0: actualizar junto con la evidencia de calidad.
+          ref: 57e60c58b28ad4981e9a0b20ec50563c36ff854c
           token: ${{ secrets.FWK_MOBILE_TOKEN }}
           path: fwk-mobile-test
 

@@ -24,18 +24,11 @@ import {
     readUtf8File,
     writeJsonUtf8,
 } from '../../../shared';
-import { projectPaths } from '../../../workspace';
 import {
     AuthorCacheTarget,
     DELEGATES,
-    INPUT_FILES,
-    LAYERED_CACHE_SCHEMA_VERSION,
     ROLE_OUTPUTS,
 } from './roles';
-import {
-    integrationPrompt,
-    partialPrompt,
-} from './prompts';
 import { buildScreenApi } from './screenApi';
 
 export function artifact(file: string, root: string) {
@@ -60,14 +53,11 @@ export function stableFingerprint(value: unknown): string {
 }
 
 /**
- * Cachés de Lorem/Zorem/Sumrak: viven en la memoria del recorder, no en el
- * recording. Un resultado verificado sirve a cualquier recording cuyos inputs
- * sean los mismos una vez quitados los identificadores propios de la
- * grabación (recordingId, planId, fechas): una regrabación del mismo caso o
- * una regeneración desde otra carpeta no vuelven a pagar al agente.
+ * Caché temporal del intento. El directorio Derek se reinicia en cada run:
+ * un borrador no aprobado nunca se reutiliza entre generaciones o recordings.
  */
-export function agentCacheRoot(): string {
-    return path.join(projectPaths.automationMemory, 'agent-cache');
+export function agentCacheRoot(packageDirectory: string): string {
+    return path.join(packageDirectory, 'agents', 'derek', 'attempt-cache');
 }
 
 /**
@@ -294,33 +284,6 @@ export function normalizeAutomationResponse(response: AutomationAgentResponse, c
 export function actionInterfaceFingerprint(resultFile: string): string {
     const result = readJsonUtf8<LayeredAgentResult>(resultFile);
     return stableFingerprint({ trace: interfaceFingerprint(result.actionTrace), api: buildScreenApi(result) });
-}
-
-export function pipelineFingerprint(packageDirectory: string, model: string): string {
-    const files = [
-        ...INPUT_FILES.map(file => path.join(packageDirectory, file)),
-        ...filesInside(path.join(packageDirectory, 'baselines')),
-    ]
-        .filter(file => fs.existsSync(file) && fs.statSync(file).isFile())
-        .sort()
-        .map(file => ({
-            path: path.relative(packageDirectory, file).replace(/\\/g, '/'),
-            sha256: memoryIdentity(file),
-        }));
-    return stableFingerprint({
-        schemaVersion: LAYERED_CACHE_SCHEMA_VERSION,
-        model,
-        files,
-        prompts: {
-            behavior: partialPrompt('behavior-author', ROLE_OUTPUTS['behavior-author'], false),
-            interaction: partialPrompt('interaction-author', ROLE_OUTPUTS['interaction-author'], false),
-            integration: integrationPrompt(false),
-        },
-    });
-}
-
-export function pipelineCacheFile(fingerprint: string): string {
-    return path.join(agentCacheRoot(), 'pipeline', `${fingerprint}.json`);
 }
 
 export function promoteAuthorCache(outputFile: string, target: AuthorCacheTarget): void {

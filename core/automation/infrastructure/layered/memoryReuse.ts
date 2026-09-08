@@ -1,16 +1,7 @@
 /**
- * Qué autores hacen falta cuando el borrador ya viene de memoria.
- *
- * Cuando todas las filas del escenario son `reused` (step existente del
- * framework) o `wording: memory` (step que otro caso validó a score 100 para
- * la misma secuencia de elementos) y no queda ningún gap abierto, no hay nada
- * nuevo que escribir en Screen/Locators: Zorem no corre y el borrador
- * determinista es su resultado. Lorem tampoco redacta —el Gherkin ya está
- * validado— pero la revisión de diseño es del CASO (objetivo y criterio
- * contra lo grabado), no de las interacciones, así que por defecto Lorem
- * corre en modo revisión, con contexto mínimo y sin escribir capas. Solo si
- * el QA lo pide explícitamente (`inheritDesignReview`) se hereda la revisión
- * de los casos de origen y ningún autor corre.
+ * Reutilización exacta del framework: permite materializar las capas conocidas.
+ * El wording de memoria legacy no acredita esta reutilización. La revisión del
+ * objetivo sigue perteneciendo al caso actual, salvo decisión explícita del QA.
  */
 import fs from 'fs';
 import path from 'path';
@@ -78,16 +69,16 @@ export function authoringNeeds(
     if (open.length) {
         return { ...agents, reason: `${open.length} gap(s) abiertos: ${open.join(', ')}` };
     }
-    const fresh = rows.filter(row => row.status !== 'reused' && row.wording !== 'memory');
+    const fresh = rows.filter(row => row.status !== 'reused' || row.wording === 'memory');
     if (fresh.length) {
         return { ...agents, reason: `${fresh.length} step(s) nuevos por redactar` };
     }
-    const memoryCases = [...new Set(rows.map(row => row.memory?.caseId || '').filter(Boolean))];
+    const memoryCases: string[] = [];
     return {
         behavior: options.inheritDesignReview ? 'deterministic' : 'design-review',
         interaction: 'deterministic',
         memoryCases,
-        reason: 'todas las filas vienen del framework o de memoria y no hay gaps abiertos',
+        reason: 'todas las filas se reutilizan del framework y no hay gaps abiertos',
     };
 }
 
@@ -118,7 +109,7 @@ export function writeDeterministicAuthorResult(
         files: (draft.files || []).filter(file => layers.has(file.layer)),
         actionTrace: draft.actionTrace,
         assumptions: [
-            `Resultado materializado por Derek desde el borrador determinista: todas las interacciones ya fueron validadas` +
+            `Resultado materializado por Derek desde el borrador determinista: todas las interacciones ya existen` +
             (memoryCases.length ? ` en ${memoryCases.join(', ')}` : ' en el framework') + '.',
         ],
     };
@@ -133,7 +124,7 @@ export function writeDeterministicAuthorResult(
         stage: role,
         status: 'completed',
         artifacts: [artifact(outputFile, stageDirectory)],
-        instructions: ['Resultado determinista desde memoria validada; verificar hash antes de integrar.'],
+        instructions: ['Resultado determinista desde el framework; verificar hash antes de integrar.'],
     });
     return outputFile;
 }
@@ -142,11 +133,11 @@ export function inheritedDesignReview(memoryCases: string[]): TestDesignReview {
     return {
         status: 'pass',
         summary: 'Revisión de diseño heredada por decisión del QA: todas las interacciones y verificaciones ' +
-            'de este caso ya fueron validadas a score 100' +
+            'de este caso ya existen' +
             (memoryCases.length ? ` en ${memoryCases.join(', ')}` : ' en el framework') +
             '. Nadie revisó el objetivo y el resultado esperado de ESTE caso.',
         issues: [],
-        source: 'memory',
+        source: 'framework',
     };
 }
 
@@ -154,7 +145,7 @@ export function inheritedDesignReview(memoryCases: string[]): TestDesignReview {
 export function designReviewPrompt(memoryCases: string[]): string {
     return [
         'Eres Lorem, behavior-author bajo la coordinación de Derek, en modo revisión de diseño.',
-        'behavior-result.json ya está escrito por Derek con Feature y Steps que otros casos validaron a score 100' +
+        'behavior-result.json ya está escrito por Derek con Feature y Steps reutilizados del framework' +
         (memoryCases.length ? ` (${memoryCases.join(', ')})` : '') + '. No lo modifiques ni lo reescribas.',
         'Lee scenario.json (objective, acceptanceCriteria, actions), generation-plan.json y behavior-result.json.',
         'Evalúa únicamente el diseño funcional de ESTE caso: contrasta objective y acceptanceCriteria con las acciones y verificaciones grabadas.',

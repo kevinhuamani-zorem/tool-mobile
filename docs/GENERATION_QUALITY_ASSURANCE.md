@@ -27,7 +27,7 @@ La puerta exige:
 - generación de las cuatro capas cuando el caso las necesita;
 - build completo de Electron y React;
 - reducción de contexto mínima para los grafos locales.
-- cuatro rutas exactas, traza completa y score 100 para promover memoria;
+- cuatro rutas exactas, traza completa y ausencia de aprendizaje por exportación;
 - medición de objetivos de 120 000 bytes y 300 000 ms por etapa (avisos, no
   cortes); hang stop independiente de una hora por defecto y reparación acotada
   según el plan;
@@ -61,7 +61,8 @@ La puerta exige:
 configuración heredada, NodeNext, imports JSON, métodos y argumentos inválidos,
 claves ausentes, deuda preexistente, cambios de dependencias y estados no
 comprobables. `tests/preparedAutomation.test.js` comprueba además que el handler
-no escribe ni promueve memoria cuando el código pasa sintaxis pero falla tipos.
+no escribe cuando el código pasa sintaxis pero falla tipos (F3 cambiará esa
+política de exportación). Aplicar nunca promociona memoria, tampoco con score 100.
 
 En la app, importar un caso, introducir una llamada a un método inexistente y
 revalidar: debe conservar los archivos para edición, indicar código TypeScript,
@@ -116,7 +117,7 @@ una ejecución exitosa en el dispositivo.
     comprobar que la traza completa sea válida.
 12. Generar y confirmar que todos los archivos permanezcan dentro del workspace
    activo.
-13. Confirmar que solo la generación validada al 100% aparece en memoria.
+13. Confirmar que aplicar no crea memoria y que un nuevo intento no usa cachés legacy.
 14. Regenerar un caso importado, confirmar la copia en `history`, un `planId`
     nuevo y las mismas cuatro rutas.
 15. Modificar externamente uno de sus archivos y comprobar que el refinamiento

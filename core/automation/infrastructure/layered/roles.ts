@@ -156,10 +156,3 @@ export interface RepairIssue {
     /** Archivo del plan al que apunta el error (ruta relativa al framework). */
     file?: string;
 }
-
-export interface PipelineCacheEntry {
-    schemaVersion: 1;
-    fingerprint: string;
-    response: AutomationAgentResponse;
-    testDesignReview?: unknown;
-}

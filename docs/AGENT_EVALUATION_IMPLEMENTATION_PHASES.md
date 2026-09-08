@@ -2,8 +2,9 @@
 
 Fecha: 2026-09-08.
 
-Estado: **fases definidas; implementación pendiente**. Ninguna fase se considera
-terminada por estar documentada. Referencia inspeccionada del recorder:
+Estado: **implementación iniciada: baseline F0 y retirada de memoria en F1**.
+El historial de F1 y las fases siguientes siguen pendientes. Ver
+[avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
 
@@ -53,13 +54,13 @@ evidencia de cuáles errores se reducen o reaparecen.
 
 Objetivo: empezar desde el estado real del recorder y del framework.
 
-- [ ] Capturar SHA y estado de trabajo de ambos repositorios, versiones de
+- [x] Capturar SHA y estado de trabajo de ambos repositorios, versiones de
   Node/dependencias y resultado fechado de `npm run quality`.
-- [ ] Consultar CodeGraph antes de modificar módulos grandes y registrar los
+- [x] Consultar CodeGraph antes de modificar módulos grandes y registrar los
   puntos donde se valida, exporta, corrige, cachea y promociona memoria.
-- [ ] Identificar todos los límites de corrección, incluyendo feedback dentro
+- [x] Identificar todos los límites de corrección, incluyendo feedback dentro
   de sesiones y resincronización de la interfaz Lorem/Zorem.
-- [ ] Fijar una referencia real del framework para CI y comparar fallos con la
+- [x] Fijar una referencia real del framework para CI y comparar fallos con la
   evidencia capturada, sustituyendo la clasificación por nombres hardcodeados
   de `phase43-baseline.js`. No inventar un SHA ni esconder fallos preexistentes.
 - [ ] Preparar fixtures aislados de borrador inválido, archivo compartido con
@@ -87,16 +88,16 @@ un caso exitoso.
   del paquete pueden seguir como vistas compatibles del historial.
 - [ ] Separar estados de generación, exportación, aprobación QA y verificación
   funcional. Una exportación con observaciones no significa generación exitosa.
-- [ ] Retirar la promoción automática desde `applyAutomation` y deshabilitar
+- [x] Retirar la promoción automática desde `applyAutomation` y deshabilitar
   los lectores de casos, fragmentos, gaps y vocabulario de la memoria antigua,
   incluyendo su reconstrucción automática y los caminos manual/heredado.
-- [ ] Invalidar las cachés persistentes de respuestas previas del agente. Las
+- [x] Invalidar las cachés persistentes de respuestas previas del agente. Las
   entregas de un intento en curso pueden conservarse para continuar ese intento;
   no se reutilizan entre casos como conocimiento aprobado.
-- [ ] Preparar una migración idempotente que archive la memoria anterior sin
+- [x] Preparar una migración idempotente que archive la memoria anterior sin
   borrado destructivo. Conservar el índice del framework, los diccionarios
   estáticos, las grabaciones y la evidencia; no son casos aprendidos.
-- [ ] Permitir generación con el índice golden vacío: usar contratos, resolver
+- [x] Permitir generación con el índice golden vacío: usar contratos, resolver
   y evidencia actual del framework. No reactivar memoria antigua como fallback.
 
 Superficie: `automationRecordingStore.ts`, `agentRunStore.ts`,

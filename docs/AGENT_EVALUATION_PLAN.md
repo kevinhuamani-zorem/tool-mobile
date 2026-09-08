@@ -13,7 +13,9 @@ sustituye la tabla resumida de entregas de abajo para organizar la implementaci�
 
 ## Decisión de producto actualizada — 2026-09-08
 
-**Estado: plan acordado, pendiente de implementación.** Esta sección incorpora
+**Estado: implementación iniciada; baseline F0 y retirada de memoria en F1.**
+El historial y las entregas siguientes siguen pendientes; ver
+[avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Esta sección incorpora
 la decisión del usuario: limitar la iteración automática, entregar el borrador
 al QA sin bloquear su exportación por calidad y recuperar del framework la
 versión que el QA corrigió y verificó para convertirla en golden.

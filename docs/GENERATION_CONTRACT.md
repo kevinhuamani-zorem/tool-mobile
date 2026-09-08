@@ -44,7 +44,7 @@ método, no compara el texto devuelto, o compara con otro operador/valor). Cada
 mensaje nombra la parte que falla y muestra la línea esperada. La política
 existente de revisión/aplicación del QA no cambia.
 
-El fingerprint y la memoria de interacciones incluyen esta definición y el valor
+El fingerprint incluye esta definición y el valor
 exacto. Cambiarla invalida la reutilización de una comparación distinta. Las
 grabaciones anteriores no se reinterpretan: siguen sin `textAssertion` hasta que
 el QA las edite explícitamente. La edición conserva el locator y solo se guarda
@@ -348,29 +348,22 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
   `gap-english-naming`. En el pipeline por capas ese gap es informativo para
   Lorem y Zorem (nombran en inglés al escribir), Derek lo firma como
   `renamed-by-authors` y Sumrak no lo juzga.
-- La memoria del recorder aprende de respuestas validadas al 100%: si el agente
-  renombró `historyEncadenadoList` a `historyChainedList`, `encadenado →
-  chained` queda en `runtime/automation-memory/vocabulary.json` y se carga en
-  el diccionario al preparar el siguiente paquete. La memoria no aprende de
-  fallos.
-- La misma memoria conserva fragmentos entre recordings
-  (`runtime/automation-memory/fragments.json`): una fila `scenarioRows` con
-  `wording: memory` trae el texto y `methodName` que otro caso validó para
-  exactamente esa secuencia de elementos, y `memory.caseId` dice cuál. Los
-  autores la tratan como wording validado, no como plantilla; pueden mejorarla
-  pero no necesitan reescribirla. Un gap `verification-semantics` con
-  `status: resolved` y `resolvedBy: memory` no aparece en
-  `plan.unresolvedGapIds`: ya se decidió sobre ese mismo elemento y no exige
-  resolución. `AutomationPackageResult.memoryRecall` resume cuántos steps y
-  decisiones se heredaron y de qué casos.
-- Si todo el caso viene de memoria o del framework y no hay gaps abiertos,
-  Zorem no corre y Lorem solo revisa el diseño (`test-design-review.json`
-  con `source: agent`); con la preferencia `inheritDesignReview` del QA no
-  corre ningún agente y la revisión heredada se marca `source: memory`.
-  "Abiertos" son los gaps que aún exigen juicio (`gapJudgment().open`), no
-  todo `plan.unresolvedGapIds`: los que Derek firma sin abrir sesión, como
-  `gap-extend-existing-artifacts` (presente en todo `update`) o
-  `gap-english-naming`, no obligan a lanzar a Zorem.
+- La memoria legacy está retirada. `AutomationMemory` no devuelve casos,
+  fragmentos ni vocabulario; tampoco reconstruye entradas desde `cases/`.
+  Aplicar una respuesta no enseña a los agentes, incluso con score 100. Al
+  arrancar Electron se archivan los datos conocidos de memoria y el caché global
+  bajo `runtime/automation-memory/legacy-v1/<lote>/`. Si el archivo falla,
+  las lecturas permanecen deshabilitadas. Recordings y golden se conservan.
+- Si todas las filas se reutilizan del framework y no hay gaps que exijan
+  juicio (`gapJudgment().open`), Zorem no corre y Lorem solo revisa el diseño
+  (`source: agent`). Un `wording: memory` legacy no habilita este atajo. Con la
+  preferencia explícita `inheritDesignReview` se omite esa revisión y se registra
+  `source: framework`, indicando que nadie revisó el objetivo de este caso.
+  Esta reutilización no equivale a aprobación golden.
+- No se recuperan respuestas de otro intento ni se usa un `agent-response.json`
+  anterior como caché. Los cachés temporales de autores/revisión se ubican bajo
+  `agents/derek/attempt-cache/`, que se reinicia en cada ejecución. El índice de
+  ejemplos derivados de revisiones golden aprobadas se implementará en F6.
 - La normalización nunca renombra identificadores heredados del framework (los
   declarados en el baseline de un archivo `update`, como `titleVentas`):
   traducirlos destruiría una API existente. Y el importador nunca convierte una
@@ -623,7 +616,7 @@ prompts, XML o capturas. Sus estados son:
 - `passed`: sin errores en el alcance comprobado.
 - `preexisting-errors`: sin errores nuevos, con deuda previa visible al QA.
 - `failed`: errores nuevos; conserva el borrador editable pero impide aplicar y
-  promover memoria hasta corregir/revalidar.
+  aplicar hasta corregir/revalidar (la exportación con diagnósticos corresponde a F3).
 - `unavailable`: faltan configuración, módulos/tipos o no se puede comprobar;
   no equivale a aprobado. `noCheck` y proyectos con `references` también se
   reportan como no comprobados; estos últimos aún no están soportados.
@@ -650,8 +643,8 @@ y revisar el resultado, no se descarta en silencio.
 La escritura usa una transacción recuperable para los archivos creados y
 actualizados, el registro, el recibo y el estado del paquete. Ante una excepción
 se restauran los anteriores y se retiran únicamente los archivos nuevos de esa
-operación. La memoria tiene rollback propio y promociona la respuesta exacta
-aplicada, después de escribir y registrar el resultado. La recuperación cubre
+operación. La respuesta aplicada queda registrada sin promoción de memoria ni
+aprobación golden automática. La recuperación cubre
 fallos capturados durante el proceso; no es un journal persistente contra un
 apagado abrupto del sistema.
 
@@ -909,12 +902,10 @@ devuelto al estado previo (baselines aplicados, `create` retirados), tiene que
 aceptar los archivos aprobados con el mismo perfil de errores. Los datos de
 prueba de la grabación viajan con el caso: revísalos antes de versionarlo.
 
-El dataset también es la semilla portable de la memoria: `npm run
-golden:seed-memory` promueve a `runtime/automation-memory` los casos validados
-al 100 % que la memoria de esa máquina no tenga, con la respuesta aceptada
-(correcciones incluidas). Los agentes no reciben el dataset completo: la
-memoria sigue seleccionando por fingerprint y fragmentos, que es lo que
-mantiene el contexto acotado.
+El comando `golden:seed-memory` está retirado y termina con un mensaje explícito
+sin escribir memoria. Los golden existentes se conservan para replay. El índice
+reconstruible que consumirá únicamente revisiones aprobadas por QA corresponde a
+F6 de [las fases de implementación](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
 
 ## Conformidad con el review de PR
 

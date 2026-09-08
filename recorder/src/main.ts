@@ -23,6 +23,7 @@ import {
     AutomationPackageBuilder,
     AutomationAgentLauncher,
     AutomationMemory,
+    archiveLegacyAutomationMemory,
     AutomationPatchWriter,
     AutomationApplier,
     CopilotCliAdapter,
@@ -126,6 +127,8 @@ app.whenReady().then(async () => {
     const generatedFileRegistry = new GeneratedFileRegistry();
     const automationRecordingStore = new AutomationRecordingStore();
     const automationMemory = new AutomationMemory();
+    try { archiveLegacyAutomationMemory(); }
+    catch { console.warn('No se pudo archivar la memoria anterior; su uso sigue deshabilitado.'); }
     const automationPatchWriter = new AutomationPatchWriter();
     const automationApplier = new AutomationApplier(automationPatchWriter, fwkMobileGenerator, generatedFileRegistry);
     const automationResponseValidator = new AutomationResponseValidator();

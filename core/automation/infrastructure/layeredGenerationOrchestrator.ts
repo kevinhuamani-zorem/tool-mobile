@@ -46,7 +46,6 @@ import {
     LayeredValidationError,
     MAX_LAYERED_REPAIR_ATTEMPTS,
     MAX_LIVE_FEEDBACK_ROUNDS,
-    PipelineCacheEntry,
     ROLE_INPUT_FILES,
     ROLE_LAYERS,
     ROLE_OUTPUTS,
@@ -87,8 +86,6 @@ import {
     filesInside,
     normalizeAutomationResponse,
     normalizeAuthorResult,
-    pipelineCacheFile,
-    pipelineFingerprint,
     promoteAuthorCache,
     sessionName,
     stableFingerprint,
@@ -164,70 +161,6 @@ export class LayeredGenerationOrchestrator {
 
         let repairAttempts = 0;
         try {
-            const completeFingerprint = pipelineFingerprint(root, options.model || DEFAULT_AGENT_MODEL);
-            const completeCacheFile = pipelineCacheFile(completeFingerprint);
-            if (!options.forceRegenerate) {
-                let cachedEntry: PipelineCacheEntry | undefined;
-                if (fs.existsSync(completeCacheFile)) {
-                    cachedEntry = readJsonUtf8<PipelineCacheEntry>(completeCacheFile);
-                } else {
-                    // Migración transparente: una respuesta oficial existente y
-                    // válida pertenece al mismo plan y puede sembrar el caché.
-                    const existingResponseFile = path.join(root, 'agent-response.json');
-                    if (fs.existsSync(existingResponseFile)) {
-                        const response = readJsonUtf8<AutomationAgentResponse>(existingResponseFile);
-                        if (normalizeAutomationResponse(response, scenarioNaming(root))) {
-                            writeJsonUtf8(existingResponseFile, response);
-                        }
-                        const reviewFile = path.join(root, 'test-design-review.json');
-                        cachedEntry = {
-                            schemaVersion: 1,
-                            fingerprint: completeFingerprint,
-                            response,
-                            testDesignReview: fs.existsSync(reviewFile)
-                                ? readJsonUtf8<unknown>(reviewFile)
-                                : undefined,
-                        };
-                    }
-                }
-                if (cachedEntry) {
-                    rebindCachedResult(cachedEntry.response, plan);
-                    normalizeAutomationResponse(cachedEntry.response, scenarioNaming(root));
-                }
-                if (cachedEntry
-                    && cachedEntry.fingerprint === completeFingerprint
-                    && this.isReusableResponse(root, plan, cachedEntry.response)) {
-                    const responseFile = path.join(root, 'agent-response.json');
-                    writeJsonUtf8(responseFile, cachedEntry.response);
-                    if (cachedEntry.testDesignReview) {
-                        writeJsonUtf8(path.join(root, 'test-design-review.json'), cachedEntry.testDesignReview);
-                    }
-                    fs.mkdirSync(path.dirname(completeCacheFile), { recursive: true });
-                    writeJsonUtf8(completeCacheFile, cachedEntry);
-                    for (const role of ['behavior-author', 'interaction-author', 'integration-reviewer'] as const) {
-                        const stage: LayeredGenerationStageReport = {
-                            role,
-                            agentName: LAYERED_GENERATION_AGENTS[role].name,
-                            sessionName: `${sessionName(plan.recordingId, role)}/pipeline-cache`,
-                            attempt: 0,
-                            state: 'completed',
-                            durationMs: 0,
-                            outputFile: 'agent-response.json',
-                            execution: 'cache',
-                            fingerprint: completeFingerprint,
-                            cacheHit: true,
-                            contextBytes: 0,
-                            contextFiles: 0,
-                            assignedLayers: [...ROLE_LAYERS[role]],
-                        };
-                        stages.push(stage);
-                        options.onStageChange?.({ ...stage });
-                    }
-                    writeOwnerManifest(agentsRoot, plan, 'completed', draft);
-                    this.writeReport(reportFile, plan, startedAt, 'completed', stages, 0, draft);
-                    return { success: true, responseFile, reportFile };
-                }
-            }
             const behaviorCache: AuthorCacheTarget = {};
             const interactionCache: AuthorCacheTarget = {};
             const draftContract = options.parallelAuthors === false
@@ -235,7 +168,7 @@ export class LayeredGenerationOrchestrator {
                 : writeDraftBehaviorContract(root, agentsRoot, plan);
             let behavior: string | undefined;
             let interaction: string | undefined;
-            // Todo el caso viene de memoria o del framework y no hay gaps
+            // Todo el caso se reutiliza del framework y no hay gaps
             // abiertos: Zorem no tiene nada que escribir y Lorem no redacta.
             // Lorem sí revisa el diseño del caso, salvo que el QA pida heredar
             // esa revisión. Si la revisión falla, se vuelve al flujo normal.
@@ -309,18 +242,6 @@ export class LayeredGenerationOrchestrator {
                     // Si hubo reparación, estas rutas apuntan al resultado final.
                     promoteAuthorCache(behavior!, behaviorCache);
                     promoteAuthorCache(interaction!, interactionCache);
-                    const response = readJsonUtf8<AutomationAgentResponse>(responseFile);
-                    const reviewFile = path.join(root, 'test-design-review.json');
-                    const completeEntry: PipelineCacheEntry = {
-                        schemaVersion: 1,
-                        fingerprint: completeFingerprint,
-                        response,
-                        testDesignReview: fs.existsSync(reviewFile)
-                            ? readJsonUtf8<unknown>(reviewFile)
-                            : undefined,
-                    };
-                    fs.mkdirSync(path.dirname(completeCacheFile), { recursive: true });
-                    writeJsonUtf8(completeCacheFile, completeEntry);
                     writeOwnerManifest(agentsRoot, plan, 'completed', draft);
                     this.writeReport(reportFile, plan, startedAt, 'completed', stages, repairAttempts, draft);
                     return { success: true, responseFile, reportFile };
@@ -379,23 +300,6 @@ export class LayeredGenerationOrchestrator {
         }
     }
 
-    private isReusableResponse(
-        packageDirectory: string,
-        plan: GenerationPlan,
-        response: AutomationAgentResponse,
-    ): boolean {
-        if (response.recordingId !== plan.recordingId || response.planId !== plan.planId) return false;
-        const expected = new Map(plan.files.map(file => [file.layer, file.path]));
-        const actual = new Map((response.files || []).map(file => [file.layer, file.path]));
-        if (actual.size !== expected.size) return false;
-        if ([...expected].some(([layer, file]) => actual.get(layer) !== file)) return false;
-        const resolved = new Set((response.resolutions || []).map(item => item.gapId));
-        if ((plan.unresolvedGapIds || []).some(gapId => !resolved.has(gapId))) return false;
-        if (screenApiInputErrors(response).length || validateScreenApi(response, response).length) return false;
-        const validation = this.responseValidator?.(packageDirectory, response);
-        return validation ? validation.valid : true;
-    }
-
     private pushDeterministicStage(
         stages: LayeredGenerationStageReport[],
         plan: GenerationPlan,
@@ -407,7 +311,7 @@ export class LayeredGenerationOrchestrator {
         const report: LayeredGenerationStageReport = {
             role,
             agentName: identity.name,
-            sessionName: `${sessionName(plan.recordingId, role)}/memory`,
+            sessionName: `${sessionName(plan.recordingId, role)}/framework`,
             attempt: 0,
             state: 'completed',
             durationMs: 0,
@@ -426,9 +330,9 @@ export class LayeredGenerationOrchestrator {
 
     /**
      * Lorem en modo revisión: Feature y Steps ya están materializados desde
-     * memoria validada; solo evalúa el diseño de ESTE caso (objetivo y
+     * reutilización del framework; solo evalúa el diseño de ESTE caso (objetivo y
      * criterio contra lo grabado) con un contexto mínimo. El resultado se
-     * cachea por identidad de inputs sin ids del recording.
+     * conserva únicamente en esta ejecución.
      */
     private async runDesignReview(
         packageDirectory: string,
@@ -463,7 +367,7 @@ export class LayeredGenerationOrchestrator {
                 sha256: memoryIdentity(file),
             })),
         });
-        const cacheFile = path.join(agentCacheRoot(), 'design-review', `${cacheFingerprint}.json`);
+        const cacheFile = path.join(agentCacheRoot(packageDirectory), 'design-review', `${cacheFingerprint}.json`);
         const outputFile = path.join(stageDirectory, 'test-design-review.json');
         const namedSession = `${sessionName(plan.recordingId, role)}/design-review`;
         const budget = stageBudget(plan, options);
@@ -678,10 +582,9 @@ export class LayeredGenerationOrchestrator {
                 // otro recording es el mismo trabajo para el agente.
                 .map(item => ({ path: item.path, sha256: memoryIdentity(path.join(stageDirectory, item.path)) })),
         });
-        // El caché vive en la memoria del recorder (no en el recording): un
-        // resultado verificado sirve a cualquier recording con los mismos
-        // inputs, y sobrevive a que automation/ se reconstruya.
-        const cacheFile = path.join(agentCacheRoot(), role, `${cacheFingerprint}.json`);
+        // El caché pertenece exclusivamente a esta ejecución; nunca recupera
+        // propuestas de otro intento sin aprobación del QA.
+        const cacheFile = path.join(agentCacheRoot(packageDirectory), role, `${cacheFingerprint}.json`);
         if (attempt === 0 && repairErrors.length === 0) cacheTarget.file = cacheFile;
         const budget = stageBudget(plan, options);
         const report: LayeredGenerationStageReport = {

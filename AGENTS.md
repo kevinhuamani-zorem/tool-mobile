@@ -105,12 +105,14 @@ generadores, validadores o plantillas.
     fijados en su lockfile. El `.app` inicia ese runtime empaquetado y registra
     sus drivers en un `APPIUM_HOME` escribible. Nunca uses ni modifiques las
     dependencias Appium del framework padre para iniciar una sesión.
-13. **La memoria no aprende de fallos.** Solo una propuesta generada, revisada
-    y validada con score 100 puede promocionarse a `runtime/automation-memory`.
-    La memoria es global, no del recording: lo que un caso validado enseña
-    (wording y método por secuencia de elementos, decisiones de gaps por
-    elemento, cachés de agentes por identidad de inputs sin ids) lo reutiliza
-    cualquier otro recording. Nunca guarda selectores ni renombra nada.
+13. **Solo la aprobación QA permite aprender.** Exportar/aplicar o conseguir
+    score 100 no promociona memoria. La memoria legacy está deshabilitada:
+    casos, fragmentos, vocabulario y cachés anteriores se archivan bajo
+    `runtime/automation-memory/legacy-v1/`, sin borrarlos ni convertirlos en
+    golden. Ninguna generación recupera respuestas de otro intento. El índice
+    derivado de revisiones golden aprobadas por QA se implementará en F6;
+    mientras tanto las lecturas legacy devuelven vacío. La reutilización exacta
+    del framework permanece disponible y no acredita aprobación golden.
 14. **Regenerar conserva identidad y rutas.** Un refinamiento parte del último
     `agent-response.json` validado, crea una versión histórica, mantiene
     `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry

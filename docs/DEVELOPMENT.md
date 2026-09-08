@@ -54,9 +54,9 @@ copia el resultado a `node_modules/.cache`.
 | `npm run codegraph:export -- --squad X` | Exporta subgrafo del target |
 | `npm run phase43:refresh-canonical` | Regenera los golden canónicos de `tests/fixtures/phase43/*` |
 | `npm run test:phase43:deterministic` | Ejecuta regresión determinística L1 sin agente real |
-| `npm run test:phase43:baseline` | Corre baseline completo y escribe clasificación en `runtime/phase43/` |
+| `npm run test:phase43:baseline` | Captura resultados y contexto en `runtime/phase43/`; `-- --baseline <reporte.json>` compara contra una captura compatible |
 | `npm run golden:save -- <grabación> [--executed passed] [--notes "…"]` | Guarda una grabación ya aplicada como caso golden (`tests/golden/`), igual que «Guardar como dataset» en la revisión |
-| `npm run golden:seed-memory` | Siembra `runtime/automation-memory` con los casos golden validados al 100 % que la memoria no tenga |
+| `npm run golden:seed-memory` | Retirado: informa el reemplazo previsto en F6 y sale sin modificar memoria |
 | `npm run test:golden` | Reproduce cada caso de `tests/golden/`: mismo plan del resolver y archivos aceptados aún válidos |
 
 Flags útiles del pipeline agentic:
@@ -168,12 +168,12 @@ ya cerró y, si continúa inválida, relanza solo ese autor como
 `.../repair-1/feedback-N`. La traza provisional siempre sale del resultado
 vigente de Lorem, nunca de un borrador anterior de Sumrak.
 
-El pipeline usa fingerprints de contenido para reutilizar resultados válidos de
-Lorem y Zorem cuando no cambiaron acciones, plan, baselines, prompt o modelo.
-El caché vive en `runtime/automation-memory/agent-cache/` (no en el recording):
-la clave ignora `recordingId`, `planId` y fechas, así que otro recording con los
-mismos inputs reutiliza el resultado; cualquier cambio de contenido genera otra
-clave y evita reutilizaciones obsoletas.
+El pipeline no reutiliza respuestas entre generaciones. El caché temporal de
+la ejecución vive en `agents/derek/attempt-cache/`; el arranque de cada `run`
+reinicia ese directorio. Un `agent-response.json` anterior tampoco sirve como
+caché. Los casos, fragmentos, vocabulario y caché global legacy se archivan al
+iniciar Electron, y sus lectores permanecen vacíos incluso si el archivo falla.
+El futuro índice solo se reconstruirá desde revisiones golden aprobadas por QA.
 Los inputs se proyectan por responsabilidad: Lorem no recibe contratos ni
 baselines exclusivos de Screen/Locators, y Zorem no recibe baselines de
 Feature/Steps. En reparación, Zorem solo se relanza por feedback de interacción
@@ -289,7 +289,8 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
    Conserva los límites de reparación del plan; no los amplíes sin
    decisión explícita y métricas.
 4. Añade pruebas de resolver, paquete, validator y memoria.
-5. Un resultado solo entra a memoria después de escritura revisada y score 100.
+5. Aplicar o alcanzar score 100 no enseña a los agentes. No reintroduzcas lectores
+   ni promoción de memoria legacy; el índice derivado de golden corresponde a F6.
 
 ### Cambio de driver o gestos
 
@@ -352,3 +353,21 @@ npm run quality
 No incluyas `.env`, credenciales, sesiones, screenshots, workspaces, grafos,
 coverage, `dist`, `renderer-dist` ni dependencias. Conserva cambios ajenos en un
 worktree sucio y evita comandos destructivos.
+
+## Comparación del baseline de evaluación
+
+`npm run test:phase43:baseline` ejecuta la suite real y guarda reporte JSON y log.
+La primera captura no clasifica fallos como preexistentes. Para comparar:
+
+```bash
+npm run test:phase43:baseline -- --baseline runtime/phase43/baseline-<fecha>.json
+```
+
+Solo compara capturas completas con el mismo framework (commit y hash de cambios
+locales), lockfiles y entorno Node/plataforma/arquitectura. El recorder puede
+cambiar entre capturas: sus revisiones y hashes quedan registrados para atribuir
+la diferencia. `PREEXISTING` significa que el mismo test falló antes; no prueba
+que tenga la misma causa. `REGRESSION` exige que ese test haya pasado antes.
+Un test nuevo fallido queda `UNBASELINED`; omitir o saltar un test no lo resuelve.
+El comando conserva salida fallida aunque los fallos ya existieran. Un contexto
+distinto o una corrida cancelada no produce una comparación válida.

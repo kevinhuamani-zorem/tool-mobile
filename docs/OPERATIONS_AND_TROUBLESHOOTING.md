@@ -234,7 +234,8 @@ y vuelve a guardar: la corrección se valida, se escribe en el framework y es la
 versión que queda en el dataset. Si lo corregiste días después en el framework,
 `npm run golden:save -- <carpeta o recordingId> --executed passed --notes "…"`
 toma lo que hay en disco. `npm run test:golden` reproduce los casos guardados y
-`npm run golden:seed-memory` los siembra en la memoria de otra máquina. Los
+`npm run golden:seed-memory` está retirado: no escribe memoria. El índice
+derivado de revisiones golden aprobadas corresponde a F6. Los
 datos de prueba de la grabación (usuarios QA, correos, celulares de ambiente)
 viajan con el caso: revísalos antes de commitear.
 
@@ -372,10 +373,10 @@ módulo: el resolver ya no adopta esa coincidencia (la resolución queda `create
 con `unspecificSelector: true` y `declinedReuse`), el QA la ve en
 `qa-observations.json` (`unspecific-selector`) y el validador la avisa sin
 bloquear (`framework-locator-collision` como warning). Un caso ya aplicado con
-el Screen equivocado se revierte en el framework con git; si además se promovió
-a memoria (`runtime/automation-memory/index.json` con `qualityScore: 100`),
-borra esa entrada y sus fragmentos (`fragments.json`, mismo `fingerprint`) para
-que no se replique en la siguiente grabación.
+el Screen equivocado se corrige en el framework. La memoria legacy ya no se
+consume: no hace falta borrar casos ni fragmentos. Al iniciar Electron se
+archivan bajo `runtime/automation-memory/legacy-v1/`, sin aprobación golden.
+
 
 ### Al ejecutar, Cucumber reporta «Multiple step definitions match» o un step undefined
 
@@ -429,7 +430,8 @@ corrige manualmente y **Reimportar corrección del agente**. En layered, Derek
 dirige `repair-feedback.json` al autor de la capa afectada. **Revalidar** comprueba
 el preview conforme al modo de revisión. Las sugerencias funcionales no bloquean;
 errores técnicos nuevos de compilación o de integridad deben resolverse antes
-de aplicar. Una propuesta fallida no se promociona a memoria.
+de aplicar (la exportación con diagnósticos se implementará en F3). Ninguna
+exportación promociona memoria, aunque la propuesta sea válida.
 
 ### Falló la ejecución automática del agente
 

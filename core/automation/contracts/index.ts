@@ -669,10 +669,11 @@ export interface TestDesignReview {
     summary: string;
     issues: TestDesignIssue[];
     /**
-     * `memory`: el QA pidió heredar la revisión de los casos de origen y
-     * ningún agente evaluó este caso. Ausente o `agent`: la evaluó Lorem.
+     * `framework`: el QA omitió revisar el diseño del caso reutilizado.
+     * `memory` se conserva para leer artefactos legacy, no acredita aprobación.
+     * Ausente o `agent`: la evaluó Lorem.
      */
-    source?: 'agent' | 'memory';
+    source?: 'agent' | 'memory' | 'framework';
 }
 
 export interface AutomationAgentResponse {

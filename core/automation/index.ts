@@ -26,6 +26,7 @@ export * from './domain/verifiedSelectorCandidates';
 export * from './application/automationMemory';
 export * from './application/gapExecutionPlanner';
 
+export * from './infrastructure/legacyAutomationMemoryArchive';
 export * from './infrastructure/agentContextEnvelope';
 export * from './infrastructure/agentOrchestrator';
 export * from './infrastructure/agentRunStore';

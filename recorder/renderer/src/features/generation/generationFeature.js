@@ -533,7 +533,7 @@ export function createGenerationFeature(deps) {
                 }
                 rememberGeneratedFiles(result.generated.files);
                 setGenerate(
-                    `✓ ${result.generated.files.length} archivos generados · memoria v${result.memoryVersion} validada al 100%`,
+                    `✓ ${result.generated.files.length} archivos generados · pendientes de verificación del QA`,
                     'ok'
                 );
                 state.previewDocuments.forEach(document => {

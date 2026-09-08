@@ -1,0 +1,2933 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-08T15:54:15.067Z",
+  "context": {
+    "recorderHead": "64423280de47681e6fa782eb324b9e0de2006374",
+    "recorderWorktree": " M .github/workflows/quality.yml\n M AGENTS.md\n M core/automation/application/automationMemory.ts\n M core/automation/contracts/index.ts\n M core/automation/index.ts\n M core/automation/infrastructure/layered/artifacts.ts\n M core/automation/infrastructure/layered/memoryReuse.ts\n M core/automation/infrastructure/layered/roles.ts\n M core/automation/infrastructure/layeredGenerationOrchestrator.ts\n M docs/AGENT_EVALUATION_IMPLEMENTATION_PHASES.md\n M docs/AGENT_EVALUATION_PLAN.md\n M docs/ARCHITECTURE.md\n M docs/DEVELOPMENT.md\n M docs/GENERATION_CONTRACT.md\n M docs/GENERATION_QUALITY_ASSURANCE.md\n M docs/OPERATIONS_AND_TROUBLESHOOTING.md\n M docs/README.md\n M recorder/renderer/src/features/generation/generationFeature.js\n M recorder/src/ipc/automation/applyAutomation.ts\n M recorder/src/main.ts\n M scripts/golden-seed-memory.js\n M scripts/phase43-baseline.js\n M tests/automationPipeline.test.js\n M tests/layeredGenerationOrchestrator.test.js\n M tests/memoryFragments.test.js\n M tests/preparedAutomation.test.js\n?? core/automation/infrastructure/legacyAutomationMemoryArchive.ts\n?? docs/AGENT_EVALUATION_PROGRESS.md\n?? tests/automationMemoryRetirement.test.js\n?? tests/phase43Baseline.test.js\n",
+    "frameworkHead": "57e60c58b28ad4981e9a0b20ec50563c36ff854c",
+    "frameworkWorktree": " M config/wdio.shared.conf.ts\n M package-lock.json\n M package.json\n M resources/locators/payment/movements.locator.json\n M screenobjects/payment/movements.screen.ts\n?? features/yape-features/payment/enter-email-validate-message.feature\n?? features/yape-steps-definitions/payment/enter-email-validate-message.steps.ts\n",
+    "frameworkWorkingHash": "75d369e1d35d00a17bf8aec35dc8d26cb5e2ec13c6ec32c601e414eb7bc05879",
+    "recorderWorkingHash": "576c8b5e57ce4627d180452e869c95ff4e2b4711f5a23179a8c5291802b7780c",
+    "recorderLockHash": "76c82765a6b0e8b717bca41e9467e7144dcd55f830091dbb6de4156fa02c29e4",
+    "frameworkLockHash": "3f001b5521f99e8d95d57d30f35b70ba565b8526807912174f1097b7ba7b19e6",
+    "node": "v22.18.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "complete": true,
+  "exitCode": 0,
+  "signal": null,
+  "counts": {
+    "tests": 737,
+    "passed": 737,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "tests": [
+    {
+      "name": "orchestrator propaga el modelo por ejecución y registra el modelo usado incluso ante fallo",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator ejecuta dos pasadas y genera query-results",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator hace fallback manual cuando provider no está instalado",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator falla por schema inválido en query-requests",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator rechaza args inválidos en query requests con invalid-args",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator no bloquea PASS 1 por context budget",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator usa hang-stop fijo en PASS 1 y PASS 2",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator sigue a PASS 2 aunque PASS 1 tome todo el presupuesto histórico",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator particiona por gap y fusiona respuestas cuando hay múltiples gaps",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator usa estrategia compacta por defecto con múltiples gaps",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator falla con QUERY_RESULT_TRUNCATED cuando una query llega truncada",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator no descarta gaps por deadline global",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator atiende needs en PASS 2 y reinvoca una vez",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator sanitiza rutas absolutas en artefactos de paquete",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator no modifica bytes de files[].content al sanear artefactos",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator deterministic usa planner local y materializa agent-response sin codegen del agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator termina y solicita regeneración cuando Pass 2 no puede corregir el Gherkin del plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "orchestrator conserva como sugerencia la revisión funcional y continúa generando",
+      "outcome": "passed"
+    },
+    {
+      "name": "la generación determinista es el modo por defecto y legacy requiere opt-in",
+      "outcome": "passed"
+    },
+    {
+      "name": "query request válido",
+      "outcome": "passed"
+    },
+    {
+      "name": "query request con versión inválida",
+      "outcome": "passed"
+    },
+    {
+      "name": "query desconocida",
+      "outcome": "passed"
+    },
+    {
+      "name": "gapId faltante",
+      "outcome": "passed"
+    },
+    {
+      "name": "cantidad máxima de requests",
+      "outcome": "passed"
+    },
+    {
+      "name": "query result resolved",
+      "outcome": "passed"
+    },
+    {
+      "name": "query result rejected",
+      "outcome": "passed"
+    },
+    {
+      "name": "error code tipado en rejected",
+      "outcome": "passed"
+    },
+    {
+      "name": "budget válido",
+      "outcome": "passed"
+    },
+    {
+      "name": "context bytes no generan violación bloqueante",
+      "outcome": "passed"
+    },
+    {
+      "name": "total query budget exceeded",
+      "outcome": "passed"
+    },
+    {
+      "name": "deterministic scenario mantiene agentInvocations en 0",
+      "outcome": "passed"
+    },
+    {
+      "name": "blocked QA mantiene agentInvocations en 0",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature flag manual",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature flag automatic",
+      "outcome": "passed"
+    },
+    {
+      "name": "fallback permitido",
+      "outcome": "passed"
+    },
+    {
+      "name": "fallback no permitido",
+      "outcome": "passed"
+    },
+    {
+      "name": "output path válido",
+      "outcome": "passed"
+    },
+    {
+      "name": "path traversal rechazado",
+      "outcome": "passed"
+    },
+    {
+      "name": "symlink escape rechazado",
+      "outcome": "passed"
+    },
+    {
+      "name": "agent-run sin provider real conserva defaults",
+      "outcome": "passed"
+    },
+    {
+      "name": "backward compatibility de agent-response sin schemaVersion",
+      "outcome": "passed"
+    },
+    {
+      "name": "sanitización de logs",
+      "outcome": "passed"
+    },
+    {
+      "name": "serialización/deserialización de contratos",
+      "outcome": "passed"
+    },
+    {
+      "name": "modelo de estados de ejecución soportado",
+      "outcome": "passed"
+    },
+    {
+      "name": "normalizes spanish identifiers consistently across generated layers",
+      "outcome": "passed"
+    },
+    {
+      "name": "skips rename entirely when english target already exists",
+      "outcome": "passed"
+    },
+    {
+      "name": "no renombra identificadores heredados del baseline de un update",
+      "outcome": "passed"
+    },
+    {
+      "name": "agrega @android cuando el feature no trae tag de plataforma",
+      "outcome": "passed"
+    },
+    {
+      "name": "agrega @ios cuando locators tienen cobertura iOS completa",
+      "outcome": "passed"
+    },
+    {
+      "name": "reconoce el tag de plataforma aunque sea el primero de la linea",
+      "outcome": "passed"
+    },
+    {
+      "name": "agent-run registra éxito, cache y tiempos sin contenido sensible",
+      "outcome": "passed"
+    },
+    {
+      "name": "agent-run conserva métricas y resultado en una ejecución fallida",
+      "outcome": "passed"
+    },
+    {
+      "name": "agent-run guarda contexto por pasada y breakdown",
+      "outcome": "passed"
+    },
+    {
+      "name": "ADB_PATH explícito tiene prioridad y se añade al PATH del app",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta platform-tools del SDK estándar de macOS sin depender del PATH de Finder",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta ADB instalado por Homebrew en Apple Silicon",
+      "outcome": "passed"
+    },
+    {
+      "name": "la arquitectura actual no agrega ciclos ni violaciones sobre el baseline",
+      "outcome": "passed"
+    },
+    {
+      "name": "core/ solo contiene directorios de módulo, sin fachadas legadas planas",
+      "outcome": "passed"
+    },
+    {
+      "name": "el módulo core/coverage no queda excluido como reporte de cobertura",
+      "outcome": "passed"
+    },
+    {
+      "name": "validation expone contratos puros y también su infraestructura concreta",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea imports profundos entre módulos y validation hacia automation application",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea runtimes concretos desde domain y application",
+      "outcome": "passed"
+    },
+    {
+      "name": "automation contracts no depende de validation ni generation",
+      "outcome": "passed"
+    },
+    {
+      "name": "permite APIs públicas y bloquea domain hacia capas superiores",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea application hacia infrastructure y renderer hacia core",
+      "outcome": "passed"
+    },
+    {
+      "name": "ignora imports escritos dentro de plantillas de código generado",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea ciclos nuevos y puertos fuera del módulo consumidor",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva hints compactos de decisiones y relaciones existentes",
+      "outcome": "passed"
+    },
+    {
+      "name": "confidence usa coincidencia exacta o score existente de forma determinística",
+      "outcome": "passed"
+    },
+    {
+      "name": "autoriza únicamente una query declarada por el gap",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza una query no autorizada sin tocar FrameworkQueryService",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza argumentos inválidos con razón invalid-args y sin llamar al servicio",
+      "outcome": "passed"
+    },
+    {
+      "name": "acepta query válida con symbol en args",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza cualquier query cuando no existe un gap abierto",
+      "outcome": "passed"
+    },
+    {
+      "name": "evita una query idéntica repetida",
+      "outcome": "passed"
+    },
+    {
+      "name": "respeta maxQueries por gap",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza nuevas consultas después de resolver el gap",
+      "outcome": "passed"
+    },
+    {
+      "name": "un gap blocking pertenece al QA y no habilita queries",
+      "outcome": "passed"
+    },
+    {
+      "name": "scenario completamente determinístico produce gaps vacíos y cero queries",
+      "outcome": "passed"
+    },
+    {
+      "name": "mantiene presupuestos independientes para múltiples gaps",
+      "outcome": "passed"
+    },
+    {
+      "name": "normaliza gaps de recordings anteriores sin romper su contrato",
+      "outcome": "passed"
+    },
+    {
+      "name": "la política rechaza resultados truncados en vez de aceptarlos en silencio",
+      "outcome": "passed"
+    },
+    {
+      "name": "GapQueryPolicy inyecta maxBytes cuando args no lo especifica",
+      "outcome": "passed"
+    },
+    {
+      "name": "actualiza métricas de proyección y consultas aceptadas/rechazadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "archivar memoria conserva bytes y no toca recordings, golden ni otros archivos",
+      "outcome": "passed"
+    },
+    {
+      "name": "una migración interrumpida restaura los archivos movidos y mantiene las lecturas deshabilitadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "el archivo histórico no sigue un enlace a un directorio externo",
+      "outcome": "passed"
+    },
+    {
+      "name": "un runtime nuevo no crea memoria legacy al iniciar ni al consultar",
+      "outcome": "passed"
+    },
+    {
+      "name": "reimporta contra la instantánea del paquete sin volver a resolver el framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea cambios de la grabación, scenario empaquetado o plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "application receipt permite corrección si el archivo aplicado sigue intacto",
+      "outcome": "passed"
+    },
+    {
+      "name": "un update corregido toma como base el afterHash aplicado",
+      "outcome": "passed"
+    },
+    {
+      "name": "corrección de update restaura baseline y permite rollback",
+      "outcome": "passed"
+    },
+    {
+      "name": "baseline faltante no modifica parcialmente otros archivos",
+      "outcome": "passed"
+    },
+    {
+      "name": "Screen reconoce alias y ruta relativa del mismo módulo sin sustituir el import original",
+      "outcome": "passed"
+    },
+    {
+      "name": "corrección de import en Screen sin métodos nuevos es idempotente y rechaza conflictos",
+      "outcome": "passed"
+    },
+    {
+      "name": "agrega la clave nueva a ambos bloques sin ensuciar el JSON con _metadata",
+      "outcome": "passed"
+    },
+    {
+      "name": "nunca pisa una clave de locator existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "inserta el getter tras el último getter y el método antes del cierre de clase",
+      "outcome": "passed"
+    },
+    {
+      "name": "no duplica un método de Screen Object que ya existe",
+      "outcome": "passed"
+    },
+    {
+      "name": "agrega la definición de step y el import del Screen si falta",
+      "outcome": "passed"
+    },
+    {
+      "name": "agrega el escenario al final del Feature sin tocar los previos",
+      "outcome": "passed"
+    },
+    {
+      "name": "aborta si el patch eliminaría un símbolo existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza rutas fuera del framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "symbolsOf reconoce los tokens de cada capa",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva solo las claves de locator nuevas comparando contra el disco",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva getters y métodos nuevos del Screen Object propuesto",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva definiciones de step nuevas e ignora las existentes",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva el escenario nuevo con su tag y descarta el existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "update fusiona imports multilinea, aliases, tipos y varios screens sin duplicar bindings",
+      "outcome": "passed"
+    },
+    {
+      "name": "un binding importado incompatible no cambia el archivo existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "AutomationApplier entrega todos los imports al patch de Steps",
+      "outcome": "passed"
+    },
+    {
+      "name": "update conserva varios tags, comentarios, Examples y todos los escenarios nuevos",
+      "outcome": "passed"
+    },
+    {
+      "name": "register no adopta un archivo ajeno que solo se amplió",
+      "outcome": "passed"
+    },
+    {
+      "name": "registerPatch deja traza sin reclamar el archivo",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar rellena el hueco de una clave existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar nunca pisa un valor real",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar una clave que el bloque no declara es un error",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar rechaza un bloque distinto del mapping autorizado",
+      "outcome": "passed"
+    },
+    {
+      "name": "la captura solicita contexto funcional y no un nombre técnico de locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar una grabación ofrece seguir grabando o completar locators",
+      "outcome": "passed"
+    },
+    {
+      "name": "configuración separa squad de la ruta anidada de Features",
+      "outcome": "passed"
+    },
+    {
+      "name": "scanner y catálogo resuelven las cuatro capas de un Feature anidado por relaciones",
+      "outcome": "passed"
+    },
+    {
+      "name": "recording persiste datos funcionales y oculta únicamente secretos",
+      "outcome": "passed"
+    },
+    {
+      "name": "recording descarta backups derivados de secretos y rechaza un primary sensible",
+      "outcome": "passed"
+    },
+    {
+      "name": "prevalidación sensible ocurre antes de ejecutar o mutar el recording",
+      "outcome": "passed"
+    },
+    {
+      "name": "replaceActions revierte actions y manifest si falla la persistencia",
+      "outcome": "passed"
+    },
+    {
+      "name": "al iniciar elimina únicamente placeholders sin scenario ni acciones",
+      "outcome": "passed"
+    },
+    {
+      "name": "la limpieza conserva el recording activo aunque todavía esté vacío",
+      "outcome": "passed"
+    },
+    {
+      "name": "el listado dice si la grabación tiene plan y si tiene Then",
+      "outcome": "passed"
+    },
+    {
+      "name": "continuar una grabación reengancha su carpeta y conserva las acciones",
+      "outcome": "passed"
+    },
+    {
+      "name": "una grabación sin manifest ni scenario no se puede continuar",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar caso lista solo recordings del ambiente y reconstruye su cobertura",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar iOS conserva Android y sincroniza únicamente locator y estrategia generados",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver propone dataName editable cuando el recording no lo especifica",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver filtra por featureScope y extiende artefactos relacionados sin duplicarlos",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver extiende Screen y Locators relacionados aunque todavía no exista un Steps que los importe",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator acepta reutilizar un Screen y Locator update sin reescribir su deuda legacy",
+      "outcome": "passed"
+    },
+    {
+      "name": "generador escribe el Feature en su alcance y conserva otras capas en el squad",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver convierte un teléfono grabado en parámetro y Example",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver rechaza como completo un valor funcional perdido",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver crea nombres semánticos y no solicita al agente cuando todo está verificado",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver delega la semántica de un saldo dinámico sin descartar el selector verificado",
+      "outcome": "passed"
+    },
+    {
+      "name": "generador consolida pasos repetidos y usa acceso seguro a bloques locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver agrupa acciones técnicas en comportamiento y propone rutas compactas",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver usa contextHint como pista sin copiarlo literalmente al Gherkin",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolver reutiliza las cuatro capas cuando encuentra un caso equivalente del squad",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator juzga solo lo que se agrega a un Screen legacy y acepta el create renombrado a ingles",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator exige clave contraparte y prohíbe literal vacío en getElement",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator exige cuatro capas, trazabilidad y Then",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator falla cuando falta un gap abierto en resolutions",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator no permite intercambiar selectores verificados entre acciones",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator exige el par primary exacto para create y verifica el TypeLocator del getter",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator relaja trace-locator cuando conserva selector primary verificado",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator permite un screenMethod agrupado que consume varios getters create",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator permite relajar create-locator-contract y trace-screen-method por flag experimental",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator autoriza completions solo por identidad exacta y getter trazado",
+      "outcome": "passed"
+    },
+    {
+      "name": "informa caso existente cuando el agente reutiliza todos los locators",
+      "outcome": "passed"
+    },
+    {
+      "name": "conserva el error de locator vacío cuando todavía hay locators por crear",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator rechaza Gherkin procedimental que narra acciones de interfaz",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator rechaza una pareja genérica de steps generada por cada filtro",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator rechaza copiar contextHint literalmente como Step",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator exige englobar acciones técnicas en un step funcional",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator bloquea steps y locators que duplican artefactos del framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "un score 100 no promociona memoria ni devuelve un caso previo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el vocabulario legacy no vuelve a cargarse al preparar otro caso",
+      "outcome": "passed"
+    },
+    {
+      "name": "una grabación sin verificación no llega a armar el paquete",
+      "outcome": "passed"
+    },
+    {
+      "name": "package builder limita el contexto y deja verificador autocontenido",
+      "outcome": "passed"
+    },
+    {
+      "name": "package builder exige revisión funcional del agente cuando hay interacción y aserción",
+      "outcome": "passed"
+    },
+    {
+      "name": "package builder publica expresiones reservadas para evitar colisiones de step",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza el Given reutilizado reescrito y el parámetro sin Examples",
+      "outcome": "passed"
+    },
+    {
+      "name": "advierte identificadores en español y no toca el Gherkin ni lo heredado",
+      "outcome": "passed"
+    },
+    {
+      "name": "reuse-context declara los elementos existentes que el caso toca",
+      "outcome": "passed"
+    },
+    {
+      "name": "package builder mantiene baselines grandes fuera del contexto mínimo",
+      "outcome": "passed"
+    },
+    {
+      "name": "reprocesar una grabación siempre reconstruye el paquete y conserva evidencia e historial",
+      "outcome": "passed"
+    },
+    {
+      "name": "regeneración versiona la propuesta anterior y conserva las cuatro rutas importadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "launcher abre una terminal en el paquete sin ejecutar automáticamente el agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "launcher puede abrir terminal y ejecutar copilot con prompt automático",
+      "outcome": "passed"
+    },
+    {
+      "name": "launcher de corrección layered permite editar agent-response sin tocar handoffs",
+      "outcome": "passed"
+    },
+    {
+      "name": "launcher no incrusta JSON ni comillas del contexto en AppleScript",
+      "outcome": "passed"
+    },
+    {
+      "name": "launcher abre monitor legible de ejecución automática en macOS",
+      "outcome": "passed"
+    },
+    {
+      "name": "el flujo de automatización cruza renderer, preload y main por IPC explícito",
+      "outcome": "passed"
+    },
+    {
+      "name": "wizard expone evidencia, análisis y revisión sin un paso bloqueante de generación",
+      "outcome": "passed"
+    },
+    {
+      "name": "generación automática muestra progreso visual y oculta controles técnicos",
+      "outcome": "passed"
+    },
+    {
+      "name": "revisión agrupa validación y acciones sin repetir el resultado",
+      "outcome": "passed"
+    },
+    {
+      "name": "controller corre pipeline automático con y sin resolución semántica",
+      "outcome": "passed"
+    },
+    {
+      "name": "reimportar y revalidar rematerializan gap-resolutions cuando cambió",
+      "outcome": "passed"
+    },
+    {
+      "name": "main conserva Copilot visible para legacy y usa Derek con tres agentes headless",
+      "outcome": "passed"
+    },
+    {
+      "name": "un error propiedad del planner libera el flujo y muestra el borrador para revalidar",
+      "outcome": "passed"
+    },
+    {
+      "name": "una revisión funcional se muestra como sugerencia y no bloquea la automatización",
+      "outcome": "passed"
+    },
+    {
+      "name": "la revisión de diseño se presenta sin roast ni sesión de presentación",
+      "outcome": "passed"
+    },
+    {
+      "name": "el resumen del análisis muestra lo heredado de la memoria de otros casos",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator marca sintaxis TypeScript inválida antes de aprobar",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator bloquea mojibake en un locator generado por el agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator exige normalización NFC en los archivos del agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "validator rechaza una llamada Steps incompatible con la firma del Screen Object",
+      "outcome": "passed"
+    },
+    {
+      "name": "con procedencia usa la instantánea y no reejecuta el resolver al reimportar",
+      "outcome": "passed"
+    },
+    {
+      "name": "acepta la normalización determinista y las filas/Examples agregadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "el paquete agentic nunca publica selectorCandidates, con o sin candidatos en la grabación",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza cambios reales del escenario empaquetado",
+      "outcome": "passed"
+    },
+    {
+      "name": "preserva revisiones de refinement sin aceptar retrocesos",
+      "outcome": "passed"
+    },
+    {
+      "name": "locator-candidates.json siempre viaja vacío y conserva validación de identidad",
+      "outcome": "passed"
+    },
+    {
+      "name": "el caso B reutiliza y amplia los artefactos que el caso A dejo sin commitear",
+      "outcome": "passed"
+    },
+    {
+      "name": "el caso B amplia el Screen Object de A aunque A lo haya modificado despues de generarlo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el caso C reutiliza el step de A cuando cubre exactamente los mismos elementos",
+      "outcome": "passed"
+    },
+    {
+      "name": "un segundo caso con el mismo objetivo amplía el Feature de A en vez de pisarlo",
+      "outcome": "passed"
+    },
+    {
+      "name": "construye un subgrafo relevante y guarda el cache dentro del recorder",
+      "outcome": "passed"
+    },
+    {
+      "name": "reutiliza el índice si los archivos del framework no cambiaron",
+      "outcome": "passed"
+    },
+    {
+      "name": "las relaciones se resuelven por sentencia, no por archivo",
+      "outcome": "passed"
+    },
+    {
+      "name": "cada definición enlaza solo con el método que su cuerpo invoca",
+      "outcome": "passed"
+    },
+    {
+      "name": "el subgrafo de una pantalla no se escapa a otros squads",
+      "outcome": "passed"
+    },
+    {
+      "name": "no indexa palabras clave de control como métodos",
+      "outcome": "passed"
+    },
+    {
+      "name": "subgraphOf parte de archivos concretos y queda acotado",
+      "outcome": "passed"
+    },
+    {
+      "name": "subgraphOf sin semillas no devuelve el framework entero",
+      "outcome": "passed"
+    },
+    {
+      "name": "extrae className real aunque el JSDoc contenga \"class\"",
+      "outcome": "passed"
+    },
+    {
+      "name": "dependentsOfLocator resuelve quién más usa un locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "exporta Graphviz DOT válido con relaciones",
+      "outcome": "passed"
+    },
+    {
+      "name": "exporta Mermaid con nodos escapados y clases por tipo",
+      "outcome": "passed"
+    },
+    {
+      "name": "permisos headless autorizan paquete y validadores sin habilitar permisos globales",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter reporta AGENT_NOT_INSTALLED cuando el comando no existe",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter devuelve éxito cuando el proceso termina en 0",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter selecciona el custom agent y nombra la sesión de Copilot",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter conserva UTF-8 cuando Copilot parte una tilde entre chunks",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter respeta un modelo explícito en args sin inyectar auto",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter termina PASS 2 cuando aparece salida validada por schema",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter entrega una salida con schema inválido al validador oficial antes de esperar la corrección",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter corta por timeout aunque el hijo ignore SIGTERM",
+      "outcome": "passed"
+    },
+    {
+      "name": "modelo por ejecución prevalece sobre args y reporta auto resuelto sin modelos auxiliares",
+      "outcome": "passed"
+    },
+    {
+      "name": "modelo fijo se envía sin inventar modelo usado cuando no hay telemetría",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter no corta cuando una herramienta es denegada",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter corta de inmediato cuando create falla por Path already exists",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter tolera una denegación aislada de bash y puede terminar en éxito",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter canonicaliza cwd antes de ejecutar el comando",
+      "outcome": "passed"
+    },
+    {
+      "name": "denegación por ruta absoluta interna no corta y se contabiliza como formato",
+      "outcome": "passed"
+    },
+    {
+      "name": "denegación fuera de cwd se contabiliza como fuga y no corta ejecución",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter corta la sesión si tras rechazar la salida no llega una corrección en el plazo",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter corta la sesión cuando la corrección repite los mismos errores (stuck)",
+      "outcome": "passed"
+    },
+    {
+      "name": "una corrección dentro del plazo reinicia la espera y la sesión termina aceptada",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter corta una sesión muda por silencio y cada evento reinicia el plazo",
+      "outcome": "passed"
+    },
+    {
+      "name": "idleStopMs y feedbackIdleMs en 0 desactivan los cortes por inactividad",
+      "outcome": "passed"
+    },
+    {
+      "name": "la ayuda decide qué flags de aislamiento existen en el CLI instalado",
+      "outcome": "passed"
+    },
+    {
+      "name": "copilotIsolationArgs solo emite flags anunciados y respeta el opt-out por entorno",
+      "outcome": "passed"
+    },
+    {
+      "name": "los servidores no builtin se extraen del evento session.mcp_servers_loaded",
+      "outcome": "passed"
+    },
+    {
+      "name": "la memoria de servidores persiste la unión y no reescribe sin novedades",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter aislado sondea --help una vez y desactiva builtin y servidores configurados",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin flags en la ayuda el adapter no inventa opciones y lo deja en la traza",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin isolateMcp o con RECORDER_COPILOT_ISOLATE=0 no se sondea la ayuda",
+      "outcome": "passed"
+    },
+    {
+      "name": "adapter aprende los MCP de plugins del evento del CLI, los recuerda y los desactiva después",
+      "outcome": "passed"
+    },
+    {
+      "name": "el adapter no duplica flags que ya vienen en RECORDER_COPILOT_CLI_ARGS",
+      "outcome": "passed"
+    },
+    {
+      "name": "el script del modo visible sondea --help en zsh y desactiva los MCP recordados",
+      "outcome": "passed"
+    },
+    {
+      "name": "modelo Sonnet predeterminado e IDs inválidos rechazados antes de lanzar CLI",
+      "outcome": "passed"
+    },
+    {
+      "name": "lector de eventos incremental conserva solo modelos, tolera archivo ausente y líneas partidas",
+      "outcome": "passed"
+    },
+    {
+      "name": "telemetría separa solicitado y usados, conserva fallos y reinicia por ejecución",
+      "outcome": "passed"
+    },
+    {
+      "name": "launcher usa modelo elegido y UUID nuevo sin cambiar permisos",
+      "outcome": "passed"
+    },
+    {
+      "name": "UI recuerda modelo, bloquea cambios durante ejecución y muestra datos reales",
+      "outcome": "passed"
+    },
+    {
+      "name": "deterministic draft builder persiste una referencia estable de cuatro capas",
+      "outcome": "passed"
+    },
+    {
+      "name": "deterministic generator aplica wording híbrido sin perder trazabilidad",
+      "outcome": "passed"
+    },
+    {
+      "name": "merge de Screen update conserva el baseline y agrega getters junto con métodos",
+      "outcome": "passed"
+    },
+    {
+      "name": "reemplazo autorizado actualiza getter y conserva APIs existentes",
+      "outcome": "passed"
+    },
+    {
+      "name": "Screen update conserva imports auxiliares y timeout local sin duplicarlos al refinar",
+      "outcome": "passed"
+    },
+    {
+      "name": "reemplazo autorizado modifica solo la plataforma grabada del locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "mergeStepsUpdate conserva las definiciones del baseline y agrega solo las nuevas",
+      "outcome": "passed"
+    },
+    {
+      "name": "mergeFeatureUpdate añade solo los Scenarios nuevos con sus tags y conserva el baseline",
+      "outcome": "passed"
+    },
+    {
+      "name": "mergeFeatureUpdate sustituye el Scenario del mismo caso regenerado y conserva los demás",
+      "outcome": "passed"
+    },
+    {
+      "name": "mergeLocatorUpdate suma las claves nuevas a los bloques legacy de la misma plataforma",
+      "outcome": "passed"
+    },
+    {
+      "name": "la plataforma de un bloque se reconoce por sufijo sin distinguir mayúsculas",
+      "outcome": "passed"
+    },
+    {
+      "name": "el identificador del import se toma del Screen existente aunque use ruta relativa",
+      "outcome": "passed"
+    },
+    {
+      "name": "el borrador extiende los bloques legacy del JSON existente y reutiliza el import del Screen",
+      "outcome": "passed"
+    },
+    {
+      "name": "framework-api describe el identificador y los bloques reales de un módulo legacy en update",
+      "outcome": "passed"
+    },
+    {
+      "name": "frameworkModuleResolver iguala alias y rutas relativas al mismo módulo del framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "mergeStepsUpdate reutiliza el import legacy del Screen en vez de importarlo dos veces",
+      "outcome": "passed"
+    },
+    {
+      "name": "el borrador de un update funde el helper readRecordedText aunque sea private",
+      "outcome": "passed"
+    },
+    {
+      "name": "abre un gap cuando el selector fija el mismo texto que la acción valida",
+      "outcome": "passed"
+    },
+    {
+      "name": "un nombre propio no lo detectaba likelyDynamicText y ahora sí se marca",
+      "outcome": "passed"
+    },
+    {
+      "name": "desambigua un step cuando el texto ya existe en el framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "no marca la aserción cuando el selector no depende del valor",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta el comodín que UiSelector.text no interpreta",
+      "outcome": "passed"
+    },
+    {
+      "name": "no marca comodín cuando el texto no lo lleva",
+      "outcome": "passed"
+    },
+    {
+      "name": "conserva el selector primary verificado y no reutiliza a partir de un backup",
+      "outcome": "passed"
+    },
+    {
+      "name": "conserva el primary como selector de create cuando ningún candidato existe",
+      "outcome": "passed"
+    },
+    {
+      "name": "completionTargets conserva file, bloque y key exactos del candidato reuse",
+      "outcome": "passed"
+    },
+    {
+      "name": "el reuse depende exclusivamente del selector primary, no de la estabilidad de un backup",
+      "outcome": "passed"
+    },
+    {
+      "name": "abre un gap QA bloqueante ante matches materialmente ambiguos",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa del método equivalente que ya existe en el módulo target",
+      "outcome": "passed"
+    },
+    {
+      "name": "no reutiliza por parecido de nombre cuando el selector es otro",
+      "outcome": "passed"
+    },
+    {
+      "name": "reutiliza cuando TypeLocator y selector normalizado coinciden",
+      "outcome": "passed"
+    },
+    {
+      "name": "no reutiliza cuando el tipo difiere aunque el contenido coincida",
+      "outcome": "passed"
+    },
+    {
+      "name": "no inventa duplicados cuando el módulo target no tiene nada parecido",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa del duplicado cuando el mismo elemento se grabo con otra estrategia",
+      "outcome": "passed"
+    },
+    {
+      "name": "no propone duplicado contra el modulo que se esta escribiendo",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea cuando un locator nuevo no se puede componer con TypeLocator",
+      "outcome": "passed"
+    },
+    {
+      "name": "no abre el gap de composicion cuando los selectores traen su sintaxis",
+      "outcome": "passed"
+    },
+    {
+      "name": "no marca como roto un locator existente que se reutiliza",
+      "outcome": "passed"
+    },
+    {
+      "name": "el mismo elemento pulsado varias veces produce un solo locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "el nombre logico conserva los digitos del intent",
+      "outcome": "passed"
+    },
+    {
+      "name": "un candidato sin valor en la plataforma grabada exige rellenarlo, no duplicarlo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el resolver no reutiliza un locator vacio en la plataforma grabada",
+      "outcome": "passed"
+    },
+    {
+      "name": "el gap de duplicado publica los candidatos que ofrece",
+      "outcome": "passed"
+    },
+    {
+      "name": "el objetivo y el criterio del QA se usan como texto de los steps",
+      "outcome": "passed"
+    },
+    {
+      "name": "una frase de dominio gana al objetivo del QA",
+      "outcome": "passed"
+    },
+    {
+      "name": "consolida un ciclo de filtro y validación en una sola expectativa declarativa",
+      "outcome": "passed"
+    },
+    {
+      "name": "un objetivo procedimental no se usa y la fila queda marcada template",
+      "outcome": "passed"
+    },
+    {
+      "name": "redacta filas desde la pista contextual cuando no hay frase de dominio",
+      "outcome": "passed"
+    },
+    {
+      "name": "sustantivos genericos de interfaz no convierten un Screen ajeno en objetivo de extension",
+      "outcome": "passed"
+    },
+    {
+      "name": "reutiliza el step existente cuando su metodo llega exactamente al locator grabado",
+      "outcome": "passed"
+    },
+    {
+      "name": "no reutiliza el step si su metodo alcanza locators que este caso no grabo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el nombre de archivo sale en ingles y estable aunque el criterio traiga palabras sin traduccion",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa cuando el QA escribio a mano un nombre de archivo que no esta en ingles",
+      "outcome": "passed"
+    },
+    {
+      "name": "la frase de dominio de consulta no se adjudica a un bloque que termina en otra accion",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan materializa selectedCandidate autorizado como reuse",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan rechaza candidatos que no ofrecieron plan ni findLocator",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan traduce un método existente al único locator que consume",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan conserva create cuando TypeLocator o selector difieren",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan crea una sola clave para acciones repetidas del mismo recording",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan fortalece una aserción débil con un locator semántico único",
+      "outcome": "passed"
+    },
+    {
+      "name": "effective plan autoriza reemplazo explícito desde la acción verificada",
+      "outcome": "passed"
+    },
+    {
+      "name": "gap-resolutions exige candidato estructurado para reuse nuevo",
+      "outcome": "passed"
+    },
+    {
+      "name": "gap-resolutions acepta wording Gherkin trazado y rechaza secuencias duplicadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "gap-resolutions valida la revisión funcional e ignora el campo roast heredado",
+      "outcome": "passed"
+    },
+    {
+      "name": "gap-resolutions normaliza aliases copiados del plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "gap-resolutions exige fuente grabada para replace-existing",
+      "outcome": "passed"
+    },
+    {
+      "name": "declara tipo, bloque, valor y la expresión lista para escribir",
+      "outcome": "passed"
+    },
+    {
+      "name": "el nombre es el de la clave existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "marca missing la plataforma que todavía no tiene locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "usa el identificador del screen destino y avisa cuando falta el import",
+      "outcome": "passed"
+    },
+    {
+      "name": "el import es por alias aunque el framework lo escriba relativo",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva un identificador cuando ningún screen importa el módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "declara todos los elementos, sin tope",
+      "outcome": "passed"
+    },
+    {
+      "name": "agrupa por módulo sin perder ningún campo del elemento",
+      "outcome": "passed"
+    },
+    {
+      "name": "no repite el mismo elemento",
+      "outcome": "passed"
+    },
+    {
+      "name": "el radio de impacto solo aparece cuando hay dependientes",
+      "outcome": "passed"
+    },
+    {
+      "name": "reconoce el mismo elemento aunque cambie la estrategia",
+      "outcome": "passed"
+    },
+    {
+      "name": "descarta tipos de nodo, ids generados y numeros",
+      "outcome": "passed"
+    },
+    {
+      "name": "una etiqueta generica sola no identifica",
+      "outcome": "passed"
+    },
+    {
+      "name": "encuentra el duplicado que la comparacion por cadena no veia",
+      "outcome": "passed"
+    },
+    {
+      "name": "ve un locator que solo tiene valor en la otra plataforma",
+      "outcome": "passed"
+    },
+    {
+      "name": "excluye lo que pida el llamador y no repite candidatos",
+      "outcome": "passed"
+    },
+    {
+      "name": "exposes active session metadata without credential capabilities",
+      "outcome": "passed"
+    },
+    {
+      "name": "uses a sandboxed Inspector window and denies external navigation",
+      "outcome": "passed"
+    },
+    {
+      "name": "host delegates only clipboard writes while preserving iframe and document isolation",
+      "outcome": "passed"
+    },
+    {
+      "name": "defaults to embedded only with assets and preserves actionable legacy fallback",
+      "outcome": "passed"
+    },
+    {
+      "name": "explicit use hides Inspector, focuses recorder, and preserves the same window",
+      "outcome": "passed"
+    },
+    {
+      "name": "accepts only the embedded origin and active session through the Appium proxy",
+      "outcome": "passed"
+    },
+    {
+      "name": "the proxy forwards only requests from the trusted origin to the active session",
+      "outcome": "passed"
+    },
+    {
+      "name": "proxy shutdown aborts a hung Appium request instead of blocking session cleanup",
+      "outcome": "passed"
+    },
+    {
+      "name": "rejects altered embedded assets at runtime",
+      "outcome": "passed"
+    },
+    {
+      "name": "resolves embedded assets from the cache pinned to the controlled fork commit",
+      "outcome": "passed"
+    },
+    {
+      "name": "pins and builds the controlled fork without a committed bundle or plugin",
+      "outcome": "passed"
+    },
+    {
+      "name": "validates every embedded event payload",
+      "outcome": "passed"
+    },
+    {
+      "name": "maps successful Inspector strategies into existing recorder selector syntax",
+      "outcome": "passed"
+    },
+    {
+      "name": "performs the handshake and transfers the explicitly used strategy and selector unchanged",
+      "outcome": "passed"
+    },
+    {
+      "name": "rejects explicit element use before the connected acknowledgement",
+      "outcome": "passed"
+    },
+    {
+      "name": "rejects ordinary Inspector selection without mutating recorder state",
+      "outcome": "passed"
+    },
+    {
+      "name": "rejects missing, malformed, duplicated, oversized, evidence-bearing and inconsistent candidates",
+      "outcome": "passed"
+    },
+    {
+      "name": "marca el espanol inequivoco y deja pasar el ingles",
+      "outcome": "passed"
+    },
+    {
+      "name": "una palabra funcional sola no marca",
+      "outcome": "passed"
+    },
+    {
+      "name": "traduce el vocabulario del recorder sin pasar por el agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "mueve el sustantivo de UI al final salvo que sea lo unico que hay",
+      "outcome": "passed"
+    },
+    {
+      "name": "reporta lo que el diccionario no cubre",
+      "outcome": "passed"
+    },
+    {
+      "name": "extrae los identificadores de cada capa y nunca del Feature",
+      "outcome": "passed"
+    },
+    {
+      "name": "la ausencia y la negacion se traducen",
+      "outcome": "passed"
+    },
+    {
+      "name": "el vocabulario corriente de QA se traduce",
+      "outcome": "passed"
+    },
+    {
+      "name": "las terminaciones espanolas se detectan sin diccionario",
+      "outcome": "passed"
+    },
+    {
+      "name": "dictionaryLookup deriva plurales, sustantivos deverbales y participios",
+      "outcome": "passed"
+    },
+    {
+      "name": "unknownTokens reporta lo que ni el diccionario ni el framework reconocen",
+      "outcome": "passed"
+    },
+    {
+      "name": "learnTranslationsFromRenames aprende solo de alineaciones inequivocas y lo aplica",
+      "outcome": "passed"
+    },
+    {
+      "name": "traduce verbos conjugados del criterio de aceptacion y los detecta como espanol",
+      "outcome": "passed"
+    },
+    {
+      "name": "sustantivos del objetivo y del criterio no se pierden en el nombre del caso",
+      "outcome": "passed"
+    },
+    {
+      "name": "compila overlay de Steps, Screen y JSON nuevos con aliases y extends reales sin escribir",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta método inexistente, argumento incorrecto y key JSON inexistente",
+      "outcome": "passed"
+    },
+    {
+      "name": "no atribuye deuda preexistente al caso ni escanea suites ajenas",
+      "outcome": "passed"
+    },
+    {
+      "name": "un update con líneas desplazadas conserva deuda pero detecta ocurrencias nuevas",
+      "outcome": "passed"
+    },
+    {
+      "name": "falta de tsconfig o tipos no se interpreta como compilación exitosa",
+      "outcome": "passed"
+    },
+    {
+      "name": "import ausente incluso heredado impide afirmar compilación correcta",
+      "outcome": "passed"
+    },
+    {
+      "name": "revalida cambios en dependencias y no reutiliza un resultado obsoleto",
+      "outcome": "passed"
+    },
+    {
+      "name": "respeta NodeNext, package type y los imports con atributo JSON",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza escapes, duplicados y symlinks del overlay",
+      "outcome": "passed"
+    },
+    {
+      "name": "diagnósticos alimentan validación y reparación; deuda sola sigue como advertencia",
+      "outcome": "passed"
+    },
+    {
+      "name": "configuración inválida, noCheck y project references no producen un aprobado falso",
+      "outcome": "passed"
+    },
+    {
+      "name": "resuelve los anclajes desde el framework, no desde una constante",
+      "outcome": "passed"
+    },
+    {
+      "name": "sigue al ancla cuando el framework la mueve o la renombra",
+      "outcome": "passed"
+    },
+    {
+      "name": "recalcula cuando el arbol cambia, sin reiniciar el proceso",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa en vez de mentir cuando no encuentra un ancla",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin tsconfig usa los alias por convención y lo dice",
+      "outcome": "passed"
+    },
+    {
+      "name": "toma la extension de import que usa el framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "elige el alias mas especifico",
+      "outcome": "passed"
+    },
+    {
+      "name": "lee la tabla de composicion del framework, no de una convencion",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa en vez de mentir cuando el framework no declara la composicion",
+      "outcome": "passed"
+    },
+    {
+      "name": "una estrategia nueva en el switch entra sin reiniciar",
+      "outcome": "passed"
+    },
+    {
+      "name": "un prefijo cambiado en las constantes entra sin reiniciar",
+      "outcome": "passed"
+    },
+    {
+      "name": "los helpers se leen del framework con sus metodos",
+      "outcome": "passed"
+    },
+    {
+      "name": "un metodo que vive en otro helper se nombra",
+      "outcome": "passed"
+    },
+    {
+      "name": "un metodo inexistente propone escribirlo en el Screen Object",
+      "outcome": "passed"
+    },
+    {
+      "name": "las llamadas correctas no producen nada",
+      "outcome": "passed"
+    },
+    {
+      "name": "no confunde metodos del propio Screen Object con helpers",
+      "outcome": "passed"
+    },
+    {
+      "name": "el generador determinista solo llama a helpers que existen",
+      "outcome": "passed"
+    },
+    {
+      "name": "un método nuevo en un helper existente entra sin reiniciar",
+      "outcome": "passed"
+    },
+    {
+      "name": "un helper completamente nuevo también entra",
+      "outcome": "passed"
+    },
+    {
+      "name": "expone las ocho consultas con resultados estructurados y sin archivos completos",
+      "outcome": "passed"
+    },
+    {
+      "name": "valida cache frío, caliente y actualización incremental",
+      "outcome": "passed"
+    },
+    {
+      "name": "aplica límites de resultados y bytes y maneja consultas inválidas",
+      "outcome": "passed"
+    },
+    {
+      "name": "findExistingScreen prioriza módulo/símbolo del gap sobre resultados irrelevantes",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza argumentos desconocidos con lista de campos válidos",
+      "outcome": "passed"
+    },
+    {
+      "name": "renombra metadata nueva y reemplaza el encabezado legado sin duplicarlo",
+      "outcome": "passed"
+    },
+    {
+      "name": "genera Feature, Steps, Locators y Screen Object para filas nuevas",
+      "outcome": "passed"
+    },
+    {
+      "name": "importa browser una sola vez únicamente para acciones que lo utilizan",
+      "outcome": "passed"
+    },
+    {
+      "name": "aplica ediciones revisadas únicamente a archivos incluidos en el preview",
+      "outcome": "passed"
+    },
+    {
+      "name": "referencia el locator reutilizado en vez de copiarlo a su módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin reutilización el comportamiento no cambia",
+      "outcome": "passed"
+    },
+    {
+      "name": "conserva el archivo de locators aunque todo se reutilice",
+      "outcome": "passed"
+    },
+    {
+      "name": "ignora una reutilización sin referencia para la plataforma activa",
+      "outcome": "passed"
+    },
+    {
+      "name": "una espera fija se convierte en espera explicita sobre el elemento siguiente",
+      "outcome": "passed"
+    },
+    {
+      "name": "un Unhappy Path va a regresion y el Feature lleva su tag de dominio",
+      "outcome": "passed"
+    },
+    {
+      "name": "el tier de ejecucion se puede fijar desde la peticion",
+      "outcome": "passed"
+    },
+    {
+      "name": "renderiza DataTable cuando la fila del escenario la incluye",
+      "outcome": "passed"
+    },
+    {
+      "name": "un update respeta los bloques y el identificador del locator existente",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin baseline el modulo nuevo sigue la convencion <camel>Android|Ios",
+      "outcome": "passed"
+    },
+    {
+      "name": "particiona una ejecución por gap id",
+      "outcome": "passed"
+    },
+    {
+      "name": "ejecuta gaps en paralelo con grado configurable",
+      "outcome": "passed"
+    },
+    {
+      "name": "aísla GAP_CONTEXT_OVERFLOW por gap y continúa con los demás",
+      "outcome": "passed"
+    },
+    {
+      "name": "obtiene calidad 100 cuando todas las acciones están enlazadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "falla cuando una acción no está enlazada o hay líneas duplicadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "corrige And tras Then sin cambiar grabación, texto, orden ni código de las otras capas",
+      "outcome": "passed"
+    },
+    {
+      "name": "conserva trazas sin prefijo, formato CRLF, comentarios y keywords ya válidos",
+      "outcome": "passed"
+    },
+    {
+      "name": "no adivina ante trazas incompletas, repetidas o desconocidas",
+      "outcome": "passed"
+    },
+    {
+      "name": "preserva pasos reutilizados y textos repetidos entre escenarios",
+      "outcome": "passed"
+    },
+    {
+      "name": "no convierte una fila mixta de resultado y cierre en una acción por su último evento",
+      "outcome": "passed"
+    },
+    {
+      "name": "ignora docstrings, tablas, Examples y Background; reinicia tipo por Scenario",
+      "outcome": "passed"
+    },
+    {
+      "name": "usa la traza, no el orden del array, y mantiene But válido",
+      "outcome": "passed"
+    },
+    {
+      "name": "las entradas del autor y del caché usan la misma normalización antes de validar",
+      "outcome": "passed"
+    },
+    {
+      "name": "los keywords salen de lo que ejecuta cada step y And hereda el tipo del anterior",
+      "outcome": "passed"
+    },
+    {
+      "name": "tercera persona o impersonal: se rechazan primera persona, imperativo e infinitivo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el borrador de 18167698 alterna When/Then, nombra el dato escrito y no repite la frase de dominio",
+      "outcome": "passed"
+    },
+    {
+      "name": "el criterio del QA en infinitivo se vuelve impersonal y el objetivo en infinitivo no se copia",
+      "outcome": "passed"
+    },
+    {
+      "name": "las definitions llevan el keyword efectivo aunque el step anterior sea una fila reutilizada",
+      "outcome": "passed"
+    },
+    {
+      "name": "el validador señala keywords sin semántica y redacción fuera de tercera persona",
+      "outcome": "passed"
+    },
+    {
+      "name": "guardar un caso aplicado sin cambios congela grabacion, plan, catalogo, baselines y archivos aceptados",
+      "outcome": "passed"
+    },
+    {
+      "name": "una correccion del QA en el editor se valida, se escribe en el framework y es lo que queda en el dataset",
+      "outcome": "passed"
+    },
+    {
+      "name": "una correccion hecha en el framework tras ejecutar el caso tambien cuenta como aceptada",
+      "outcome": "passed"
+    },
+    {
+      "name": "una correccion que no pasa la validacion no se guarda ni toca el framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "goldenDatasetRoot usa tests/golden en un checkout y runtime/golden en la app empaquetada",
+      "outcome": "passed"
+    },
+    {
+      "name": "el replay reproduce el plan de un caso real desde catalog.json y los baselines, sin el framework vivo",
+      "outcome": "passed"
+    },
+    {
+      "name": "cada caso de tests/golden se reproduce: mismo plan y los archivos aceptados siguen validos",
+      "outcome": "passed"
+    },
+    {
+      "name": "routes header and assignment launchers to Appium Inspector only",
+      "outcome": "passed"
+    },
+    {
+      "name": "keeps the lower inspect button in recorder-local screenshot and XML mode",
+      "outcome": "passed"
+    },
+    {
+      "name": "exposes only explicit element-use transfer after recorder revalidation",
+      "outcome": "passed"
+    },
+    {
+      "name": "revalidates explicit use before forwarding and hiding without centralized cleanup",
+      "outcome": "passed"
+    },
+    {
+      "name": "clears stale backups on edits or alternative selection and persists only the trusted token",
+      "outcome": "passed"
+    },
+    {
+      "name": "aplica completions externos aunque el plan no tenga capas update",
+      "outcome": "passed"
+    },
+    {
+      "name": "extrae la versión del identificador del runtime",
+      "outcome": "passed"
+    },
+    {
+      "name": "lista solo simuladores iOS y pone los arrancados primero",
+      "outcome": "passed"
+    },
+    {
+      "name": "tolera salidas inválidas o incompletas",
+      "outcome": "passed"
+    },
+    {
+      "name": "un simulador apagado sigue siendo elegible",
+      "outcome": "passed"
+    },
+    {
+      "name": "la cadena local resuelve la plataforma en vez de fijarla",
+      "outcome": "passed"
+    },
+    {
+      "name": "la configuración local permite seleccionar IPA por un IPC acotado",
+      "outcome": "passed"
+    },
+    {
+      "name": "iOS local puede iniciar sin app ni bundleId para apertura manual",
+      "outcome": "passed"
+    },
+    {
+      "name": "main.ts no registra ningún canal IPC directamente",
+      "outcome": "passed"
+    },
+    {
+      "name": "cada familia de handlers exporta su función de registro y un contexto de dependencias propio",
+      "outcome": "passed"
+    },
+    {
+      "name": "main.ts construye servicios/estado y registra cada familia exactamente una vez",
+      "outcome": "passed"
+    },
+    {
+      "name": "ningún módulo de ipc/ importa de vuelta a main.ts (sin ciclos)",
+      "outcome": "passed"
+    },
+    {
+      "name": "los 53 canales IPC existentes se reparten sin duplicarse entre las familias",
+      "outcome": "passed"
+    },
+    {
+      "name": "main.ts conserva la ventana, el ciclo de vida de la app y el registro del protocolo del Inspector",
+      "outcome": "passed"
+    },
+    {
+      "name": "la limpieza de ciclo de vida sigue siendo Inspector embebido primero y sesión propia después",
+      "outcome": "passed"
+    },
+    {
+      "name": "ejecuta autores aislados y deja la revisión integrada como respuesta oficial",
+      "outcome": "passed"
+    },
+    {
+      "name": "separa la memoria del framework según el ownership de Lorem y Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "proyecta a cada autor solo sus dos capas del borrador determinístico",
+      "outcome": "passed"
+    },
+    {
+      "name": "el recorder impone el contenido de los autores aunque el integrador intente reescribirlo",
+      "outcome": "passed"
+    },
+    {
+      "name": "normaliza And y But de Steps a keywords ejecutables por Cucumber",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza una capa fuera del ownership del autor",
+      "outcome": "passed"
+    },
+    {
+      "name": "el autor recibe baselines por referencia en su manifiesto",
+      "outcome": "passed"
+    },
+    {
+      "name": "una nueva ejecución limpia solo los workspaces obsoletos de sus roles",
+      "outcome": "passed"
+    },
+    {
+      "name": "detiene integración si un resultado cambia después de publicar su hash",
+      "outcome": "passed"
+    },
+    {
+      "name": "somete la respuesta integrada al validador determinista inyectado",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek devuelve una observación de locator solo a Zorem y reintenta Sumrak",
+      "outcome": "passed"
+    },
+    {
+      "name": "una incompatibilidad tipada repara solo Zorem y se valida en vivo aunque el validador general apruebe",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek valida la reparación de Zorem en vivo y mantiene la misma sesión hasta aceptarla",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek relanza solo el autor con feedback pendiente cuando Copilot cerró antes de corregir",
+      "outcome": "passed"
+    },
+    {
+      "name": "una ronda cortada por inactividad se relanza con el feedback y, agotadas las rondas, falla con detalle",
+      "outcome": "passed"
+    },
+    {
+      "name": "una corrección que repite los mismos errores corta sin agotar las rondas y conserva la última versión",
+      "outcome": "passed"
+    },
+    {
+      "name": "Sumrak no puede omitir gaps abiertos aunque el JSON cumpla el schema",
+      "outcome": "passed"
+    },
+    {
+      "name": "Sumrak no puede cambiar create a reuse contra la resolución determinista del plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "regenerar ejecuta los autores aunque exista una respuesta anterior válida",
+      "outcome": "passed"
+    },
+    {
+      "name": "otro recording no reutiliza respuestas previas ni el caché global legacy",
+      "outcome": "passed"
+    },
+    {
+      "name": "no promueve al caché una generación que falló la validación oficial",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek integra sin Sumrak cuando el único gap ya está fijado como extend-existing",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek integra sin Sumrak cuando todas las decisiones abiertas ya están fijadas por el plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "Sumrak sigue decidiendo cuando algún gap abierto no tiene decisión fijada por el plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "los agentes reciben solo los gaps abiertos y Derek firma los que el plan ya fijó",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek dirige el feedback por código de regla aunque el mensaje no delate la capa",
+      "outcome": "passed"
+    },
+    {
+      "name": "un error de Gherkin con código de comportamiento vuelve solo a Lorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "un import o alias de Screen Object inválido en Steps vuelve a Lorem, no a Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek corrige el keyword de cierre antes del handoff y no consume otra ronda de Lorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek normaliza los deslices mecánicos del autor en vez de fallar o pedir una ronda",
+      "outcome": "passed"
+    },
+    {
+      "name": "solo Zorem recibe permiso de ejecutar scripts de validación",
+      "outcome": "passed"
+    },
+    {
+      "name": "el presupuesto informa por etapa y la sesión solo se corta al hang stop",
+      "outcome": "passed"
+    },
+    {
+      "name": "un timeoutMs explícito en las opciones sigue mandando como hang stop",
+      "outcome": "passed"
+    },
+    {
+      "name": "contrato tipado: cambiar solo Gherkin conserva el trabajo paralelo",
+      "outcome": "passed"
+    },
+    {
+      "name": "contrato tipado: cambiar argumentos sin cambiar actionTrace resincroniza Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Lorem y Zorem corren en paralelo sobre el contrato del borrador y Zorem no se relanza si la interfaz coincide",
+      "outcome": "passed"
+    },
+    {
+      "name": "si Lorem cambia la interfaz del contrato, Zorem se sincroniza con el resultado real",
+      "outcome": "passed"
+    },
+    {
+      "name": "parallelAuthors:false conserva la secuencia Lorem -> Zorem aunque exista borrador",
+      "outcome": "passed"
+    },
+    {
+      "name": "Zorem recibe el borrador de un archivo update como adiciones sobre el baseline",
+      "outcome": "passed"
+    },
+    {
+      "name": "un gap de nombres en inglés llega a los autores y no exige juicio de Sumrak",
+      "outcome": "passed"
+    },
+    {
+      "name": "un gap de aserción débil llega a los autores y Derek lo firma con la decisión del plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "con todo el caso reutilizado del framework Zorem no corre y Lorem solo revisa el diseño",
+      "outcome": "passed"
+    },
+    {
+      "name": "heredar la revisión de diseño es una decisión explícita del QA y queda trazada",
+      "outcome": "passed"
+    },
+    {
+      "name": "si la revisión de diseño falla, el caso vuelve al flujo normal con ambos autores",
+      "outcome": "passed"
+    },
+    {
+      "name": "un gap que Derek ya firma no impide que Zorem se ahorre cuando todo se reutiliza del framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "con un step nuevo o un gap abierto los autores corren como siempre",
+      "outcome": "passed"
+    },
+    {
+      "name": "registra el motivo cuando el borrador determinista no se genera",
+      "outcome": "passed"
+    },
+    {
+      "name": "el reporte declara el borrador disponible cuando sí se generó",
+      "outcome": "passed"
+    },
+    {
+      "name": "Zorem recibe tools/check.js y las once reglas en su catálogo; Lorem no",
+      "outcome": "passed"
+    },
+    {
+      "name": "wording legacy no permite omitir autores aunque el paquete diga reused",
+      "outcome": "passed"
+    },
+    {
+      "name": "el par (tipo, valor) reconstruye el selector grabado",
+      "outcome": "passed"
+    },
+    {
+      "name": "un resource-id de Android se graba como UiSelector, no como id=",
+      "outcome": "passed"
+    },
+    {
+      "name": "un id de Compose se graba como XPath sobre resource-id",
+      "outcome": "passed"
+    },
+    {
+      "name": "strategyOf y strategyValue son las dos mitades del mismo par",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa cuando el framework no puede componer la estrategia",
+      "outcome": "passed"
+    },
+    {
+      "name": "el inspector de Android ya no emite selectores id=",
+      "outcome": "passed"
+    },
+    {
+      "name": "actions.json guarda el tipo y el valor del locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "actions.json conserva tildes del selector y las guarda como NFC",
+      "outcome": "passed"
+    },
+    {
+      "name": "completar un locator de la otra plataforma normaliza igual que el generador",
+      "outcome": "passed"
+    },
+    {
+      "name": "project settings expose a validated framework root switch",
+      "outcome": "passed"
+    },
+    {
+      "name": "workspace paths can target a selected framework and writable runtime",
+      "outcome": "passed"
+    },
+    {
+      "name": "packaging config produces a mac app with the isolated mobile runtime",
+      "outcome": "passed"
+    },
+    {
+      "name": "packaged compiler requires its standard libraries and can resolve Promise",
+      "outcome": "passed"
+    },
+    {
+      "name": "bundled Appium manifest points to both recorder-owned drivers",
+      "outcome": "passed"
+    },
+    {
+      "name": "un caso validado deja fragmentos por step contiguo y por gap de elemento",
+      "outcome": "passed"
+    },
+    {
+      "name": "recall parte el bloque en tramos memorizados (los mas largos) y tramos nuevos",
+      "outcome": "passed"
+    },
+    {
+      "name": "otro recording no hereda fragmentos ni decisiones de un caso legacy con score 100",
+      "outcome": "passed"
+    },
+    {
+      "name": "acepta locators Android-only y deja iOS como cobertura pendiente",
+      "outcome": "passed"
+    },
+    {
+      "name": "acepta locators iOS-only y deja Android como cobertura pendiente",
+      "outcome": "passed"
+    },
+    {
+      "name": "bloquea únicamente cuando falta el bloque de la plataforma grabada",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza And y But como funciones TypeScript de Cucumber",
+      "outcome": "passed"
+    },
+    {
+      "name": "scenarioExampleValues reúne Examples y celdas de DataTables por columna",
+      "outcome": "passed"
+    },
+    {
+      "name": "una columna de Examples que ningún step nombra es un dato que el caso ignora",
+      "outcome": "passed"
+    },
+    {
+      "name": "una definition que recibe el parámetro debe pasarlo al Screen Object",
+      "outcome": "passed"
+    },
+    {
+      "name": "el Screen Object usa cada parámetro y nunca deja fijo un valor de Examples",
+      "outcome": "passed"
+    },
+    {
+      "name": "el validador bloquea el correo fijo en el Screen, la definition que no lo pasa y la columna sin usar",
+      "outcome": "passed"
+    },
+    {
+      "name": "baseline compara resultados capturados, incluidos fallos resueltos y tests no ejecutados",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin baseline y con nombres ambiguos nunca confirma fallos preexistentes",
+      "outcome": "passed"
+    },
+    {
+      "name": "un cambio de framework, dependencias o entorno impide comparar baselines como equivalentes",
+      "outcome": "passed"
+    },
+    {
+      "name": "phase43 deterministic fixtures remain stable and valid",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta las claves que quedarian vacias en la plataforma grabada",
+      "outcome": "passed"
+    },
+    {
+      "name": "una clave declarada en completions ya no cuenta como vacia",
+      "outcome": "passed"
+    },
+    {
+      "name": "no marca el bloque de la plataforma que no se grabo",
+      "outcome": "passed"
+    },
+    {
+      "name": "la forma con corchetes del modulo propio tambien se revisa",
+      "outcome": "passed"
+    },
+    {
+      "name": "una clave con valor real no produce nada",
+      "outcome": "passed"
+    },
+    {
+      "name": "una clave sin valor en el modulo que se extiende avisa, no bloquea el analisis",
+      "outcome": "passed"
+    },
+    {
+      "name": "el paquete se arma con la clave vacia y el gap queda abierto para el agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "cuando una accion grabada puede rellenar la clave, el aviso apunta al completionTarget",
+      "outcome": "passed"
+    },
+    {
+      "name": "prepare no escribe; commit aplica exactamente los bytes revisados",
+      "outcome": "passed"
+    },
+    {
+      "name": "completion externo aparece en preview y participa en el mismo rollback",
+      "outcome": "passed"
+    },
+    {
+      "name": "preparar otra vez Screen y Steps ya revisados no cambia sus bytes",
+      "outcome": "passed"
+    },
+    {
+      "name": "un cambio externo o creación concurrente invalida el preview antes de escribir",
+      "outcome": "passed"
+    },
+    {
+      "name": "Screen update conserva imports auxiliares en preview, revalidación y commit",
+      "outcome": "passed"
+    },
+    {
+      "name": "fallo al escribir la segunda capa restaura la primera",
+      "outcome": "passed"
+    },
+    {
+      "name": "fallo de finalización restaura archivos nuevos, modificados, recibos y registry",
+      "outcome": "passed"
+    },
+    {
+      "name": "corrección se prepara desde baseline sin restaurarlo sobre el framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "handler aplica el preview final y registra el recibo sin aprender del resultado",
+      "outcome": "passed"
+    },
+    {
+      "name": "handler rechaza errores semánticos antes de escribir o promover memoria",
+      "outcome": "passed"
+    },
+    {
+      "name": "relaciona un canal IPC con los módulos internos del recorder",
+      "outcome": "passed"
+    },
+    {
+      "name": "el cache del grafo interno vive en runtime y es incremental",
+      "outcome": "passed"
+    },
+    {
+      "name": "deduplicates concurrent recorder cleanup and closes every owned resource",
+      "outcome": "passed"
+    },
+    {
+      "name": "continues cleanup after one resource fails and surfaces the failure",
+      "outcome": "passed"
+    },
+    {
+      "name": "deduplicates cleanup even when a cleanup task reenters synchronously",
+      "outcome": "passed"
+    },
+    {
+      "name": "closing during session acquisition cancels continuation and quits the acquired session once",
+      "outcome": "passed"
+    },
+    {
+      "name": "closing the session keeps process resources alive; app cleanup releases everything once",
+      "outcome": "passed"
+    },
+    {
+      "name": "app cleanup waits for a session close already in flight and then shuts down process resources",
+      "outcome": "passed"
+    },
+    {
+      "name": "reordena acciones conservando su contenido y renumerando la traza",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza posiciones inválidas sin alterar el recording",
+      "outcome": "passed"
+    },
+    {
+      "name": "la interfaz expone controles y sincroniza preview al mover",
+      "outcome": "passed"
+    },
+    {
+      "name": "muestra Lorem y Zorem en curso a la vez con evidencia y avisos de presupuesto",
+      "outcome": "passed"
+    },
+    {
+      "name": "una etapa que falla o se corta por el hang stop se ve en su fila",
+      "outcome": "passed"
+    },
+    {
+      "name": "las observaciones para QA distinguen erratas de verificaciones con XPath genérico",
+      "outcome": "passed"
+    },
+    {
+      "name": "el renderer declara exactamente las seis features requeridas bajo src/features",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"configuration\" expone una única fábrica create*Feature con mount/unmount",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"configuration\" solo importa helpers compartidos, nunca otra feature ni core/",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"configuration\" no declara estado mutable a nivel de módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"recording\" expone una única fábrica create*Feature con mount/unmount",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"recording\" solo importa helpers compartidos, nunca otra feature ni core/",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"recording\" no declara estado mutable a nivel de módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"generation\" expone una única fábrica create*Feature con mount/unmount",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"generation\" solo importa helpers compartidos, nunca otra feature ni core/",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"generation\" no declara estado mutable a nivel de módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"review\" expone una única fábrica create*Feature con mount/unmount",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"review\" solo importa helpers compartidos, nunca otra feature ni core/",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"review\" no declara estado mutable a nivel de módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"inspector\" expone una única fábrica create*Feature con mount/unmount",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"inspector\" solo importa helpers compartidos, nunca otra feature ni core/",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"inspector\" no declara estado mutable a nivel de módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"platform-completion\" expone una única fábrica create*Feature con mount/unmount",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"platform-completion\" solo importa helpers compartidos, nunca otra feature ni core/",
+      "outcome": "passed"
+    },
+    {
+      "name": "feature \"platform-completion\" no declara estado mutable a nivel de módulo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el composition root importa cada fábrica de feature exactamente una vez",
+      "outcome": "passed"
+    },
+    {
+      "name": "el composition root no registra listeners de DOM directamente (queda solo como orquestador)",
+      "outcome": "passed"
+    },
+    {
+      "name": "el composition root se mantiene como una capa delgada frente al tamaño de las features",
+      "outcome": "passed"
+    },
+    {
+      "name": "initializeRecorder monta cada feature una sola vez sin listeners duplicados",
+      "outcome": "passed"
+    },
+    {
+      "name": "sin dispose entre mounts los listeners sí se duplican (documenta el riesgo que dispose evita)",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta el ciclo, sus valores y de dónde empieza",
+      "outcome": "passed"
+    },
+    {
+      "name": "nombra el parámetro desde el contexto que escribió el QA",
+      "outcome": "passed"
+    },
+    {
+      "name": "mapea cada repetición a sus secuencias",
+      "outcome": "passed"
+    },
+    {
+      "name": "ignora un flujo lineal sin repetición",
+      "outcome": "passed"
+    },
+    {
+      "name": "exige al menos tres vueltas para no confundir un par casual",
+      "outcome": "passed"
+    },
+    {
+      "name": "descarta el ciclo si varían dos posiciones: son flujos distintos, no una tabla",
+      "outcome": "passed"
+    },
+    {
+      "name": "detecta un ciclo de una sola acción",
+      "outcome": "passed"
+    },
+    {
+      "name": "prefiere el ciclo que cubre más acciones de la grabación",
+      "outcome": "passed"
+    },
+    {
+      "name": "no repite un valor: si el literal se repite no es una tabla de datos",
+      "outcome": "passed"
+    },
+    {
+      "name": "el plan detecta repetición y agrega DataTable de forma determinística",
+      "outcome": "passed"
+    },
+    {
+      "name": "la falta de aserción es un gap bloqueante propio, no una nota dentro de otro gap",
+      "outcome": "passed"
+    },
+    {
+      "name": "un flujo lineal no produce gap de repetición",
+      "outcome": "passed"
+    },
+    {
+      "name": "reconoce retorno directo, alias const y conjunciones de lecturas verificadas",
+      "outcome": "passed"
+    },
+    {
+      "name": "reconoce Promise.all con every(Boolean) sin confundir promesas con booleanos",
+      "outcome": "passed"
+    },
+    {
+      "name": "no autoriza lecturas descartadas, constantes, OR, promesas truthy, mutaciones ni funciones señuelo",
+      "outcome": "passed"
+    },
+    {
+      "name": "el Step debe afirmar el retorno esperado del Screen importado y la definition trazada",
+      "outcome": "passed"
+    },
+    {
+      "name": "regresión 85a9110f: acepta los seis getters agrupados en Android/iOS sin alterar inputs",
+      "outcome": "passed"
+    },
+    {
+      "name": "feedback dirige un retorno no afirmado a Steps; no consume reparación de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "mantiene rechazo de getters ajenos, selectores inline, resultados falsos y acciones de click",
+      "outcome": "passed"
+    },
+    {
+      "name": "autores y catálogo reciben el contrato de retorno y permiten agrupar getters",
+      "outcome": "passed"
+    },
+    {
+      "name": "selectorIsUnspecific distingue tipo/posición de identidad",
+      "outcome": "passed"
+    },
+    {
+      "name": "el flujo de movimientos por correo extiende movements, no el Screen del OTP",
+      "outcome": "passed"
+    },
+    {
+      "name": "el mismo selector genérico sí se reutiliza cuando el locator vive en el módulo que se extiende",
+      "outcome": "passed"
+    },
+    {
+      "name": "un selector genérico repetido en varios módulos no bloquea por ambigüedad y prefiere el módulo que se extiende",
+      "outcome": "passed"
+    },
+    {
+      "name": "un único acierto sin cobertura no adopta un Screen ajeno; un caso corto sobre la misma pantalla sí",
+      "outcome": "passed"
+    },
+    {
+      "name": "bestArtifactBundle puntúa por evidencia y elige el locator con aciertos o el del Screen",
+      "outcome": "passed"
+    },
+    {
+      "name": "qa-observations avisa del selector sin predicado y conserva el selector grabado",
+      "outcome": "passed"
+    },
+    {
+      "name": "the embedded server starts Appium with the runtime owned by visual-recorder",
+      "outcome": "passed"
+    },
+    {
+      "name": "the recorder pins an isolated and compatible Appium runtime",
+      "outcome": "passed"
+    },
+    {
+      "name": "packaged runtime resolves to the checkout that built the app",
+      "outcome": "passed"
+    },
+    {
+      "name": "explicit runtime root wins over packaged metadata",
+      "outcome": "passed"
+    },
+    {
+      "name": "stale or malformed build metadata falls back to userData",
+      "outcome": "passed"
+    },
+    {
+      "name": "API deriva tipos, retorno y secuencias de las llamadas reales sin guardar valores del caso",
+      "outcome": "passed"
+    },
+    {
+      "name": "API no cambia por redacción, formato ni valor de string; sí por tipo o cantidad de argumentos",
+      "outcome": "passed"
+    },
+    {
+      "name": "API distingue consumir, ignorar y esperar el retorno",
+      "outcome": "passed"
+    },
+    {
+      "name": "API reporta tipos desconocidos y spread sin inventar una firma",
+      "outcome": "passed"
+    },
+    {
+      "name": "API no mezcla métodos homónimos de otros Screens ni variables locales",
+      "outcome": "passed"
+    },
+    {
+      "name": "API cache devuelve copias independientes y detecta cambios de contenido",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta método ausente y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta tipo incompatible y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta argumento requerido ausente y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta argumento adicional y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta retorno incompatible y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta export incorrecto y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek detecta método privado y asigna el diagnóstico al Screen de Zorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek admite métodos reutilizados con parámetros opcionales, rest y overloads compatibles",
+      "outcome": "passed"
+    },
+    {
+      "name": "API aislada deja imports externos al compilador del framework y respeta el dueño de cada Screen",
+      "outcome": "passed"
+    },
+    {
+      "name": "la firma de getElement se lee del framework",
+      "outcome": "passed"
+    },
+    {
+      "name": "un import de locators sin atributo de tipo es un error",
+      "outcome": "passed"
+    },
+    {
+      "name": "un modulo reutilizado tambien tiene que ir por alias",
+      "outcome": "passed"
+    },
+    {
+      "name": "el atributo vale con comillas simples o dobles",
+      "outcome": "passed"
+    },
+    {
+      "name": "deriva el identificador semantico desde el archivo locator",
+      "outcome": "passed"
+    },
+    {
+      "name": "exige alias semantico y notacion de punto para el locator planificado",
+      "outcome": "passed"
+    },
+    {
+      "name": "getElement con solo la plataforma activa es un error",
+      "outcome": "passed"
+    },
+    {
+      "name": "el valor antes del TypeLocator es un error",
+      "outcome": "passed"
+    },
+    {
+      "name": "intercambiar los valores de iOS y Android es un error",
+      "outcome": "passed"
+    },
+    {
+      "name": "usar literal vacio en getElement es un error aunque el locator exista",
+      "outcome": "passed"
+    },
+    {
+      "name": "la llamada correcta no produce ningun problema",
+      "outcome": "passed"
+    },
+    {
+      "name": "los argumentos se parten balanceando parentesis",
+      "outcome": "passed"
+    },
+    {
+      "name": "el generador determinista cumple el contrato que exige al agente",
+      "outcome": "passed"
+    },
+    {
+      "name": "el enum importado por defecto se nombra como lo que es",
+      "outcome": "passed"
+    },
+    {
+      "name": "usar el enum sin importarlo tambien se marca",
+      "outcome": "passed"
+    },
+    {
+      "name": "el import nombrado correcto no produce nada",
+      "outcome": "passed"
+    },
+    {
+      "name": "nombra alias y singleton desde los nombres esperados del Screen Object",
+      "outcome": "passed"
+    },
+    {
+      "name": "el validador no debe hardcodear reglas de alias/clase/singleton fuera del contrato",
+      "outcome": "passed"
+    },
+    {
+      "name": "matching: Cucumber ignora el keyword y un regex laxo de otro squad atrapa la frase nueva",
+      "outcome": "passed"
+    },
+    {
+      "name": "matching: acepta fuente interna, literal con flags y cucumber expression",
+      "outcome": "passed"
+    },
+    {
+      "name": "reformulación: cambiar el verbo saca la frase del regex laxo; los sufijos no",
+      "outcome": "passed"
+    },
+    {
+      "name": "borrador: una frase atrapada por un regex ajeno se reformula en vez de sufijarse",
+      "outcome": "passed"
+    },
+    {
+      "name": "catálogo: frameworkStepDefinitions trae todos los squads; stepDefinitions sigue acotado al squad",
+      "outcome": "passed"
+    },
+    {
+      "name": "validador: step-ambiguous cuando un regex de otro squad resuelve la misma línea que la definición propia",
+      "outcome": "passed"
+    },
+    {
+      "name": "validador: la frase reformulada resuelve a una sola definición y el step reutilizado a la suya",
+      "outcome": "passed"
+    },
+    {
+      "name": "validador: step-undefined cuando ninguna definición (propia ni del framework) resuelve la línea",
+      "outcome": "passed"
+    },
+    {
+      "name": "validador: sin catálogo del framework no se afirma que una línea quede undefined",
+      "outcome": "passed"
+    },
+    {
+      "name": "persiste solo intención explícita y conserva Unicode/espacios del esperado",
+      "outcome": "passed"
+    },
+    {
+      "name": "cache y fingerprint distinguen fuente, operador y esperado exacto",
+      "outcome": "passed"
+    },
+    {
+      "name": "lectura de contenedor encuentra Hoy en descendientes sin inferir padres ni alterar selector",
+      "outcome": "passed"
+    },
+    {
+      "name": "texto propio, comparación exacta y legacy conservan comportamiento",
+      "outcome": "passed"
+    },
+    {
+      "name": "lector emitido y ejecución local tienen idénticos resultados Android/iOS, duplicados y límites",
+      "outcome": "passed"
+    },
+    {
+      "name": "genera las cuatro capas, conserva XPath y emite lectura en el Screen + comparación en el Step",
+      "outcome": "passed"
+    },
+    {
+      "name": "el valor <param> del Examples se compara en el Step con el parámetro del callback",
+      "outcome": "passed"
+    },
+    {
+      "name": "una fila con dos aserciones de texto o con acciones tras la lectura conserva la comparación en el Screen",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza cambio de fuente/getter, helper alterado o lectura no devuelta en el Screen (Zorem)",
+      "outcome": "passed"
+    },
+    {
+      "name": "rechaza en Steps cambio de operador/esperado o comparación ausente y lo atribuye a Lorem",
+      "outcome": "passed"
+    },
+    {
+      "name": "ambos autores reciben semántica explícita sin inferir validación a partir de XPath",
+      "outcome": "passed"
+    },
+    {
+      "name": "actions.json y scenario.json conservan intención sin persistir contenido observado",
+      "outcome": "passed"
+    },
+    {
+      "name": "el error de recorded-text-assertion nombra la parte que falla y cómo corregirla",
+      "outcome": "passed"
+    },
+    {
+      "name": "un metodo trazado inexistente o una traza incompleta se explican por separado",
+      "outcome": "passed"
+    },
+    {
+      "name": "Derek restaura el helper canónico antes de juzgar y el resultado pasa la regla",
+      "outcome": "passed"
+    },
+    {
+      "name": "preview no escribe; edición conserva selector y solo guarda una comparación comprobada",
+      "outcome": "passed"
+    },
+    {
+      "name": "comparación fallida, índice inválido, sesión cerrada o persistencia fallida no alteran el recording",
+      "outcome": "passed"
+    },
+    {
+      "name": "una grabación cambiada durante la lectura no recibe el resultado de la acción antigua",
+      "outcome": "passed"
+    },
+    {
+      "name": "UI envía fuente/operador explícitos, conserva espacios y muestra lectura como texto seguro",
+      "outcome": "passed"
+    },
+    {
+      "name": "editar restaura descendientes y operador; cancelar o guardar vuelve al alcance del elemento",
+      "outcome": "passed"
+    },
+    {
+      "name": "la fachada del validador sintáctico conserva ubicación precisa",
+      "outcome": "passed"
+    },
+    {
+      "name": "el validador sintáctico acepta TypeScript válido",
+      "outcome": "passed"
+    },
+    {
+      "name": "reporta texto visible defectuoso sin modificar el selector capturado",
+      "outcome": "passed"
+    },
+    {
+      "name": "no genera observaciones para el texto correcto",
+      "outcome": "passed"
+    },
+    {
+      "name": "usa la plataforma del escenario en recordings antiguos que no la guardaron por acción",
+      "outcome": "passed"
+    },
+    {
+      "name": "avisa una verificación con XPath genérico sin tocar el selector",
+      "outcome": "passed"
+    },
+    {
+      "name": "JSON UTF-8 conserva tildes y normaliza Unicode a NFC sin BOM",
+      "outcome": "passed"
+    },
+    {
+      "name": "lector estricto rechaza bytes que no son UTF-8",
+      "outcome": "passed"
+    },
+    {
+      "name": "diagnóstico distingue mojibake, reemplazo y texto no NFC",
+      "outcome": "passed"
+    },
+    {
+      "name": "el contrato declara todos los códigos que emite el validador",
+      "outcome": "passed"
+    },
+    {
+      "name": "la fuente del contrato incluye cada familia de reglas del validador",
+      "outcome": "passed"
+    },
+    {
+      "name": "automation package publica validation-contract.json",
+      "outcome": "passed"
+    },
+    {
+      "name": "el paquete informa al agente el alias semantico y la notacion de punto para locators",
+      "outcome": "passed"
+    },
+    {
+      "name": "el contrato publica requisitos positivos y ejemplo minimo por regla",
+      "outcome": "passed"
+    },
+    {
+      "name": "el catálogo incluye las reglas mecánicas del Screen Object con ejemplo",
+      "outcome": "passed"
+    },
+    {
+      "name": "revalidates every candidate, same-element identity and TypeLocator roundtrip",
+      "outcome": "passed"
+    },
+    {
+      "name": "omits zero, multiple, different-element, unrepresentable and failed alternatives visibly",
+      "outcome": "passed"
+    },
+    {
+      "name": "rejects an invalid primary instead of importing it",
+      "outcome": "passed"
+    },
+    {
+      "name": "omits an unsupported backup strategy without aborting the primary",
+      "outcome": "passed"
+    },
+    {
+      "name": "blocks an unsupported primary strategy visibly",
+      "outcome": "passed"
+    },
+    {
+      "name": "validates all received candidates before applying the compact deterministic cap",
+      "outcome": "passed"
+    },
+    {
+      "name": "locator-candidates.json siempre viaja vacío y no reintroduce candidatos al escenario",
+      "outcome": "passed"
+    },
+    {
+      "name": "rejects a locator candidate package modified after recorder preparation",
+      "outcome": "passed"
+    },
+    {
+      "name": "terminal identifica solo su sesión y reporta modelo real sin esperar cierre de Copilot",
+      "outcome": "passed"
+    },
+    {
+      "name": "PASS 1 permanece en el provider controlado",
+      "outcome": "passed"
+    },
+    {
+      "name": "PASS 2 abre Copilot interactivo y termina al validar una respuesta nueva",
+      "outcome": "passed"
+    },
+    {
+      "name": "PASS 2 mantiene Copilot abierto hasta que cambia una salida rechazada por el validador oficial",
+      "outcome": "passed"
+    },
+    {
+      "name": "PASS 2 entrega al validador oficial una salida con schema inválido para solicitar corrección",
+      "outcome": "passed"
+    },
+    {
+      "name": "respuesta parcial no dispara importación y respeta timeout",
+      "outcome": "passed"
+    },
+    {
+      "name": "PASS 2 acepta extend-existing emitido desde el vocabulario del plan",
+      "outcome": "passed"
+    },
+    {
+      "name": "fuera de macOS conserva el provider headless",
+      "outcome": "passed"
+    },
+    {
+      "name": "resuelve exclusivamente el fwk-mobile padre e ignora configuración heredada",
+      "outcome": "passed"
+    }
+  ],
+  "comparison": "no-baseline",
+  "failures": [],
+  "resolved": [],
+  "notReevaluated": []
+}

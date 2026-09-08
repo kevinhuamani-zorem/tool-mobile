@@ -2287,48 +2287,35 @@ test('validator bloquea steps y locators que duplican artefactos del framework',
     assert.equal(validation.errors.some(error => error.code === 'framework-locator-collision'), true);
 });
 
-test('memoria solo promociona calidad 100 y recupera la versión más reciente', () => {
+test('un score 100 no promociona memoria ni devuelve un caso previo', t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-memory-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const memory = new AutomationMemory(root);
     const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=movimientos', selectorVerified: true,
         elementIntent: 'lista de movimientos'
     }]));
     const response = validResponse(resolved.plan);
-    assert.throws(() => memory.promote(resolved.scenario, resolved.plan, response, {
-        valid: false, qualityScore: 90, errors: [], warnings: []
-    }), /100%/);
-    const entry = memory.promote(resolved.scenario, resolved.plan, response, {
-        valid: true, qualityScore: 100, errors: [], warnings: []
-    });
-    assert.equal(entry.version, 1);
-    assert.equal(memory.find(resolved.scenario.fingerprint).response.planId, resolved.plan.planId);
-    assert.deepEqual(memory.stats(), { successfulCases: 1, versions: 1, interactions: 1, gapDecisions: 0 });
+    for (const score of [90, 100]) assert.throws(() => memory.promote(resolved.scenario, resolved.plan, response, {
+        valid: score === 100, qualityScore: score, errors: [], warnings: []
+    }), /promoción por score está retirada/);
+    assert.equal(memory.find(resolved.scenario.fingerprint), null);
+    assert.deepEqual(memory.stats(), { successfulCases: 0, versions: 0, interactions: 0, gapDecisions: 0 });
+    assert.deepEqual(fs.readdirSync(root), []);
 });
 
-// La memoria aprende vocabulario de respuestas validadas al 100%: el recorder
-// propuso un nombre con una palabra que no supo traducir y el agente lo
-// renombro; el siguiente caso ya nace en ingles sin gastar tokens.
-test('memoria aprende traducciones de renombres validados y las carga al preparar', () => {
+test('el vocabulario legacy no vuelve a cargarse al preparar otro caso', t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-memory-vocab-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    fs.writeFileSync(path.join(root, 'vocabulary.json'), JSON.stringify({ encadenado: 'chained' }));
     const memory = new AutomationMemory(root);
-    const resolved = new DeterministicResolver(emptyCatalog).resolve(scenario([{
-        action: 'VERIFICAR_EXISTE', selector: 'id=historial', selectorVerified: true,
-        elementIntent: 'lista de historial encadenado'
-    }]));
-    assert.equal(resolved.plan.resolutions[0].locatorName, 'historyEncadenadoList');
-    const response = validResponse(resolved.plan);
-    response.actionTrace = response.actionTrace.map(trace => ({ ...trace, locatorName: 'historyChainedList' }));
-    memory.promote(resolved.scenario, resolved.plan, response, {
-        valid: true, qualityScore: 100, errors: [], warnings: []
-    });
-    assert.deepEqual(memory.learnedVocabulary(), { encadenado: 'chained' });
-    assert.deepEqual(new AutomationMemory(root).loadLearnedVocabulary(), { encadenado: 'chained' });
+    assert.deepEqual(memory.learnedVocabulary(), {});
+    assert.deepEqual(new AutomationMemory(root).loadLearnedVocabulary(), {});
     const again = new DeterministicResolver(emptyCatalog).resolve(scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=historial', selectorVerified: true,
         elementIntent: 'lista de historial encadenado'
     }]));
-    assert.equal(again.plan.resolutions[0].locatorName, 'historyChainedList');
+    assert.equal(again.plan.resolutions[0].locatorName, 'historyEncadenadoList');
 });
 
 // Regla ISTQB: sin resultado esperado no hay caso de prueba. El corte tiene que

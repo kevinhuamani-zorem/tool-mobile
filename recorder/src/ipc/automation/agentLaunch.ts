@@ -176,7 +176,7 @@ export class AutomationAgentLaunchService {
                                         ? 'Derek ensambló y validó las capas sin otra llamada a Copilot.'
                                         : `${stage.agentName} no corrió: sus capas ya estaban validadas en memoria o en el framework.`)
                                     : stage.execution === 'design-review'
-                                        ? 'Lorem no redacta: Feature y Steps vienen de memoria validada; solo revisa el diseño de este caso.'
+                                        ? 'Lorem no redacta: Feature y Steps se reutilizan del framework; solo revisa el diseño de este caso.'
                                         : undefined;
                             const progress = stage.role === 'behavior-author'
                                 ? {

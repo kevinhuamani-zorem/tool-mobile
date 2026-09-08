@@ -17,10 +17,7 @@ const { DeterministicGenerator } = require('../dist/core/generation');
 const { AutomationResponseValidator } = require('../dist/core/validation');
 const { projectPaths } = require('../dist/core/workspace');
 
-// La memoria de casos solo sirve para regenerar la misma grabacion. Lo que un
-// QA repite entre recordings son interacciones y verificaciones sobre los
-// mismos elementos: eso es lo que la memoria de fragmentos conserva y lo que
-// otro recording debe poder reutilizar sin volver a pagar al agente.
+// Las utilidades de fragmentos permanecen comprobadas; el servicio legacy no las expone.
 
 function step(sequence, action, selector, extra = {}) {
     return {
@@ -162,16 +159,14 @@ function fixedResolutions(packageDirectory) {
     });
 }
 
-test('otro recording hereda wording, metodo y decision de gap de un caso validado en otro recording', t => {
+test('otro recording no hereda fragmentos ni decisiones de un caso legacy con score 100', t => {
     isolatedFramework(t, 'avr-memory-');
     const memoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'avr-memory-root-'));
     t.after(() => fs.rmSync(memoryRoot, { recursive: true, force: true }));
     const memory = new AutomationMemory(memoryRoot);
     const builder = new AutomationPackageBuilder(undefined, memory);
 
-    // Caso A: se prepara, se materializa y se promociona (score 100) como
-    // haria "Aplicar". Simula ademas que el agente redacto el bloque When y su
-    // metodo con nombres propios: eso es lo que vale la pena recordar.
+    // Captura un caso válido como evidencia legacy, sin aprobación golden.
     const recordingA = path.join(projectPaths.recordings, 'rec-memory-a');
     fs.mkdirSync(recordingA, { recursive: true });
     const preparedA = builder.prepare(recording('rec-memory-a', 'el usuario consulta el historial memoria', 'se muestra el titulo del historial memoria', [HISTORY, SEE_ALL, TITLE], 'TC-70001'), recordingA);
@@ -182,47 +177,25 @@ test('otro recording hereda wording, metodo y decision de gap de un caso validad
     const validationA = new AutomationResponseValidator().validate(scenarioA, planA, responseA);
     assert.equal(validationA.valid, true, validationA.errors.map(error => error.message).join(' | '));
     const gapsA = JSON.parse(fs.readFileSync(path.join(preparedA.packageDirectory, 'unresolved-context.json'), 'utf8')).gaps;
-    memory.promote(scenarioA, planA, responseA, validationA, gapsA);
-    const whenA = responseA.actionTrace.find(trace => trace.sequence === 1);
-    const thenA = responseA.actionTrace.find(trace => trace.sequence === 3);
-    assert.deepEqual(memory.stats(), { successfulCases: 1, versions: 1, interactions: 2, gapDecisions: 1 });
+    const fragments = fragmentsFromValidatedCase({ scenario: scenarioA, response: responseA, gaps: gapsA, promotedAt: '2026-09-08T00:00:00Z' });
+    fs.writeFileSync(path.join(memoryRoot, 'fragments.json'), JSON.stringify(fragments));
+    assert.ok(fragments.interactions.length > 0);
+    assert.deepEqual(memory.stats(), { successfulCases: 0, versions: 0, interactions: 0, gapDecisions: 0 });
 
-    // Caso B: otro recording, otro objetivo, un paso mas en medio, y el
-    // framework NO tiene aplicado A (el QA no llego a aplicarlo o lo
-    // descarto). Lo que se repite son las interacciones: esas vienen de memoria.
     const recordingB = path.join(projectPaths.recordings, 'rec-memory-b');
     fs.mkdirSync(recordingB, { recursive: true });
     const preparedB = builder.prepare(recording('rec-memory-b', 'el usuario descarga el historial memoria', 'se muestra el titulo tras descargar', [HISTORY, SEE_ALL, DOWNLOAD, TITLE], 'TC-70002'), recordingB);
     const scenarioB = JSON.parse(fs.readFileSync(path.join(preparedB.packageDirectory, 'scenario.json'), 'utf8'));
     const rowsB = scenarioB.request.scenarioRows;
-    const whenB = rowsB.find(row => row.keyword === 'When');
-    assert.equal(whenB.wording, 'memory');
-    assert.equal(`${whenB.keyword} ${whenB.text}`, whenA.gherkinStep);
-    assert.equal(whenB.methodName, whenA.screenMethod);
-    assert.deepEqual(whenB.memory, { caseId: 'TC-70001', screenMethod: whenA.screenMethod });
-    assert.deepEqual(whenB.actions.map(item => item.sequence), [1, 2]);
-    const downloadB = rowsB.find(row => (row.actions || []).some(item => item.sequence === 3));
-    assert.notEqual(downloadB.wording, 'memory', 'la descarga no estaba en memoria: sigue el camino normal');
-    const thenB = rowsB.find(row => row.keyword === 'Then');
-    assert.equal(thenB.wording, 'memory');
-    assert.equal(`Then ${thenB.text}`, thenA.gherkinStep);
-    assert.equal(thenB.methodName, thenA.screenMethod);
+    assert.ok(rowsB.every(row => row.wording !== 'memory' && !row.memory));
 
-    // El gap de verificacion sobre el mismo titulo nace resuelto desde memoria:
-    // queda trazado para el QA pero no abre el paquete al agente.
     const planB = JSON.parse(fs.readFileSync(path.join(preparedB.packageDirectory, 'generation-plan.json'), 'utf8'));
     const gapsB = JSON.parse(fs.readFileSync(path.join(preparedB.packageDirectory, 'unresolved-context.json'), 'utf8')).gaps;
     const verificationB = gapsB.find(gap => gap.id === 'gap-verification-4');
     assert.ok(verificationB);
-    assert.equal(verificationB.status, 'resolved');
-    assert.equal(verificationB.resolvedBy, 'memory');
-    assert.match(verificationB.reason, /TC-70001/);
-    assert.equal(planB.unresolvedGapIds.includes('gap-verification-4'), false);
-
-    // La materializacion determinista honra el metodo memorizado.
+    assert.notEqual(verificationB.resolvedBy, 'memory');
+    assert.equal(planB.unresolvedGapIds.includes('gap-verification-4'), true);
     const responseB = new DeterministicGenerator().generate(preparedB.packageDirectory, fixedResolutions(preparedB.packageDirectory));
-    const stepsB = responseB.files.find(file => file.layer === 'steps').content;
-    assert.match(stepsB, new RegExp(`\\.${whenA.screenMethod}\\(`));
     const validationB = new AutomationResponseValidator().validate(scenarioB, planB, responseB);
     assert.equal(validationB.valid, true, validationB.errors.map(error => error.message).join(' | '));
 });

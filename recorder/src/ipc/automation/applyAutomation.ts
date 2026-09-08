@@ -7,7 +7,6 @@ import {
     AutomationMemory,
     AutomationApplier,
     AutomationAgentResponse,
-    UnresolvedGap,
     AgentRunStore,
     AutomationApplicationReceipt,
     createAutomationApplicationReceipt,
@@ -32,7 +31,7 @@ export interface ApplyAutomationDependencies {
  * Aplica sobre el framework la propuesta revisada por QA: revalida con los
  * contenidos editados, exige que los archivos ya aplicados no hayan cambiado,
  * calcula correcciones sin restaurar baselines en disco, delega la escritura al
- * `AutomationApplier` de core, promueve memoria y deja el recibo de aplicación.
+ * `AutomationApplier` de core y deja el recibo; aplicar no enseña a los agentes.
  */
 export async function applyReviewedAutomation(
     deps: ApplyAutomationDependencies,
@@ -44,7 +43,6 @@ export async function applyReviewedAutomation(
         automationResponseValidator,
         generatedFileRegistry,
         automationApplier,
-        automationMemory,
         emitProgress: emitAutomationProgress,
     } = deps;
     let runStore: AgentRunStore | undefined;
@@ -109,13 +107,6 @@ export async function applyReviewedAutomation(
         // el archivo puede ser ajeno y solo debe recibir los símbolos nuevos.
         // El flujo completo vive en core (`AutomationApplier`), compartido
         // con las pruebas.
-        // La memoria aprende tambien de los gaps que este caso cerro: con la
-        // decision aceptada por elemento, otro recording no vuelve a preguntar.
-        const unresolvedFile = path.join(state.activeAutomationPackage, 'unresolved-context.json');
-        const memorizedGaps = fs.existsSync(unresolvedFile)
-            ? (readJsonUtf8<{ gaps?: UnresolvedGap[] }>(unresolvedFile).gaps || [])
-            : [];
-        let memoryVersion = 0;
         const metadataFiles = ['agent-response.json', 'validation.json', 'application-receipt.json', 'status.json']
             .map(file => path.join(state.activeAutomationPackage, file));
         const { generated, patched } = automationApplier.commit(prepared, scenario, plan, () => {
@@ -139,6 +130,7 @@ export async function applyReviewedAutomation(
         const statusFile = path.join(state.activeAutomationPackage, 'status.json');
         let status: Record<string, any> = {};
         try { status = readJsonUtf8<Record<string, any>>(statusFile); } catch { status = {}; }
+        delete status.memoryVersion;
         writeJsonUtf8(statusFile, {
             ...status,
             recordingId: scenario.recordingId,
@@ -147,16 +139,11 @@ export async function applyReviewedAutomation(
             generatedAt: new Date().toISOString(),
             lastMaterializedAgentResponseHash: sha256(fs.readFileSync(metadataFiles[0], 'utf8')),
         });
-        // Last fallible operation: memory has its own rollback and learns only
-        // the exact response whose bytes were committed above.
-        memoryVersion = automationMemory.promote(scenario, plan, response, validation, memorizedGaps, entry => {
-            writeJsonUtf8(statusFile, { ...readJsonUtf8<Record<string, any>>(statusFile), memoryVersion: entry.version });
-        }).version;
         }, metadataFiles);
         state.automationPreview = null;
         runStore.mark('generated', true);
         emitAutomationProgress('COMPLETED', 'Automatización aplicada correctamente', 2, 2);
-        return { success: true, generated, validation, memoryVersion, patched: patched.outcomes };
+        return { success: true, generated, validation, patched: patched.outcomes };
     } catch (e: any) {
         emitAutomationProgress('FAILED', 'No pudimos aplicar la automatización', 0, 2, {
             error: e.message,

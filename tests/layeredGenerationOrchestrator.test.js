@@ -19,9 +19,7 @@ function writeJson(file, value) {
 
 function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'layered-generation-'));
-    // El caché de agentes vive en la memoria del recorder (global entre
-    // recordings): cada fixture usa un runtime propio para no heredar
-    // resultados de otro test ni escribir en la memoria real.
+    // Cada fixture aísla su runtime y los artefactos del intento.
     configureWorkspacePaths({ targetProject: FRAMEWORK_ROOT, runtimeRoot: path.join(root, 'runtime'), source: 'selected' });
     writeJson(path.join(root, 'generation-plan.json'), {
         schemaVersion: 1,
@@ -721,78 +719,45 @@ test('Sumrak no puede cambiar create a reuse contra la resolución determinista 
     assert.match(result.error, /gap-1 debe conservar decision create del plan; recibió resolved/);
 });
 
-test('reutiliza Lorem y Zorem por fingerprint cuando sus entradas no cambiaron', async () => {
+test('regenerar ejecuta los autores aunque exista una respuesta anterior válida', async () => {
     const root = fixture();
     const calls = [];
     const fake = provider(calls);
     const orchestrator = new LayeredGenerationOrchestrator(fake, fake);
 
     assert.equal((await orchestrator.run(root)).success, true);
-    // Simula la reconstrucción del paquete automation: los workspaces se
-    // eliminan, mientras el caché sibling del recording debe sobrevivir.
-    fs.rmSync(path.join(root, 'agents'), { recursive: true, force: true });
+    // Conserva los artefactos: el inicio debe aislarlos de esta nueva ejecución.
     calls.length = 0;
     const second = await orchestrator.run(root);
 
     assert.equal(second.success, true);
-    assert.deepEqual(calls.map(call => call.agentName), []);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
     const report = JSON.parse(fs.readFileSync(second.reportFile, 'utf8'));
-    assert.deepEqual(report.stages.map(stage => stage.execution), ['cache', 'cache', 'cache']);
-    assert.deepEqual(report.stages.map(stage => stage.cacheHit), [true, true, true]);
+    assert.deepEqual(report.stages.map(stage => stage.execution), ['agent', 'agent', 'agent']);
+    assert.deepEqual(report.stages.map(stage => stage.cacheHit), [false, false, false]);
 });
 
-// La memoria no es del recording: otro recording con las mismas acciones,
-// plan y baselines (una regrabacion del mismo caso, una regeneracion desde
-// otra carpeta) reutiliza el trabajo verificado de Lorem y Zorem aunque
-// cambien recordingId, planId y fechas.
-test('otro recording con los mismos inputs reutiliza el pipeline verificado y recibe sus propios ids', async () => {
+test('otro recording no reutiliza respuestas previas ni el caché global legacy', async t => {
     const root = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const calls = [];
     const fake = provider(calls);
     const orchestrator = new LayeredGenerationOrchestrator(fake, fake);
     assert.equal((await orchestrator.run(root)).success, true);
-    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
-
-    // Segundo recording: misma memoria (mismo runtime), otra carpeta, otros ids.
-    const other = path.join(path.dirname(root), `${path.basename(root)}-other`);
-    fs.cpSync(root, other, { recursive: true });
-    fs.rmSync(path.join(other, 'agents'), { recursive: true, force: true });
-    fs.rmSync(path.join(other, 'agent-response.json'), { force: true });
-    for (const name of ['generation-plan.json', 'scenario.json']) {
-        const file = path.join(other, name);
-        const document = JSON.parse(fs.readFileSync(file, 'utf8'));
-        document.recordingId = 'rec-2';
-        if (document.planId) document.planId = 'plan-2';
-        document.createdAt = '2030-01-01T00:00:00.000Z';
-        writeJson(file, document);
+    const other = path.join(root, 'other');
+    fs.mkdirSync(other);
+    for (const file of ['generation-plan.json', 'scenario.json', 'gaps.json', 'agent-response.schema.json']) {
+        fs.copyFileSync(path.join(root, file), path.join(other, file));
     }
+    // Incluso una copia completa del caché anterior no acredita aprobación QA.
+    const legacy = path.join(projectPaths.automationMemory, 'agent-cache');
+    fs.cpSync(path.join(root, 'agents/derek/attempt-cache'), legacy, { recursive: true });
     calls.length = 0;
-    const second = await orchestrator.run(other);
-
-    assert.equal(second.success, true);
-    assert.deepEqual(calls.map(call => call.agentName), [], 'ningun agente vuelve a correr');
-    const report = JSON.parse(fs.readFileSync(second.reportFile, 'utf8'));
-    assert.deepEqual(report.stages.map(stage => stage.execution), ['cache', 'cache', 'cache']);
-    const response = JSON.parse(fs.readFileSync(path.join(other, 'agent-response.json'), 'utf8'));
-    assert.equal(response.recordingId, 'rec-2');
-    assert.equal(response.planId, 'plan-2');
-
-    // Un cambio real de contenido (otra accion) no reutiliza nada. (El
-    // proveedor falso responde con los ids del fixture, asi que este tercer
-    // recording conserva rec-1/plan-1 y solo cambia las acciones.)
-    const changed = path.join(path.dirname(root), `${path.basename(root)}-changed`);
-    fs.cpSync(root, changed, { recursive: true });
-    fs.rmSync(path.join(changed, 'agents'), { recursive: true, force: true });
-    fs.rmSync(path.join(changed, 'agent-response.json'), { force: true });
-    fs.rmSync(path.join(changed, 'layered-generation-run.json'), { force: true });
-    const scenarioFile = path.join(changed, 'scenario.json');
-    const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'));
-    scenario.request.actions = [{ action: 'CLICK', selector: '~otro', sequence: 1 }];
-    writeJson(scenarioFile, scenario);
-    calls.length = 0;
-    const third = await orchestrator.run(changed);
-    assert.equal(third.success, true, third.error);
+    const result = await orchestrator.run(other);
+    assert.equal(result.success, true, result.error);
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak']);
+    const report = JSON.parse(fs.readFileSync(result.reportFile));
+    assert.ok(report.stages.every(stage => !stage.cacheHit));
 });
 
 test('no promueve al caché una generación que falló la validación oficial', async () => {
@@ -1458,11 +1423,11 @@ test('un gap de aserción débil llega a los autores y Derek lo firma con la dec
     assert.deepEqual(response.resolutions.map(item => [item.gapId, item.decision]), [['gap-weak-assertion-2', 'create']]);
 });
 
-// Cuando todo el caso viene de memoria (o del framework) y no hay gaps
+// Cuando todo el caso se reutiliza del framework y no hay gaps
 // abiertos, Zorem no tiene nada que escribir y Lorem no redacta: solo revisa
 // el diseño de ESTE caso. La revisión es del caso, no de las interacciones,
 // asi que por defecto sigue habiendo una llamada a Lorem (pequeña).
-function memoryCase(root, { inherit = false } = {}) {
+function frameworkCase(root, { inherit = false } = {}) {
     const planFile = path.join(root, 'generation-plan.json');
     const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
     plan.unresolvedGapIds = [];
@@ -1476,7 +1441,7 @@ function memoryCase(root, { inherit = false } = {}) {
             actions: [],
             scenarioRows: [
                 { keyword: 'Given', text: 'el usuario <username> inicia sesión en Yape', status: 'reused', actions: [] },
-                { keyword: 'When', text: 'el usuario consulta todos sus movimientos', status: 'missing', wording: 'memory', methodName: 'viewAllMovements', memory: { caseId: 'TC-10140', screenMethod: 'viewAllMovements' }, actions: [{ sequence: 1 }] },
+                { keyword: 'When', text: 'el usuario consulta todos sus movimientos', status: 'reused', methodName: 'viewAllMovements', actions: [{ sequence: 1 }] },
             ],
         },
     });
@@ -1511,9 +1476,9 @@ function reviewingProvider(calls, { failReview = false } = {}) {
     };
 }
 
-test('con todo el caso en memoria Zorem no corre y Lorem solo revisa el diseño', async () => {
+test('con todo el caso reutilizado del framework Zorem no corre y Lorem solo revisa el diseño', async () => {
     const root = fixture();
-    const options = memoryCase(root);
+    const options = frameworkCase(root);
     const calls = [];
     const fake = reviewingProvider(calls);
 
@@ -1537,8 +1502,8 @@ test('con todo el caso en memoria Zorem no corre y Lorem solo revisa el diseño'
     assert.equal(response.files.find(file => file.layer === 'feature').content, 'Feature: Draft');
     assert.deepEqual(response.actionTrace, DRAFT_TRACE);
     const behavior = JSON.parse(fs.readFileSync(path.join(root, 'agents/lorem/behavior-result.json'), 'utf8'));
-    assert.match(behavior.assumptions[0], /TC-10140/);
-    // Y otro recording igual reutiliza la revisión desde el caché global.
+    assert.match(behavior.assumptions[0], /framework/);
+    // Otro recording igual recibe una revisión nueva de su diseño.
     const again = path.join(path.dirname(root), `${path.basename(root)}-again`);
     fs.cpSync(root, again, { recursive: true });
     fs.rmSync(path.join(again, 'agents'), { recursive: true, force: true });
@@ -1547,12 +1512,12 @@ test('con todo el caso en memoria Zorem no corre y Lorem solo revisa el diseño'
     calls.length = 0;
     const second = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(again, options);
     assert.equal(second.success, true, second.error);
-    assert.deepEqual(calls, []);
+    assert.deepEqual(calls.map(call => [call.agentName, Boolean(call.review)]), [['Lorem', true]]);
 });
 
 test('heredar la revisión de diseño es una decisión explícita del QA y queda trazada', async () => {
     const root = fixture();
-    const options = memoryCase(root, { inherit: true });
+    const options = frameworkCase(root, { inherit: true });
     const calls = [];
     const fake = reviewingProvider(calls);
 
@@ -1564,14 +1529,14 @@ test('heredar la revisión de diseño es una decisión explícita del QA y queda
     assert.deepEqual(report.stages.map(stage => stage.execution), ['deterministic', 'deterministic', 'deterministic']);
     const review = JSON.parse(fs.readFileSync(path.join(root, 'test-design-review.json'), 'utf8'));
     assert.equal(review.status, 'pass');
-    assert.equal(review.source, 'memory');
-    assert.match(review.summary, /TC-10140/);
+    assert.equal(review.source, 'framework');
+    assert.match(review.summary, /framework/);
     assert.match(review.summary, /Nadie revisó/);
 });
 
 test('si la revisión de diseño falla, el caso vuelve al flujo normal con ambos autores', async () => {
     const root = fixture();
-    const options = memoryCase(root);
+    const options = frameworkCase(root);
     const calls = [];
     const fake = reviewingProvider(calls, { failReview: true });
 
@@ -1585,9 +1550,9 @@ test('si la revisión de diseño falla, el caso vuelve al flujo normal con ambos
 // `gap-extend-existing-artifacts`, que Derek firma sin abrir sesión. Con el
 // plan crudo ese gap bloqueaba el atajo y Zorem corría ~100 s para reescribir
 // cinco imports que ni siquiera debía tocar (df0669f9, 05-09-2026).
-test('un gap que Derek ya firma no impide que Zorem se ahorre cuando todo viene de memoria', async () => {
+test('un gap que Derek ya firma no impide que Zorem se ahorre cuando todo se reutiliza del framework', async () => {
     const root = fixture();
-    const options = memoryCase(root);
+    const options = frameworkCase(root);
     const planFile = path.join(root, 'generation-plan.json');
     const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
     plan.unresolvedGapIds = ['gap-extend-existing-artifacts', 'gap-english-naming'];
@@ -1619,7 +1584,7 @@ test('un gap que Derek ya firma no impide que Zorem se ahorre cuando todo viene 
     );
     // Un gap que sí exige juicio sigue llevando a los autores al flujo normal.
     const judged = fixture();
-    memoryCase(judged);
+    frameworkCase(judged);
     const judgedPlanFile = path.join(judged, 'generation-plan.json');
     const judgedPlan = JSON.parse(fs.readFileSync(judgedPlanFile, 'utf8'));
     judgedPlan.unresolvedGapIds = ['gap-extend-existing-artifacts', 'gap-1'];
@@ -1636,7 +1601,7 @@ test('un gap que Derek ya firma no impide que Zorem se ahorre cuando todo viene 
 
 test('con un step nuevo o un gap abierto los autores corren como siempre', async () => {
     const root = fixture();
-    memoryCase(root);
+    frameworkCase(root);
     const scenarioFile = path.join(root, 'scenario.json');
     const scenario = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'));
     scenario.request.scenarioRows.push({ keyword: 'And', text: 'nuevo', status: 'missing', wording: 'qa', actions: [{ sequence: 2 }] });
@@ -1783,4 +1748,20 @@ test('Zorem recibe tools/check.js y las once reglas en su catálogo; Lorem no', 
     writeJson(path.join(zorem, 'fixed.json'), fixed);
     const ok = execFileSync(process.execPath, ['tools/check.js', 'fixed.json'], { cwd: zorem, encoding: 'utf8' });
     assert.match(ok, /^OK: /m);
+});
+
+
+test('wording legacy no permite omitir autores aunque el paquete diga reused', async () => {
+    const root = fixture();
+    frameworkCase(root);
+    const file = path.join(root, 'scenario.json');
+    const scenario = JSON.parse(fs.readFileSync(file));
+    scenario.request.scenarioRows[1].wording = 'memory';
+    scenario.request.scenarioRows[1].memory = { caseId: 'TC-10140', screenMethod: 'viewAllMovements' };
+    writeJson(file, scenario);
+    const calls = [];
+    const fake = reviewingProvider(calls);
+    const result = await new LayeredGenerationOrchestrator(fake, fake, undefined, draftBuilderWith(DRAFT_TRACE)).run(root);
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem']);
 });
