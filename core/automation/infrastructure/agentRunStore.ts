@@ -50,6 +50,8 @@ export interface AgentRunArtifact {
     tokensOutput: number | null;
     repairAttempts: number;
     result: string;
+    exportResult?: string;
+    exportedAt?: string;
     cacheHits: number;
     initialGapCount: number;
     finalGapCount: number;
@@ -482,6 +484,10 @@ export class AgentRunStore {
     markRepairFinished(): void {
         this.finishTimer('repairStartedAtMs', 'repairDurationMs');
     }
+    recordExport(result: string): void {
+        this.update(run => ({ ...run, exportResult: result, exportedAt: new Date(this.now()).toISOString() }));
+    }
+
     mark(result: string, terminal = false): void {
         this.update(run => ({
             ...run,

@@ -48,14 +48,14 @@ export interface ApplyAutomationResult {
 }
 
 /**
- * Aplica al framework una respuesta ya validada.
+ * Exporta al framework una propuesta revisada, incluso con observaciones.
  *
  * Vivia dentro del handler IPC `generate-automation-response`, donde ni los
  * tests ni la CLI podian ejercerlo y el helper de pruebas lo duplicaba. Aqui
  * es el unico camino: las capas `update` se amplian con un patch aditivo (el
  * archivo puede ser ajeno y solo recibe los simbolos nuevos), las `create` se
  * escriben completas y el registro anota lo que el recorder creo o amplio.
- * No valida: quien llama ya paso por `AutomationResponseValidator`.
+ * Valida el contrato de escritura; los diagnósticos de calidad no impiden exportar.
  */
 export class AutomationApplier {
     constructor(
@@ -178,13 +178,29 @@ export class AutomationApplier {
     /** Resolves every final byte before review; no target or registry writes. */
     prepare(scenario: AutomationScenario, plan: GenerationPlan, response: AutomationAgentResponse,
         preview: GeneratedPreview, baselines = new Map<string, string>()): PreparedAutomation {
-        for (const file of response.files) this.target(file.path);
+        if (!Array.isArray(response.files) || !response.files.length || response.files.length > 4) {
+            throw new Error('No hay archivos exportables o el conjunto de capas es inválido.');
+        }
+        if (response.recordingId !== scenario.recordingId || (plan.recordingId && plan.recordingId !== scenario.recordingId) || (plan.planId && response.planId !== plan.planId)) {
+            throw new Error('La propuesta pertenece a otra grabación o plan.');
+        }
+        const seen = new Set<string>();
+        for (const file of response.files) {
+            const planned = plan.files.find(item => item.layer === file.layer && item.path === file.path);
+            if (!planned || !['create', 'update'].includes(planned.operation) || seen.has(file.layer)
+                || typeof file.content !== 'string') throw new Error(`Archivo fuera del plan o capa duplicada: ${file.path}`);
+            seen.add(file.layer);
+            const target = this.target(file.path);
+            if (planned.operation === 'update' && !fs.existsSync(target)) throw new Error(`El baseline fue eliminado: ${file.path}`);
+        }
+        if (response.completions !== undefined && !Array.isArray(response.completions)) throw new Error('Completions inválidos.');
         for (const file of response.completions || []) this.target(file.file);
         const updates = new Map(plan.files.filter(file => file.operation === 'update').map(file => [file.layer, file.path]));
         const patched = this.applyAdditiveUpdates(scenario, plan, response, updates, true, baselines);
         const byPath = new Map(patched.patches!.map(file => [file.file, file]));
         const finalResponse = { ...response, files: response.files.map(file => ({
-            ...file, content: byPath.get(file.path)?.content ?? file.content,
+            ...file, content: byPath.get(file.path)?.content
+                ?? (updates.has(file.layer) ? baselines.get(file.path) ?? fs.readFileSync(this.target(file.path), 'utf8') : file.content),
         })) };
         const files = finalResponse.files.map(file => ({
             path: file.path, content: file.content,
@@ -212,7 +228,9 @@ export class AutomationApplier {
         if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) throw new Error(`Ruta fuera del framework: ${relative}`);
         let cursor = target;
         while (cursor !== root) {
-            if (fs.existsSync(cursor) && fs.lstatSync(cursor).isSymbolicLink()) throw new Error(`Symlink no permitido: ${relative}`);
+            try {
+                if (fs.lstatSync(cursor).isSymbolicLink()) throw new Error(`Symlink no permitido: ${relative}`);
+            } catch (error: any) { if (error.code !== 'ENOENT') throw error; }
             cursor = path.dirname(cursor);
         }
         return target;

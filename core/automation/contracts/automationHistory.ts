@@ -33,7 +33,7 @@ export interface AutomationHistoryEvent extends AutomationHistoryIdentity {
 }
 export interface AutomationLifecycle {
     generation: 'not-started' | 'running' | 'passed' | 'failed' | 'unknown';
-    export: 'not-exported' | 'exported' | 'failed';
+    export: 'not-exported' | 'exported' | 'exported-with-observations' | 'failed';
     qaApproval: 'pending' | 'approved' | 'revoked';
     functionalVerification: 'not-reported' | 'passed' | 'failed';
 }

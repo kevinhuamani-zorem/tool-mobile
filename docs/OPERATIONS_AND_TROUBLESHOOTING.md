@@ -301,7 +301,7 @@ entre versiones. `repair-feedback.json` queda en `requires-qa` si persisten los
 diagnósticos. Revisión muestra la última entrega recuperable por capa y su
 procedencia; si solo existe borrador determinista, lo indica. Un JSON ilegible
 se conserva como evidencia, sin deducir de él destinos. Volver a generar es una
-nueva solicitud QA con otro intento. Exportar con observaciones corresponde a F3.
+nueva solicitud QA con otro intento. Usa **Exportar al framework** para continuar con el borrador disponible, aunque tenga observaciones.
 
 ### La sesión tarda en arrancar o el log muestra MCP y skills que el recorder no usa
 
@@ -417,8 +417,9 @@ El borrador permanece disponible para editarlo. Usa **Corregir con Copilot** o
 corrige manualmente y **Reimportar corrección del agente**. En layered, Derek
 dirige `repair-feedback.json` al autor de la capa afectada. **Revalidar** comprueba
 el preview conforme al modo de revisión. Las sugerencias funcionales no bloquean;
-errores técnicos nuevos de compilación o de integridad deben resolverse antes
-de aplicar (la exportación con diagnósticos se implementará en F3). Ninguna
+los errores de calidad y compilación permanecen visibles al exportar. Solo un
+conflicto de escritura (rutas, contenido ajeno o cambio concurrente) impide la
+aplicación; revisa el destino y prepara un nuevo preview. Ninguna
 exportación promociona memoria, aunque la propuesta sea válida.
 
 ### Falló la ejecución automática del agente

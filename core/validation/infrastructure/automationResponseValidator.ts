@@ -58,13 +58,13 @@ export class AutomationResponseValidator {
     toPreview(response: AutomationAgentResponse): GeneratedPreview {
         const byLayer = new Map(response.files.map(file => [file.layer, file]));
         const absolute = (relative: string) => path.join(projectPaths.frameworkRoot, relative);
-        const feature = byLayer.get('feature')!;
+        const feature = byLayer.get('feature');
         const steps = byLayer.get('steps');
         const screen = byLayer.get('screen');
         const locators = byLayer.get('locators');
         return {
-            featurePath: absolute(feature.path),
-            featureContent: feature.content,
+            featurePath: feature ? absolute(feature.path) : '',
+            featureContent: feature?.content ?? '',
             stepPath: steps ? absolute(steps.path) : undefined,
             stepContent: steps?.content,
             screenPath: screen ? absolute(screen.path) : undefined,

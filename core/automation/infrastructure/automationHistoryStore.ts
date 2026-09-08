@@ -167,7 +167,7 @@ export class AutomationHistoryStore {
         for (const event of this.events().filter(event => event.revisionId === revisionId)) {
             if (event.kind === 'attempt-started') state.generation = 'running';
             if (event.kind === 'generation-result') state.generation = event.result === 'passed' ? 'passed' : event.result === 'failed' ? 'failed' : 'unknown';
-            if (event.kind === 'export-result') state.export = event.result === 'exported' ? 'exported' : 'failed';
+            if (event.kind === 'export-result') state.export = event.result === 'exported' || event.result === 'exported-with-observations' ? event.result : 'failed';
             if (event.kind === 'qa-verification') {
                 if (event.result === 'approved' || event.result === 'revoked') state.qaApproval = event.result;
                 if (event.result === 'passed' || event.result === 'failed') state.functionalVerification = event.result;

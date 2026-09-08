@@ -712,7 +712,7 @@ export function createReviewFeature(deps) {
                 true,
                 manualCorrection
                     ? 'La corrección fue importada como borrador. Puedes seguir editando y reimportar todas las veces necesarias.'
-                    : 'La propuesta está disponible para revisión. Edítala aquí o pide al agente que corrija gap-resolutions.json y vuelve a importar.'
+                    : 'La propuesta está disponible para revisión. Puedes exportar los archivos disponibles y continuar la corrección en el framework.'
             );
             setWizardPage(3);
             return { ...result, reviewAvailable: Boolean(result.draft) };
@@ -737,7 +737,7 @@ export function createReviewFeature(deps) {
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || state.invalidAutomationDraft;
             if (result.draft) generation.showPreviewDocuments(result.draft, false, false);
-            generation.setGenerate('✗ ' + (result.error || 'La propuesta editada todavía no es válida.'), 'err');
+            if (!result.draft) generation.setGenerate('✗ ' + (result.error || 'No se pudo preparar la revisión.'), 'err');
             return result;
         }
         state.invalidAutomationDraft = null;
@@ -1074,7 +1074,7 @@ export function createReviewFeature(deps) {
             updateProductStage(
                 'RESOLVING_DECISIONS',
                 'Copilot está corrigiendo la propuesta.',
-                'El recorder no aplicará cambios hasta que vuelvas a importar y la validación sea correcta.'
+                'Al terminar, reimporta y revisa los archivos antes de exportarlos; las observaciones de calidad seguirán visibles.'
             );
             enableBtn(btnStartAutomationCorrection);
             automationPipelineRunning = false;

@@ -5,9 +5,10 @@ Fecha: 2026-09-08. Rama: `feature/multi-agent-generation-pipeline`.
 Los planes y diagramas locales se publicaron en `64423280de47681e6fa782eb324b9e0de2006374`.
 El baseline y la retirada de memoria se publicaron en `8a2a4fa0a1ec9e8ad22a4d711a930342f1782d83`.
 El historial se publicó en `504e7eb40eb51254af134b2bc6d09f2bbe732987` (F1).
-La entrega actual completa F2 del pipeline por capas de
+Las dos pasadas se publicaron en `95322f1` (F2).
+La entrega actual completa F3, exportación con observaciones, de
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
-F3–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
+F4–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
 hasta terminar el ciclo completo. La aprobación golden nueva aún no está habilitada.
 
 ## Punto de partida y medición
@@ -108,7 +109,7 @@ Contrato de almacenamiento, compatibilidad y límites:
   para hacerlos válidos y no permiten deducir destinos.
 - IPC y Revisión muestran el borrador al finalizar, aunque no exista Feature,
   junto con diagnóstico, faltantes y procedencia. El fallo no recibe un token
-  de aplicación ni se convierte en éxito autónomo. F3 habilitará la exportación.
+  de aplicación en F2 ni se convierte en éxito autónomo. F3 agrega preparación de exportación independiente.
 
 Alcance y contrato: [AGENT_TWO_PASS_GENERATION.md](AGENT_TWO_PASS_GENERATION.md).
 El pipeline heredado de diagnóstico conserva su protocolo de queries; la entrega
@@ -121,15 +122,15 @@ corresponde al pipeline `layered` predeterminado del wizard.
 | F0 — completada | Baseline real, contexto CI fijado, comparación TAP y fixtures aislados disponibles. |
 | F1 — completada | Memoria antigua fuera del consumo; historial y recibos vinculados. Falta el piloto real, compartido con F7. |
 | F2 — completada | Dos pasadas comunes en layered, envelopes comprobados y Revisión de capas recuperables. Pruebas sin tercera llamada por rol, incluso con resincronización y fallos persistentes. |
-| F3 — siguiente | Permitir exportar bytes revisados y capas disponibles pese a errores de calidad. Mantener rutas, contenido compartido, conflictos, rollback y comprobaciones concurrentes. Registrar exportación con observaciones y actualizar IPC/preload/UI. Probar un borrador inválido exportado y una escritura fallida revertida. |
-| F4 — pendiente de F3 | Recuperar cambios del framework con comparación baseline/exportado/actual; seguir relaciones, renombres y helpers del caso. Mostrar diff y asociaciones pendientes; guardar revisión QA sin inventar eventos Appium. Registrar PR y repo/rama/commit opcionales, incluso con cambios sin commit. |
+| F3 — completada | Exportación de bytes revisados y capas disponibles con observaciones. Se conservan rutas, contenido compartido, conflictos, rollback y comprobaciones concurrentes. Recibo parcial con hashes/símbolos, historial separado y botón disponible sin score 100. |
+| F4 — siguiente | Recuperar cambios del framework con comparación baseline/exportado/actual; seguir relaciones, renombres y helpers del caso. Mostrar diff y asociaciones pendientes; guardar revisión QA sin inventar eventos Appium. Registrar PR y repo/rama/commit opcionales, incluso con cambios sin commit. |
 | F5 — pendiente de F4 | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
 | F6 — pendiente de F4/F5 | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
 | F7 — pendiente de F6 | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
 
 F2 sustituyó los contadores independientes del pipeline por capas.
-Siguen vigentes los bloqueos de exportación/regeneración por calidad
-en el código actual; F3 y F5 los cambiarán según lo acordado.
+F3 retira los bloqueos de exportación por calidad. Los ciclos de regeneración y
+reexportación con correcciones externas se abordarán en F4/F5.
 
 ## Validación de la entrega inicial (`8a2a4fa`)
 
@@ -169,12 +170,11 @@ a F6/F7; no se ejecutó todavía el piloto con dispositivo/Copilot.
 
 ## Próxima entrega concreta
 
-Implementar F3 en preparación/aplicación, IPC y Revisión. Separar diagnóstico de
-calidad de autorización de escritura; convertir el borrador revisado en un conjunto
-de archivos exportables con rutas del caso y transacción. Conservar las comprobaciones
-concurrentes, contenido compartido y rollback. El criterio de cierre es exportar un
-borrador con error semántico sin perder su diagnóstico, y revertir todas las escrituras
-ante un fallo. No esperar al dataset golden para habilitar la salida al QA.
+Implementar F4: recuperar los cambios QA desde el framework comparando baseline,
+exportación y archivos actuales; mostrar diff y asociaciones del caso. Conservar
+identidad, revisiones, cambios sin commit y contexto opcional de PR/repo/rama/commit.
+F5 habilitará ciclos repetidos de regeneración/reexportación; F6 aprobación golden;
+F7 ejemplos, métricas y piloto real. Los checklists detallados siguen abiertos.
 
 ## Validación de F2
 
@@ -193,3 +193,19 @@ ante un fallo. No esperar al dataset golden para habilitar la salida al QA.
   acordados de dos pasadas; no se cambiaron golden ni se omitieron regresiones.
 - Los proveedores, IPC y DOM están simulados. No se ejecutó Copilot real, un caso
   móvil ni el runtime empaquetado del `.app`; ese piloto permanece en F7.
+
+## Implementación de F3
+
+- Exportación independiente de validación en importación normal y recuperación F2,
+  incluido un Screen sin Feature. Revalidar un borrador no necesita una respuesta
+  completa del agente.
+- Escritura de bytes revisados con observaciones, recibo del conjunto real con
+  hashes previos/exportados, símbolos propios, faltantes y diagnóstico.
+- Historial y resultado del intento conservados; la exportación tiene su propio
+  resultado y no acredita aprobación QA, verificación funcional ni memoria.
+- Contrato y límites: [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).
+- Pruebas focalizadas: **68/68**. Log: `/private/tmp/recorder-f3-focused.log`.
+- `npm run quality`: **765/765**, cero fallos, cancelaciones u omisiones;
+  tipos, arquitectura, métricas y builds correctos. Log: `/private/tmp/recorder-f3-quality.log`.
+- El framework padre conserva sus cambios locales. No se ejecutó el piloto con
+  dispositivo/Copilot ni la reapertura del `.app`; siguen pendientes en F7.

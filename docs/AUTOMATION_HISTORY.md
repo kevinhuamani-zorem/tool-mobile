@@ -97,3 +97,11 @@ No borrar `history/` para reprocesar ni usarlo como caché de conocimiento. Una
 limpieza explícita del paquete solo reinicia derivados. Las pruebas cubren
 reapertura, bytes previos a NFC, revisión hija, vínculos al intento, recibos v1/v2,
 contenido alterado, enlaces, publicación interrumpida y rollback de aplicación.
+
+## Exportaciones con observaciones (F3)
+
+El recibo v2 contiene solo los archivos exportados, hashes previos/exportados,
+símbolos propios reconocibles, faltantes y validación. El evento `export-result`
+admite `exported-with-observations`. `agent-run.json` agrega `exportResult` y
+`exportedAt` conservando `result` del intento. Ninguna exportación transforma
+el fallo autónomo en éxito, aprobación QA o verificación funcional.

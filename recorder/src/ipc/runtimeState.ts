@@ -9,6 +9,7 @@ import {
     AutomationScenario,
     GenerationPlan,
     PreparedAutomation,
+    RecoverableLayeredDraft,
 } from '../../../core/automation';
 import { MobileInspector } from '../mobileInspector';
 import { EmbeddedInspectorHandshake } from '../embeddedInspectorProtocol';
@@ -25,6 +26,9 @@ export interface AutomationPreviewState {
     response: AutomationAgentResponse;
     prepared?: PreparedAutomation;
     correctionBaselines?: Map<string, string>;
+    generationDiagnostics?: string[];
+    recoveredDraft?: RecoverableLayeredDraft;
+    packageDirectory?: string;
 }
 
 /** Candidatos de selector ya verificados contra la sesión activa por el Inspector embebido. */

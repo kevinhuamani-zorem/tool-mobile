@@ -133,14 +133,14 @@ test('reimportar y revalidar rematerializan gap-resolutions cuando cambió', () 
     );
     assert.match(
         automationHandlers,
-        /ipcMain\.handle\('revalidate-automation-response',[\s\S]*?const rematerialized = rematerializeGapResolutions/,
+        /ipcMain\.handle\('revalidate-automation-response',[\s\S]*?const rematerialized = [\s\S]*?rematerializeGapResolutions/,
     );
     assert.match(automationHandlers, /lastMaterializedGapResolutionsHash/);
     assert.match(automationHandlers, /lastMaterializedAgentResponseHash/);
     assert.match(automationHandlers, /Copilot modificó agent-response\.json directamente/);
     assert.match(automationHandlers, /sha256File\(responseFile\)/);
     assert.match(review, /Procesando gap-resolutions\.json, regenerando la propuesta/);
-    assert.match(review, /corrija gap-resolutions\.json/);
+    assert.match(review, /exportar los archivos disponibles/);
     assert.match(review, /borrador sigue disponible para editar y reimportar/);
     assert.match(automationHandlers, /const reviewOnly = input\?\.reviewOnly !== false/);
     assert.match(automationHandlers, /reviewOnly \|\| manualCorrection/);

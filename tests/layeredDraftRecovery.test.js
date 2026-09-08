@@ -78,13 +78,19 @@ test('IPC entrega el borrador fallido sin importarlo como un éxito ni perderlo 
     const service = new AutomationAgentLaunchService({ state,
         layeredGenerationOrchestrator: { run: async () => ({ success: false, reportFile: path.join(root, 'missing-report.json'), error: 'Dos pasadas agotadas',
             draft: { files: [{ layer: 'screen', path: 'screenobjects/a.screen.ts', content: 'class A {}', origin: 'agent', pass: 2 }], missingLayers: ['feature'], diagnostics: ['Sin Feature'] } }) },
-        responseImporter: { importFromPackage() { assert.fail('Un fallo recuperado no se reimporta como generación exitosa'); } },
+        responseImporter: { importFromPackage() { assert.fail('Un fallo recuperado no se reimporta como generación exitosa'); },
+            prepareRecoveredDraft(directory, draft) {
+                assert.equal(directory, root);
+                state.automationPreview = { token: 'safe-export' };
+                return { ...layeredDraftPreview(draft, root), previewToken: 'safe-export', exportReady: true };
+            } },
         emitProgress: (...args) => progress.push(args),
     });
     const result = await service.launch({ mode: 'automatic', pipeline: 'layered' });
     assert.equal(result.success, false);
     assert.equal(result.draft.preview.screenContent, 'class A {}');
     assert.deepEqual(result.draft.missingLayers, ['feature']);
-    assert.equal(state.automationPreview, null);
+    assert.equal(state.automationPreview.token, 'safe-export');
+    assert.equal(result.draft.exportReady, true);
     assert.ok(progress.some(args => args[0] === 'READY_FOR_REVIEW'));
 });

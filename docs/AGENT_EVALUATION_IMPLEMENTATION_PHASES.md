@@ -2,8 +2,8 @@
 
 Fecha: 2026-09-08.
 
-Estado: **F0, F1 y F2 implementadas y verificadas localmente**.
-La siguiente entrega es F3; F3–F7 conservan sus pendientes debajo. Ver
+Estado: **F0, F1, F2 y F3 implementadas y verificadas localmente**.
+La siguiente entrega es F4; F4–F7 conservan sus pendientes debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -151,20 +151,20 @@ segunda pasada común, sin rondas internas adicionales.
 Objetivo: entregar el trabajo al framework sin convertir calidad automática en
 un impedimento para el QA.
 
-- [ ] Separar los diagnósticos de contenido del estado que habilita exportación.
+- [x] Separar los diagnósticos de contenido del estado que habilita exportación.
   Errores de TypeScript, aserciones, Gherkin o parámetros siguen visibles y no
   deshabilitan la escritura del borrador revisado.
-- [ ] Extraer/reutilizar preparación y escritura transaccional sin imponer score
+- [x] Extraer/reutilizar preparación y escritura transaccional sin imponer score
   100. La exportación escribe los bytes revisados, con las rutas asociadas al caso.
-- [ ] Conservar límites del workspace, snapshots, protección de contenido ajeno
+- [x] Conservar límites del workspace, snapshots, protección de contenido ajeno
   y rollback. La revisión de un conflicto de escritura no obliga a corregir
   todos los diagnósticos del código.
-- [ ] Exportar las capas disponibles y registrar las faltantes; no fabricar
+- [x] Exportar las capas disponibles y registrar las faltantes; no fabricar
   contenido para aparentar completitud ni inferir destinos de JSON ilegible.
-- [ ] Guardar recibo versionado con hashes previos/exportados, identidad del
+- [x] Guardar recibo versionado con hashes previos/exportados, identidad del
   intento/revisión, rutas y símbolos. Registrar `exported-with-observations`
   cuando corresponda, sin certificar éxito ni promover memoria.
-- [ ] Actualizar el flujo completo de IPC, preload, tipos, UI y mensajes de
+- [x] Actualizar el flujo completo de IPC, preload, tipos, UI y mensajes de
   producto. El QA no tiene que activar un modo avanzado para exportar.
 
 Superficie: `applyAutomation.ts`, `automationApplier.ts`,
@@ -175,6 +175,8 @@ Superficie: `applyAutomation.ts`, `automationApplier.ts`,
 Salida comprobable: un Screen con un método inexistente puede exportarse como
 borrador; el diagnóstico se conserva. Una falla en la segunda escritura restaura
 el conjunto. Una edición en un archivo compartido no desaparece al exportar.
+
+Contrato: [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).
 
 ## F4 — Recuperar las correcciones del framework
 

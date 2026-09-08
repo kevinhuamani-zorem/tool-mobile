@@ -186,7 +186,7 @@ test('handler aplica el preview final y registra el recibo sin aprender del resu
     assert.equal(state.automationPreview, null);
 });
 
-test('handler rechaza errores semánticos antes de escribir o promover memoria', async t => {
+test('handler exporta errores semánticos con diagnóstico sin promover memoria', async t => {
     const f = fixture(t);
     const { projectPaths } = require('../dist/core/workspace');
     const originalRoot = projectPaths.frameworkRoot;
@@ -202,17 +202,22 @@ test('handler rechaza errores semánticos antes de escribir o promover memoria',
     } };
     const { applyReviewedAutomation } = require('../dist/recorder/src/ipc/automation/applyAutomation');
     const result = await applyReviewedAutomation({ state, automationApplier: f.applier,
+        generatedFileRegistry: { assess: () => ({ conflicts: [] }) },
         automationResponseValidator: { validate: () => ({ valid: true, qualityScore: 100, errors: [], warnings: [] }), toPreview: () => f.preview },
         automationMemory: { promote: () => assert.fail('must not learn invalid code') },
         emitProgress: () => {},
     }, 'token');
-    assert.equal(result.success, false);
-    assert.match(result.error, /TS2322/);
-    assert.equal(fs.readFileSync(prepared.preview.featurePath, 'utf8'), f.original);
-    assert.equal(fs.existsSync(prepared.preview.stepPath), false);
-    assert.equal(fs.readFileSync(f.registryFile, 'utf8'), 'original registry');
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.exportStatus, 'exported-with-observations');
+    assert.match(result.validation.errors.map(item => item.message).join(' '), /TS2322/);
+    assert.equal(fs.readFileSync(prepared.preview.stepPath, 'utf8'), f.response.files[1].content);
     assert.equal(JSON.parse(fs.readFileSync(path.join(packageDirectory, 'framework-compilation.json'))).status, 'failed');
-    assert.ok(state.automationPreview, 'QA retains editable preview');
+    const history = new AutomationHistoryStore(packageDirectory);
+    assert.equal(history.lifecycle().export, 'exported-with-observations');
+    assert.equal(history.lifecycle().qaApproval, 'pending');
+    assert.equal(history.lifecycle().generation, 'not-started');
+    assert.equal(state.automationPreview, null);
+
 });
 
 test('fallar el evento de exportación revierte framework y recibo sin inventar éxito', async t => {
@@ -306,7 +311,7 @@ test('importar una corrección QA conserva los bytes previos a NFC y el fallo de
     assert.equal(history.events().filter(event => event.revisionId === history.current().revisionId && event.kind === 'generation-result').length, 0);
 });
 
-test('importar un envelope inválido devuelve sus capas seguras sin normalizar null ni habilitar aplicación', async t => {
+test('importar un envelope inválido prepara sus capas seguras para exportar', async t => {
     const f = fixture(t);
     f.scenario.request = { caseId: 'TC-1' };
     Object.assign(f.plan, { recordingId: 'rec-a', planId: 'plan-a' });
@@ -320,18 +325,26 @@ test('importar un envelope inválido devuelve sus capas seguras sin normalizar n
     fs.writeFileSync(path.join(packageDirectory, 'agent-response.json'), raw);
     const { AutomationResponseImporter } = require('../dist/recorder/src/ipc/automation/responseImport');
     const state = { automationPreview: { token: 'old' } };
-    const importer = new AutomationResponseImporter({ state,
+    const { projectPaths } = require('../dist/core/workspace');
+    const { AutomationResponseValidator } = require('../dist/core/validation');
+    const oldRoot = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.root;
+    t.after(() => { projectPaths.frameworkRoot = oldRoot; });
+    const importer = new AutomationResponseImporter({ state, automationApplier: f.applier,
+        generatedFileRegistry: { assess: () => ({ conflicts: [] }) },
         automationPackageBuilder: { requireTrustedScenarioPackage: () => f.scenario },
-        automationResponseValidator: { validate() { assert.fail('No recorrer campos de un envelope inválido'); } },
+        automationResponseValidator: new AutomationResponseValidator(),
         emitProgress() {},
     });
     const result = await importer.importFromPackage(packageDirectory);
     assert.equal(result.success, false);
     assert.match(result.error, /output-envelope/);
     assert.equal(result.draft.preview.stepContent, f.response.files[1].content);
-    assert.equal(result.draft.preview.featurePath, undefined);
+    assert.equal(result.draft.preview.featurePath, '');
     assert.deepEqual(result.draft.missingLayers, ['feature']);
-    assert.equal(state.automationPreview, null);
+    assert.ok(result.draft.previewToken);
+    assert.equal(result.draft.exportReady, true);
+    assert.equal(state.automationPreview.token, result.draft.previewToken);
     assert.equal(fs.readFileSync(path.join(f.root, f.relative), 'utf8'), f.original);
     const history = new AutomationHistoryStore(packageDirectory);
     const original = history.events().find(event => event.stage === 'import:original');

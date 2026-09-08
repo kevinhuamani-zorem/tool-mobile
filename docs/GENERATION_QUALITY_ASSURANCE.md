@@ -53,7 +53,7 @@ La puerta exige:
 - cero consultas al framework cuando el scenario queda completamente resuelto.
 - round-trip UTF-8/NFC de tildes y eñes desde recording hasta Locators, incluso
   cuando el stream del agente divide un carácter multibyte entre chunks;
-- rechazo de bytes inválidos, U+FFFD y mojibake antes de importar o escribir.
+- diagnóstico de bytes inválidos, U+FFFD y mojibake; F3 conserva el contenido revisado al exportar.
 
 ## Control manual
 
@@ -62,13 +62,14 @@ La puerta exige:
 `tests/frameworkCompilation.test.js` cubre overlay sin escrituras, aliases,
 configuración heredada, NodeNext, imports JSON, métodos y argumentos inválidos,
 claves ausentes, deuda preexistente, cambios de dependencias y estados no
-comprobables. `tests/preparedAutomation.test.js` comprueba además que el handler
-no escribe cuando el código pasa sintaxis pero falla tipos (F3 cambiará esa
-política de exportación). Aplicar nunca promociona memoria, tampoco con score 100.
+comprobables. `tests/preparedAutomation.test.js` y `automationDraftExport.test.js`
+comprueban que el handler exporta código con errores de tipos conservando sus
+diagnósticos y que revierte el conjunto ante un fallo de escritura/finalización.
+Aplicar nunca promociona memoria, tampoco con score 100.
 
 En la app, importar un caso, introducir una llamada a un método inexistente y
 revalidar: debe conservar los archivos para edición, indicar código TypeScript,
-ruta y posición, y no permitir la aplicación. Corregir y revalidar vuelve a
+ruta y posición, y permitir **Exportar al framework** con observaciones. Corregir y revalidar vuelve a
 comprobar los contenidos finales. Repetir después de cambiar una firma de una
 dependencia fuera del recorder para confirmar que aplicar no usa un aprobado viejo.
 
@@ -113,7 +114,8 @@ una ejecución exitosa en el dispositivo.
 7. Revisar Feature, Steps, Screen Object y Locators en el visor de código.
 8. Modificar un archivo y confirmar que el estado cambie a `Editado`.
 9. Probar `Copiar contenido`, `Copiar ruta` y `Descartar cambios`.
-10. Introducir JSON o Gherkin inválido y comprobar que la generación se bloquee.
+10. Introducir JSON o Gherkin inválido y comprobar que se conserva el diagnóstico
+    y se permite exportar el borrador revisado en una ruta autorizada.
 11. Introducir un step como `And el usuario desplaza la pantalla hacia abajo`
     y comprobar que se rechace; enlazar el scroll al step funcional adyacente y
     comprobar que la traza completa sea válida.
@@ -129,7 +131,7 @@ una ejecución exitosa en el dispositivo.
     `@ios` conservando `@android`.
 17. Generar un módulo `cuentas-tapp` y comprobar clase `CuentasTappScreen`,
     singleton e import `cuentasTappScreen`; reemplazarlo por `generatedScreen`
-    y comprobar que la validación bloquee la importación.
+    y comprobar que la validación lo señale sin impedir exportar el borrador revisado.
 18. Generar un caso solo con click y comprobar que no importe `browser`;
     añadir una acción que use `browser.` y comprobar que lo importe una vez.
 19. Sustituir un alias por una ruta relativa en Steps o Screen Object y

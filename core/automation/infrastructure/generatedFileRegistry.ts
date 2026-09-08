@@ -144,14 +144,14 @@ export class GeneratedFileRegistry {
 
     private outputs(preview: GeneratedPreview): { file: string; content: string }[] {
         return [
-            { file: preview.featurePath, content: preview.featureContent },
-            ...(preview.locatorPath && preview.locatorContent
+            ...(preview.featurePath ? [{ file: preview.featurePath, content: preview.featureContent }] : []),
+            ...(preview.locatorPath && typeof preview.locatorContent === 'string'
                 ? [{ file: preview.locatorPath, content: preview.locatorContent }]
                 : []),
-            ...(preview.stepPath && preview.stepContent
+            ...(preview.stepPath && typeof preview.stepContent === 'string'
                 ? [{ file: preview.stepPath, content: preview.stepContent }]
                 : []),
-            ...(preview.screenPath && preview.screenContent
+            ...(preview.screenPath && typeof preview.screenContent === 'string'
                 ? [{ file: preview.screenPath, content: preview.screenContent }]
                 : [])
         ];

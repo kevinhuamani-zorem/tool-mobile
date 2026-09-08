@@ -1,7 +1,8 @@
 import path from 'path';
+import type { AutomationValidation } from '../../../../core/validation';
 import type { LayeredGenerationResult } from '../../../../core/automation';
 
-/** A review payload, without an application token. F3 adds draft export. */
+/** Display only; draftExport adds a token after checking the write contract. */
 export function layeredDraftPreview(draft: NonNullable<LayeredGenerationResult['draft']>, frameworkRoot: string) {
     const preview: Record<string, any> = { files: [], provenance: {} };
     const names = { feature: 'feature', steps: 'step', screen: 'screen', locators: 'locator' };
@@ -15,6 +16,6 @@ export function layeredDraftPreview(draft: NonNullable<LayeredGenerationResult['
     }
     return {
         preview, missingLayers: draft.missingLayers,
-        validation: { valid: false, warnings: [], errors: draft.diagnostics.map(message => ({ code: 'generation-incomplete', message })) },
+        validation: { valid: false, qualityScore: 0, warnings: [], errors: draft.diagnostics.map(message => ({ code: 'generation-incomplete', message })) } as AutomationValidation,
     };
 }

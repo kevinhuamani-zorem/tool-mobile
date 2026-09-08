@@ -46,7 +46,8 @@ recuperan respuestas de intentos anteriores como si fueran nuevas entregas.
 IPC devuelve ese borrador aunque falte Feature o falle Sumrak. Revisión abre el
 editor automáticamente y muestra origen, capas faltantes y diagnósticos. El
 payload no recibe un token de aplicación ni convierte el fallo autónomo en
-éxito. Exportar con diagnósticos se implementa en F3; no se presenta F2 como una
+éxito. F3 habilita exportación con diagnósticos mediante preparación independiente
+([contrato](AUTOMATION_DRAFT_EXPORT.md)); no se presenta F2 como una
 exportación ya habilitada.
 
 ## Forma y tamaño

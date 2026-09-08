@@ -93,7 +93,11 @@ generadores, validadores o plantillas.
     ejecuta los tres delegados headless y entrega el borrador a Revisión con
     sus diagnósticos. La sesión visible `copilot -i` pertenece al camino manual
     o heredado; no es un requisito del pipeline por capas. Ver un borrador no
-    equivale a aprobar su aplicación al framework.
+    equivale a aprobar su aplicación al framework. F3 permite exportar el
+    borrador revisado aunque tenga diagnósticos de calidad: `exportReady` es
+    independiente de `validation.valid`. Conserva rutas, contenido compartido,
+    comprobaciones concurrentes y rollback. No se exige score 100 ni cuatro
+    capas presentes para exportar las disponibles. Ver `docs/AUTOMATION_DRAFT_EXPORT.md`.
 11. **No borres datos funcionales de entrada.** Teléfonos, montos, correos y
     textos usados por el caso permanecen en el recording local para convertirlos
     en parámetros/Examples. Solo contraseña, clave, PIN, OTP, token y secretos
@@ -214,7 +218,8 @@ generadores, validadores o plantillas.
 - Recording, paquete, respuesta del agente y archivos generados usan UTF-8
   estricto, normalización Unicode NFC y ningún BOM. Conserva literalmente
   tildes, eñes y diacríticos de selectores verificados; U+FFFD y mojibake como
-  `BotÃ³n` bloquean la importación en vez de corregirse silenciosamente.
+  `BotÃ³n` invalidan la calidad automática. F3 conserva los bytes revisados al
+  exportar y mantiene el diagnóstico visible, sin corregirlos silenciosamente.
 - La búsqueda compartida conserva el orden squad → commons → home → global.
 - `create` es el fallback. Un Feature nuevo puede vivir en `featureScope`
   mientras las otras capas se actualizan de forma aditiva en rutas existentes.

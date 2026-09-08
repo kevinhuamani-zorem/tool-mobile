@@ -253,7 +253,9 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
             if (!reviewedContents || typeof reviewedContents !== 'object' || Array.isArray(reviewedContents)) {
                 throw new Error('No se recibieron archivos revisados para validar.');
             }
-            const rematerialized = rematerializeGapResolutions(state.activeAutomationPackage);
+            // A recovered draft can be reviewed/exported without a complete agent-response.json.
+            const rematerialized = state.automationPreview?.generationDiagnostics ? false
+                : rematerializeGapResolutions(state.activeAutomationPackage);
             return await importAutomationResponseFromPackage(state.activeAutomationPackage, {
                 ...(rematerialized ? {} : { reviewedContents }),
                 trackRepair: false,

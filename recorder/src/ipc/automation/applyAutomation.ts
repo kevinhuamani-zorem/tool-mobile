@@ -14,7 +14,7 @@ import {
     requireUnchangedAppliedFiles,
 } from '../../../../core/automation';
 import { AutomationResponseValidator, FrameworkCompilationValidator, includeFrameworkCompilation } from '../../../../core/validation';
-import { normalizeJsonUnicode, readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
+import { readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
 import { RecorderRuntimeState } from '../runtimeState';
 import { AutomationProgressEmitter } from './progress';
 const sha256 = (text: string) => crypto.createHash('sha256').update(text).digest('hex');
@@ -53,7 +53,10 @@ export async function applyReviewedAutomation(
             throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
         }
         emitAutomationProgress('APPLYING', 'Aplicando automatización', 1, 2);
-        const { scenario, plan } = state.automationPreview;
+        const { scenario, plan, generationDiagnostics = [], packageDirectory } = state.automationPreview;
+        if (packageDirectory && packageDirectory !== state.activeAutomationPackage) throw new Error('El paquete cambió después del preview.');
+        if (reviewedContents !== undefined && (!reviewedContents || typeof reviewedContents !== 'object' || Array.isArray(reviewedContents)
+            || Object.values(reviewedContents).some(content => typeof content !== 'string'))) throw new Error('Contenidos revisados inválidos.');
         const originalPrepared = state.automationPreview.prepared;
         if (!originalPrepared) throw new Error('Reimporta la propuesta para preparar el resultado final antes de aplicar.');
         automationApplier.requireUnchanged(originalPrepared);
@@ -65,20 +68,21 @@ export async function applyReviewedAutomation(
         history = new AutomationHistoryStore(state.activeAutomationPackage);
         history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
         history.capture('preview-response.json', JSON.stringify(state.automationPreview.response), 'recorder', 'apply:before-qa-edit');
-        let response: AutomationAgentResponse = normalizeJsonUnicode({
+        let response: AutomationAgentResponse = {
             ...state.automationPreview.response,
             files: state.automationPreview.response.files.map(file => ({
                 ...file,
                 content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content,
             })),
-        });
+        };
         if (response.files.some((file, index) => file.content !== state.automationPreview!.response.files[index].content)) {
             history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'qa-edit' }, [
                 { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
             ]);
         }
-        const prepared = automationApplier.prepare(scenario, plan, response,
-            automationResponseValidator.toPreview(response), state.automationPreview.correctionBaselines);
+        const edited = response.files.some((file, index) => file.content !== originalPrepared.response.files[index].content);
+        const prepared = edited ? automationApplier.prepare(scenario, plan, response,
+            automationResponseValidator.toPreview(response), state.automationPreview.correctionBaselines) : originalPrepared;
         // An edit must not be silently dropped by the additive merge.
         for (const file of prepared.files) {
             const absolute = path.join(projectPaths.frameworkRoot, file.path);
@@ -95,7 +99,6 @@ export async function applyReviewedAutomation(
         writeJsonUtf8(path.join(state.activeAutomationPackage, 'validation.json'), validation);
         runStore.addDuration('validatorDurationMs', Number(process.hrtime.bigint() - validatorStarted) / 1_000_000);
         runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
-        if (!validation.valid) throw new Error(validation.errors.map(item => item.message).join(' | '));
         const preview = automationResponseValidator.toPreview(response);
         // La evaluacion del registro va antes de restaurar baselines de
         // correccion: un archivo ajeno se detecta sin tocar nada.
@@ -119,8 +122,9 @@ export async function applyReviewedAutomation(
         // con las pruebas.
         const metadataFiles = ['agent-response.json', 'validation.json', 'application-receipt.json', 'status.json', 'agent-run.json']
             .map(file => path.join(state.activeAutomationPackage, file));
+        let exportStatus: string | undefined;
         const { generated, patched } = automationApplier.commit(prepared, scenario, plan, () => {
-        writeJsonUtf8(metadataFiles[0], response);
+        fs.writeFileSync(metadataFiles[0], JSON.stringify(response, null, 2) + '\n', 'utf8');
         writeJsonUtf8(metadataFiles[1], validation);
         const applicationReceipt = createAutomationApplicationReceipt(
             projectPaths.frameworkRoot,
@@ -128,12 +132,9 @@ export async function applyReviewedAutomation(
             plan,
             response,
             history!.identity(),
+            { prepared, validation, generationDiagnostics },
         );
-        for (const file of prepared.files) {
-            if (!applicationReceipt.files.some(item => item.path === file.path)) {
-                applicationReceipt.files.push({ path: file.path, operation: 'update', afterHash: sha256(file.content) });
-            }
-        }
+        exportStatus = applicationReceipt.exportStatus;
         writeJsonUtf8(
             path.join(state.activeAutomationPackage, 'application-receipt.json'),
             applicationReceipt,
@@ -146,21 +147,23 @@ export async function applyReviewedAutomation(
             ...status,
             recordingId: scenario.recordingId,
             planId: plan.planId,
-            state: 'generated',
+            state: exportStatus,
+            exportStatus,
             generatedAt: new Date().toISOString(),
             lastMaterializedAgentResponseHash: sha256(fs.readFileSync(metadataFiles[0], 'utf8')),
         });
-        runStore!.mark('generated', true);
+        runStore!.recordExport(exportStatus!);
         // Last fallible operation: an export event is committed only after all files/metadata.
-        history!.append({ ...history!.identity()!, kind: 'export-result', origin: 'qa', result: 'exported', stage: 'apply' }, [
+        history!.append({ ...history!.identity()!, kind: 'export-result', origin: 'qa', result: exportStatus, stage: 'apply' }, [
             { name: 'application-receipt.json', content: JSON.stringify(applicationReceipt, null, 2) + '\n' },
             { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
             { name: 'validation.json', content: JSON.stringify(validation, null, 2) + '\n' },
         ]);
         }, metadataFiles);
         state.automationPreview = null;
-        emitAutomationProgress('COMPLETED', 'Automatización aplicada correctamente', 2, 2);
-        return { success: true, generated, validation, patched: patched.outcomes };
+        emitAutomationProgress('COMPLETED', 'Archivos exportados; verificación QA pendiente', 2, 2);
+        return { success: true, generated, validation, exportStatus, generationDiagnostics,
+            missingLayers: plan.files.filter(file => !response.files.some(item => item.layer === file.layer)).map(file => file.layer), patched: patched.outcomes };
     } catch (e: any) {
         emitAutomationProgress('FAILED', 'No pudimos aplicar la automatización', 0, 2, {
             error: e.message,
@@ -168,7 +171,7 @@ export async function applyReviewedAutomation(
         try {
             const identity = history?.identity();
             if (identity) history!.append({ ...identity, kind: 'export-result', origin: 'qa', result: 'failed', stage: 'apply' });
-            runStore?.mark('generation-failed', true);
+            runStore?.recordExport('failed');
         } catch { /* Keep the original application error when recording it also fails. */ }
         return { success: false, error: e.message };
     }

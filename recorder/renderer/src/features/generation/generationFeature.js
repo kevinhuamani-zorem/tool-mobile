@@ -123,6 +123,7 @@ export function createGenerationFeature(deps) {
 
     function invalidatePreview() {
         state.lastPreviewToken = '';
+        if (isAutomationWorkflow()) btnGenerate.disabled = true;
         state.previewDocuments = [];
         state.activePreviewDocumentIndex = -1;
         if (cmbPreviewFile) cmbPreviewFile.style.display = 'none';
@@ -457,14 +458,15 @@ export function createGenerationFeature(deps) {
         codeReviewWorkspace.style.display = 'grid';
         renderPreviewFileTree();
         showPreviewDocument(0);
+        const exportReady = Boolean(result.previewToken) && result.exportReady !== false && !(result.exportBlockers || []).length;
+        btnGenerate.disabled = !exportReady;
+        btnGenerate.textContent = 'Exportar al framework';
         if (valid) {
-            enableBtn(btnGenerate);
             if (reviewValidationIcon) reviewValidationIcon.textContent = '✓';
             if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación correcta';
             lblGenerationFileCount.textContent = `${state.previewDocuments.length} archivo(s) validados al 100%.`;
             setGenerate(`✓ Propuesta válida · ${state.previewDocuments.length} capas · lista para revisión`, 'ok');
         } else {
-            btnGenerate.disabled = true;
             if (reviewValidationIcon) reviewValidationIcon.textContent = '⚠';
             if (reviewValidationTitle) reviewValidationTitle.textContent = 'Borrador con observaciones';
             const missing = result.missingLayers?.length ? ` · Capas faltantes: ${result.missingLayers.join(', ')}` : '';
@@ -473,8 +475,9 @@ export function createGenerationFeature(deps) {
             lblGenerationFileCount.textContent =
                 `${state.previewDocuments.length} archivo(s) con observaciones${missing}${sources.length ? ` · Origen: ${sources.join('; ')}` : ''}`;
             const diagnostics = (result.validation?.errors || []).map(error => error.message).join('\n');
-            setGenerate(`⚠ Borrador disponible para revisión. Revalida únicamente cuando quieras aplicarlo.${diagnostics ? `\n${diagnostics}` : ''}`, 'err');
+            setGenerate(`⚠ Borrador disponible para revisión. Puedes exportar los archivos disponibles y corregirlos en el framework.${diagnostics ? `\n${diagnostics}` : ''}`, 'err');
         }
+        if (result.exportBlockers?.length) setGenerate(`No se puede escribir sobre el destino: ${result.exportBlockers.join(' | ')}`, 'err');
     }
 
     function getReviewedContents() {
@@ -538,14 +541,6 @@ export function createGenerationFeature(deps) {
         on(btnGenerate, 'click', async () => {
             disableBtn(btnGenerate, '⏳ Generando...');
             if (isAutomationWorkflow()) {
-                const invalidDocuments = state.previewDocuments
-                    .map(document => ({ document, validation: validatePreviewDocument(document) }))
-                    .filter(item => !item.validation.valid);
-                if (invalidDocuments.length) {
-                    setGenerate('✕ Corrige los archivos inválidos antes de generar.', 'err');
-                    enableBtn(btnGenerate);
-                    return;
-                }
                 const reviewedContents = getReviewedContents();
                 const result = await api.generateAutomationResponse(state.lastPreviewToken, reviewedContents);
                 enableBtn(btnGenerate);
@@ -555,9 +550,13 @@ export function createGenerationFeature(deps) {
                 }
                 rememberGeneratedFiles(result.generated.files);
                 setGenerate(
-                    `✓ ${result.generated.files.length} archivos generados · pendientes de verificación del QA`,
+                    `✓ ${result.generated.files.length} archivos exportados${result.exportStatus === 'exported-with-observations' ? ' con observaciones' : ''} · pendientes de verificación del QA`
+                        + (result.missingLayers?.length ? `\nCapas faltantes: ${result.missingLayers.join(', ')}` : '')
+                        + [...(result.validation?.errors || []).map(item => item.message), ...(result.generationDiagnostics || [])].map(message => `\n${message}`).join(''),
                     'ok'
                 );
+                state.lastPreviewToken = '';
+                btnGenerate.disabled = true;
                 state.previewDocuments.forEach(document => {
                     document.originalContent = document.content;
                     document.generated = true;

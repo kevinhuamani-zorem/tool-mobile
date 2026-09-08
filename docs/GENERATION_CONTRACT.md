@@ -615,8 +615,8 @@ prompts, XML o capturas. Sus estados son:
 
 - `passed`: sin errores en el alcance comprobado.
 - `preexisting-errors`: sin errores nuevos, con deuda previa visible al QA.
-- `failed`: errores nuevos; conserva el borrador editable pero impide aplicar y
-  aplicar hasta corregir/revalidar (la exportación con diagnósticos corresponde a F3).
+- `failed`: errores nuevos; conserva el borrador editable y permite exportarlo
+  con observaciones después de revisar el conjunto preparado (F3).
 - `unavailable`: faltan configuración, módulos/tipos o no se puede comprobar;
   no equivale a aprobado. `noCheck` y proyectos con `references` también se
   reportan como no comprobados; estos últimos aún no están soportados.
@@ -797,7 +797,7 @@ resincronización. Cada sesión entrega una versión; la validación y el feedba
 se procesan al terminarla. `repair-feedback.json` deja `accepted` o `requires-qa`
 al cierre. No existen rondas `feedback-N`. Los errores de calidad no eliminan
 las capas recuperables: `layered-draft.json` las ofrece a Revisión, con origen,
-pasada y capas faltantes. Su exportación con observaciones se habilitará en F3.
+pasada y capas faltantes. F3 permite exportar ese conjunto tras preparar sus rutas y bytes.
 Para las resoluciones ligadas a una secuencia, Sumrak conserva `create` o `reuse`
 fijado por `generation-plan.json`; no inventa selectores ni candidatos.
 
@@ -1063,3 +1063,13 @@ Escribe this.gestureHelper.scrollDown(...).
 Y cuando no existe en ninguno, enumera los que sí hay y da la salida correcta:
 escribirlo como un método del propio Screen Object, para que quede reutilizable
 — nunca inventar una llamada al helper.
+
+## Exportación de borradores (F3)
+
+Los rechazos de calidad descritos en este contrato determinan validez automática,
+no impiden la exportación revisada por QA. Revisión habilita **Exportar al framework**
+con un token del conjunto preparado, incluso con capas faltantes o errores de
+TypeScript/Gherkin/aserciones. Se mantienen destinos del plan, contenido compartido,
+comprobaciones concurrentes y rollback. La exportación conserva los bytes revisados
+sin otra normalización Unicode; registra faltantes y diagnósticos sin promover memoria.
+Ver [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).

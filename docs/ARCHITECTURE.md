@@ -437,6 +437,12 @@ XML, screenshots, source, capabilities ni credenciales.
     una operación recuperable. Las correcciones cargan baselines en memoria,
     sin restaurarlas temporalmente sobre el framework. Los completions externos
     se muestran como archivos adicionales de solo lectura y entran al recibo.
+    F3 separa `validation.valid` de `exportReady`: un fallo autónomo entrega un
+    `draft` con token si las rutas/contenidos pueden escribirse. Se exportan las
+    capas disponibles con observaciones, sin exigir score 100. El recibo incluye
+    solo ese conjunto, hashes previos/exportados, símbolos propios y faltantes;
+    el resultado de exportación no aprueba QA ni cambia el resultado del agente.
+    Ver [AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).
     `FrameworkCompilationValidator` comprueba ese overlay con el `tsconfig` y
     las dependencias reales del workspace antes de entregar el preview y de
     nuevo antes del commit. Vive en `validation/infrastructure`, no en agentes

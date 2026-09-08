@@ -373,3 +373,11 @@ Pruebas focalizadas: `automationHistoryStore`, `agentRunStore`,
 `preparedAutomation`, `automationPipeline`, `layeredGenerationOrchestrator` y
 `goldenDataset`. Comprueba también errores de publicación/rollback y que el
 historial no se copie a los workspaces de agentes por gap.
+
+## Exportación con observaciones (F3)
+
+Ejercita `automationDraftExport` y `preparedAutomation` antes de `npm run quality`.
+No uses `validation.valid` como permiso de exportación: depende del conjunto
+preparado y su token. Los cambios de calidad se conservan como diagnósticos; rutas,
+conflictos, protección compartida y rollback permanecen obligatorios. Contrato en
+[AUTOMATION_DRAFT_EXPORT.md](AUTOMATION_DRAFT_EXPORT.md).

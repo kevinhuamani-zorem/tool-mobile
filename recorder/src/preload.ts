@@ -1,3 +1,4 @@
+import type { AutomationExportResult } from './automationExportContracts';
 import { contextBridge, ipcRenderer } from 'electron';
 
 /**
@@ -117,7 +118,7 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('revalidate-automation-response', reviewedContents),
     getAutomationQaDecisions: () => ipcRenderer.invoke('get-automation-qa-decisions'),
     resolveAutomationQaDecisions: (input: any) => ipcRenderer.invoke('resolve-automation-qa-decisions', input),
-    generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>) =>
+    generateAutomationResponse: (previewToken: string, reviewedContents?: Record<string, string>): Promise<AutomationExportResult> =>
         ipcRenderer.invoke('generate-automation-response', previewToken, reviewedContents),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
     saveGoldenCase: (input: { recordingId?: string; squad?: string; executed?: 'passed' | 'failed' | 'not-run'; notes?: string; reviewedContents?: Record<string, string> }) =>

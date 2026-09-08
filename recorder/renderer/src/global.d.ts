@@ -1,3 +1,4 @@
+import type { AutomationExportResult } from '../../src/automationExportContracts';
 export {};
 
 interface EmbeddedInspectorElementUsed {
@@ -44,6 +45,7 @@ declare global {
             resolveAutomationQaDecisions(input: any): Promise<any>;
             getAutomationModelUsage(): Promise<{ requestedModel: string; actualModels: string[] } | null>;
             launchAutomationAgent(input?: { mode?: 'manual' | 'automatic'; autorun?: boolean; inheritDesignReview?: boolean; model?: string }): Promise<any>;
+            generateAutomationResponse(previewToken: string, reviewedContents?: Record<string, string>): Promise<AutomationExportResult>;
             revalidateAutomationResponse(reviewedContents: Record<string, string>): Promise<any>;
             saveGoldenCase(input: {
                 recordingId?: string;

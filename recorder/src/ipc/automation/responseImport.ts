@@ -34,7 +34,9 @@ import { DeterministicGenerator } from '../../../../core/generation';
 import { normalizeJsonUnicode, readJsonUtf8, writeJsonUtf8 } from '../../../../core/shared';
 import { RecorderRuntimeState } from '../runtimeState';
 import { AutomationProgressEmitter } from './progress';
-import { layeredDraftPreview } from './layeredDraftPreview';
+import { prepareRecoveredExport } from './draftExport';
+import type { AutomationExportReadiness } from '../../automationExportContracts';
+import type { LayeredGenerationResult } from '../../../../core/automation';
 
 const DIRECT_AGENT_RESPONSE_EDIT_ERROR =
     'Copilot modificó agent-response.json directamente, pero en modo determinista ese archivo '
@@ -72,6 +74,10 @@ export interface AutomationResponseImporterDependencies {
 export class AutomationResponseImporter {
     constructor(private readonly deps: AutomationResponseImporterDependencies) {}
 
+    prepareRecoveredDraft(packageDirectory: string, draft: NonNullable<LayeredGenerationResult['draft']>) {
+        return prepareRecoveredExport(this.deps, packageDirectory, draft);
+    }
+
     async importFromPackage(
         packageDirectory: string,
         options: ImportAutomationResponseOptions = {},
@@ -83,6 +89,17 @@ export class AutomationResponseImporter {
             generatedFileRegistry,
             emitProgress: emitAutomationProgress,
         } = this.deps;
+        const current = state.automationPreview;
+        if (options.reviewedContents && current?.generationDiagnostics && current.packageDirectory === packageDirectory) {
+            const draft = prepareRecoveredExport(this.deps, packageDirectory, {
+                files: current.recoveredDraft?.files || current.response.files.map(file => ({ ...file, origin: 'agent' as const })),
+                missingLayers: current.plan.files.filter(file => !current.response.files.some(item => item.layer === file.layer)).map(file => file.layer),
+                diagnostics: current.generationDiagnostics,
+            }, options.reviewedContents);
+            return { success: false, failureKind: 'generated-output-validation', draft, validation: draft.validation,
+                error: draft.validation.errors.map(item => item.message).join(' | '), repairAvailable: true };
+        }
+        state.automationPreview = null;
         const runStore = new AgentRunStore(packageDirectory);
         runStore.markAgentFinished();
         runStore.markRepairFinished();
@@ -137,8 +154,7 @@ export class AutomationResponseImporter {
             const recovery = new RecoverableDraftStore(packageDirectory, plan);
             recovery.capture(path.join(packageDirectory, 'deterministic-draft.json'), 'deterministic');
             recovery.capture(responsePath, options.manualCorrection ? 'qa' : 'agent');
-            const draft = layeredDraftPreview(recovery.save([error.message]), projectPaths.frameworkRoot);
-            state.automationPreview = null;
+            const draft = this.prepareRecoveredDraft(packageDirectory, recovery.save([error.message]));
             history.append({ ...history.identity()!, kind: options.manualCorrection ? 'qa-validation-result' : 'generation-result',
                 origin: 'recorder', stage: 'import-envelope', result: 'failed' }, [
                 { name: 'validation.json', content: JSON.stringify(draft.validation) },
@@ -278,22 +294,14 @@ export class AutomationResponseImporter {
             { name: 'validation.json', content: JSON.stringify(validation, null, 2) + '\n' },
             { name: 'prepared-response.json', content: JSON.stringify(response, null, 2) + '\n' },
         ]);
-        const draftPreview = Array.isArray(response.files) &&
-            response.files.some(file =>
-                file?.layer === 'feature' &&
-                typeof file.path === 'string' &&
-                typeof file.content === 'string'
-            ) &&
-            response.files.every(file =>
-                file &&
-                typeof file.path === 'string' &&
-                typeof file.content === 'string'
-            )
-            ? prepared?.preview || automationResponseValidator.toPreview(response)
-            : null;
-        const draftPayload = draftPreview
-            ? { draft: { preview: draftPreview, validation } }
-            : {};
+        const preview = prepared?.preview || automationResponseValidator.toPreview(response);
+        const exportBlockers = preparationError ? [preparationError]
+            : generatedFileRegistry.assess(preview, scenario.squad, plan.files).conflicts;
+        const token = prepared && !exportBlockers.length ? crypto.randomUUID() : '';
+        if (token) state.automationPreview = { token, scenario, plan, response, prepared, correctionBaselines, packageDirectory };
+        const exportFields: AutomationExportReadiness = { previewToken: token, exportReady: Boolean(token), exportBlockers,
+            missingLayers: plan.files.filter(file => !response.files.some(item => item.layer === file.layer)).map(file => file.layer) };
+        const draftPayload = { ...exportFields, draft: { preview, validation, ...exportFields } };
         if (!validation.valid) {
             if (options.trackRepair === false) {
                 return {
@@ -399,7 +407,6 @@ export class AutomationResponseImporter {
                 ...draftPayload,
             };
         }
-        const preview = prepared!.preview;
         const observationsFile = path.join(packageDirectory, 'qa-observations.json');
         const observationsArtifact = fs.existsSync(observationsFile)
             ? readJsonUtf8<QaObservationsArtifact>(observationsFile)
@@ -408,17 +415,14 @@ export class AutomationResponseImporter {
             writeJsonUtf8(observationsFile, observationsArtifact);
         }
         const qaObservations = observationsArtifact.observations;
-        const managed = generatedFileRegistry.assess(preview, scenario.squad, plan.files);
-        const token = crypto.randomUUID();
-        state.automationPreview = { token, scenario, plan, response, prepared, correctionBaselines };
         runStore.mark('ready-for-review');
         emitAutomationProgress('READY_FOR_REVIEW', 'Validación completa', 6, 6);
         return {
             success: true,
             preview,
             validation,
-            previewToken: token,
-            conflicts: managed.conflicts,
+            ...exportFields,
+            conflicts: exportBlockers,
             qaObservations,
         };
     }
