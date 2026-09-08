@@ -15,10 +15,10 @@ import type {
 import type { SquadReuseCatalog } from '../../indexing';
 import type { BaselineSnapshotPort } from '../ports/baselineSnapshotPort';
 import { readJsonUtf8, readUtf8File, slug } from '../../shared';
-import { projectPaths } from '../../workspace';
+import { projectPaths, resolveGoldenRepository } from '../../workspace';
+export { GOLDEN_DATASET_DIRECTORY } from '../../workspace';
 
 export const GOLDEN_MANIFEST_SCHEMA_VERSION = 2 as const;
-export const GOLDEN_DATASET_DIRECTORY = path.join('tests', 'golden');
 export type GoldenExecutionStatus = 'passed' | 'failed' | 'not-run';
 
 /**
@@ -131,17 +131,9 @@ export interface GoldenCase {
 
 const sha256 = (content: string | Buffer) => crypto.createHash('sha256').update(content).digest('hex');
 
-/**
- * Donde vive el dataset: dentro del checkout (`tests/golden`) cuando el
- * recorder corre desde codigo, y bajo `runtime/golden` cuando corre
- * empaquetado (los recursos de la app no se escriben).
- */
+/** Both source and packaged apps share tests/golden in a recorder Git checkout. */
 export function goldenDatasetRoot(paths: { toolRoot: string; runtimeRoot: string } = projectPaths): string {
-    const checkout = path.join(paths.toolRoot, GOLDEN_DATASET_DIRECTORY);
-    if (fs.existsSync(path.join(paths.toolRoot, 'tests')) && fs.existsSync(path.join(paths.toolRoot, 'package.json'))) {
-        return checkout;
-    }
-    return path.join(paths.runtimeRoot, 'runtime', 'golden');
+    return resolveGoldenRepository(paths).datasetRoot;
 }
 
 /** `TC-10240-85a9110f`: legible para el QA y unico por grabacion. */

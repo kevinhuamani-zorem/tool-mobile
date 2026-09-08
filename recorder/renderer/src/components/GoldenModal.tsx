@@ -3,6 +3,9 @@ export function GoldenModal() {
         <section className="framework-recovery-card">
             <header><h2 id="goldenTitle">Golden verificado por QA</h2><button id="btnCloseGolden" className="btn btn-dark">Cerrar</button></header>
             <p>Tu aprobación corresponde a los archivos de esta revisión. La declaración de ejecución es del QA; el recorder conserva por separado los diagnósticos automáticos.</p>
+            <p id="goldenDatasetPath" style={{ overflowWrap: 'anywhere' }} />
+            <button id="btnSelectGoldenRepository" className="btn btn-dark">Seleccionar repositorio</button>
+            <p>Los golden se guardan en tests/golden del recorder. Inclúyelos en un commit y PR para compartirlos; los demás QA los recibirán al actualizar su rama.</p>
             <p id="goldenStatus" role="status" />
             <div id="goldenList" />
             <div id="goldenReview" style={{ display: 'none' }}>

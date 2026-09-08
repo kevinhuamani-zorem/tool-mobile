@@ -5,18 +5,22 @@ export function createGoldenFeature({ api }) {
     let token = '';
     let version = 0;
     let busy = false;
+    let currentInput;
     const on = (target, event, handler) => { target?.addEventListener(event, handler); bound.push([target, event, handler]); };
     function invalidate() { version++; token = ''; el('goldenApproved').checked = false; el('btnApproveGolden').disabled = true; }
     const status = text => { el('goldenStatus').textContent = text; };
     async function open(input) {
         if (busy) return;
+        currentInput = input;
         invalidate(); const requested = version;
+        el('goldenDatasetPath').textContent = '';
         el('goldenModal').style.display = 'flex'; el('goldenReview').style.display = 'none'; el('goldenList').innerHTML = '';
         status(input ? 'Preparando la versión para revisión…' : 'Leyendo versiones aprobadas…');
         try {
             const result = input ? await api.previewGoldenCase(input) : await api.listGoldenCases();
             if (requested !== version) return;
             if (!result.success) throw new Error(result.error);
+            el('goldenDatasetPath').textContent = result.datasetRoot || result.preview?.datasetRoot || '';
             if (input) {
                 const p = result.preview; token = p.token;
                 el('goldenReview').style.display = 'block';
@@ -53,11 +57,28 @@ export function createGoldenFeature({ api }) {
             const result = await api.saveGoldenCase({ token, approved: true, usage: el('goldenUsage').value || 'reference', executed: el('goldenExecution').value, notes: el('goldenNotes').value });
             if (!result.success) throw new Error(result.error);
             invalidate();
-            status(`Golden aprobado · ${result.manifest.versionHash.slice(0, 12)}${result.duplicate ? ' · Versión ya publicada' : ''}. ${result.indexWarning || ''} ${result.historyWarning || ''}`);
+            status(`Golden aprobado · ${result.manifest.versionHash.slice(0, 12)}${result.duplicate ? ' · Versión ya publicada' : ''}. Guardado en el repositorio local; incluye tests/golden en un commit y PR para compartirlo. ${result.indexWarning || ''} ${result.historyWarning || ''}`);
         } catch (error) { status(error.message); invalidate(); }
         finally { busy = false; }
     }
+    async function selectRepository() {
+        if (busy) return;
+        busy = true; el('btnSelectGoldenRepository').disabled = true; el('btnApproveGolden').disabled = true;
+        let changed = false; const requested = version;
+        try {
+            const result = await api.selectGoldenRepository();
+            if (requested !== version || result.canceled) return;
+            if (!result.success) throw new Error(result.error);
+            invalidate(); changed = true;
+        } catch (error) { status(error.message); }
+        finally {
+            busy = false; el('btnSelectGoldenRepository').disabled = false;
+            el('btnApproveGolden').disabled = !token || !el('goldenApproved').checked;
+        }
+        if (changed) await open(currentInput);
+    }
     function mount() {
+        on(el('btnSelectGoldenRepository'), 'click', selectRepository);
         on(el('btnGoldenCases'), 'click', () => open());
         on(el('btnCloseGolden'), 'click', () => { if (!busy) { invalidate(); el('goldenModal').style.display = 'none'; } });
         on(el('goldenApproved'), 'change', () => { el('btnApproveGolden').disabled = !token || !el('goldenApproved').checked || busy; });
@@ -65,5 +86,5 @@ export function createGoldenFeature({ api }) {
         on(el('btnRebuildGolden'), 'click', async () => { try { const result = await api.rebuildGoldenIndex(); if (!result.success) throw new Error(result.error); status(`Índice reconstruido: ${result.index.entries.length} activo(s), ${result.index.issues.length} problema(s).`); } catch (error) { status(error.message); } });
     }
     function unmount() { bound.forEach(([target, event, handler]) => target?.removeEventListener(event, handler)); bound.length = 0; invalidate(); }
-    return { mount, unmount, open, approve };
+    return { mount, unmount, open, approve, selectRepository };
 }

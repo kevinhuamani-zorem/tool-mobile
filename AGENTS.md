@@ -248,6 +248,12 @@ generadores, validadores o plantillas.
   reutilizar. La aprobación no escribe el framework ni borra fallos del agente;
   ejecución declarada y diagnóstico automático son campos distintos. No exige
   score 100 ni validación verde. No cambies expected para esconder discrepancias.
+  El dataset compartido vive en `tests/golden` del checkout Git del recorder,
+  incluso desde la app empaquetada. `core/workspace` detecta o persiste el checkout;
+  la selección local no se versiona. No escribas golden nuevos en runtime ni en
+  el bundle. Snapshots/publicaciones viajan por commit/PR; el índice es local.
+  Conserva `.gitattributes` para no cambiar bytes/hash entre máquinas. Sin checkout,
+  la generación/exportación sigue disponible sin referencias golden.
   Los legacy solo se promueven tras revisión explícita. Ver
   `docs/AUTOMATION_GOLDEN_APPROVAL.md`.
 - Un gap `blocking` es un defecto de la grabación que solo el QA corrige

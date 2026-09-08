@@ -25,3 +25,7 @@ test-results/
 /tests/golden/.publication.lock
 /tests/golden/**/.pending-*
 /tests/golden/*.tmp
+
+# Selección local del checkout compartido; no viaja entre máquinas.
+/config/golden-repository.json
+/config/golden-repository.json.*.tmp

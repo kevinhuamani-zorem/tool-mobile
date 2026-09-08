@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('save-framework-recovery', token),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
     previewGoldenCase: (input: GoldenReviewRequest) => ipcRenderer.invoke('preview-golden-case', input),
+    selectGoldenRepository: () => ipcRenderer.invoke('select-golden-repository'),
     listGoldenCases: () => ipcRenderer.invoke('list-golden-cases'),
     rebuildGoldenIndex: () => ipcRenderer.invoke('rebuild-golden-index'),
     revokeGoldenCase: (input: { goldenId: string; versionHash: string }) => ipcRenderer.invoke('revoke-golden-case', input),

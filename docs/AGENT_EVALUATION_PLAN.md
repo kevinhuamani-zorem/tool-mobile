@@ -13,8 +13,10 @@ sustituye la tabla resumida de entregas de abajo para organizar la implementaci�
 
 ## Decisión de producto actualizada — 2026-09-08
 
-**Estado: F0–F5 implementadas y verificadas localmente.**
-El historial, las dos pasadas, la exportación con observaciones y la recuperación QA y la reexportación con reconciliación están implementados; F6–F7 siguen pendientes. Ver
+**Estado: F0–F6 implementadas y verificadas; F7 tiene implementación técnica y pruebas.**
+Están implementados el historial, las dos pasadas, exportación con observaciones,
+recuperación/reexportación QA y golden compartidos en `tests/golden` del recorder.
+El cierre de F7 requiere corpus QA, piloto completo y comparación real. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Esta sección incorpora
 la decisión del usuario: limitar la iteración automática, entregar el borrador
 al QA sin bloquear su exportación por calidad y recuperar del framework la

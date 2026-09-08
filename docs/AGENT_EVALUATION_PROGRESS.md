@@ -10,8 +10,9 @@ La exportación con observaciones se publicó en `30ae8e0` (F3).
 La recuperación QA se publicó en `25d412d` (F4).
 La reconciliación se publicó en `41bf2b4` (F5).
 F6 se publicó en `c4f01aa`: aprobación QA explícita, versiones inmutables e
-índice local reconstruible. Esta entrega implementa el código y las pruebas de
-F7. Su cierre con corpus QA y piloto real sigue abierto; el checklist en
+índice local reconstruible. F7 se publicó en `b05c77b`, con código y pruebas.
+La continuación conecta la app al dataset compartido del recorder en `tests/golden`.
+Su cierre con corpus QA y piloto real sigue abierto; el checklist en
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md) conserva todos
 los pendientes hasta terminar el ciclo completo.
 
@@ -297,3 +298,32 @@ La infraestructura está implementada; estos puntos de evidencia siguen abiertos
   runtime `.app`; comparación controlada con/sin ejemplos.
 
 Contrato y procedimiento: [AUTOMATION_GOLDEN_LEARNING.md](AUTOMATION_GOLDEN_LEARNING.md).
+
+
+## Dataset compartido por Git — continuación de F7
+
+- Desarrollo y app empaquetada usan `tests/golden` del checkout Git del recorder.
+  Si no se detecta, **Casos golden → Seleccionar repositorio** permite elegirlo
+  y conserva la selección local. No crea un dataset alternativo en runtime.
+- Snapshots, aprobaciones y revocaciones se comparten por commit/PR del recorder;
+  otros QA actualizan su rama. El índice y la selección local quedan excluidos.
+  `.gitattributes` conserva bytes/hash incluso con `core.autocrlf`.
+- El cambio de repositorio invalida la aprobación pendiente. Sin repositorio,
+  la generación sigue entregando archivos sin ejemplos golden. Las pruebas
+  verifican un commit/clone/pull real entre dos clones temporales, recepción de
+  correcciones QA, integridad y revocación.
+- La limpieza solicitada retiró ejecuciones antiguas y memoria legacy. Conservó
+  las 7 grabaciones (76 acciones) y los cambios ajenos de configuración/dependencias
+  del framework. El corpus real continúa sin aprobaciones; no se usaron fixtures
+  como casos QA ni se afirma una tasa de fallos a partir de un corpus vacío.
+
+- Validación: `npm run quality`, **825/825 pruebas aprobadas**, sin omitidas
+  ni canceladas; tipos, arquitectura, métricas y builds correctos. La suite golden
+  también rechaza un dataset versionado corrupto aunque no tenga entradas activas.
+- App macOS reconstruida; el resolver empaquetado apunta al mismo `tests/golden`
+  del checkout y los módulos empaquetados coinciden con el build verificado.
+  El piloto funcional del ciclo QA continúa pendiente.
+
+Configuración y flujo de PR: [tests/golden/README.md](../tests/golden/README.md).
+Continúan abiertos el corpus de 5–8 casos, la reserva de evaluación, el piloto
+funcional completo y la comparación con/sin ejemplos.

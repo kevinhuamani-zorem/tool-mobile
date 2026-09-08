@@ -404,7 +404,11 @@ de conflictos, rebase/merge y rollback; termina con `npm run quality`.
 `tests/goldenDataset.test.js` cubre aprobación explícita, bytes NFD/CRLF, preview
 obsoleto, diagnósticos fallidos, historial de intentos, dependencias recuperadas,
 legacy, publicación fallida, reintento e índice corrupto/reconstruido. Comprueba
-también la interacción del panel sin dispositivo. Ver
+también la interacción del panel sin dispositivo. `goldenRepository.test.js`
+verifica selección persistente, detección de checkout/worktree y confinamiento;
+`goldenDataset.test.js` incluye commit/clone/pull entre QA con `core.autocrlf`,
+invalidación del preview al cambiar repositorio y generación sin dataset disponible.
+Los fixtures viven en temporales y nunca se promocionan al corpus compartido. Ver
 [AUTOMATION_GOLDEN_APPROVAL.md](AUTOMATION_GOLDEN_APPROVAL.md).
 
 

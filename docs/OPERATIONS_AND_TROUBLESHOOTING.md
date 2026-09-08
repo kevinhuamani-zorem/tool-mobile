@@ -519,3 +519,17 @@ silenciar el diagnóstico. Ver [F7 y piloto pendiente](AUTOMATION_GOLDEN_LEARNIN
 
 Los mensajes de contexto que excede el presupuesto ya no se muestran en Revisión.
 Permanecen en el reporte interno de etapas; los errores reales siguen visibles.
+
+### Compartir golden desde la app instalada
+
+En **Configuración → Casos golden**, la ruta mostrada debe terminar en
+`tests/golden` dentro del clon Git del recorder. Si falta o se movió, usa
+**Seleccionar repositorio**. Un framework mobile o el bundle `.app` no son el
+repositorio del recorder. La selección es local y no altera las grabaciones.
+
+Una aprobación nueva queda pendiente de commit/PR en ese clon. Los demás QA deben
+actualizar la misma rama para verla. Si un golden no aparece como referencia,
+comprueba primero **Reconstruir índice aprobado**, su uso (referencia/evaluación)
+y compatibilidad con el framework actual. El índice no necesita copiarse entre
+máquinas. Flujo y migración de datos anteriores en
+[tests/golden/README.md](../tests/golden/README.md).

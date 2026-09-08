@@ -52,6 +52,7 @@ declare global {
             previewFrameworkRecovery(input?: FrameworkRecoveryRequest): Promise<{ success: boolean; error?: string; preview?: FrameworkRecoveryPreview }>;
             saveFrameworkRecovery(token: string): Promise<{ success: boolean; error?: string; result?: FrameworkRecoverySaved }>;
             previewGoldenCase(input: GoldenReviewRequest): Promise<any>;
+            selectGoldenRepository(): Promise<{ success: boolean; canceled?: boolean; datasetRoot?: string; error?: string }>;
             listGoldenCases(): Promise<any>;
             rebuildGoldenIndex(): Promise<any>;
             revokeGoldenCase(input: { goldenId: string; versionHash: string }): Promise<any>;

@@ -3,7 +3,7 @@
 Fecha: 2026-09-08.
 
 Estado: **F0–F6 implementadas y verificadas localmente**.
-La siguiente entrega es F7; conserva sus pendientes debajo. Ver
+F7 tiene código y pruebas; conserva los pendientes de corpus y piloto debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -321,8 +321,10 @@ compatible; una prueba detecta si el error regresa; el reporte distingue el éxi
 autónomo del asistido y demuestra qué referencias recibió cada agente.
 
 Implementación técnica y pruebas: [contrato F7](AUTOMATION_GOLDEN_LEARNING.md).
-El chequeo local encontró 0 golden aprobados y 7 intentos legacy sin evidencia
-suficiente: evaluación/replay `not-evaluated`. No se cierra la fase hasta curar
+El chequeo de F7 encontró 0 golden aprobados y 7 intentos legacy sin evidencia
+suficiente: evaluación/replay `not-evaluated`. La limpieza posterior retiró esas
+ejecuciones antiguas y preservó las siete grabaciones. El dataset compartido
+en `tests/golden` sigue vacío hasta que QA apruebe los primeros casos. No se cierra la fase hasta curar
 el corpus y realizar el piloto/comparación reales de los puntos abiertos.
 
 ## Verificación por fase y entrega

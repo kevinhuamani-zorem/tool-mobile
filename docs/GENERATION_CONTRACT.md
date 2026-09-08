@@ -888,7 +888,17 @@ F6 toma el artefacto inmutable de esa revisión, incluyendo las dependencias del
 sus asociaciones pendientes y referencia de PR. Puede repetirse después de otro PR,
 regrabación o regeneración. Las trazas pendientes no se convierten en eventos Appium.
 
-El almacenamiento es `tests/golden/` en desarrollo y `runtime/golden/` en la app:
+El almacenamiento es `tests/golden/` del repositorio Git del recorder, tanto en
+desarrollo como en la app instalada. Se detecta el checkout del recorder o se
+selecciona desde **Casos golden → Seleccionar repositorio**. La selección local
+persiste en `config/golden-repository.json` del runtime y no se versiona. Si falta
+el checkout, la generación/exportación continúa sin ejemplos; guardar golden
+requiere seleccionarlo. No se utiliza `runtime/golden` como fallback. Ver el
+[flujo para compartir por Git](../tests/golden/README.md).
+
+Se versionan snapshots y publicaciones al incluirlos en un commit/PR del recorder;
+los demás QA los reciben al actualizar su rama. Guardar no hace operaciones Git.
+El almacenamiento contiene:
 
 - `approved/<goldenId>/versions/<versionHash>/`: snapshot inmutable con manifiesto
   v2, paquete, baselines, código esperado, dependencias, diagnósticos, entregas de

@@ -25,6 +25,7 @@ const { inferredStrategy } = require('../dist/core/indexing');
 const { isolatedFramework } = require('./helpers/isolatedFramework');
 
 const sha256 = content => crypto.createHash('sha256').update(content).digest('hex');
+const { git, recorderRepository } = require('./helpers/goldenRepository');
 const GOLDEN_ROOT = path.join(process.cwd(), 'tests', 'golden');
 
 // ---- fixture: un paquete aplicado sobre un framework minimo -----------------
@@ -101,10 +102,10 @@ function withGoldenRoot(t, fixture) {
     // goldenDatasetRoot lee projectPaths; el fixture apunta la raiz a su tmp.
     const { projectPaths } = require('../dist/core/workspace');
     const original = { toolRoot: projectPaths.toolRoot, runtimeRoot: projectPaths.runtimeRoot };
-    projectPaths.toolRoot = path.join(fixture.root, 'no-checkout');
+    projectPaths.toolRoot = recorderRepository(path.join(fixture.root, 'recorder'));
     projectPaths.runtimeRoot = fixture.root;
     t.after(() => Object.assign(projectPaths, original));
-    return path.join(fixture.root, 'runtime', 'golden');
+    return path.join(projectPaths.toolRoot, 'tests', 'golden');
 }
 
 const expectedFile = (saved, layer) => path.join(saved.directory, 'expected', saved.manifest.files.find(file => file.layer === layer).expected);
@@ -227,13 +228,7 @@ test('F6 historical approval never transfers to changed framework, scope or cont
     assert.equal(store.index().entries.length, 1, 'historical approved bytes remain available');
 });
 
-test('goldenDatasetRoot usa tests/golden en un checkout y runtime/golden en la app empaquetada', t => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'golden-root-'));
-    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-    assert.equal(goldenDatasetRoot({ toolRoot: root, runtimeRoot: root }), path.join(root, 'runtime', 'golden'));
-    fs.mkdirSync(path.join(root, 'tests'));
-    fs.writeFileSync(path.join(root, 'package.json'), '{}');
-    assert.equal(goldenDatasetRoot({ toolRoot: root, runtimeRoot: root }), path.join(root, 'tests', 'golden'));
+test('golden case names retain recording identity', () => {
     assert.equal(goldenCaseDirectoryName({ recordingId: 'rec-f98d051e-c07d-4f6a-9577-a1ff85a9110f', request: { caseId: 'TC-10240' } }), 'tc-10240-85a9110f');
 });
 
@@ -355,7 +350,9 @@ function overlayBaselines(frameworkRoot, goldenCase) {
 }
 
 test('cada caso de tests/golden se reproduce: mismo plan y los archivos aceptados siguen validos', async t => {
-    const cases = listGoldenCases(GOLDEN_ROOT);
+    const index = new ApprovedGoldenStore(GOLDEN_ROOT).index();
+    assert.deepEqual(index.issues, [], 'El dataset versionado contiene publicaciones o snapshots corruptos');
+    const cases = index.entries.map(entry => entry.directory);
     if (!cases.length) {
         t.diagnostic('sin casos golden todavia: guarda uno desde la revision («Guardar como golden verificado por QA»)');
         return;
@@ -613,4 +610,108 @@ test('F7 replay reports an empty corpus and unpinned snapshots explicitly withou
     assert.equal(report.results[0].status, 'unreproducible'); assert.match(report.results[0].reason, /commit/);
     assert.deepEqual(fs.readFileSync(expectedFile(saved, 'steps')), before);
     assert.equal(readGoldenCase(saved.directory).manifest.approval.source, 'qa-declaration');
+});
+
+
+test('shared golden survives Git commit/clone with autocrlf, selects QA corrections and receives revocation', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const { projectPaths } = require('../dist/core/workspace');
+    const { selectGoldenExamples } = require('../dist/core/automation');
+    const before = projectPaths.frameworkRoot; t.after(() => { projectPaths.frameworkRoot = before; });
+    projectPaths.frameworkRoot = f.frameworkRoot;
+    const repository = path.resolve(root, '../..');
+    // Exercise both LF and CRLF artifacts under a checkout that normally converts LF to CRLF.
+    git(repository, 'config', 'core.autocrlf', 'true');
+    const correction = '// QA corrigió Cafe\u0301\r\n';
+    fs.writeFileSync(path.join(f.frameworkRoot, f.stepsPath), correction);
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true, executed: 'passed' });
+    fs.mkdirSync(path.join(root, 'approved/.pending-fixture'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'approved/.pending-fixture/data.json'), '{}');
+    fs.writeFileSync(path.join(root, '.publication.lock'), 'temporary');
+    git(repository, 'add', '.');
+    const tracked = git(repository, 'ls-files');
+    assert.match(tracked, /publications\//); assert.match(tracked, /versions\//);
+    assert.doesNotMatch(tracked, /approved-index|publication.lock|pending-fixture/);
+    git(repository, 'commit', '-qm', 'QA approves fixture');
+    const clone = path.join(f.root, 'qa-two');
+    git(repository, '-c', 'core.autocrlf=true', 'clone', '-q', repository, clone);
+    const receivedRoot = goldenDatasetRoot({ toolRoot: path.join(f.root, 'app'), runtimeRoot: clone });
+    const received = new ApprovedGoldenStore(receivedRoot).read(saved.manifest.goldenId);
+    assert.equal(received.manifest.versionHash, saved.manifest.versionHash);
+    assert.equal(fs.readFileSync(expectedFile(received, 'steps'), 'utf8'), correction);
+    assert.equal(new ApprovedGoldenStore(receivedRoot).rebuildIndex().issues.length, 0);
+    const target = { ...f.scenario, recordingId: 'qa-two-recording', request: { ...f.scenario.request, caseId: 'TC-2' } };
+    assert.equal(selectGoldenExamples(target, { root: receivedRoot }).examples[0].versionHash, saved.manifest.versionHash);
+    assert.equal(fs.existsSync(path.join(clone, 'runtime')), false, 'no recorder runtime is needed by a receiving QA');
+    // A later Git update changes the references available to the other QA without copying an index.
+    fs.rmSync(path.join(root, '.publication.lock'));
+    new ApprovedGoldenStore(root).revoke(saved.manifest.goldenId, saved.manifest.versionHash, 'qa');
+    git(repository, 'add', 'tests/golden'); git(repository, 'commit', '-qm', 'QA withdraws fixture');
+    git(clone, 'pull', '--ff-only', '-q');
+    assert.equal(selectGoldenExamples(target, { root: receivedRoot }).examples.length, 0);
+    assert.equal(new ApprovedGoldenStore(receivedRoot).read(saved.manifest.goldenId).manifest.active, false);
+});
+
+test('packaged app without a recorder checkout still prepares agents without golden examples', t => {
+    const f = appliedPackageFixture(t);
+    const { projectPaths } = require('../dist/core/workspace');
+    const previous = { ...projectPaths }; t.after(() => Object.assign(projectPaths, previous));
+    Object.assign(projectPaths, { toolRoot: path.join(f.root, 'app'), runtimeRoot: f.root });
+    const { prepareGoldenExamples, writeGoldenRoleExamples } = require('../dist/core/automation');
+    const selected = prepareGoldenExamples(f.packageDirectory);
+    assert.equal(selected.examples.length, 0); assert.match(selected.issues[0], /Selecciona el repositorio/);
+    const stage = path.join(f.root, 'agent'); fs.mkdirSync(stage);
+    assert.ok(writeGoldenRoleExamples(f.packageDirectory, stage, 'behavior-author', 1).file);
+    assert.equal(fs.existsSync(path.join(f.root, 'runtime/golden')), false);
+});
+
+test('Golden UI can select the repository after a missing-checkout error, and cancel keeps a reviewed token', async t => {
+    const { installFakeBrowserGlobals } = require('./helpers/fakeDom'); const fake = installFakeBrowserGlobals(); t.after(() => fake.restore());
+    const { createGoldenFeature } = await import('../recorder/renderer/src/features/golden/goldenFeature.js');
+    let available = false, canceled = false, previews = 0, saved;
+    const feature = createGoldenFeature({ api: {
+        previewGoldenCase: async () => {
+            previews++;
+            return available ? { success: true, preview: { token: `review-${previews}`, datasetRoot: '/recorder/tests/golden',
+                files: [], diagnostics: { valid: true, qualityScore: 100 }, notes: '', executionDeclaration: 'not-run' } }
+                : { success: false, error: 'Selecciona el repositorio' };
+        },
+        selectGoldenRepository: async () => { if (canceled) return { success: false, canceled: true }; available = true; return { success: true }; },
+        saveGoldenCase: async input => { saved = input; return { success: true, manifest: { versionHash: 'a'.repeat(64) } }; },
+    } });
+    feature.mount(); await feature.open({ recordingId: 'rec-case' });
+    const el = id => fake.document.getElementById(id);
+    assert.match(el('goldenStatus').textContent, /Selecciona/);
+    await feature.selectRepository();
+    assert.equal(previews, 2); assert.equal(el('goldenDatasetPath').textContent, '/recorder/tests/golden');
+    el('goldenApproved').checked = true;
+    canceled = true; await feature.selectRepository();
+    assert.equal(previews, 2); assert.equal(el('goldenApproved').checked, true);
+    assert.equal(el('btnApproveGolden').disabled, false);
+    canceled = false; await feature.selectRepository();
+    assert.equal(previews, 3); assert.equal(el('goldenApproved').checked, false);
+    await feature.approve(); assert.equal(saved, undefined);
+    el('goldenApproved').checked = true; await feature.approve();
+    assert.equal(saved.token, 'review-3'); assert.match(el('goldenStatus').textContent, /commit y PR/);
+    feature.unmount(); assert.equal(el('btnSelectGoldenRepository').listenerCount(), 0);
+});
+
+
+test('changing the shared recorder repository invalidates a pending approval on the main process', t => {
+    const f = appliedPackageFixture(t); const firstRoot = withGoldenRoot(t, f);
+    const { projectPaths, saveGoldenRepository } = require('../dist/core/workspace');
+    const previous = { ...projectPaths }; t.after(() => Object.assign(projectPaths, previous));
+    Object.assign(projectPaths, { frameworkRoot: f.frameworkRoot, recordings: path.join(f.root, 'recording') });
+    const controller = new GoldenCaseController({ ...f.deps(), state: { activeSquad: 'payment', activeEnvironment: 'qa', activeAutomationPackage: f.packageDirectory } });
+    const first = controller.prepare().preview;
+    assert.equal(first.datasetRoot, firstRoot);
+    const nextRepository = recorderRepository(path.join(f.root, 'other-recorder'));
+    const nextRoot = saveGoldenRepository(nextRepository).datasetRoot;
+    assert.throws(() => controller.save({ token: first.token, approved: true }), /Cambió el contexto/);
+    assert.equal(new ApprovedGoldenStore(firstRoot).index().entries.length, 0);
+    assert.equal(new ApprovedGoldenStore(nextRoot).index().entries.length, 0);
+    const fresh = controller.prepare().preview;
+    assert.equal(fresh.datasetRoot, nextRoot);
+    assert.equal(controller.save({ token: fresh.token, approved: true }).success, true);
+    assert.equal(controller.list().datasetRoot, nextRoot);
 });

@@ -7,6 +7,12 @@ el historial inmutable. Aprender significa recuperar referencias y correcciones
 aprobadas para el contexto del agente; no modifica los pesos del modelo ni elimina
 sus posibles fallos. La memoria legacy permanece deshabilitada.
 
+Los casos se comparten en `tests/golden/` del repositorio del recorder, también
+cuando se usa la app instalada. La aprobación queda local hasta incluirla en un
+commit/PR; los demás QA reciben las versiones y revocaciones con Git y los agentes
+las consultan al generar. La selección de otro checkout invalida el preview QA.
+Ver [configuración, versionado y actualizaciones](../tests/golden/README.md).
+
 ## Selección y responsabilidad
 
 `goldenExamples.ts` verifica publicaciones y hashes, exige squad, plataforma,

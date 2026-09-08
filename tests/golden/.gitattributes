@@ -1,0 +1,2 @@
+# Los hashes QA verifican bytes exactos, incluidos CRLF y Unicode.
+approved/** -text -filter -ident !working-tree-encoding

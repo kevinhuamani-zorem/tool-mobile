@@ -14,3 +14,5 @@ export * from './infrastructure/frameworkContract';
 export * from './infrastructure/frameworkHelpers';
 export * from './infrastructure/frameworkScanner';
 export * from './infrastructure/frameworkQueryService';
+
+export * from './infrastructure/goldenRepository';

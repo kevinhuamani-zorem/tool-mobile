@@ -90,7 +90,7 @@ export class GoldenCaseReview {
         const token = crypto.randomUUID();
         this.pending = { token, usage, accepted, dependencies, recoverySnapshot, scenario, plan, validation, validationSource, catalog, revisionId: revision.revisionId,
             packageDigest: packageDigest(packageDirectory), target, hashes: new Map(target.watched), git: recoveryGitContext(frameworkRoot), source: source.read('legacy-manifest.json') ? 'legacy-review' : recovery ? 'framework-recovery' : 'review' };
-        return structuredClone({ token, recordingId: scenario.recordingId, caseId: scenario.request?.caseId, revisionId: revision.revisionId,
+        return structuredClone({ token, datasetRoot: this.root, recordingId: scenario.recordingId, caseId: scenario.request?.caseId, revisionId: revision.revisionId,
             files: [...accepted.response.files, ...dependencies.map(file => ({ ...file, layer: 'dependency' }))], diagnostics: validation, pending: recovery?.pending || [], context: recovery?.context || this.pending.git,
             source: this.pending.source, usage, automaticVerification: 'not-reported', executionDeclaration: input.executed || 'not-run', notes: input.notes || '' });
     }
@@ -133,7 +133,7 @@ export class GoldenCaseController {
     list() {
         const root = goldenDatasetRoot(); const store = new ApprovedGoldenStore(root);
         const legacy = listLegacyGoldenCases(root).map(directory => ({ legacyId: path.basename(directory), caseId: readGoldenCase(directory).manifest.caseId }));
-        return { success: true, index: store.index(), legacy };
+        return { success: true, datasetRoot: root, index: store.index(), legacy };
     }
     prepare(input: SaveGoldenCaseRequest = {}) {
         validateRequest(input); this.pending?.cleanup?.(); this.pending = undefined;

@@ -2,8 +2,8 @@ import fs from 'fs';
 import os from 'os';
 import { ApprovedGoldenStore, goldenDatasetRoot } from '../../../core/automation';
 import path from 'path';
-import { ipcMain } from 'electron';
-import { projectPaths } from '../../../core/workspace';
+import { dialog, ipcMain } from 'electron';
+import { projectPaths, saveGoldenRepository } from '../../../core/workspace';
 import { GenerationRequest, FwkMobileGenerator } from '../../../core/generation';
 import {
     GeneratedFileRegistry,
@@ -345,10 +345,19 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         emitProgress: emitAutomationProgress,
     }, previewToken, reviewedContents));
 
-    ipcMain.handle('get-automation-memory-stats', async () => ({
-        success: true,
-        stats: new ApprovedGoldenStore(goldenDatasetRoot()).stats(),
-    }));
+    ipcMain.handle('get-automation-memory-stats', async () => {
+        try { return { success: true, stats: new ApprovedGoldenStore(goldenDatasetRoot()).stats() }; }
+        catch (error: any) { return { success: false, error: error.message }; }
+    });
+    ipcMain.handle('select-golden-repository', async () => {
+        try {
+            const selected = await dialog.showOpenDialog({ title: 'Selecciona el repositorio del recorder',
+                message: 'Selecciona la raíz del clon Git del recorder. Los casos aprobados se guardarán en tests/golden.',
+                buttonLabel: 'Usar este repositorio', properties: ['openDirectory'] });
+            if (selected.canceled || !selected.filePaths[0]) return { success: false, canceled: true };
+            return { success: true, ...saveGoldenRepository(selected.filePaths[0]) };
+        } catch (error: any) { return { success: false, error: error.message }; }
+    });
 
     const golden = new GoldenCaseController(context);
     ipcMain.handle('preview-golden-case', async (_, input: SaveGoldenCaseRequest) => {
