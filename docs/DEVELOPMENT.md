@@ -389,3 +389,10 @@ parámetros, aserciones, nombres/rutas movidas, helpers, contenido compartido,
 pendientes, reapertura, Git local, symlinks, concurrencia y publicación fallida.
 Las consultas al target son de lectura; las revisiones se escriben exclusivamente
 en el paquete del recording. Ejecuta esas pruebas antes de `npm run quality`.
+
+### Reconciliación F5
+
+Ejecuta `node --test tests/automationReconciliation.test.js` después de compilar
+main. Usa frameworks temporales: nunca resetear ni modificar los cambios QA del
+framework padre para probar regeneración. La suite cubre dos ciclos, resolución
+de conflictos, rebase/merge y rollback; termina con `npm run quality`.

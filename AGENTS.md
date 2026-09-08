@@ -125,16 +125,18 @@ generadores, validadores o plantillas.
     Limpiar el paquete no borra `history/`. Exportar o validar una edición QA
     no transforma el fallo autónomo previo en éxito ni acredita aprobación o
     ejecución funcional. Ver `docs/AUTOMATION_HISTORY.md`.
-    **Regenerar conserva identidad y rutas.** Un refinamiento parte del último
-    `agent-response.json` validado, crea una versión histórica, mantiene
-    `recordingId` y las cuatro rutas, y solo reemplaza archivos que el registry
-    sigue reconociendo como administrados y no modificados externamente.
+    **Regenerar conserva identidad y correcciones QA.** F5 parte del checkout
+    actual recuperado, crea revisión/intento nuevos y conserva las rutas vigentes.
+    El baseline histórico autoriza la reconciliación por símbolos; muestra los
+    solapamientos en el editor y verifica destinos/checkout nuevamente antes de
+    escribir. No exige score 100 ni todas las capas exportadas. Ver
+    `docs/AUTOMATION_RECONCILIATION.md`.
     **Recuperar código QA conserva la evidencia grabada.** F4 guarda correcciones
     del framework como revisión `framework-import`, leyendo las relaciones del
     caso y excluyendo cambios ajenos en módulos compartidos. Las asociaciones
     inciertas quedan pendientes y no impiden guardar. No inventes eventos Appium
     ni promociones golden; no uses la proyección de código compartido como
-    reemplazo directo del archivo actual. F5 hará esa reconciliación. Ver
+    reemplazo directo del archivo actual. F5 realiza esa reconciliación. Ver
     `docs/AUTOMATION_FRAMEWORK_RECOVERY.md`.
 15. **Squad y ruta Feature son conceptos distintos.** `featureScope` puede
     limitar Features a una subruta como `tapp/payment`, pero Steps, Screen

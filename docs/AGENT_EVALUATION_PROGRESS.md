@@ -7,9 +7,10 @@ El baseline y la retirada de memoria se publicaron en `8a2a4fa0a1ec9e8ad22a4d711
 El historial se publicó en `504e7eb40eb51254af134b2bc6d09f2bbe732987` (F1).
 Las dos pasadas se publicaron en `95322f1` (F2).
 La exportación con observaciones se publicó en `30ae8e0` (F3).
-La entrega actual completa F4, recuperación de correcciones del framework, de
+La recuperación QA se publicó en `25d412d` (F4).
+La entrega actual completa F5, regeneración y reexportación con reconciliación, de
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
-F5–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
+F6–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
 hasta terminar el ciclo completo. La aprobación golden nueva aún no está habilitada.
 
 ## Punto de partida y medición
@@ -125,13 +126,13 @@ corresponde al pipeline `layered` predeterminado del wizard.
 | F2 — completada | Dos pasadas comunes en layered, envelopes comprobados y Revisión de capas recuperables. Pruebas sin tercera llamada por rol, incluso con resincronización y fallos persistentes. |
 | F3 — completada | Exportación de bytes revisados y capas disponibles con observaciones. Se conservan rutas, contenido compartido, conflictos, rollback y comprobaciones concurrentes. Recibo parcial con hashes/símbolos, historial separado y botón disponible sin score 100. |
 | F4 — completada | Recuperación por relaciones, comparación baseline/exportado/actual y diff del caso. Rutas/símbolos movidos, helpers, asociaciones pendientes y revisión QA con código sin modificar eventos Appium. PR opcional y contexto Git local; no exige commit ni dispositivo. |
-| F5 — siguiente | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
-| F6 — pendiente de F4/F5 | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
+| F5 — completada | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
+| F6 — siguiente | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
 | F7 — pendiente de F6 | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
 
 F2 sustituyó los contadores independientes del pipeline por capas.
 F3 retira los bloqueos de exportación por calidad. Los ciclos de regeneración y
-reexportación con correcciones externas se abordarán en F5; F4 ya conserva esas correcciones en una revisión QA.
+reexportación con correcciones externas están implementados en F5; F4 conserva esas correcciones en una revisión QA.
 
 ## Validación de la entrega inicial (`8a2a4fa`)
 
@@ -171,11 +172,10 @@ a F6/F7; no se ejecutó todavía el piloto con dispositivo/Copilot.
 
 ## Próxima entrega concreta
 
-Implementar F5: usar la revisión recuperada como baseline al regrabar/regenerar y
-reexportar durante el PR. Conciliar cambios compartidos, preservar correcciones QA
-y probar dos ciclos sucesivos, incluidos cambios de rama/rebase/merge. Después
-siguen F6 (aprobación y versiones golden) y F7 (ejemplos, métricas y piloto real).
-Los checklists detallados de esas fases siguen abiertos.
+Implementar F6: aprobación QA explícita sobre la revisión aceptada, versiones
+golden inmutables con hashes e índice local derivado solo de versiones aprobadas.
+Después sigue F7: ejemplos por capa, medición de correcciones/fallos con
+denominadores y piloto real. Sus checklists detallados siguen abiertos.
 
 ## Validación de F2
 
@@ -228,3 +228,19 @@ Los checklists detallados de esas fases siguen abiertos.
 - `npm run quality`: **784/784 pruebas aprobadas**, sin omitidas ni canceladas;
   tipos, arquitectura, métricas y builds correctos. Log:
   `/private/tmp/recorder-f4-quality.log`.
+
+## Implementación de F5
+
+- Preparación desde código actual del framework, con revisión QA, identidad y
+  rutas vigentes. Regrabación vuelve a resolver las acciones actuales.
+- Baseline inmutable y contexto por autor; no hereda una entrega del intento
+  anterior ni exige score 100 o cuatro capas ya exportadas.
+- Combinación de tres versiones, conflictos visibles y resolución en el editor.
+  Conserva métodos/locators compartidos y valida cambios concurrentes del checkout.
+- Dos ciclos sucesivos probados, también con rutas movidas y rebase/merge reales
+  en repositorios temporales. Exportación parcial y rollback siguen disponibles.
+- Nueva cobertura F5: **12/12 pruebas aprobadas**. Log: `/private/tmp/recorder-f5-new.log`.
+- `npm run quality`: **796/796 pruebas aprobadas**, sin omitidas ni canceladas;
+  tipos, arquitectura, métricas y builds correctos. Log:
+  `/private/tmp/recorder-f5-quality.log`.
+- Contrato: [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md).

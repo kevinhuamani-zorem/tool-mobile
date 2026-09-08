@@ -101,10 +101,9 @@ archivos. Un límite no trunca silenciosamente código ni convierte un caso en �
 Si falla la publicación del evento histórico se restaura la vista mutable previa.
 No se trata de una garantía de recuperación frente a corte de energía.
 
-## Siguiente fase
+## Regeneración y siguientes fases
 
-F5 utilizará esta revisión como baseline de regrabación/regeneración y
-reexportación durante el PR, conciliando las partes compartidas con el checkout
-actual. Hasta entonces la recuperación no elimina los controles de concurrencia
-ni reescribe `agent-response.json` para hacer pasar el código QA por entrega del
-agente. F6 añadirá aprobación golden explícita; F7 realizará el piloto real.
+F5 usa el código actual recuperado como baseline de regrabación/regeneración y
+reexportación durante el PR, conciliando las partes compartidas con el checkout.
+Ver [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md). F6 añadirá
+aprobación golden explícita; F7 realizará el piloto real.

@@ -2,8 +2,8 @@
 
 Fecha: 2026-09-08.
 
-Estado: **F0–F4 implementadas y verificadas localmente**.
-La siguiente entrega es F5; F5–F7 conservan sus pendientes debajo. Ver
+Estado: **F0–F5 implementadas y verificadas localmente**.
+La siguiente entrega es F6; F6–F7 conservan sus pendientes debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -214,18 +214,18 @@ Contrato: [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).
 
 Objetivo: mantener abierto el ciclo del mismo caso durante toda su vida útil.
 
-- [ ] Retomar una revisión mediante **Volver a grabar** o **Regenerar con agente**,
+- [x] Retomar una revisión mediante **Volver a grabar** o **Regenerar con agente**,
   conservando identidad del caso y creando una revisión/intento nuevo.
-- [ ] Recuperar el código actual antes de construir el paquete de regeneración;
+- [x] Recuperar el código actual antes de construir el paquete de regeneración;
   las correcciones del QA/reviewer forman su baseline, no una respuesta antigua.
-- [ ] Combinar cambios no solapados y presentar conflictos reales entre versiones.
+- [x] Combinar cambios no solapados y presentar conflictos reales entre versiones.
   Adaptar `requireUnchangedAppliedFiles` al camino de reconciliación, sin quitar
   la comprobación de cambios concurrentes justo antes de escribir.
-- [ ] Reexportar las rutas vigentes como actualización del mismo caso, preservando
+- [x] Reexportar las rutas vigentes como actualización del mismo caso, preservando
   métodos/locators compartidos y evitando duplicar escenarios.
-- [ ] Soportar cambio de rama, rebase o merge usando el checkout seleccionado;
+- [x] Soportar cambio de rama, rebase o merge usando el checkout seleccionado;
   registrar su estado real sin asumir que coincide con el PR remoto.
-- [ ] Permitir reiterar el ciclo a petición del QA. Cada solicitud tiene sus dos
+- [x] Permitir reiterar el ciclo a petición del QA. Cada solicitud tiene sus dos
   pasadas; exportar o actualizar el PR no promociona automáticamente un golden.
 
 Superficie: `prepare-automation-regeneration`, `automationPackageBuilder.ts`,
@@ -236,6 +236,8 @@ Superficie: `prepare-automation-regeneration`, `automationPackageBuilder.ts`,
 Salida comprobable: exportar → corrección por review → recuperar → regrabar o
 regenerar → reexportar mantiene la corrección, la identidad y el contenido
 compartido. Repetir el ciclo después del merge sigue siendo posible.
+
+Contrato: [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md).
 
 ## F6 — Golden aprobado e índice local reconstruible
 

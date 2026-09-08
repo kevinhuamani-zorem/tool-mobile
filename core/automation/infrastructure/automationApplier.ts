@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { writeUtf8FileAtomic } from '../../shared';
+import { ReconciliationInput, reconcileFrameworkFile, recoveryGitContext } from './automationReconciliation';
 import {
     AutomationAgentResponse,
     AutomationScenario,
@@ -35,6 +36,8 @@ export interface PreparedAutomation {
     files: Array<{ path: string; before: string | null; content: string }>;
     outcomes: PatchOutcome[];
     digest: string;
+    conflicts?: string[];
+    checkout?: ReturnType<typeof recoveryGitContext>;
 }
 
 function digest(value: unknown): string {
@@ -177,7 +180,7 @@ export class AutomationApplier {
 
     /** Resolves every final byte before review; no target or registry writes. */
     prepare(scenario: AutomationScenario, plan: GenerationPlan, response: AutomationAgentResponse,
-        preview: GeneratedPreview, baselines = new Map<string, string>()): PreparedAutomation {
+        preview: GeneratedPreview, baselines = new Map<string, string>(), reconciliation?: ReconciliationInput): PreparedAutomation {
         if (!Array.isArray(response.files) || !response.files.length || response.files.length > 4) {
             throw new Error('No hay archivos exportables o el conjunto de capas es inválido.');
         }
@@ -195,6 +198,10 @@ export class AutomationApplier {
         }
         if (response.completions !== undefined && !Array.isArray(response.completions)) throw new Error('Completions inválidos.');
         for (const file of response.completions || []) this.target(file.file);
+        if (plan.reconciliation) {
+            if (!reconciliation || reconciliation.baseline.planId !== plan.planId || reconciliation.baseline.revisionId !== plan.reconciliation.revisionId) throw new Error('Falta el baseline QA autorizado.');
+            return this.prepareReconciled(scenario, plan, response, preview, reconciliation);
+        }
         const updates = new Map(plan.files.filter(file => file.operation === 'update').map(file => [file.layer, file.path]));
         const patched = this.applyAdditiveUpdates(scenario, plan, response, updates, true, baselines);
         const byPath = new Map(patched.patches!.map(file => [file.file, file]));
@@ -220,6 +227,43 @@ export class AutomationApplier {
             outcomes: patched.outcomes, digest: digest({ files, response: finalResponse }) };
     }
 
+    private prepareReconciled(scenario: AutomationScenario, plan: GenerationPlan, response: AutomationAgentResponse,
+        preview: GeneratedPreview, input: ReconciliationInput): PreparedAutomation {
+        const conflicts: string[] = [];
+        const files = response.files.map(file => {
+            const target = this.target(file.path);
+            const before = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
+            const merged = reconcileFrameworkFile(file, before, input);
+            if (merged.conflict) conflicts.push(`${file.path}: conflicto entre propuesta y framework. Resuelve los marcadores y revalida.`);
+            return { path: file.path, before, content: merged.content };
+        });
+        const finalResponse = { ...response, files: response.files.map(file => ({ ...file, content: files.find(item => item.path === file.path)!.content })) };
+        const finalPreview = { ...preview,
+            featureContent: finalResponse.files.find(file => file.layer === 'feature')?.content || '',
+            stepContent: finalResponse.files.find(file => file.layer === 'steps')?.content,
+            screenContent: finalResponse.files.find(file => file.layer === 'screen')?.content,
+            locatorContent: finalResponse.files.find(file => file.layer === 'locators')?.content,
+            beforeContents: Object.fromEntries(files.map(file => [this.target(file.path), file.before])),
+        };
+        // Completion targets remain confined and transactional, including external modules.
+        const patches = this.applyAdditiveUpdates(scenario, plan, { ...finalResponse, files: [] }, new Map(), true,
+            new Map(files.map(file => [file.path, file.content])));
+        for (const patch of patches.patches || []) {
+            const existing = files.find(file => file.path === patch.file);
+            if (existing) {
+                existing.content = patch.content;
+                finalResponse.files.find(file => file.path === patch.file)!.content = patch.content;
+            } else files.push({ path: patch.file, before: fs.readFileSync(this.target(patch.file), 'utf8'), content: patch.content });
+        }
+        for (const [layer, key] of [['feature', 'featureContent'], ['steps', 'stepContent'], ['screen', 'screenContent'], ['locators', 'locatorContent']] as const)
+            (finalPreview as any)[key] = finalResponse.files.find(file => file.layer === layer)?.content;
+        finalPreview.additionalFiles = files.filter(file => !response.files.some(item => item.path === file.path))
+            .map(file => ({ path: this.target(file.path), content: file.content, before: file.before || '' }));
+        const checkout = recoveryGitContext(this.frameworkRoot);
+        return { frameworkRoot: this.frameworkRoot, response: finalResponse, preview: finalPreview, files,
+            outcomes: patches.outcomes, conflicts, checkout, digest: digest({ files, response: finalResponse, conflicts, checkout }) };
+    }
+
     private target(relative: string): string {
         if (typeof relative !== 'string' || path.isAbsolute(relative)) throw new Error('Ruta de aplicación inválida.');
         const root = path.resolve(this.frameworkRoot);
@@ -237,8 +281,12 @@ export class AutomationApplier {
     }
 
     requireUnchanged(prepared: PreparedAutomation): void {
-        if (prepared.frameworkRoot !== this.frameworkRoot || prepared.digest !== digest({ files: prepared.files, response: prepared.response })) {
+        if (prepared.frameworkRoot !== this.frameworkRoot || prepared.digest !== digest({ files: prepared.files, response: prepared.response, conflicts: prepared.conflicts, checkout: prepared.checkout })) {
             throw new Error('El resultado preparado cambió. Reimporta y revisa nuevamente.');
+        }
+        if (prepared.checkout) {
+            const current = recoveryGitContext(this.frameworkRoot);
+            for (const key of ['repository', 'branch', 'commit'] as const) if (prepared.checkout[key] !== current[key]) throw new Error('El checkout cambió después del preview. Reimporta y revisa nuevamente.');
         }
         for (const file of prepared.files) {
             const target = this.target(file.path);
@@ -251,6 +299,7 @@ export class AutomationApplier {
     commit(prepared: PreparedAutomation, scenario: AutomationScenario, plan: GenerationPlan,
         finalize: () => void = () => {}, metadataFiles: string[] = []): ApplyAutomationResult {
         this.requireUnchanged(prepared);
+        if (prepared.conflicts?.length) throw new Error(prepared.conflicts.join(' | '));
         const managed = this.registry.assess(prepared.preview, scenario.squad, plan.files);
         if (managed.conflicts.length) throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
         const metadata = [...new Set([this.registry.storagePath(), ...metadataFiles])].map(file => ({

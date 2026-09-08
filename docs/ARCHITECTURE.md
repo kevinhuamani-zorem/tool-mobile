@@ -521,21 +521,19 @@ se valida determinísticamente; todavía no existe orquestador ni integración C
 
 ### Regenerar una automatización importada
 
-1. La UI lista únicamente recordings con propuesta validada al 100% y las
-   cuatro capas ya presentes en el workspace.
-2. El QA selecciona el recording y describe el refinamiento funcional.
-3. El recorder guarda la versión anterior bajo
-   `generation/automation/history/regeneration-NNN`, conserva `recordingId` y
-   fija un nuevo `planId` para impedir importar accidentalmente la respuesta
-   anterior.
-4. El agente recibe `baseline-response.json`, el plan y el contexto mínimo; no
-   vuelve a explorar el framework ni puede cambiar rutas o selectores
-   verificados.
-5. La nueva propuesta atraviesa el mismo validator, preview y revisión. Solo
-   archivos administrados, sin cambios externos, pueden reemplazarse
-   atómicamente en el target.
-6. Aplicar deja el estado del recording en `generated`, permitiendo futuras
-   iteraciones. No crea memoria ni convierte el resultado en golden.
+1. La UI ofrece regeneración para casos exportados, también parciales o con
+   observaciones, sin exigir score 100.
+2. El recorder recupera el checkout actual y conserva el código QA en una revisión;
+   el nuevo plan mantiene identidad y rutas vigentes, con un planId nuevo.
+3. El baseline histórico autoriza la reconciliación; `baseline-response.json`
+   proporciona a cada autor el código QA de sus capas y dependencias.
+4. La nueva propuesta se combina con el framework actual. Los solapamientos se
+   muestran en el editor; Revalidar prepara nuevamente la versión resuelta.
+5. El token fija los bytes revisados y el estado de destinos/checkout. Aplicar
+   verifica concurrencia y mantiene rollback, diagnósticos y capas faltantes.
+6. El ciclo se puede repetir durante o después del PR, sin promoción golden.
+
+Ver [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md).
 
 ## Contrato IPC
 

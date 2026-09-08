@@ -1,3 +1,4 @@
+import { loadFrameworkBaseline, planForReconciliation } from '../../../../core/automation';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -124,7 +125,8 @@ export class AutomationResponseImporter {
         const applicationReceipt = fs.existsSync(receiptFile)
             ? readJsonUtf8<AutomationApplicationReceipt>(receiptFile)
             : undefined;
-        if (applicationReceipt) {
+        const frameworkBaseline = loadFrameworkBaseline(packageDirectory, plan);
+        if (applicationReceipt && !frameworkBaseline) {
             requireUnchangedAppliedFiles(
                 projectPaths.frameworkRoot,
                 applicationReceipt,
@@ -135,6 +137,12 @@ export class AutomationResponseImporter {
             // plan. Para una corrección legítima, su nueva base es exactamente el
             // afterHash persistido y verificado en el recibo de aplicación.
             plan = planAgainstApplicationReceipt(plan, applicationReceipt);
+        }
+        plan = planForReconciliation(projectPaths.frameworkRoot, plan, frameworkBaseline);
+        if (frameworkBaseline && options.reviewedContents) {
+            if (!current?.prepared || current.packageDirectory !== packageDirectory) throw new Error('Reimporta antes de resolver el conflicto o editar la propuesta.');
+            (this.deps.automationApplier || new AutomationApplier()).requireUnchanged(current.prepared);
+            for (const file of Object.keys(options.reviewedContents)) if (!current.prepared.files.some(item => path.join(projectPaths.frameworkRoot, item.path) === file)) throw new Error('Edición fuera del preview.');
         }
         const responsePath = path.join(packageDirectory, 'agent-response.json');
         if (!fs.existsSync(responsePath)) {
@@ -148,7 +156,7 @@ export class AutomationResponseImporter {
         history.captureFile(responsePath, options.manualCorrection ? 'qa' : 'agent', 'import:original');
         let delivered: unknown;
         try {
-            delivered = readLayeredOutput(responsePath);
+            delivered = readLayeredOutput(responsePath, Boolean(frameworkBaseline));
             assertLayeredEnvelope(delivered, true);
         } catch (error: any) {
             const recovery = new RecoverableDraftStore(packageDirectory, plan);
@@ -162,10 +170,8 @@ export class AutomationResponseImporter {
             return { success: false, failureKind: 'generated-output-validation', error: error.message,
                 validation: draft.validation, draft, repairAvailable: true };
         }
-        let response = withGeneratedResponseMetadata(
-            delivered as AutomationAgentResponse,
-            scenario.createdAt
-        );
+        let response = frameworkBaseline ? delivered as AutomationAgentResponse : withGeneratedResponseMetadata(
+            delivered as AutomationAgentResponse, scenario.createdAt);
         const beforeQaEdit = JSON.stringify(response);
         if (options.reviewedContents) {
             response = {
@@ -183,7 +189,7 @@ export class AutomationResponseImporter {
                 { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
             ]);
         }
-        response = normalizeJsonUnicode(response);
+        if (!frameworkBaseline) response = normalizeJsonUnicode(response);
         const asDelivered = response;
         // Los identificadores que ya viven en el framework (baselines de los
         // archivos update) no se traducen: renombrar `titleVentas` a
@@ -196,11 +202,12 @@ export class AutomationResponseImporter {
                 .filter(file => fs.existsSync(file.absolute))
                 .map(file => ({ layer: file.layer, content: fs.readFileSync(file.absolute, 'utf-8') })),
         );
-        const normalized = normalizeAgentResponseEnglishIdentifiers(response, { inheritedIdentifiers });
+        const normalized = frameworkBaseline ? { response, renamed: {}, skipped: [] }
+            : normalizeAgentResponseEnglishIdentifiers(response, { inheritedIdentifiers });
         response = withGeneratedResponseMetadata(normalized.response, scenario.createdAt);
-        const tagged = enforceAgentResponsePlatformTags(response, scenario.platform);
+        const tagged = frameworkBaseline ? { response, added: [] } : enforceAgentResponsePlatformTags(response, scenario.platform);
         response = withGeneratedResponseMetadata(tagged.response, scenario.createdAt);
-        const keywords = normalizeGeneratedGherkinKeywords(response, {
+        const keywords = frameworkBaseline ? { response, changed: 0 } : normalizeGeneratedGherkinKeywords(response, {
             actions: scenario.actions,
             reusedStepTexts: scenario.request.scenarioRows?.filter(row => row.status === 'reused').map(row => row.text),
         });
@@ -225,8 +232,10 @@ export class AutomationResponseImporter {
                 }
             }
         }
+        if (frameworkBaseline) response = asDelivered;
         runStore.setResponseBytes(Buffer.byteLength(JSON.stringify(response), 'utf-8'));
-        writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), response);
+        if (frameworkBaseline) fs.writeFileSync(path.join(packageDirectory, 'agent-response.json'), JSON.stringify(response, null, 2) + '\n', 'utf8');
+        else writeJsonUtf8(path.join(packageDirectory, 'agent-response.json'), response);
         history.captureFile(responsePath, 'recorder', 'import:normalized');
         const statusFile = path.join(packageDirectory, 'status.json');
         const status = fs.existsSync(statusFile) ? read<any>('status.json') : {};
@@ -253,9 +262,10 @@ export class AutomationResponseImporter {
         let preparationError: string | undefined;
         let correctionBaselines = new Map<string, string>();
         try {
-            if (applicationReceipt) correctionBaselines = loadUpdateBaselinesForCorrection(packageDirectory, projectPaths.frameworkRoot, plan);
+            if (applicationReceipt && !frameworkBaseline) correctionBaselines = loadUpdateBaselinesForCorrection(packageDirectory, projectPaths.frameworkRoot, plan);
             prepared = (this.deps.automationApplier || new AutomationApplier()).prepare(
                 scenario, plan, response, automationResponseValidator.toPreview(response), correctionBaselines,
+                frameworkBaseline ? { baseline: frameworkBaseline, reviewed: Boolean(options.reviewedContents) } : undefined,
             );
             response = prepared.response;
         } catch (error: any) {
@@ -268,6 +278,7 @@ export class AutomationResponseImporter {
             includeFrameworkCompilation(validation, compilation);
             writeJsonUtf8(path.join(packageDirectory, 'framework-compilation.json'), compilation);
         }
+        if (prepared?.conflicts?.length) preparationError = prepared.conflicts.join(' | ');
         if (preparationError) {
             validation.valid = false;
             validation.qualityScore = 0;
@@ -298,7 +309,7 @@ export class AutomationResponseImporter {
         const exportBlockers = preparationError ? [preparationError]
             : generatedFileRegistry.assess(preview, scenario.squad, plan.files).conflicts;
         const token = prepared && !exportBlockers.length ? crypto.randomUUID() : '';
-        if (token) state.automationPreview = { token, scenario, plan, response, prepared, correctionBaselines, packageDirectory };
+        if (prepared) state.automationPreview = { token, scenario, plan, response, prepared, correctionBaselines, packageDirectory };
         const exportFields: AutomationExportReadiness = { previewToken: token, exportReady: Boolean(token), exportBlockers,
             missingLayers: plan.files.filter(file => !response.files.some(item => item.layer === file.layer)).map(file => file.layer) };
         const draftPayload = { ...exportFields, draft: { preview, validation, ...exportFields } };

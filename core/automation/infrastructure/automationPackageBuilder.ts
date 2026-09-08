@@ -42,6 +42,12 @@ import {
 import type { PackagedAutomationScenario } from '../domain/automationScenarioPackage';
 import { AgentRunStore } from './agentRunStore';
 import { AutomationHistoryStore } from './automationHistoryStore';
+import { FrameworkRecoveryService } from './frameworkRecovery/service';
+import { FrameworkRecoveryPreview } from '../contracts/frameworkRecovery';
+import { RecoveryWorkspace } from './frameworkRecovery/files';
+import { recoverRelationships } from './frameworkRecovery/graph';
+import { inspectRecoveryCode, projectRecoveryFile } from './frameworkRecovery/inspection';
+import { baselineFromRecovery, loadFrameworkBaseline, recoveryGitContext } from './automationReconciliation';
 import { deriveAutomationContextProjections, ProjectionInput } from '../domain/automationContextProjections';
 import { emptyQueryResults, queryRequestsSchema } from '../domain/agentQueryContracts';
 import { resolveAgentExecutionMode, resolvePackageArtifactPath } from './agentRuntimeGuards';
@@ -917,49 +923,94 @@ export class AutomationPackageBuilder {
 
     prepareRegeneration(
         recordingDirectory: string,
-        refinement: string
+        refinement: string,
+        recordingOverride?: AutomationScenario
     ): AutomationPackageResult {
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
         const read = <T>(name: string): T => readJsonUtf8<T>(path.join(packageDirectory, name));
         const normalizedRefinement = refinement.trim() ||
             'Realizar una revisión general del caso y mejorar claridad, mantenibilidad y consistencia sin cambiar su comportamiento.';
-        if (!fs.existsSync(path.join(packageDirectory, 'agent-response.json'))) {
-            throw new Error('La grabación no tiene una propuesta validada para regenerar');
-        }
-        const scenario = read<AutomationScenario>('scenario.json');
+        const scenario = recordingOverride || read<AutomationScenario>('scenario.json');
         const previousPlan = read<GenerationPlan>('generation-plan.json');
         const runStore = new AgentRunStore(packageDirectory);
-        const baseline = read<AutomationAgentResponse>('agent-response.json');
-        const previousValidation = fs.existsSync(path.join(packageDirectory, 'validation.json'))
-            ? read<any>('validation.json')
-            : this.validator.validate(scenario, previousPlan, baseline);
-        if (!previousValidation.valid || previousValidation.qualityScore !== 100) {
-            throw new Error('Solo se puede regenerar una propuesta previamente validada al 100%');
+        const history = new AutomationHistoryStore(packageDirectory);
+        history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
+        const workspace = new RecoveryWorkspace(this.frameworkRoot);
+        let recovered: FrameworkRecoveryPreview;
+        let recoveryBytes: string | undefined;
+        if (fs.existsSync(path.join(packageDirectory, 'application-receipt.json'))) {
+            const service = new FrameworkRecoveryService(this.frameworkRoot);
+            recovered = service.prepare(packageDirectory);
+            service.save(packageDirectory, recovered.token);
+            recoveryBytes = fs.readFileSync(path.join(packageDirectory, 'framework-recovery.json'), 'utf8');
+        } else {
+            const prior = loadFrameworkBaseline(packageDirectory, previousPlan);
+            const responseFile = path.join(packageDirectory, 'agent-response.json');
+            if (!prior && !fs.existsSync(responseFile)) throw new Error('No hay código previo para regenerar; reprocesa la grabación.');
+            const response = fs.existsSync(responseFile) ? read<AutomationAgentResponse>('agent-response.json') : undefined;
+            recovered = { schemaVersion: 1, token: '', recordingId: scenario.recordingId, caseId: scenario.request?.caseId,
+                associations: { paths: {}, symbols: Object.fromEntries((prior?.files || []).filter(file => file.shared && file.symbols.includes('*')).map(file => [file.path, ['*']])) }, files: [...previousPlan.files, ...(prior?.files.filter(file => file.layer === 'dependency').map(file => ({ ...file, operation: 'update' as const })) || [])].map(file => {
+                    const saved = prior?.files.find(item => item.path === file.path);
+                    const current = workspace.read(file.path);
+                    return { path: file.path, previousPath: file.path, layer: file.layer, current, content: file.layer === 'dependency'
+                            ? projectRecoveryFile('dependency', null, current, new Set(saved?.symbols || []), true).content : current,
+                        currentHash: current === null ? null : crypto.createHash('sha256').update(current).digest('hex'),
+                        exported: saved?.content ?? response?.files.find(item => item.path === file.path)?.content ?? null,
+                        symbols: saved?.symbols || (file.operation === 'create' ? ['*'] : []), shared: saved?.shared ?? file.operation === 'update',
+                        association: 'receipt', changes: [] };
+                }), relations: prior?.relations || [], parameters: [], pending: prior?.pending || [], recordedTrace: prior?.recordedTrace || response?.actionTrace || [], traceAssociations: [],
+                context: { ...prior?.context, ...recoveryGitContext(this.frameworkRoot) } };
         }
-        if (previousPlan.files.length !== 4 || previousPlan.files.some(file =>
-            !fs.existsSync(path.join(this.frameworkRoot, file.path))
-        )) {
-            throw new Error('Las cuatro capas todavía no fueron importadas en el workspace');
+        // A file initially created by the recorder can acquire other cases later.
+        const feature = recovered.files.find(file => file.layer === 'feature' && file.current);
+        const ownScenarios = feature && scenario.request?.caseId ? inspectRecoveryCode('feature', feature.current!).units
+            .filter(unit => unit.key.includes(`[${scenario.request.caseId}]`)).map(unit => unit.key) : [];
+        if (feature && ownScenarios.length === 1) {
+            const graph = recoverRelationships(workspace, new Map([[feature.path, new Set(ownScenarios)]]), scenario.request.caseId,
+                new Map(recovered.files.map(file => [file.path, file.layer])));
+            for (const file of recovered.files) {
+                const selected = graph.selected.get(file.path);
+                if (!selected || !file.current) continue;
+                const parsed = inspectRecoveryCode(file.layer, file.current);
+                const foreign = parsed.units.some(unit => !selected.has(unit.key) && !unit.key.startsWith('import:') && unit.key !== 'default');
+                if (file.shared || foreign) { file.shared = true; file.symbols = [...new Set([...selected, ...(recovered.associations.symbols[file.path] || [])])]; }
+            }
         }
-
+        // Always start from the selected checkout. QA code is evidence, not an agent success.
+        const baseline: AutomationAgentResponse = { schemaVersion: AUTOMATION_AGENT_RESPONSE_SCHEMA_VERSION,
+            recordingId: scenario.recordingId, planId: previousPlan.planId, files: recovered.files
+                .filter(file => file.layer !== 'dependency' && file.current !== null && previousPlan.files.some(item => item.path === (file.previousPath || file.path)))
+                .map(file => ({ layer: file.layer as AgentGeneratedFile['layer'], path: file.path, content: file.current! })),
+            actionTrace: recovered.recordedTrace as AutomationAgentResponse['actionTrace'], resolutions: [], };
+        const fresh = recordingOverride ? this.resolver.resolve(scenario, { memory: this.memory }) : undefined;
+        if (fresh?.unresolvedContext.gaps.some(gap => gap.blocking)) throw new BlockingGapError(fresh.unresolvedContext.gaps.filter(gap => gap.blocking));
         const statusFile = path.join(packageDirectory, 'status.json');
         const previousStatus = fs.existsSync(statusFile) ? read<any>('status.json') : {};
         const iteration = Number(previousStatus.regenerationIteration || 0) + 1;
         const plan: GenerationPlan = {
-            ...previousPlan,
+            ...(fresh?.plan || previousPlan),
+            existingCase: undefined,
+            reconciliation: { revisionId: history.current()!.revisionId },
             planId: `plan-${crypto.randomUUID()}`,
             status: 'regeneration',
             files: previousPlan.files.map(file => {
-                const source = path.join(this.frameworkRoot, file.path);
-                return {
-                    ...file,
-                    operation: 'update',
-                    baseHash: crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
-                };
+                const recoveredFile = recovered.files.find(item => item.previousPath === file.path || item.path === file.path);
+                const relative = recoveredFile?.path || file.path;
+                const current = workspace.read(relative);
+                return { ...file, path: relative, operation: current === null ? 'create' : 'update',
+                    baseHash: current === null ? undefined : crypto.createHash('sha256').update(current).digest('hex') };
             }),
-            unresolvedGapIds: ['gap-regeneration-refinement'],
+            unresolvedGapIds: [...(fresh?.plan.unresolvedGapIds || []), 'gap-regeneration-refinement'],
             budgets: normalizeAgentOperationalBudgets(previousPlan.budgets || DEFAULT_AGENT_OPERATIONAL_BUDGETS),
         };
+        const pathMap = new Map((fresh?.plan.files || previousPlan.files).map(file => [file.path, plan.files.find(item => item.layer === file.layer)!.path]));
+        const remap = (value: any): any => typeof value === 'string' ? pathMap.get(value) || value
+            : Array.isArray(value) ? value.map(remap) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remap(item)])) : value;
+        plan.resolutions = remap(plan.resolutions);
+        plan.reuseTarget = remap(plan.reuseTarget);
+        const reconciliation = baselineFromRecovery(recovered, plan.planId, plan.reconciliation!.revisionId);
+        for (const file of plan.files) if (!reconciliation.files.some(item => item.path === file.path)) reconciliation.files.push({
+            path: file.path, layer: file.layer, content: workspace.read(file.path), symbols: workspace.read(file.path) === null ? ['*'] : [], shared: workspace.read(file.path) !== null });
         const revisedScenario: AutomationScenario = {
             ...scenario,
             revision: scenario.revision + 1,
@@ -968,11 +1019,11 @@ export class AutomationPackageBuilder {
             schemaVersion: revisedScenario.schemaVersion,
             recordingId: revisedScenario.recordingId,
             planId: plan.planId,
-            gaps: [{
+            gaps: [...(fresh?.unresolvedContext.gaps || []), {
                 id: 'gap-regeneration-refinement',
                 type: 'refinement',
                 description: normalizedRefinement,
-                requiredOutput: 'Actualizar las cuatro capas conservando rutas, selectores verificados y trazabilidad.',
+                requiredOutput: 'Actualizar las cuatro capas conservando las correcciones QA, rutas vigentes y trazabilidad; las asociaciones inciertas siguen pendientes.',
             }],
         };
         const instructions = regenerationInstructions(revisedScenario, plan, normalizedRefinement);
@@ -1019,14 +1070,16 @@ export class AutomationPackageBuilder {
         // La propuesta anterior ya quedo versionada. A partir de aqui la nueva
         // iteracion no puede heredar ningun output mutable de Copilot ni de una
         // validacion/reparacion anterior.
-        const history = new AutomationHistoryStore(packageDirectory);
-        history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
         history.checkpoint('before-regeneration');
         history.beginRevision({ recordingId: scenario.recordingId, caseId: scenario.request?.caseId, source: 'regeneration' }, [
             { name: 'recording-scenario.json', content: JSON.stringify(scenario, null, 2) + '\n' },
         ]);
         resetAutomationPackage(packageDirectory);
 
+        const reconciliationBytes = JSON.stringify(reconciliation, null, 2) + '\n';
+        fs.writeFileSync(path.join(packageDirectory, 'framework-baseline.json'), reconciliationBytes, 'utf8');
+        history.capture('framework-baseline.json', reconciliationBytes, 'recorder', 'regeneration:baseline');
+        if (recoveryBytes) fs.writeFileSync(path.join(packageDirectory, 'framework-recovery.json'), recoveryBytes, 'utf8');
         const packagedScenario = packageAutomationScenario(revisedScenario);
         writeJson(path.join(packageDirectory, 'scenario.json'), packagedScenario);
         writeJson(path.join(packageDirectory, 'qa-observations.json'), analyzeScenarioUiTextQuality(revisedScenario));
@@ -1041,7 +1094,7 @@ export class AutomationPackageBuilder {
         );
         const baselinesDirectory = path.join(packageDirectory, 'baselines');
         fs.mkdirSync(baselinesDirectory, { recursive: true });
-        const updateBaselines = plan.files.map(file => {
+        const updateBaselines = plan.files.filter(file => file.operation === 'update').map(file => {
             const source = path.join(this.frameworkRoot, file.path);
             const reference = `baselines/${file.layer}-${path.basename(file.path)}`;
             fs.copyFileSync(source, path.join(packageDirectory, reference));
@@ -1075,7 +1128,7 @@ export class AutomationPackageBuilder {
             requiresReuse: false,
             blocking: false,
         });
-        writeJson(path.join(packageDirectory, 'baseline-response.json'), baseline);
+        fs.writeFileSync(path.join(packageDirectory, 'baseline-response.json'), JSON.stringify({ ...baseline, origin: 'qa-framework', pending: recovered.pending, relations: recovered.relations, dependencies: recovered.files.filter(file => file.layer === 'dependency').map(file => ({ path: file.path, content: file.content })) }, null, 2) + '\n', 'utf8');
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         writeJson(
@@ -1142,7 +1195,7 @@ export class AutomationPackageBuilder {
             planId: plan.planId,
             status: plan.status,
             deterministicCoverage: plan.deterministicCoverage,
-            unresolvedGaps: 1,
+            unresolvedGaps: plan.unresolvedGapIds.length,
             agentRequired: true,
             responseAvailable: false,
             contextBytes,
@@ -1155,6 +1208,9 @@ export class AutomationPackageBuilder {
 
     prepare(scenario: AutomationScenario, recordingDirectory: string): AutomationPackageResult {
         const packageDirectory = path.join(recordingDirectory, 'generation', 'automation');
+        if (fs.existsSync(path.join(packageDirectory, 'application-receipt.json')) || fs.existsSync(path.join(packageDirectory, 'framework-baseline.json'))) {
+            return this.prepareRegeneration(recordingDirectory, 'Incorporar las acciones de la grabación actual conservando las correcciones QA y la identidad del caso.', scenario);
+        }
         // Compatibilidad: la memoria legacy permanece deshabilitada.
         this.memory.loadLearnedVocabulary();
         // Aplica tanto a un caso nuevo como a una grabacion retomada. Se hace

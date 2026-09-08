@@ -6,11 +6,11 @@ export const MAX_LAYERED_OUTPUT_BYTES = 4 * 1024 * 1024;
 export const MAX_LAYERED_TRACE_ITEMS = 2000;
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 
-export function readLayeredOutput(file: string): unknown {
+export function readLayeredOutput(file: string, preserveBytes = false): unknown {
     if (fs.lstatSync(file).isSymbolicLink() || fs.statSync(file).size > MAX_LAYERED_OUTPUT_BYTES) {
         throw new Error('output-envelope: la entrega requiere un archivo local de hasta 4 MiB.');
     }
-    return readJsonUtf8<unknown>(file);
+    return preserveBytes ? JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(file))) : readJsonUtf8<unknown>(file);
 }
 
 /** Check shape before normalization/AST traversal; semantic rules remain authoritative. */

@@ -37,6 +37,7 @@ export * from './infrastructure/agentRuntimeGuards';
 export * from './infrastructure/automationAgentLauncher';
 export * from './infrastructure/automationApplicationReceipt';
 export * from './infrastructure/automationCorrectionBaseline';
+export * from './infrastructure/automationReconciliation';
 export * from './infrastructure/automationPackageBuilder';
 export * from './infrastructure/automationPatchWriter';
 export * from './infrastructure/automationApplier';

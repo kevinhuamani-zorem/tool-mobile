@@ -106,6 +106,11 @@ export function projectRoleJson(relativePath: string, value: any, role: AuthorRo
             }),
         };
     }
+    if (relativePath === 'baseline-response.json') {
+        const layers = new Set(ROLE_LAYERS[role]);
+        return { ...value, files: (value.files || []).filter((file: any) => layers.has(file.layer)),
+            dependencies: role === 'interaction-author' ? value.dependencies || [] : [] };
+    }
     if (relativePath === 'deterministic-draft.json') {
         const layers = new Set(ROLE_LAYERS[role]);
         const files = (value.files || []).filter((file: any) => layers.has(file.layer));
@@ -219,6 +224,10 @@ export function copyRoleInput(
     fs.mkdirSync(path.dirname(target), { recursive: true });
     if (!relativePath.endsWith('.json')) {
         fs.copyFileSync(source, target);
+        return;
+    }
+    if (relativePath === 'baseline-response.json') {
+        fs.writeFileSync(target, JSON.stringify(projectRoleJson(relativePath, JSON.parse(fs.readFileSync(source, 'utf8')), role, sourceRoot), null, 2) + '\n', 'utf8');
         return;
     }
     writeJsonUtf8(target, projectRoleJson(

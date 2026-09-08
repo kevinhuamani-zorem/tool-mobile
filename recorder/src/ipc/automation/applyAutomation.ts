@@ -1,3 +1,4 @@
+import { loadFrameworkBaseline } from '../../../../core/automation';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -49,7 +50,7 @@ export async function applyReviewedAutomation(
     let runStore: AgentRunStore | undefined;
     let history: AutomationHistoryStore | undefined;
     try {
-        if (!state.automationPreview || state.automationPreview.token !== previewToken) {
+        if (!previewToken || !state.automationPreview || state.automationPreview.token !== previewToken) {
             throw new Error('La propuesta cambió. Importa y revisa nuevamente.');
         }
         emitAutomationProgress('APPLYING', 'Aplicando automatización', 1, 2);
@@ -80,9 +81,11 @@ export async function applyReviewedAutomation(
                 { name: 'agent-response.json', content: JSON.stringify(response, null, 2) + '\n' },
             ]);
         }
+        const frameworkBaseline = loadFrameworkBaseline(state.activeAutomationPackage, plan);
         const edited = response.files.some((file, index) => file.content !== originalPrepared.response.files[index].content);
         const prepared = edited ? automationApplier.prepare(scenario, plan, response,
-            automationResponseValidator.toPreview(response), state.automationPreview.correctionBaselines) : originalPrepared;
+            automationResponseValidator.toPreview(response), state.automationPreview.correctionBaselines,
+            frameworkBaseline ? { baseline: frameworkBaseline, reviewed: true } : undefined) : originalPrepared;
         // An edit must not be silently dropped by the additive merge.
         for (const file of prepared.files) {
             const absolute = path.join(projectPaths.frameworkRoot, file.path);
@@ -107,7 +110,7 @@ export async function applyReviewedAutomation(
             throw new Error(`Archivos existentes no administrados: ${managed.conflicts.join(', ')}`);
         }
         const receiptFile = path.join(state.activeAutomationPackage, 'application-receipt.json');
-        if (fs.existsSync(receiptFile)) {
+        if (fs.existsSync(receiptFile) && !frameworkBaseline) {
             const receipt = readJsonUtf8<AutomationApplicationReceipt>(receiptFile);
             requireUnchangedAppliedFiles(
                 projectPaths.frameworkRoot,

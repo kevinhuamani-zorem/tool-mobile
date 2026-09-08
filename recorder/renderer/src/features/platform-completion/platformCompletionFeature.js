@@ -217,7 +217,7 @@ export function createPlatformCompletionFeature(deps) {
                 : 'No hay grabaciones disponibles en el ambiente y squad activos.';
         } else if (refining) {
             onboardingRegenerationHint.textContent =
-                'Automatización validada al 100%: puedes indicar una mejora y conservar su historial.';
+                'Se recuperará el código actual del framework como base de la mejora, conservando las correcciones QA y el historial.';
         } else {
             onboardingRegenerationHint.textContent = clean
                 ? 'Se eliminará solo el paquete anterior; acciones, XML y capturas se conservarán.'

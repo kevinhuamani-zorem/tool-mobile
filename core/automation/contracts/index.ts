@@ -324,6 +324,8 @@ export interface RepetitionProposal {
 }
 
 export interface GenerationPlan {
+    /** Immutable QA/framework baseline authorizing scoped three-way reconciliation. */
+    reconciliation?: { revisionId: string };
     schemaVersion: number;
     pipelineVersion: string;
     planId: string;

@@ -1,3 +1,4 @@
+import { loadFrameworkBaseline, planForReconciliation } from '../../../../core/automation';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -13,6 +14,7 @@ import { FrameworkCompilationValidator, includeFrameworkCompilation } from '../.
 /** Recovery is an export candidate, never a new successful agent response. */
 export function prepareRecoveredExport(deps: AutomationResponseImporterDependencies, packageDirectory: string,
     draft: NonNullable<LayeredGenerationResult['draft']>, reviewedContents?: Record<string, string>) {
+    const previousPreview = deps.state.automationPreview;
     deps.state.automationPreview = null;
     const result = { ...layeredDraftPreview(draft, projectPaths.frameworkRoot),
         exportReady: false, previewToken: '', exportBlockers: [] as string[] };
@@ -24,11 +26,17 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
         let plan = readJsonUtf8<GenerationPlan>(fs.existsSync(effective) ? effective : path.join(packageDirectory, 'generation-plan.json'));
         const receiptFile = path.join(packageDirectory, 'application-receipt.json');
         let correctionBaselines = new Map<string, string>();
-        if (fs.existsSync(receiptFile)) {
+        const frameworkBaseline = loadFrameworkBaseline(packageDirectory, plan);
+        if (fs.existsSync(receiptFile) && !frameworkBaseline) {
             const receipt = readJsonUtf8<AutomationApplicationReceipt>(receiptFile);
             requireUnchangedAppliedFiles(projectPaths.frameworkRoot, receipt, scenario.recordingId, plan.planId);
             plan = planAgainstApplicationReceipt(plan, receipt);
             correctionBaselines = loadUpdateBaselinesForCorrection(packageDirectory, projectPaths.frameworkRoot, plan);
+        }
+        plan = planForReconciliation(projectPaths.frameworkRoot, plan, frameworkBaseline);
+        if (frameworkBaseline && reviewedContents) {
+            if (!previousPreview?.prepared || previousPreview.packageDirectory !== packageDirectory) throw new Error('Reimporta antes de editar la propuesta.');
+            (deps.automationApplier || new AutomationApplier()).requireUnchanged(previousPreview.prepared);
         }
         for (const [file, content] of Object.entries(reviewedContents || {})) {
             if (typeof content !== 'string' || !draft.files.some(item => path.join(projectPaths.frameworkRoot, item.path) === file)) {
@@ -47,7 +55,8 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
             ]);
         }
         const prepared = (deps.automationApplier || new AutomationApplier()).prepare(scenario, plan, response,
-            deps.automationResponseValidator.toPreview(response), correctionBaselines);
+            deps.automationResponseValidator.toPreview(response), correctionBaselines,
+            frameworkBaseline ? { baseline: frameworkBaseline, reviewed: Boolean(reviewedContents) } : undefined);
         const recoveredDraft = { ...draft, files: prepared.response.files.map(file => {
             const original = draft.files.find(item => item.layer === file.layer)!;
             return { ...original, ...file, ...(reviewedContents && file.content !== original.content ? { origin: 'qa' as const, pass: undefined } : {}) };
@@ -61,13 +70,13 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
                 { name: 'validation.json', content: JSON.stringify(validation) },
             ]);
         }
-        result.exportBlockers = deps.generatedFileRegistry.assess(prepared.preview, scenario.squad, plan.files).conflicts;
+        result.exportBlockers = [...(prepared.conflicts || []), ...deps.generatedFileRegistry.assess(prepared.preview, scenario.squad, plan.files).conflicts];
         if (!result.exportBlockers.length) {
             result.previewToken = crypto.randomUUID();
             result.exportReady = true;
-            deps.state.automationPreview = { token: result.previewToken, scenario, plan, response: prepared.response,
-                prepared, correctionBaselines, packageDirectory, generationDiagnostics: draft.diagnostics, recoveredDraft };
         }
+        deps.state.automationPreview = { token: result.previewToken, scenario, plan, response: prepared.response,
+            prepared, correctionBaselines, packageDirectory, generationDiagnostics: draft.diagnostics, recoveredDraft };
     } catch (error: any) { result.exportBlockers.push(error.message); }
     return result;
 }

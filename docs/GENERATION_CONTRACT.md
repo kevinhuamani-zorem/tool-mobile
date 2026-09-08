@@ -677,17 +677,14 @@ La descripción del refinamiento es opcional. Cuando el QA no proporciona una,
 el paquete crea un objetivo de revisión general orientado a claridad,
 mantenibilidad y consistencia sin alterar el comportamiento grabado.
 
-- Solo se ofrece para recordings con score 100 y cuatro capas ya importadas.
-- `recordingId` y las cuatro rutas permanecen estables; cada iteración recibe
-  un `planId` nuevo.
-- La respuesta anterior se conserva como `baseline-response.json` y se
-  versiona junto con escenario, plan, validación y estado.
-- El agente resuelve exclusivamente `gap-regeneration-refinement`; no reconstruye
-  selectores verificados ni cambia el alcance del workspace.
-- La respuesta refinada pasa nuevamente por importación, preview, edición y
-  validación al 100%.
-- El reemplazo usa el registry: un archivo modificado fuera del recorder se
-  reporta como conflicto y nunca se sobrescribe silenciosamente.
+- Se ofrece para casos exportados, incluidos borradores parciales con observaciones.
+- Conserva recordingId y rutas vigentes; cada solicitud recibe revisión/intento y planId nuevos.
+- Recupera el checkout y conserva una base QA histórica, sin transformar sus correcciones en éxito autónomo.
+- Regrabar vuelve a resolver las acciones actuales; refinar conserva el alcance del caso y el gap de refinamiento.
+- La propuesta pasa por importación, preview, edición y validación informativa.
+- La reconciliación combina cambios compatibles y presenta conflictos. La escritura verifica nuevamente los destinos y el checkout.
+
+Ver [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md).
 
 ## Contrato del pipeline de automatización
 
@@ -1080,5 +1077,5 @@ Recuperar cambios del framework guarda una nueva revisión del recording con el
 código del caso, relaciones y asociaciones pendientes. Mantiene el baseline,
 exportación y hash del checkout separados; en módulos compartidos el código
 guardado excluye modificaciones actuales ajenas al caso. No modifica los eventos
-Appium ni sustituye la respuesta histórica del agente. F5 conciliará esta revisión
+Appium ni sustituye la respuesta histórica del agente. F5 concilia esta revisión
 al regenerar/reexportar. Ver [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).

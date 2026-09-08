@@ -122,10 +122,11 @@ una ejecución exitosa en el dispositivo.
 12. Generar y confirmar que todos los archivos permanezcan dentro del workspace
    activo.
 13. Confirmar que aplicar no crea memoria y que un nuevo intento no usa cachés legacy.
-14. Regenerar un caso importado, confirmar la copia en `history`, un `planId`
-    nuevo y las mismas cuatro rutas.
-15. Modificar externamente uno de sus archivos y comprobar que el refinamiento
-    validado no lo sobrescriba y reporte el conflicto del registry.
+14. Regenerar un caso exportado con observaciones, confirmar la copia en `history`,
+    un `planId` nuevo y las rutas vigentes recuperadas.
+15. Cambiar un método ajeno después de preparar y comprobar que se conserve al
+    reimportar; cambiar la misma región que el agente y resolver el conflicto
+    en el editor. Un cambio posterior al preview debe impedir aplicar.
 16. Generar un caso Android y comprobar `@android` sin `@ios`; completar todos
     los locators iOS y comprobar que el Feature y la respuesta guardada añadan
     `@ios` conservando `@android`.
@@ -171,3 +172,10 @@ Appium. Prueba rutas movidas, asociación manual, guardado con pendientes y rech
 de snapshots obsoletos o checkout cambiado. El piloto del `.app` con QA/Copilot
 y ejecución en dispositivo sigue pendiente de F7; una revisión recuperada no lo
 sustituye ni acredita aprobación golden.
+
+### Regeneración con correcciones QA (F5)
+
+`automationReconciliation.test.js` ejercita servicios reales de importación y
+exportación, la preparación desde QA y regrabación, protecciones compartidas,
+concurrencia, integridad y rollback. Prueba ciclos después de rebase/merge en Git
+local. Las respuestas del agente están simuladas; el piloto real sigue en F7.

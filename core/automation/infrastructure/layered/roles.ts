@@ -24,6 +24,7 @@ export const INPUT_FILES = [
     'validation-contract.json',
     'screen-object-contract.js',
     'deterministic-draft.json',
+    'baseline-response.json',
 ];
 
 export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
@@ -37,6 +38,7 @@ export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
         'english-vocabulary.json',
         'validation-contract.json',
         'deterministic-draft.json',
+        'baseline-response.json',
     ],
     // `screen-object-contract.js` ya no es lectura de Zorem: sus once reglas
     // viajan en validation-contract.json y el codigo se ejecuta desde
@@ -52,6 +54,7 @@ export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
         'english-vocabulary.json',
         'validation-contract.json',
         'deterministic-draft.json',
+        'baseline-response.json',
     ],
 };
 

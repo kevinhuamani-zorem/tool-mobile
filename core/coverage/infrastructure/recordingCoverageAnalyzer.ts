@@ -219,7 +219,8 @@ export class RecordingCoverageAnalyzer {
                     fs.existsSync(path.join(this.frameworkRoot, file.path))
                 ));
                 const canRegenerate = Boolean(
-                    generated && response && validation?.valid && validation?.qualityScore === 100
+                    plan && (fs.existsSync(path.join(packageDirectory, 'application-receipt.json'))
+                        || fs.existsSync(path.join(packageDirectory, 'framework-baseline.json')) || (generated && response))
                 );
                 const name = scenario.request.scenarioName || scenario.objective || 'Grabación sin nombre';
                 const info: RecordingScenarioInfo = {

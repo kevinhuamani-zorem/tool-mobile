@@ -35,6 +35,7 @@ export class FrameworkRecoveryService {
         this.pending = undefined;
         const target = new RecoveryWorkspace(this.frameworkRoot);
         const source = new RecoveryWorkspace(packageDirectory);
+        const explicitPaths = request.paths || {};
         const lastRecovery = source.read('framework-recovery.json');
         const previousRecovery = lastRecovery ? JSON.parse(lastRecovery) : undefined;
         request = { ...request, paths: { ...previousRecovery?.associations?.paths, ...request.paths },
@@ -94,7 +95,12 @@ export class FrameworkRecoveryService {
         }
         const paths = new Map<string, string>();
         for (const [before, now] of Object.entries(request.paths || {})) {
-            if (!previous.has(before) && !plan.files.some(file => file.path === before)) throw new Error(`Ruta original ajena al caso: ${before}`);
+            if (!previous.has(before) && !plan.files.some(file => file.path === before)) {
+                // A reexport already adopted the formerly moved path. Old saved aliases
+                // are obsolete; new explicit associations still require validation.
+                if (!Object.prototype.hasOwnProperty.call(explicitPaths, before) && previous.has(now)) continue;
+                throw new Error(`Ruta original ajena al caso: ${before}`);
+            }
             target.target(now);
             if (target.read(now) === null) throw new Error(`No existe la ruta asociada: ${now}`);
             paths.set(before, now);
