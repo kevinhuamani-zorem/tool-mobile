@@ -1,3 +1,4 @@
+import { createGoldenFeature } from '../features/golden/goldenFeature.js';
 // [visual-recorder] Composition root del renderer. Construye el estado
 // compartido, instancia cada feature bajo `../features/<nombre>/` con sus
 // dependencias explícitas y monta sus listeners exactamente una vez. Ver
@@ -185,7 +186,9 @@ export async function initializeRecorder() {
         onVerificationScreenshot: base64 => recording.updateDeviceScreen(base64),
     });
 
+    const golden = createGoldenFeature({ api });
     const generation = createGenerationFeature({
+        openGoldenReview: input => golden.open(input),
         api,
         state,
         setStatus,
@@ -208,10 +211,11 @@ export async function initializeRecorder() {
     });
 
     const frameworkRecovery = createFrameworkRecoveryFeature({ api,
+        openGoldenReview: input => golden.open(input),
         getSquad: () => document.getElementById('cmbFrameworkSquad').value || 'payment',
         onSaved: () => { state.lastPreviewToken = ''; document.getElementById('btnGenerate').disabled = true; },
     });
-    const features = [configuration, inspector, recording, platformCompletion, generation, review, frameworkRecovery];
+    const features = [configuration, inspector, recording, platformCompletion, generation, review, frameworkRecovery, golden];
     features.forEach(feature => feature.mount());
     activeFeatures = features;
 

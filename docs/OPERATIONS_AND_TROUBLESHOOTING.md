@@ -223,21 +223,22 @@ Confirma que el adaptador soporte `supportsLayerGeneration`, que cada fila
 Gherkin tenga acciones enlazadas y que Preview incluya Feature, Steps, Screen
 Object y Locators. Si el caso requiere capas nuevas, omitir alguna es un error.
 
-### Guardar un caso como referencia (golden dataset)
+### Guardar como golden verificado por QA
 
-Al aplicar la automatización en el paso 3 aparece «Guardar como dataset».
-Indica si ya ejecutaste el caso en el dispositivo (en verde, falló o todavía
-no) y una nota, y guarda: el caso queda en `tests/golden/<tc>-<rec>/` con la
-grabación, el plan, el catálogo del framework, los baselines y los archivos
-que aceptas. Si el caso falló en un step, corrígelo en el editor de la revisión
-y vuelve a guardar: la corrección se valida, se escribe en el framework y es la
-versión que queda en el dataset. Si lo corregiste días después en el framework,
-`npm run golden:save -- <carpeta o recordingId> --executed passed --notes "…"`
-toma lo que hay en disco. `npm run test:golden` reproduce los casos guardados y
-`npm run golden:seed-memory` está retirado: no escribe memoria. El índice
-derivado de revisiones golden aprobadas corresponde a F6. Los
-datos de prueba de la grabación (usuarios QA, correos, celulares de ambiente)
-viajan con el caso: revísalos antes de commitear.
+En la revisión, abre **Revisar versión golden**, inspecciona los archivos y marca
+la aprobación explícita. La declaración de ejecución y los diagnósticos se
+conservan por separado; no hay requisito de score ni de PR integrado. El guardado
+crea una versión del dataset sin escribir correcciones al framework.
+
+Para un caso corregido externamente, incluso después del PR, abre **Recuperar
+cambios del framework**, guarda su revisión QA y pulsa **Revisar como golden**.
+En Configuración, **Casos golden** permite reconstruir el índice, retirar una
+referencia y revisar legacy. Si el token caduca por cambios de contexto o archivos,
+prepara otra revisión. Si se detecta corrupción, conserva la evidencia y restaura
+el snapshot/publicación original; editar el índice no repara los artefactos.
+
+El procedimiento CLI, formato y recuperación ante fallos están en
+[Versiones golden e índice aprobado](AUTOMATION_GOLDEN_APPROVAL.md).
 
 ### Completar un recording que solo carece de iOS o Android
 

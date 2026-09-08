@@ -16,7 +16,8 @@ export function FrameworkRecoveryModal() {
                 <small>Usa * como símbolo solo si todo el archivo pertenece al caso.</small>
             </details>
             <div className="framework-recovery-actions"><button id="btnPreviewFrameworkRecovery" className="btn btn-navy">Comparar cambios</button>
-                <button id="btnSaveFrameworkRecovery" className="btn btn-green" disabled>Guardar revisión QA</button></div>
+                <button id="btnSaveFrameworkRecovery" className="btn btn-green" disabled>Guardar revisión QA</button>
+                <button id="btnRecoveryGolden" className="btn btn-green" disabled>Revisar como golden</button></div>
             <p id="lblFrameworkRecoveryStatus" role="status" />
             <div id="frameworkRecoveryPending" />
             <div id="frameworkRecoveryFiles" />

@@ -55,8 +55,8 @@ copia el resultado a `node_modules/.cache`.
 | `npm run phase43:refresh-canonical` | Regenera los golden canónicos de `tests/fixtures/phase43/*` |
 | `npm run test:phase43:deterministic` | Ejecuta regresión determinística L1 sin agente real |
 | `npm run test:phase43:baseline` | Captura resultados y contexto en `runtime/phase43/`; `-- --baseline <reporte.json>` compara contra una captura compatible |
-| `npm run golden:save -- <grabación> [--executed passed] [--notes "…"]` | Guarda una grabación ya aplicada como caso golden (`tests/golden/`), igual que «Guardar como dataset» en la revisión |
-| `npm run golden:seed-memory` | Retirado: informa el reemplazo previsto en F6 y sale sin modificar memoria |
+| `npm run golden:save -- <grabación> [--approve <approvalDigest>] [--executed passed]` | Muestra el snapshot; con hash revisado y aprobación explícita publica golden v2 |
+| `npm run golden:seed-memory` | Reconstruye el índice desde publicaciones QA activas; nunca reactiva memoria legacy |
 | `npm run test:golden` | Reproduce cada caso de `tests/golden/`: mismo plan del resolver y archivos aceptados aún válidos |
 
 Flags útiles del pipeline agentic:
@@ -170,7 +170,7 @@ la ejecución vive en `agents/derek/attempt-cache/`; el arranque de cada `run`
 reinicia ese directorio. Un `agent-response.json` anterior tampoco sirve como
 caché. Los casos, fragmentos, vocabulario y caché global legacy se archivan al
 iniciar Electron, y sus lectores permanecen vacíos incluso si el archivo falla.
-El futuro índice solo se reconstruirá desde revisiones golden aprobadas por QA.
+El índice de F6 solo se reconstruye desde revisiones golden aprobadas por QA.
 Los inputs se proyectan por responsabilidad: Lorem no recibe contratos ni
 baselines exclusivos de Screen/Locators, y Zorem no recibe baselines de
 Feature/Steps. En reparación, Zorem solo se relanza por feedback de interacción
@@ -282,7 +282,7 @@ Nunca expongas `ipcRenderer` completo ni una función de filesystem genérica.
 
 4. Añade pruebas de resolver, paquete, validator y memoria.
 5. Aplicar o alcanzar score 100 no enseña a los agentes. No reintroduzcas lectores
-   ni promoción de memoria legacy; el índice derivado de golden corresponde a F6.
+   ni promoción de memoria legacy; el índice derivado de F6 tiene su propia publicación QA.
 
 ### Cambio de driver o gestos
 
@@ -396,3 +396,11 @@ Ejecuta `node --test tests/automationReconciliation.test.js` después de compila
 main. Usa frameworks temporales: nunca resetear ni modificar los cambios QA del
 framework padre para probar regeneración. La suite cubre dos ciclos, resolución
 de conflictos, rebase/merge y rollback; termina con `npm run quality`.
+
+## Pruebas de aprobación golden (F6)
+
+`tests/goldenDataset.test.js` cubre aprobación explícita, bytes NFD/CRLF, preview
+obsoleto, diagnósticos fallidos, historial de intentos, dependencias recuperadas,
+legacy, publicación fallida, reintento e índice corrupto/reconstruido. Comprueba
+también la interacción del panel sin dispositivo. Ver
+[AUTOMATION_GOLDEN_APPROVAL.md](AUTOMATION_GOLDEN_APPROVAL.md).

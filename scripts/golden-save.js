@@ -1,30 +1,22 @@
 #!/usr/bin/env node
-/**
- * Guarda como caso golden una grabacion ya aplicada, desde la terminal.
- *
- * Es la misma operacion que «Guardar como dataset» en la revision del
- * recorder, para cuando el QA ejecuto el caso dias despues y corrigio un
- * step directamente en el framework: lo aceptado es lo que hay en disco.
- *
- *   node scripts/golden-save.js <recordingDir|recordingId> [--executed passed|failed|not-run] [--notes "..."]
- *
- * `recordingDir` es la carpeta bajo runtime/recordings (o su nombre);
- * `recordingId` es el `rec-...` del manifest. Requiere `npm run build:main`.
- */
+// Preview: golden:save <recording> [--source recovery]. Review the printed files.
+// Approve the exact file digest: golden:save <recording> --approve <digest> [--executed passed].
 const fs = require('node:fs');
 const path = require('node:path');
 const { projectPaths } = require('../dist/core/workspace');
 const { ReuseAnalyzer } = require('../dist/core/indexing');
 const { AutomationResponseValidator } = require('../dist/core/validation');
-const { GeneratedFileRegistry } = require('../dist/core/automation');
-const { saveGoldenCaseFromPackage } = require('../dist/recorder/src/ipc/automation/goldenCase');
+const { GeneratedFileRegistry, goldenHash } = require('../dist/core/automation');
+const { GoldenCaseReview } = require('../dist/recorder/src/ipc/automation/goldenCase');
 
 function parseArguments(argv) {
     const options = { executed: 'not-run', notes: '' };
     const positional = [];
     for (let index = 0; index < argv.length; index += 1) {
         const value = argv[index];
-        if (value === '--executed') options.executed = argv[++index];
+        if (value === '--approve') options.approve = argv[++index];
+        else if (value === '--source') options.source = argv[++index];
+        else if (value === '--executed') options.executed = argv[++index];
         else if (value === '--notes') options.notes = argv[++index] || '';
         else positional.push(value);
     }
@@ -58,17 +50,22 @@ function main() {
     if (!fs.existsSync(path.join(packageDirectory, 'agent-response.json'))) {
         throw new Error(`La grabación no tiene una automatización aplicada: ${packageDirectory}`);
     }
-    const saved = saveGoldenCaseFromPackage({
+    const review = new GoldenCaseReview({
         packageDirectory,
         frameworkRoot: projectPaths.frameworkRoot,
         reuseAnalyzer: new ReuseAnalyzer(),
         automationResponseValidator: new AutomationResponseValidator(),
         generatedFileRegistry: new GeneratedFileRegistry(),
-    }, { executed: options.executed, notes: options.notes });
+    });
+    const preview = review.prepare({ source: options.source });
+    const digest = goldenHash(JSON.stringify(preview.files));
+    if (!options.approve) { console.log(JSON.stringify({ ...preview, token: undefined, approvalDigest: digest }, null, 2)); return; }
+    if (options.approve !== digest) throw new Error('El contenido cambió o el hash no coincide. Revisa el preview y usa --approve <approvalDigest>.');
+    const saved = review.save({ token: preview.token, approved: true, executed: options.executed, notes: options.notes });
     console.log(`Caso guardado en ${saved.directory}`);
     console.log(`  ${saved.manifest.caseId} · ${saved.manifest.recordingId} · ejecución: ${saved.manifest.executed}` +
         `${saved.manifest.edited ? ' · con correcciones del QA' : ''}`);
-    if (saved.appliedEdits.length) console.log(`  correcciones aplicadas al framework: ${saved.appliedEdits.join(', ')}`);
+    if (saved.indexWarning || saved.historyWarning) console.log(saved.indexWarning || saved.historyWarning);
 }
 
 try {

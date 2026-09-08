@@ -2,8 +2,8 @@
 
 Fecha: 2026-09-08.
 
-Estado: **F0–F5 implementadas y verificadas localmente**.
-La siguiente entrega es F6; F6–F7 conservan sus pendientes debajo. Ver
+Estado: **F0–F6 implementadas y verificadas localmente**.
+La siguiente entrega es F7; conserva sus pendientes debajo. Ver
 [avance y evidencia](AGENT_EVALUATION_PROGRESS.md). Referencia inicial inspeccionada del recorder:
 `feature/multi-agent-generation-pipeline`, commit `4668b5d`, bajo
 `fwk-mobile-test-updated/tools/visual-recorder`.
@@ -243,25 +243,25 @@ Contrato: [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md).
 
 Objetivo: que el conocimiento aprobado tenga una única fuente y versiones claras.
 
-- [ ] Evolucionar **Guardar como dataset** a **Guardar como golden verificado
+- [x] Evolucionar **Guardar como dataset** a **Guardar como golden verificado
   por QA**, usando la revisión y bytes que el QA acaba de aceptar.
-- [ ] Guardar versiones inmutables, con aprobación/actor/fecha, hashes, contexto
+- [x] Guardar versiones inmutables, con aprobación/actor/fecha, hashes, contexto
   previo, baselines, entregas del agente y diferencias con la corrección final.
   La declaración QA y la evidencia automática de ejecución son campos distintos.
-- [ ] Guardar los diagnósticos reales sin exigir score 100 ni un reporte adicional
+- [x] Guardar los diagnósticos reales sin exigir score 100 ni un reporte adicional
   para aceptar la aprobación QA. Señalar discrepancias para evaluar las reglas.
-- [ ] Recalcular hashes al leer y verificar la integridad de los artefactos.
+- [x] Recalcular hashes al leer y verificar la integridad de los artefactos.
   La integridad del almacenamiento no equivale a calidad funcional del caso.
-- [ ] Publicar de forma idempotente por contenido, con recuperación ante fallo.
+- [x] Publicar de forma idempotente por contenido, con recuperación ante fallo.
   Un índice derivado desactualizado se reconstruye desde el golden confirmado;
   nunca es la autoridad para decidir cuál versión aprobó el QA.
-- [ ] Construir el índice local únicamente desde revisiones golden activas:
+- [x] Construir el índice local únicamente desde revisiones golden activas:
   `goldenId`, `revisionId`, hash, ámbito, plataforma, contrato y procedencia.
   Actualizar también estadísticas y el script de reconstrucción de memoria.
-- [ ] Retirar referencias sustituidas e invalidar cachés dependientes. Un cambio
+- [x] Retirar referencias sustituidas e invalidar cachés dependientes. Un cambio
   posterior del framework no hereda la aprobación; la versión histórica sigue
   disponible y la compatibilidad actual se comprueba antes de reutilizarla.
-- [ ] Permitir revisar casos antiguos y promoverlos explícitamente por QA; no
+- [x] Permitir revisar casos antiguos y promoverlos explícitamente por QA; no
   convertir su score, existencia en disco o PR integrado en aprobación nueva.
 
 Superficie: `goldenDataset.ts`, `goldenCase.ts`, `automationMemory.ts` o su

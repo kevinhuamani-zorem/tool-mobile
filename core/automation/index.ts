@@ -58,3 +58,6 @@ export { CopilotModelEvents } from './infrastructure/copilotModelEvents';
 
 export * from './contracts/frameworkRecovery';
 export * from './infrastructure/frameworkRecovery/service';
+
+export * from './infrastructure/approvedGoldenStore';
+export { RecoveryWorkspace, recoveryGitContext } from './infrastructure/frameworkRecovery/files';

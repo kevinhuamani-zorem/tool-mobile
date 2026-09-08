@@ -1,24 +1,9 @@
-/**
- * Golden dataset: casos de referencia que el QA aprueba al terminar un flujo.
- *
- * Un caso golden congela lo que hace falta para volver a juzgar al recorder
- * sin depender del framework vivo ni de la memoria de una maquina: la
- * grabacion (`scenario.json`), el plan que el resolver produjo, el catalogo
- * del framework tal como lo vio el resolver (`catalog.json`), los baselines
- * de los archivos que el caso amplio y los cuatro archivos ACEPTADOS por el
- * QA (que pueden diferir de los que el agente entrego, si el QA corrigio un
- * step tras ejecutar el caso). Con eso `tests/goldenDataset.test.js`
- * reproduce el plan, el borrador y la validacion; y `memory:seed` puede
- * sembrar la memoria de otra maquina con los mismos casos.
- *
- * Vive en `automation/infrastructure` porque lee y escribe el filesystem;
- * no conoce Electron ni la UI. El handler IPC solo orquesta: valida,
- * aplica al framework las correcciones del QA y llama a `saveGoldenCase`.
- */
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'child_process';
+import { ApprovedGoldenStore, goldenPath } from './approvedGoldenStore';
+import { AutomationHistoryStore } from './automationHistoryStore';
+import { RecoveryWorkspace, recoveryGitContext } from './frameworkRecovery/files';
 import type {
     AutomationAgentResponse,
     AutomationScenario,
@@ -29,10 +14,10 @@ import type {
 } from '../contracts';
 import type { SquadReuseCatalog } from '../../indexing';
 import type { BaselineSnapshotPort } from '../ports/baselineSnapshotPort';
-import { readJsonUtf8, readUtf8File, slug, writeJsonUtf8, writeUtf8FileAtomic } from '../../shared';
+import { readJsonUtf8, readUtf8File, slug } from '../../shared';
 import { projectPaths } from '../../workspace';
 
-export const GOLDEN_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const GOLDEN_MANIFEST_SCHEMA_VERSION = 2 as const;
 export const GOLDEN_DATASET_DIRECTORY = path.join('tests', 'golden');
 export type GoldenExecutionStatus = 'passed' | 'failed' | 'not-run';
 
@@ -76,7 +61,15 @@ export interface GoldenValidationProfile {
 }
 
 export interface GoldenCaseManifest {
-    schemaVersion: typeof GOLDEN_MANIFEST_SCHEMA_VERSION;
+    schemaVersion: 1 | 2;
+    goldenId?: string;
+    versionHash?: string;
+    revisionId?: string;
+    contract?: string;
+    source?: string;
+    approval?: { status: 'approved'; actor: string; at: string; source: 'qa-declaration' };
+    active?: boolean;
+    artifacts?: Record<string, { sha256: string; bytes: number }>;
     caseId: string;
     recordingId: string;
     squad: string;
@@ -103,6 +96,11 @@ export interface AcceptedGoldenFiles {
 }
 
 export interface SaveGoldenCaseInput {
+    recoverySnapshot?: string;
+    dependencies?: Array<{ path: string; content: string }>;
+    approved: boolean;
+    revisionId: string;
+    source?: string;
     root: string;
     packageDirectory: string;
     frameworkRoot: string;
@@ -151,9 +149,10 @@ export function goldenCaseDirectoryName(scenario: Pick<AutomationScenario, 'reco
 }
 
 function planOf(packageDirectory: string): { plan: GenerationPlan; effectivePlan: GenerationPlan } {
-    const plan = readJsonUtf8<GenerationPlan>(path.join(packageDirectory, 'generation-plan.json'));
+    const workspace = new RecoveryWorkspace(packageDirectory);
+    const plan = JSON.parse(workspace.read('generation-plan.json')!) as GenerationPlan;
     const effectiveFile = path.join(packageDirectory, 'effective-generation-plan.json');
-    const effectivePlan = fs.existsSync(effectiveFile) ? readJsonUtf8<GenerationPlan>(effectiveFile) : plan;
+    const effectivePlan = fs.existsSync(effectiveFile) ? JSON.parse(workspace.read('effective-generation-plan.json')!) : plan;
     return { plan, effectivePlan };
 }
 
@@ -174,16 +173,20 @@ export function acceptedGoldenFiles(
     frameworkRoot: string,
     contents: Record<string, string> = {},
 ): AcceptedGoldenFiles {
-    const response = readJsonUtf8<AutomationAgentResponse>(path.join(packageDirectory, 'agent-response.json'));
+    const response = JSON.parse(new RecoveryWorkspace(packageDirectory).read('agent-response.json')!) as AutomationAgentResponse;
     const { effectivePlan } = planOf(packageDirectory);
     const byPath = new Map(Object.entries(contents).map(([key, value]) => [normalizeContentKey(frameworkRoot, key), value]));
+    const workspace = new RecoveryWorkspace(frameworkRoot);
+    for (const [relative, content] of byPath) {
+        if (typeof content !== 'string' || !effectivePlan.files.some(file => file.path === relative)) throw new Error('Archivo revisado ajeno al plan.');
+        workspace.target(relative);
+    }
     const editedLayers: PlannedFile['layer'][] = [];
     const files = response.files.map(file => {
-        const planned = effectivePlan.files.find(item => item.layer === file.layer) || { path: file.path };
+        const planned = effectivePlan.files.find(item => item.path === file.path) || effectivePlan.files.find(item => item.layer === file.layer) || { path: file.path };
         const relative = planned.path.replace(/\\/g, '/');
-        const absolute = path.join(frameworkRoot, relative);
-        const accepted = byPath.get(relative)
-            ?? (fs.existsSync(absolute) ? readUtf8File(absolute) : file.content);
+        const current = workspace.read(relative);
+        const accepted = byPath.get(relative) ?? current ?? file.content;
         if (accepted !== file.content) editedLayers.push(file.layer);
         return { ...file, path: relative, content: accepted };
     });
@@ -203,114 +206,90 @@ export function validationProfile(
     return { valid: Boolean(validation.valid), qualityScore: Number(validation.qualityScore || 0), errorCounts, source };
 }
 
-function frameworkHead(frameworkRoot: string): string | undefined {
-    try {
-        return execFileSync('git', ['-C', frameworkRoot, 'rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] })
-            .toString('utf8').trim() || undefined;
-    } catch {
-        return undefined;
-    }
-}
-
-function copyDirectory(source: string, target: string): string[] {
-    if (!fs.existsSync(source)) return [];
-    const copied: string[] = [];
-    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-        const from = path.join(source, entry.name);
-        const to = path.join(target, entry.name);
-        if (entry.isDirectory()) {
-            fs.mkdirSync(to, { recursive: true });
-            copied.push(...copyDirectory(from, to).map(item => path.join(entry.name, item)));
-        } else if (entry.isFile()) {
-            fs.mkdirSync(path.dirname(to), { recursive: true });
-            fs.copyFileSync(from, to);
-            copied.push(entry.name);
-        }
-    }
-    return copied;
-}
-
-function expectedFileName(file: { layer: string; path: string }): string {
-    return `${file.layer}-${path.basename(file.path)}`;
-}
-
-/**
- * Escribe el caso bajo `<root>/<TC>-<rec>/`. Reescribir un caso existente
- * reemplaza su contenido: el dataset refleja la ultima aprobacion del QA y
- * el historial queda en git.
- */
-export function saveGoldenCase(input: SaveGoldenCaseInput): { directory: string; manifest: GoldenCaseManifest } {
-    const scenario = readJsonUtf8<AutomationScenario>(path.join(input.packageDirectory, 'scenario.json'));
+/** Freeze exact reviewed bytes. Only an append-only QA publication activates a version. */
+export function saveGoldenCase(input: SaveGoldenCaseInput) {
+    if (input.approved !== true || !input.savedBy?.trim() || !input.revisionId) throw new Error('Se requiere aprobación QA explícita de una revisión.');
+    const workspace = new RecoveryWorkspace(input.packageDirectory);
+    const scenario = JSON.parse(workspace.read('scenario.json')!) as AutomationScenario;
     const { effectivePlan } = planOf(input.packageDirectory);
-    const directory = path.join(input.root, goldenCaseDirectoryName(scenario));
-    fs.rmSync(directory, { recursive: true, force: true });
-    fs.mkdirSync(path.join(directory, 'package'), { recursive: true });
-    fs.mkdirSync(path.join(directory, 'expected'), { recursive: true });
-
+    const artifacts = new Map<string, Buffer>();
+    const add = (name: string, content: string | Buffer) => artifacts.set(name, Buffer.isBuffer(content) ? content : Buffer.from(content));
+    const addJson = (name: string, content: unknown) => add(name, JSON.stringify(content, null, 2) + '\n');
     const copiedPackageFiles: string[] = [];
-    for (const name of GOLDEN_PACKAGE_FILES) {
-        const source = path.join(input.packageDirectory, name);
-        if (!fs.existsSync(source)) continue;
-        fs.copyFileSync(source, path.join(directory, 'package', name));
-        copiedPackageFiles.push(name);
+    for (const name of [...GOLDEN_PACKAGE_FILES, 'framework-recovery.json', 'framework-baseline.json', 'baseline-response.json', 'legacy-manifest.json']) {
+        const content = name === 'framework-recovery.json' && input.recoverySnapshot ? input.recoverySnapshot : workspace.read(name);
+        if (content !== null) { add(`package/${name}`, content); copiedPackageFiles.push(name); }
     }
-    copiedPackageFiles.push(...copyDirectory(
-        path.join(input.packageDirectory, 'baselines'),
-        path.join(directory, 'baselines'),
-    ).map(item => path.join('baselines', item).replace(/\\/g, '/')));
-
-    const { frameworkMetrics, ...catalog } = input.catalog;
-    void frameworkMetrics;
-    writeJsonUtf8(path.join(directory, 'catalog.json'), catalog);
-    writeJsonUtf8(path.join(directory, 'agent-response.json'), input.accepted.response);
-
+    const baselineRoot = goldenPath(input.packageDirectory, 'baselines');
+    if (fs.existsSync(baselineRoot)) for (const name of fs.readdirSync(baselineRoot)) {
+        const content = workspace.read(`baselines/${name}`);
+        if (content !== null) { add(`baselines/${name}`, content); copiedPackageFiles.push(`baselines/${name}`); }
+    }
+    const history = new AutomationHistoryStore(input.packageDirectory);
+    const events = history.events().map(event => ({ ...event, artifacts: event.artifacts.filter(item =>
+        /(?:agent-response|response|interaction-result|behavior-result|design-review-result|integration-result|baseline-response|framework-recovery|framework-baseline|exported-files|validation|generation-plan|scenario)\.json$/.test(item.name)) }));
+    for (const event of events) for (const artifact of event.artifacts) add(`provenance/blobs/${artifact.sha256}`, history.readArtifact(artifact));
+    addJson('provenance/events.json', events);
+    const original = workspace.read('agent-response.json');
+    if (original) add('provenance/original-agent-response.json', original);
+    const before = original ? JSON.parse(original).files || [] : [];
+    addJson('qa-changes.json', input.accepted.response.files.map(file => {
+        const prior = before.find((item: any) => item.path === file.path)?.content ?? null;
+        return { path: file.path, before: prior, after: file.content, beforeHash: prior === null ? null : sha256(prior), afterHash: sha256(file.content), changed: prior !== file.content };
+    }));
+    const dependencies = (input.dependencies || []).map(file => ({ path: file.path, content: file.content })).sort((a, b) => a.path.localeCompare(b.path));
+    for (const file of dependencies) { new RecoveryWorkspace(input.frameworkRoot).target(file.path); if (typeof file.content !== 'string') throw new Error('Dependencia inválida.'); }
+    addJson('dependency-files.json', dependencies);
+    addJson('diagnostics.json', input.validation);
+    addJson('execution.json', { declaration: { status: input.executed, source: 'qa-declaration' }, automaticVerification: 'not-reported' });
+    const { frameworkMetrics: _, ...catalog } = input.catalog;
+    addJson('catalog.json', catalog);
+    addJson('agent-response.json', input.accepted.response);
+    const seen = new Set<string>();
     const files: GoldenCaseFile[] = input.accepted.response.files.map(file => {
-        const planned = effectivePlan.files.find(item => item.layer === file.layer);
-        const expected = expectedFileName(file);
-        writeUtf8FileAtomic(path.join(directory, 'expected', expected), file.content);
-        return {
-            layer: file.layer,
-            path: file.path,
-            operation: planned?.operation || 'create',
-            expected,
-            sha256: sha256(file.content),
-        };
+        new RecoveryWorkspace(input.frameworkRoot).target(file.path);
+        if (typeof file.content !== 'string' || seen.has(file.path) || !['feature', 'steps', 'screen', 'locators'].includes(file.layer)) throw new Error('Capas golden inválidas o duplicadas.');
+        seen.add(file.path);
+        const expected = `${file.layer}-${sha256(file.path).slice(0, 12)}-${path.basename(file.path)}`;
+        add(`expected/${expected}`, file.content);
+        return { layer: file.layer, path: file.path, operation: effectivePlan.files.find(item => item.path === file.path)?.operation || 'update', expected, sha256: sha256(file.content) };
     });
-
-    const manifest: GoldenCaseManifest = {
-        schemaVersion: GOLDEN_MANIFEST_SCHEMA_VERSION,
-        caseId: String(scenario.request?.caseId || ''),
-        recordingId: scenario.recordingId,
-        squad: scenario.squad,
-        platform: scenario.platform,
-        objective: scenario.objective,
-        savedAt: new Date().toISOString(),
-        ...(input.savedBy ? { savedBy: input.savedBy } : {}),
-        executed: input.executed,
-        ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
-        edited: input.accepted.edited,
-        files,
-        validation: validationProfile(input.validation, input.validationSource),
-        ...(frameworkHead(input.frameworkRoot) ? { framework: { head: frameworkHead(input.frameworkRoot) } } : {}),
-        package: copiedPackageFiles,
+    if (!files.length) throw new Error('No hay archivos para aprobar.');
+    const contract = 'mobile-four-layers/v1';
+    const identity = { recordingId: scenario.recordingId, caseId: scenario.request?.caseId || '', squad: scenario.squad, platform: scenario.platform, featureScope: scenario.request?.featureScope || '', environment: scenario.environment || '' };
+    const goldenId = `golden-${sha256(JSON.stringify(identity))}`;
+    const contextHash = sha256(JSON.stringify([...artifacts].filter(([name]) => !name.startsWith('provenance/') && !name.startsWith('expected/') && !['execution.json', 'agent-response.json', 'dependency-files.json'].includes(name)).map(([name, content]) => [name, sha256(content)]).sort(([a], [b]) => a.localeCompare(b))));
+    const versionHash = sha256(JSON.stringify({ ...identity, contextHash, scenarioHash: sha256(artifacts.get('package/scenario.json')!), contract, dependencies, files: input.accepted.response.files.map(file => ({ layer: file.layer, path: file.path, content: file.content })).sort((a, b) => a.path.localeCompare(b.path)) }));
+    const manifest = {
+        schemaVersion: 2 as const, ...identity, goldenId, versionHash, revisionId: input.revisionId, contract, contextHash, catalogSource: 'approval-preview', source: input.source || 'review',
+        objective: scenario.objective, savedAt: new Date().toISOString(), savedBy: input.savedBy, executed: input.executed,
+        notes: input.notes?.trim(), edited: input.accepted.edited, files, validation: validationProfile(input.validation, input.validationSource),
+        framework: recoveryGitContext(input.frameworkRoot), package: copiedPackageFiles,
+        artifacts: Object.fromEntries([...artifacts].map(([name, content]) => [name, { sha256: sha256(content), bytes: content.length }])),
     };
-    writeJsonUtf8(path.join(directory, 'manifest.json'), manifest);
-    return { directory, manifest };
+    return new ApprovedGoldenStore(input.root).publish(manifest, artifacts, input.savedBy, input.revisionId, input.approved);
+}
+
+/** Legacy cases are review candidates, never approved index entries. */
+export function listLegacyGoldenCases(root: string): string[] {
+    if (!fs.existsSync(root)) return [];
+    return fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name !== 'approved')
+        .map(entry => goldenPath(root, `${entry.name}/manifest.json`)).filter(file => fs.existsSync(file))
+        .filter(file => JSON.parse(fs.readFileSync(file, 'utf8')).schemaVersion === 1).map(file => path.dirname(file)).sort();
 }
 
 export function listGoldenCases(root: string): string[] {
-    if (!fs.existsSync(root)) return [];
-    return fs.readdirSync(root, { withFileTypes: true })
-        .filter(entry => entry.isDirectory() && fs.existsSync(path.join(root, entry.name, 'manifest.json')))
-        .map(entry => path.join(root, entry.name))
-        .sort();
+    return new ApprovedGoldenStore(root).index().entries.map(entry => entry.directory);
 }
 
 export function readGoldenCase(directory: string): GoldenCase {
-    const manifest = readJsonUtf8<GoldenCaseManifest>(path.join(directory, 'manifest.json'));
-    if (manifest.schemaVersion !== GOLDEN_MANIFEST_SCHEMA_VERSION) {
-        throw new Error(`Caso golden con schemaVersion ${manifest.schemaVersion} no soportado: ${directory}`);
-    }
+    let manifest = JSON.parse(fs.readFileSync(goldenPath(directory, 'manifest.json'), 'utf8')) as GoldenCaseManifest;
+    if (manifest.schemaVersion === 2) {
+        const root = path.resolve(directory, '../../../..');
+        const verified = new ApprovedGoldenStore(root).read(manifest.goldenId!, manifest.versionHash!);
+        if (path.resolve(verified.directory) !== path.resolve(directory)) throw new Error('Directorio golden inválido.');
+        manifest = verified.manifest;
+    } else if (manifest.schemaVersion !== 1) throw new Error('Versión golden no soportada.');
     const packageDirectory = path.join(directory, 'package');
     const { plan, effectivePlan } = planOf(packageDirectory);
     const unresolvedFile = path.join(packageDirectory, 'unresolved-context.json');
@@ -321,17 +300,17 @@ export function readGoldenCase(directory: string): GoldenCase {
     const baselinesDirectory = path.join(directory, 'baselines');
     for (const file of effectivePlan.files.filter(item => item.operation === 'update')) {
         const baseline = path.join(baselinesDirectory, `${file.layer}-${path.basename(file.path)}`);
-        if (fs.existsSync(baseline)) baselines.set(file.path, readUtf8File(baseline));
+        if (fs.existsSync(baseline)) baselines.set(file.path, new RecoveryWorkspace(baselinesDirectory).read(path.basename(baseline))!);
     }
     return {
         directory,
         manifest,
-        scenario: readJsonUtf8<AutomationScenario>(path.join(packageDirectory, 'scenario.json')),
+        scenario: JSON.parse(new RecoveryWorkspace(packageDirectory).read('scenario.json')!),
         plan,
         effectivePlan,
         gaps,
         catalog: readJsonUtf8<SquadReuseCatalog>(path.join(directory, 'catalog.json')),
-        response: readJsonUtf8<AutomationAgentResponse>(path.join(directory, 'agent-response.json')),
+        response: JSON.parse(new RecoveryWorkspace(directory).read('agent-response.json')!),
         baselines,
     };
 }

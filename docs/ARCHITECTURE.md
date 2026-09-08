@@ -144,8 +144,9 @@ features; ninguna importa un archivo interno de otra ni de `core/`
   respuesta y rematerializar `gap-resolutions.json`), `agentLaunch`
   (`AutomationAgentLaunchService`: manual, por capas o determinista),
   `applyAutomation` (aplicar la propuesta revisada sobre el framework) y
-  `goldenCase` (guardar el caso aplicado como referencia: valida y escribe
-  las correcciones del QA y delega en `goldenDataset.ts` de core).
+  `goldenCase` (preview y aprobación explícita de un snapshot; delega el
+  almacenamiento inmutable y su índice en `goldenDataset`/`ApprovedGoldenStore`,
+  sin escribir el framework).
 - `recorder/src/ipc/generationHandlers.ts`: generación heredada de las cuatro
   capas sin pasar por el pipeline de automatización con agente, y el Gherkin
   con steps enlazados. Sus dos handlers de escritura final permanecen detrás
@@ -355,7 +356,7 @@ XML, screenshots, source, capabilities ni credenciales.
    Los artefactos temporales de autores y revisión permanecen bajo
    `agents/derek/attempt-cache/` y se reinician en cada `run`; el caché global
    anterior se archiva. Un score válido no permite reutilizar propuestas sin
-   aprobación del QA. El índice derivado de golden se implementará en F6.
+   aprobación del QA. F6 publica el índice derivado de golden aprobado; F7 conectará los ejemplos.
    Cuando existe `deterministic-draft.json`, Lorem y Zorem corren **en
    paralelo**: Derek publica el `actionTrace` del borrador como contrato
    provisional (`agents/derek/behavior-result.json`, con handoff verificado) y
@@ -588,3 +589,15 @@ y checkout. El controller IPC confina el paquete a recordings. Los canales
 publican una revisión `framework-import`, con code snapshot, pendientes y contexto
 Git/PR opcional. La evidencia grabada original permanece intacta. El renderer consume
 solo contratos de datos mediante preload. Ver [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).
+
+## Publicación golden e índice (F6)
+
+El renderer incorpora `features/golden/` y `GoldenModal`, accesibles sin dispositivo.
+Los canales `preview-golden-case`, `save-golden-case`, `list-golden-cases`,
+`revoke-golden-case` y `rebuild-golden-index` tienen funciones explícitas en preload.
+`GoldenCaseController` confina paquetes al recording seleccionado y fija contexto.
+`GoldenCaseReview` exige el token revisado y aprobación explícita.
+`ApprovedGoldenStore` publica snapshots y eventos inmutables; reconstruye el índice
+y verifica sus artefactos al leer. El índice sustituye referencias; el historial no
+se borra. La memoria legacy permanece deshabilitada.
+Contrato: [Versiones golden e índice aprobado](AUTOMATION_GOLDEN_APPROVAL.md).

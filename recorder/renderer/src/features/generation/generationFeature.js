@@ -133,11 +133,6 @@ export function createGenerationFeature(deps) {
     }
 
     // ─── Golden dataset ───────────────────────────────────────────────────
-    // Aparece cuando el caso ya esta aplicado: el QA lo aprueba como caso de
-    // referencia (grabacion + plan + catalogo + archivos aceptados). Si
-    // corrigio un archivo en el editor tras ejecutar el caso, ese contenido
-    // es lo aceptado: el main lo revalida, lo escribe en el framework y lo
-    // guarda en el dataset.
     function showGoldenDatasetPanel(visible) {
         if (!goldenDatasetPanel) return;
         goldenDatasetPanel.style.display = visible ? 'block' : 'none';
@@ -160,54 +155,8 @@ export function createGenerationFeature(deps) {
 
     async function saveGoldenCase() {
         if (!isAutomationWorkflow()) return;
-        const edited = editedReviewedContents();
-        const invalidDocuments = state.previewDocuments
-            .filter(document => Object.prototype.hasOwnProperty.call(edited, document.path))
-            .map(document => ({ document, validation: validatePreviewDocument(document) }))
-            .filter(item => !item.validation.valid);
-        if (invalidDocuments.length) {
-            setGoldenStatus(
-                '✕ Corrige los archivos inválidos antes de guardar: ' +
-                invalidDocuments.map(item => item.document.path.split(/[\\/]/).pop()).join(', '),
-                'err',
-            );
-            return;
-        }
-        disableBtn(btnSaveGolden, '⏳ Guardando...');
-        setGoldenStatus(Object.keys(edited).length
-            ? 'Validando la corrección y aplicándola al framework...'
-            : 'Guardando el caso de referencia...', '');
-        try {
-            const result = await api.saveGoldenCase({
-                executed: cmbGoldenExecution?.value || 'not-run',
-                notes: txtGoldenNotes?.value || '',
-                reviewedContents: edited,
-            });
-            if (!result.success) {
-                const details = Array.isArray(result.validation?.errors)
-                    ? '\n' + result.validation.errors.map(error => `• ${error.message}`).join('\n')
-                    : '';
-                setGoldenStatus(`✗ ${result.error}${details}`, 'err');
-                return;
-            }
-            const applied = result.appliedEdits?.length
-                ? ` Correcciones aplicadas al framework: ${result.appliedEdits.join(', ')}.`
-                : '';
-            state.previewDocuments.forEach(document => {
-                if (Object.prototype.hasOwnProperty.call(edited, document.path)) document.originalContent = document.content;
-            });
-            renderPreviewFileTree();
-            setGoldenStatus(
-                `✓ Caso guardado en ${result.directory} (${result.manifest.executed === 'passed'
-                    ? 'ejecutado en verde'
-                    : result.manifest.executed === 'failed' ? 'marcado como fallido' : 'sin ejecutar'}).${applied}`,
-                'ok',
-            );
-        } catch (error) {
-            setGoldenStatus(`✗ ${error?.message || error}`, 'err');
-        } finally {
-            enableBtn(btnSaveGolden);
-        }
+        await openGoldenReview?.({ executed: cmbGoldenExecution?.value || 'not-run', notes: txtGoldenNotes?.value || '',
+            reviewedContents: editedReviewedContents() });
     }
 
     function previewLayer(document) {

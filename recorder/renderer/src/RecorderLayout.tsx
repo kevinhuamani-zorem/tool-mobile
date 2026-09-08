@@ -1,3 +1,4 @@
+import { GoldenModal } from './components/GoldenModal';
 import { ConfigurationScreen } from './components/ConfigurationScreen';
 import { RecorderScreen } from './components/RecorderScreen';
 import { FrameworkRecoveryModal } from './components/FrameworkRecoveryModal';
@@ -8,6 +9,7 @@ export function RecorderLayout() {
             <ConfigurationScreen />
             <RecorderScreen />
             <FrameworkRecoveryModal />
+            <GoldenModal />
         </div>
     );
 }

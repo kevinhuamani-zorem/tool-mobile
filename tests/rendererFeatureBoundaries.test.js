@@ -27,6 +27,7 @@ const EXPECTED_FEATURES = [
     'inspector',
     'platform-completion',
     'framework-recovery',
+    'golden',
 ];
 
 function importSpecifiers(source) {

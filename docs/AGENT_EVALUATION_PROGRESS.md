@@ -8,10 +8,11 @@ El historial se publicó en `504e7eb40eb51254af134b2bc6d09f2bbe732987` (F1).
 Las dos pasadas se publicaron en `95322f1` (F2).
 La exportación con observaciones se publicó en `30ae8e0` (F3).
 La recuperación QA se publicó en `25d412d` (F4).
-La entrega actual completa F5, regeneración y reexportación con reconciliación, de
-[las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
-F6–F7 siguen abiertas; los checklists de ese documento son la lista de pendientes
-hasta terminar el ciclo completo. La aprobación golden nueva aún no está habilitada.
+La reconciliación se publicó en `41bf2b4` (F5).
+La entrega actual completa F6: aprobación QA explícita, versiones inmutables e
+índice local reconstruible. F7 sigue abierta; su checklist en
+[las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md) conserva todos
+los pendientes hasta terminar el ciclo completo.
 
 ## Punto de partida y medición
 
@@ -59,7 +60,7 @@ por test: la causa concreta se investiga con el log y los diagnósticos.
   legacy no lo habilita. La revisión omitida por preferencia explícita del QA
   queda identificada como `source: framework`, sin afirmar aprobación golden.
 
-Con el índice golden todavía sin implementar, los agentes siguen usando
+Tras F0, y hasta conectar los ejemplos en F7, los agentes siguen usando
 contratos, evidencia grabada y el índice actual del framework. La generación
 puede consumir más tiempo al dejar de reutilizar propuestas previas; todavía
 no se midió ese coste con un agente real.
@@ -83,7 +84,7 @@ no se midió ese coste con un agente real.
   publicación, se restauran archivos, registry y metadatos del paquete.
 - Generación, exportación, aprobación QA y verificación funcional son estados
   independientes. Exportar sigue sin crear aprendizaje ni afirmar ejecución móvil.
-  La interfaz que declarará aprobación/verificación se implementa en F6.
+  F6 incorpora la interfaz de aprobación y declaración de ejecución QA.
 
 Se consultó CodeGraph para `AutomationMemory` y `AgentRunStore`, además de leer
 los módulos afectados. Los fixtures aislados de `preparedAutomation` cubren
@@ -127,8 +128,8 @@ corresponde al pipeline `layered` predeterminado del wizard.
 | F3 — completada | Exportación de bytes revisados y capas disponibles con observaciones. Se conservan rutas, contenido compartido, conflictos, rollback y comprobaciones concurrentes. Recibo parcial con hashes/símbolos, historial separado y botón disponible sin score 100. |
 | F4 — completada | Recuperación por relaciones, comparación baseline/exportado/actual y diff del caso. Rutas/símbolos movidos, helpers, asociaciones pendientes y revisión QA con código sin modificar eventos Appium. PR opcional y contexto Git local; no exige commit ni dispositivo. |
 | F5 — completada | Usar las correcciones recuperadas como baseline para regrabar/regenerar y reexportar el mismo caso durante y después del PR. Resolver solapamientos reales, mantener símbolos compartidos y soportar cambio de rama/rebase/merge. Probar dos ciclos sucesivos sin perder la corrección QA. |
-| F6 — siguiente | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
-| F7 — pendiente de F6 | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
+| F6 — completada | Guardar golden por aprobación QA explícita, con actor/fecha, diagnóstico y verificación funcional separados. Versionar por contenido, publicar de forma idempotente y verificar hashes. Construir el índice solo desde versiones aprobadas activas, retirar sustituidas y reconstruirlo sin perder autoridad. Revisar los golden antiguos sin aprobación automática. |
+| F7 — siguiente | Seleccionar ejemplos compatibles por capa, conservar diferencias QA como lecciones y completar negativos/schema/cobertura. Curar 5–8 casos con QA y reservar casos sin filtrar soluciones al agente. Medir primera/final respuesta, intervención QA, fallos por capa/regla, recurrencia, timeouts, invocaciones y tiempos con denominadores y contexto. Ejecutar replay y piloto real, incluyendo reapertura y `.app`, y comparar con/sin ejemplos. |
 
 F2 sustituyó los contadores independientes del pipeline por capas.
 F3 retira los bloqueos de exportación por calidad. Los ciclos de regeneración y
@@ -168,14 +169,14 @@ dispositivo ni se verificó una corrida real de Copilot o CI remoto.
 
 Estos resultados no certifican que el agente real genere cuatro capas correctas
 ni eliminan los fallos. El corpus aprobado y la medición de ese efecto corresponden
-a F6/F7; no se ejecutó todavía el piloto con dispositivo/Copilot.
+a F7; F6 implementa su almacenamiento. No se ejecutó todavía el piloto con dispositivo/Copilot.
 
 ## Próxima entrega concreta
 
-Implementar F6: aprobación QA explícita sobre la revisión aceptada, versiones
-golden inmutables con hashes e índice local derivado solo de versiones aprobadas.
-Después sigue F7: ejemplos por capa, medición de correcciones/fallos con
-denominadores y piloto real. Sus checklists detallados siguen abiertos.
+Implementar F7: seleccionar y entregar ejemplos compatibles por capa, convertir
+correcciones en lecciones, completar negativos/schema/cobertura y medir los fallos
+con denominadores. Curar 5–8 casos y ejecutar replay y piloto real con/sin ejemplos,
+incluyendo reapertura y runtime `.app`. Su checklist sigue abierto.
 
 ## Validación de F2
 
@@ -244,3 +245,22 @@ denominadores y piloto real. Sus checklists detallados siguen abiertos.
   tipos, arquitectura, métricas y builds correctos. Log:
   `/private/tmp/recorder-f5-quality.log`.
 - Contrato: [AUTOMATION_RECONCILIATION.md](AUTOMATION_RECONCILIATION.md).
+
+## Implementación de F6
+
+- Aprobación QA explícita desde la revisión, recuperación F4 y biblioteca sin
+  dispositivo. No exige score/PR/ejecución ni escribe en el framework al aprobar.
+- Snapshot por contenido/contexto, actor/fecha, hashes, entregas originales,
+  dependencias, PR, diagnósticos y comparaciones antes/después del QA.
+- Publicación inmutable idempotente; sustitución y revocación de referencias;
+  índice descartable, verificado y reconstruible. Recuperación ante fallo de
+  publicación y aviso si falla una proyección posterior al commit.
+- Legacy requiere nueva revisión y aprobación. Estadísticas y comando de
+  reconstrucción leen únicamente publicaciones activas; memoria legacy sigue vacía.
+- Contrato: [AUTOMATION_GOLDEN_APPROVAL.md](AUTOMATION_GOLDEN_APPROVAL.md).
+- `npm run quality`: **808/808 pruebas aprobadas**, sin omitidas ni canceladas;
+  tipos, arquitectura, métricas y builds correctos. Log:
+  `/private/tmp/recorder-f6-quality.log`.
+- Las pruebas usan frameworks aislados y un DOM de prueba. No se ejecutó el
+  piloto con dispositivo/Copilot ni la reapertura de `.app`; siguen en F7.
+- F7 mantiene corpus, ejemplos por rol, medición de errores y piloto real pendientes.

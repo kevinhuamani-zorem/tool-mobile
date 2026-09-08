@@ -1,6 +1,6 @@
 // Recovery owns its preview token; it never changes the recorded Appium events.
 import { escapeHtml } from '../shared/domHelpers.js';
-export function createFrameworkRecoveryFeature({ api, getSquad, onSaved }) {
+export function createFrameworkRecoveryFeature({ api, getSquad, onSaved, openGoldenReview }) {
     const el = id => document.getElementById(id);
     const modal = el('frameworkRecoveryModal');
     const status = el('lblFrameworkRecoveryStatus');
@@ -10,7 +10,7 @@ export function createFrameworkRecoveryFeature({ api, getSquad, onSaved }) {
     let token = '';
     let version = 0;
     const on = (target, event, handler) => { target?.addEventListener(event, handler); bound.push([target, event, handler]); };
-    const invalidate = () => { token = ''; version++; save.disabled = true; };
+    const invalidate = () => { token = ''; version++; save.disabled = true; if (el('btnRecoveryGolden')) el('btnRecoveryGolden').disabled = true; };
     async function open(recordingId = '') {
         invalidate();
         modal.style.display = 'flex';
@@ -80,9 +80,11 @@ export function createFrameworkRecoveryFeature({ api, getSquad, onSaved }) {
             invalidate();
             status.textContent = `Revisión QA guardada · ${result.result.files} archivo(s) · ${result.result.pending} pendiente(s). La grabación original se conserva. Aprobación golden pendiente.`;
             onSaved?.(result.result);
+            if (el('btnRecoveryGolden')) el('btnRecoveryGolden').disabled = false;
         } catch (error) { invalidate(); status.textContent = error.message; }
     }
     function mount() {
+        on(el('btnRecoveryGolden'), 'click', () => openGoldenReview?.({ recordingId: cases.value || undefined, squad: getSquad(), source: 'recovery' }));
         on(el('btnRecoverFramework'), 'click', () => open());
         on(el('btnRecoverFrameworkCurrent'), 'click', () => open());
         on(el('btnOnboardingRecoverFramework'), 'click', () => open(el('cmbOnboardingScenario').value));

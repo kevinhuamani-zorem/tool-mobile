@@ -1,14 +1,3 @@
-/**
- * Golden dataset: casos de referencia aprobados por el QA al terminar el flujo.
- *
- * Dos contratos. `saveGoldenCaseFromPackage` congela grabacion, plan,
- * catalogo, baselines y los archivos ACEPTADOS (lo que el QA corrigio tras
- * ejecutar el caso manda sobre lo que el agente entrego; la correccion se
- * valida y se escribe en el framework). Y el replay: con `catalog.json` y
- * los baselines el resolver reproduce el mismo plan sin depender del
- * framework vivo, y el validador vuelve a aceptar los archivos aprobados.
- * Al final, cada caso guardado bajo `tests/golden/` se reproduce.
- */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -17,6 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const {
     AutomationMemory,
+    AutomationHistoryStore,
+    ApprovedGoldenStore,
     AutomationPackageBuilder,
     DeterministicResolver,
     acceptedGoldenFiles,
@@ -29,7 +20,7 @@ const {
     saveGoldenCase,
 } = require('../dist/core/automation');
 const { AutomationResponseValidator } = require('../dist/core/validation');
-const { saveGoldenCaseFromPackage } = require('../dist/recorder/src/ipc/automation/goldenCase');
+const { saveGoldenCaseFromPackage, GoldenCaseReview, GoldenCaseController } = require('../dist/recorder/src/ipc/automation/goldenCase');
 const { inferredStrategy } = require('../dist/core/indexing');
 const { isolatedFramework } = require('./helpers/isolatedFramework');
 
@@ -116,81 +107,124 @@ function withGoldenRoot(t, fixture) {
     return path.join(fixture.root, 'runtime', 'golden');
 }
 
-test('guardar un caso aplicado sin cambios congela grabacion, plan, catalogo, baselines y archivos aceptados', t => {
-    const f = appliedPackageFixture(t);
-    const goldenRoot = withGoldenRoot(t, f);
-    const saved = saveGoldenCaseFromPackage(f.deps(), { executed: 'passed', notes: 'corrido en Pixel 7' });
-    assert.equal(saved.directory, path.join(goldenRoot, 'tc-1-lden0001'));
+const expectedFile = (saved, layer) => path.join(saved.directory, 'expected', saved.manifest.files.find(file => file.layer === layer).expected);
+
+test('F6 approval freezes exact bytes, context and diagnostics without altering framework or response', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    assert.throws(() => saveGoldenCaseFromPackage(f.deps(), {}), /aprobación QA/);
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true, executed: 'passed', notes: 'Pixel 7' });
+    assert.equal(saved.manifest.schemaVersion, 2);
+    assert.equal(saved.manifest.approval.source, 'qa-declaration');
+    assert.equal(saved.manifest.executed, 'passed');
+    assert.equal(f.validatorCalls.length, 0);
     assert.deepEqual(saved.appliedEdits, []);
-    assert.equal(f.validatorCalls.length, 0, 'sin cambios se conserva la validacion con que se aplico');
-    const manifest = saved.manifest;
-    assert.equal(manifest.edited, false);
-    assert.equal(manifest.executed, 'passed');
-    assert.equal(manifest.notes, 'corrido en Pixel 7');
-    assert.deepEqual(manifest.validation, { valid: true, qualityScore: 100, errorCounts: {}, source: 'apply' });
-    assert.deepEqual(manifest.files.map(file => [file.layer, file.operation, file.expected]), [
-        ['feature', 'update', 'feature-test.feature'], ['steps', 'create', 'steps-test.steps.ts'],
-    ]);
-    assert.equal(fs.readFileSync(path.join(saved.directory, 'expected', 'feature-test.feature'), 'utf8'), f.appliedFeature);
-    assert.equal(fs.readFileSync(path.join(saved.directory, 'baselines', 'feature-test.feature'), 'utf8'), f.baseline);
-    assert.ok(manifest.package.includes('scenario.json') && manifest.package.includes('baselines/feature-test.feature'));
-    const catalog = JSON.parse(fs.readFileSync(path.join(saved.directory, 'catalog.json'), 'utf8'));
-    assert.equal(catalog.frameworkMetrics, undefined, 'la telemetria no forma parte del caso');
-    assert.equal(catalog.squad, 'payment');
-    assert.deepEqual(listGoldenCases(goldenRoot), [saved.directory]);
     const reread = readGoldenCase(saved.directory);
-    assert.equal(reread.manifest.recordingId, 'rec-golden-0001');
     assert.equal(reread.baselines.get(f.featurePath), f.baseline);
     assert.deepEqual(reread.gaps.map(gap => gap.id), ['gap-english-naming']);
+    assert.equal(fs.readFileSync(expectedFile(saved, 'feature'), 'utf8'), f.appliedFeature);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(saved.directory, 'catalog.json'))).frameworkMetrics, undefined);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(saved.directory, 'execution.json'))).automaticVerification, 'not-reported');
+    assert.deepEqual(listGoldenCases(root), [saved.directory]);
 });
 
-test('una correccion del QA en el editor se valida, se escribe en el framework y es lo que queda en el dataset', t => {
-    const f = appliedPackageFixture(t);
-    withGoldenRoot(t, f);
-    const fixedSteps = f.appliedSteps.replace('async () => {}', 'async () => { await screen.verify(); }');
-    const saved = saveGoldenCaseFromPackage(f.deps(), {
-        executed: 'failed',
-        notes: 'fallo el step 1: faltaba la verificacion',
-        reviewedContents: { [path.join(f.frameworkRoot, f.stepsPath)]: fixedSteps },
-    });
-    assert.deepEqual(saved.appliedEdits, ['steps']);
-    assert.equal(saved.manifest.edited, true);
-    assert.equal(saved.manifest.validation.source, 'golden');
-    assert.equal(f.validatorCalls.length, 1, 'lo corregido se revalida antes de escribir');
-    assert.equal(f.validatorCalls[0][2].files.find(file => file.layer === 'steps').content, fixedSteps);
-    assert.equal(fs.readFileSync(path.join(f.frameworkRoot, f.stepsPath), 'utf8'), fixedSteps, 'la correccion llega al framework');
-    assert.equal(fs.readFileSync(path.join(saved.directory, 'expected', 'steps-test.steps.ts'), 'utf8'), fixedSteps);
-    const receipt = JSON.parse(fs.readFileSync(path.join(f.packageDirectory, 'application-receipt.json'), 'utf8'));
-    assert.equal(receipt.files.find(file => file.path === f.stepsPath).afterHash, sha256(fixedSteps), 'el recibo describe los bytes en disco');
-    assert.equal(JSON.parse(fs.readFileSync(path.join(f.packageDirectory, 'agent-response.json'), 'utf8')).files[1].content, fixedSteps);
-    assert.equal(f.registry.registered, 1, 'el registro de archivos generados adopta el hash nuevo');
-});
-
-test('una correccion hecha en el framework tras ejecutar el caso tambien cuenta como aceptada', t => {
-    const f = appliedPackageFixture(t);
-    withGoldenRoot(t, f);
-    const fixedFeature = f.appliedFeature.replace('Then new result', 'Then the new result is shown');
-    fs.writeFileSync(path.join(f.frameworkRoot, f.featurePath), fixedFeature);
-    const accepted = acceptedGoldenFiles(f.packageDirectory, f.frameworkRoot, {});
-    assert.deepEqual(accepted.editedLayers, ['feature']);
-    const saved = saveGoldenCaseFromPackage(f.deps(), { executed: 'passed' });
-    assert.deepEqual(saved.appliedEdits, [], 'ya estaba en disco: no se reescribe');
-    assert.equal(saved.manifest.edited, true);
-    assert.equal(fs.readFileSync(path.join(saved.directory, 'expected', 'feature-test.feature'), 'utf8'), fixedFeature);
-});
-
-test('una correccion que no pasa la validacion no se guarda ni toca el framework', t => {
-    const f = appliedPackageFixture(t);
-    const goldenRoot = withGoldenRoot(t, f);
-    const invalid = { valid: false, qualityScore: 40, errors: [{ code: 'step-undefined', message: 'sin definicion' }], warnings: [] };
-    assert.throws(
-        () => saveGoldenCaseFromPackage(f.deps(() => invalid), {
-            reviewedContents: { [f.stepsPath]: '// roto' },
-        }),
-        error => error.name === 'GoldenValidationError' && /sin definicion/.test(error.message) && error.validation === invalid,
-    );
+test('F6 accepts explicit QA approval with failing diagnostics, keeping original response and framework untouched', t => {
+    const f = appliedPackageFixture(t); withGoldenRoot(t, f);
+    const invalid = { valid: false, qualityScore: 40, errors: [{ code: 'step-undefined', message: 'sin definición' }], warnings: [] };
+    const fixed = '// Cafe\u0301 correction\r\n';
+    const saved = saveGoldenCaseFromPackage(f.deps(() => invalid), { approved: true, reviewedContents: { [f.stepsPath]: fixed }, executed: 'failed' });
+    assert.equal(saved.manifest.validation.qualityScore, 40);
+    assert.equal(saved.manifest.validation.errorCounts['step-undefined'], 1);
+    assert.equal(fs.readFileSync(expectedFile(saved, 'steps'), 'utf8'), fixed);
     assert.equal(fs.readFileSync(path.join(f.frameworkRoot, f.stepsPath), 'utf8'), f.appliedSteps);
-    assert.equal(fs.existsSync(goldenRoot), false);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.packageDirectory, 'agent-response.json'))), f.response);
+    assert.equal(f.registry.registered, 0);
+    const changes = JSON.parse(fs.readFileSync(path.join(saved.directory, 'qa-changes.json')));
+    assert.equal(changes.find(file => file.path === f.stepsPath).before, f.appliedSteps);
+    assert.equal(readGoldenCase(saved.directory).response.files[1].content, fixed, 'NFD and CRLF survive read');
+});
+
+test('F6 preview rejects stale package, checkout files, absent approval and tampered tokens', t => {
+    const f = appliedPackageFixture(t); withGoldenRoot(t, f);
+    const review = new GoldenCaseReview(f.deps()); let p = review.prepare();
+    assert.throws(() => review.save({ token: p.token }), /aprobación QA/);
+    assert.throws(() => review.save({ token: 'forged', approved: true }), /aprobación QA/);
+    p.files[0].content = 'mutated renderer object';
+    const saved = review.save({ token: p.token, approved: true });
+    assert.equal(fs.readFileSync(expectedFile(saved, 'feature'), 'utf8'), f.appliedFeature);
+    p = review.prepare(); fs.appendFileSync(path.join(f.frameworkRoot, f.stepsPath), '// external');
+    assert.throws(() => review.save({ token: p.token, approved: true }), /Cambió/);
+    p = review.prepare(); fs.appendFileSync(path.join(f.packageDirectory, 'scenario.json'), ' ');
+    assert.throws(() => review.save({ token: p.token, approved: true }), /caso cambió/);
+});
+
+test('F6 same bytes are idempotent, new approval supersedes, index is disposable, revocation retains history', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f); const store = new ApprovedGoldenStore(root);
+    const first = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    const firstBytes = fs.readFileSync(path.join(first.directory, 'manifest.json'));
+    const duplicate = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    assert.equal(duplicate.duplicate, true); assert.equal(store.stats().versions, 1);
+    const second = saveGoldenCaseFromPackage(f.deps(), { approved: true, reviewedContents: { [f.stepsPath]: '// QA' } });
+    assert.notEqual(second.directory, first.directory);
+    assert.deepEqual(fs.readFileSync(path.join(first.directory, 'manifest.json')), firstBytes);
+    assert.equal(store.stats().versions, 2); assert.equal(store.stats().approvedCases, 1);
+    assert.equal(store.read(first.manifest.goldenId, first.manifest.versionHash).manifest.active, false);
+    const index = store.index(); fs.writeFileSync(path.join(root, 'approved-index.json'), '{"entries":["forged"]}');
+    assert.deepEqual(store.rebuildIndex(), index);
+    fs.unlinkSync(path.join(root, 'approved-index.json')); assert.deepEqual(store.rebuildIndex(), index);
+    store.revoke(second.manifest.goldenId, second.manifest.versionHash, 'qa');
+    assert.equal(store.index().entries.length, 0);
+    assert.equal(store.read(second.manifest.goldenId, second.manifest.versionHash).manifest.active, false);
+    saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    assert.equal(store.index().entries[0].versionHash, first.manifest.versionHash);
+});
+
+test('F6 corrupt version or publication fails closed without falling back to an old approval', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f); const store = new ApprovedGoldenStore(root);
+    saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true, reviewedContents: { [f.stepsPath]: '// v2' } });
+    fs.appendFileSync(expectedFile(saved, 'steps'), 'tampered');
+    assert.throws(() => readGoldenCase(saved.directory), /alterado/);
+    assert.equal(store.index().entries.length, 0); assert.equal(store.index().issues.length, 1);
+    assert.throws(() => saveGoldenCaseFromPackage(f.deps(), { approved: true, reviewedContents: { [f.stepsPath]: '// v2' } }), /alterado/);
+});
+
+test('F6 publication failure leaves no active reference; retry recovers orphan version; index failure keeps committed approval', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const original = ApprovedGoldenStore.prototype.publishRecord;
+    ApprovedGoldenStore.prototype.publishRecord = () => { throw new Error('publication failed'); };
+    try { assert.throws(() => saveGoldenCaseFromPackage(f.deps(), { approved: true }), /publication failed/); }
+    finally { ApprovedGoldenStore.prototype.publishRecord = original; }
+    const store = new ApprovedGoldenStore(root); assert.equal(store.index().entries.length, 0);
+    const rebuild = ApprovedGoldenStore.prototype.rebuildIndex;
+    ApprovedGoldenStore.prototype.rebuildIndex = () => { throw new Error('index failed'); };
+    let saved;
+    try { saved = saveGoldenCaseFromPackage(f.deps(), { approved: true }); }
+    finally { ApprovedGoldenStore.prototype.rebuildIndex = rebuild; }
+    assert.ok(saved.indexWarning); assert.equal(store.index().entries.length, 1); assert.equal(store.index().versions, 1);
+    assert.equal(store.rebuildIndex().entries[0].versionHash, saved.manifest.versionHash);
+});
+
+test('F6 confines reviewed paths and rejects symlink artifacts and package links', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    assert.throws(() => saveGoldenCaseFromPackage(f.deps(), { approved: true, reviewedContents: { '../outside.ts': 'x' } }), /ajeno/);
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    const expected = expectedFile(saved, 'steps'); fs.unlinkSync(expected); fs.symlinkSync(path.join(f.frameworkRoot, f.stepsPath), expected);
+    assert.throws(() => readGoldenCase(saved.directory), /symlink/i);
+    assert.equal(new ApprovedGoldenStore(root).index().entries.length, 0);
+    fs.symlinkSync(path.join(f.frameworkRoot, f.stepsPath), path.join(f.packageDirectory, 'external.ts'));
+    assert.throws(() => new GoldenCaseReview(f.deps()).prepare(), /symlink/i);
+});
+
+test('F6 historical approval never transfers to changed framework, scope or contract', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const saved = saveGoldenCaseFromPackage(f.deps(), { approved: true }); const store = new ApprovedGoldenStore(root);
+    const scope = { squad: 'payment', platform: 'android', contract: saved.manifest.contract };
+    assert.equal(store.compatible(scope, f.frameworkRoot).length, 1);
+    assert.equal(store.compatible({ ...scope, platform: 'ios' }, f.frameworkRoot).length, 0);
+    assert.equal(store.compatible({ ...scope, contract: 'v2' }, f.frameworkRoot).length, 0);
+    fs.appendFileSync(path.join(f.frameworkRoot, f.stepsPath), '// PR changes');
+    assert.equal(store.compatible(scope, f.frameworkRoot).length, 0);
+    assert.equal(store.index().entries.length, 1, 'historical approved bytes remain available');
 });
 
 test('goldenDatasetRoot usa tests/golden en un checkout y runtime/golden en la app empaquetada', t => {
@@ -267,7 +301,7 @@ test('el replay reproduce el plan de un caso real desde catalog.json y los basel
     fs.writeFileSync(path.join(prepared.packageDirectory, 'agent-response.json'), JSON.stringify(response));
     const accepted = acceptedGoldenFiles(prepared.packageDirectory, path.join(root, 'no-framework'), {});
     const saved = saveGoldenCase({
-        root: path.join(root, 'golden'), packageDirectory: prepared.packageDirectory, frameworkRoot: path.join(root, 'no-framework'),
+        approved: true, savedBy: 'qa', revisionId: 'revision-replay', root: path.join(root, 'golden'), packageDirectory: prepared.packageDirectory, frameworkRoot: path.join(root, 'no-framework'),
         catalog, accepted, validation: { valid: true, qualityScore: 100, errors: [], warnings: [] }, validationSource: 'apply', executed: 'not-run',
     });
     const goldenCase = readGoldenCase(saved.directory);
@@ -303,7 +337,7 @@ function overlayBaselines(frameworkRoot, goldenCase) {
 test('cada caso de tests/golden se reproduce: mismo plan y los archivos aceptados siguen validos', async t => {
     const cases = listGoldenCases(GOLDEN_ROOT);
     if (!cases.length) {
-        t.diagnostic('sin casos golden todavia: guarda uno desde la revision («Guardar como dataset»)');
+        t.diagnostic('sin casos golden todavia: guarda uno desde la revision («Guardar como golden verificado por QA»)');
         return;
     }
     const { frameworkRoot } = isolatedFramework(t, 'avr-golden-');
@@ -330,4 +364,115 @@ test('cada caso de tests/golden se reproduce: mismo plan y los archivos aceptado
             `${name}: el validador ya no acepta los archivos aprobados: ${validation.errors.map(error => error.message).join(' | ')}`,
         );
     }
+});
+
+test('F6 recovered QA revision uses immutable code and helpers, preserves failed attempt and PR, supports another approval', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const history = new AutomationHistoryStore(f.packageDirectory);
+    history.ensureRevision(f.scenario.recordingId, 'TC-1');
+    const failed = history.identity();
+    history.append({ ...failed, kind: 'generation-result', origin: 'recorder', result: 'failed' });
+    history.capture('agents/interaction-author/interaction-result.json', '{"files":[]}', 'agent', 'interaction-author:provider-output', 2);
+    const fixed = '// QA assert Cafe\u0301\r\n';
+    const helper = { layer: 'dependency', path: 'support/utils/qa.ts', content: 'export const expected = 1;\n' };
+    fs.mkdirSync(path.dirname(path.join(f.frameworkRoot, helper.path)), { recursive: true }); fs.writeFileSync(path.join(f.frameworkRoot, helper.path), helper.content);
+    fs.writeFileSync(path.join(f.frameworkRoot, f.stepsPath), fixed);
+    const recovery = { recordedTrace: f.response.actionTrace, context: { prUrl: 'https://github.com/team/mobile/pull/1' }, pending: [{ id: 'trace:1', message: 'association pending' }],
+        files: [...f.response.files.map(file => ({ ...file, content: file.layer === 'steps' ? fixed : file.content, currentHash: sha256(file.layer === 'steps' ? fixed : file.content) })), { ...helper, currentHash: sha256(helper.content) }] };
+    const bytes = JSON.stringify(recovery);
+    fs.writeFileSync(path.join(f.packageDirectory, 'framework-recovery.json'), bytes);
+    const revision = history.beginRevision({ recordingId: f.scenario.recordingId, caseId: 'TC-1', source: 'framework-import' }, [{ name: 'framework-recovery.json', content: bytes }]);
+    const review = new GoldenCaseReview(f.deps()); const preview = review.prepare({ source: 'recovery' });
+    assert.equal(preview.revisionId, revision.revisionId); assert.equal(preview.files.length, 3);
+    assert.equal(preview.context.prUrl, recovery.context.prUrl); assert.equal(preview.pending.length, 1);
+    const saved = review.save({ token: preview.token, approved: true, executed: 'passed' });
+    assert.equal(fs.readFileSync(expectedFile(saved, 'steps'), 'utf8'), fixed);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(saved.directory, 'dependency-files.json')))[0].content, helper.content);
+    assert.equal(history.lifecycle(failed.revisionId).generation, 'failed');
+    assert.equal(history.lifecycle().qaApproval, 'approved');
+    assert.equal(history.lifecycle().functionalVerification, 'not-reported');
+    const events = JSON.parse(fs.readFileSync(path.join(saved.directory, 'provenance/events.json')));
+    const delivered = events.find(event => event.stage === 'interaction-author:provider-output');
+    assert.equal(delivered.pass, 2); assert.equal(delivered.artifacts.length, 1);
+    const store = new ApprovedGoldenStore(root); const scope = { squad: 'payment', platform: 'android', contract: saved.manifest.contract };
+    assert.equal(store.compatible(scope, f.frameworkRoot).length, 1);
+    helper.content = 'export const expected = 2;\n'; fs.writeFileSync(path.join(f.frameworkRoot, helper.path), helper.content);
+    assert.equal(store.compatible(scope, f.frameworkRoot).length, 0);
+    const next = { ...recovery, files: [...recovery.files.slice(0, -1), { ...helper, currentHash: sha256(helper.content) }] };
+    fs.writeFileSync(path.join(f.packageDirectory, 'framework-recovery.json'), JSON.stringify(next));
+    history.beginRevision({ recordingId: f.scenario.recordingId, caseId: 'TC-1', source: 'framework-import' }, [{ name: 'framework-recovery.json', content: JSON.stringify(next) }]);
+    const second = saveGoldenCaseFromPackage(f.deps(), { approved: true, source: 'recovery' });
+    assert.notEqual(second.manifest.versionHash, saved.manifest.versionHash);
+    assert.equal(store.index().versions, 2); assert.equal(store.index().entries.length, 1);
+});
+
+test('F6 legacy cases remain excluded until explicit review and approval; context switch invalidates IPC preview', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const legacyDir = path.join(root, 'old-case'); fs.mkdirSync(legacyDir, { recursive: true });
+    fs.cpSync(f.packageDirectory, path.join(legacyDir, 'package'), { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'manifest.json'), JSON.stringify({ schemaVersion: 1, caseId: 'TC-1', executed: 'passed', validation: { qualityScore: 100 } }));
+    fs.writeFileSync(path.join(legacyDir, 'catalog.json'), JSON.stringify(f.catalog));
+    fs.writeFileSync(path.join(legacyDir, 'agent-response.json'), JSON.stringify(f.response));
+    const original = fs.readFileSync(path.join(legacyDir, 'manifest.json'));
+    const { projectPaths } = require('../dist/core/workspace'); const previousFramework = projectPaths.frameworkRoot;
+    projectPaths.frameworkRoot = f.frameworkRoot; t.after(() => { projectPaths.frameworkRoot = previousFramework; });
+    const deps = { ...f.deps(), state: { activeSquad: 'payment', activeEnvironment: 'qa' } };
+    const controller = new GoldenCaseController(deps);
+    assert.equal(controller.list().index.entries.length, 0); assert.equal(controller.list().legacy.length, 1);
+    let preview = controller.prepare({ legacyId: 'old-case' }).preview;
+    assert.equal(preview.source, 'legacy-review');
+    assert.throws(() => controller.save({ token: preview.token }), /aprobación QA/);
+    deps.state.activeEnvironment = 'staging';
+    assert.throws(() => controller.save({ token: preview.token, approved: true }), /contexto/);
+    deps.state.activeEnvironment = 'qa';
+    preview = controller.prepare({ legacyId: 'old-case' }).preview;
+    const saved = controller.save({ token: preview.token, approved: true });
+    assert.equal(saved.success, true); assert.equal(controller.list().index.entries.length, 1);
+    assert.deepEqual(fs.readFileSync(path.join(legacyDir, 'manifest.json')), original);
+    assert.ok(fs.existsSync(path.join(saved.directory, 'package/legacy-manifest.json')));
+    assert.throws(() => controller.prepare({ legacyId: '../old-case' }), /no encontrado/);
+});
+
+test('F6 UI requires an explicit checkbox, renders exact code and pending diagnostics, and publishes via preview token', async t => {
+    const f = appliedPackageFixture(t); withGoldenRoot(t, f);
+    const { installFakeBrowserGlobals } = require('./helpers/fakeDom'); const fake = installFakeBrowserGlobals(); t.after(() => fake.restore());
+    const { createGoldenFeature } = await import('../recorder/renderer/src/features/golden/goldenFeature.js');
+    const review = new GoldenCaseReview(f.deps()); let saves = 0;
+    const feature = createGoldenFeature({ api: {
+        previewGoldenCase: async input => ({ success: true, preview: review.prepare(input) }),
+        saveGoldenCase: async input => { saves++; return { success: true, ...review.save(input) }; },
+    } });
+    feature.mount(); await feature.open({});
+    const el = id => fake.document.getElementById(id);
+    assert.equal(el('goldenModal').style.display, 'flex');
+    assert.equal(el('btnApproveGolden').disabled, true);
+    assert.match(el('goldenFiles').innerHTML, /new result/);
+    assert.match(el('goldenDiagnostics').textContent, /no reportada/);
+    await feature.approve(); assert.equal(saves, 0);
+    el('goldenApproved').checked = true; el('goldenExecution').value = 'passed';
+    await feature.approve(); assert.equal(saves, 1);
+    assert.match(el('goldenStatus').textContent, /Golden aprobado/);
+    assert.equal(el('goldenApproved').checked, false);
+    feature.unmount(); assert.equal(el('btnApproveGolden').listenerCount(), 0);
+});
+
+test('F6 changing execution declaration retains one immutable code version and records the latest explicit approval', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const first = saveGoldenCaseFromPackage(f.deps(), { approved: true, executed: 'not-run' });
+    const second = saveGoldenCaseFromPackage(f.deps(), { approved: true, executed: 'passed', notes: 'QA confirmed' });
+    assert.equal(second.directory, first.directory); assert.equal(second.duplicate, true);
+    const store = new ApprovedGoldenStore(root); assert.equal(store.index().versions, 1);
+    assert.equal(store.read(second.manifest.goldenId).manifest.executed, 'passed');
+    assert.equal(store.read(second.manifest.goldenId).manifest.notes, 'QA confirmed');
+});
+
+test('F6 context and diagnostics changes create a new immutable snapshot even when accepted code is unchanged', t => {
+    const f = appliedPackageFixture(t); const root = withGoldenRoot(t, f);
+    const first = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    fs.writeFileSync(path.join(f.packageDirectory, 'validation.json'), JSON.stringify({ valid: false, qualityScore: 75, errors: [{ code: 'new-rule', message: 'Rule changed' }], warnings: [] }));
+    const second = saveGoldenCaseFromPackage(f.deps(), { approved: true });
+    assert.notEqual(first.manifest.versionHash, second.manifest.versionHash);
+    assert.equal(readGoldenCase(second.directory).manifest.validation.errorCounts['new-rule'], 1);
+    assert.equal(new ApprovedGoldenStore(root).index().entries[0].versionHash, second.manifest.versionHash);
+    assert.equal(readGoldenCase(first.directory).manifest.validation.qualityScore, 100);
 });

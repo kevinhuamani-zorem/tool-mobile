@@ -5,6 +5,7 @@
 - [Arquitectura](ARCHITECTURE.md): componentes, límites y flujos principales.
 - [Contrato de generación](GENERATION_CONTRACT.md): archivos, nombres,
   validaciones y política de escritura.
+- [Versiones golden e índice aprobado](AUTOMATION_GOLDEN_APPROVAL.md): aprobación explícita, integridad, migración y recuperación de publicaciones.
 - [Historial de automatización](AUTOMATION_HISTORY.md): revisiones, intentos y recibos.
 - [Regeneración y reexportación con correcciones QA](AUTOMATION_RECONCILIATION.md): base histórica, combinación y conflictos durante el PR.
 - [Recuperación de correcciones QA](AUTOMATION_FRAMEWORK_RECOVERY.md): relaciones del caso, diff y revisiones desde el framework.

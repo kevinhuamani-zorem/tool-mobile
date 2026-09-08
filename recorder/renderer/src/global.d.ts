@@ -1,3 +1,4 @@
+import type { GoldenReviewRequest } from '../../src/goldenContracts';
 import type { FrameworkRecoveryRequest, FrameworkRecoveryPreview, FrameworkRecoverySaved } from '../../src/frameworkRecoveryContracts';
 import type { AutomationExportResult } from '../../src/automationExportContracts';
 export {};
@@ -50,13 +51,11 @@ declare global {
             revalidateAutomationResponse(reviewedContents: Record<string, string>): Promise<any>;
             previewFrameworkRecovery(input?: FrameworkRecoveryRequest): Promise<{ success: boolean; error?: string; preview?: FrameworkRecoveryPreview }>;
             saveFrameworkRecovery(token: string): Promise<{ success: boolean; error?: string; result?: FrameworkRecoverySaved }>;
-            saveGoldenCase(input: {
-                recordingId?: string;
-                squad?: string;
-                executed?: 'passed' | 'failed' | 'not-run';
-                notes?: string;
-                reviewedContents?: Record<string, string>;
-            }): Promise<any>;
+            previewGoldenCase(input: GoldenReviewRequest): Promise<any>;
+            listGoldenCases(): Promise<any>;
+            rebuildGoldenIndex(): Promise<any>;
+            revokeGoldenCase(input: { goldenId: string; versionHash: string }): Promise<any>;
+            saveGoldenCase(input: GoldenReviewRequest): Promise<any>;
         };
     }
 }

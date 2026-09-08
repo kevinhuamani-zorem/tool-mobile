@@ -251,11 +251,10 @@ export function ScenarioBuilderModal() {
             <section id="goldenDatasetPanel" className="qa-observations-panel golden-dataset-panel" style={{display: 'none'}}>
               <div className="qa-observations-heading">
                 <div>
-                  <strong>📌 Guardar como dataset</strong>
+                  <strong>📌 Guardar como golden verificado por QA</strong>
                   <small>
-                    Conserva este caso como referencia: grabación, plan, catálogo del framework y los archivos que
-                    aceptas. Si un step falló al ejecutar el caso, corrígelo arriba en el editor (o en el framework)
-                    y guarda: la corrección se valida, se escribe en el framework y queda en el dataset.
+                    Revisa los archivos y aprueba esta versión como referencia. Se conservan las correcciones,
+                    los diagnósticos y tu declaración de ejecución. Puedes recuperar y aprobar nuevas revisiones después del PR.
                   </small>
                 </div>
               </div>
@@ -273,7 +272,7 @@ export function ScenarioBuilderModal() {
                   <input id="txtGoldenNotes" className="field-input" type="text"
                     placeholder="p. ej. corregido el selector del botón cerrar en el step 5" />
                 </label>
-                <button type="button" className="btn btn-green" id="btnSaveGolden">Guardar como dataset</button>
+                <button type="button" className="btn btn-green" id="btnSaveGolden">Revisar versión golden</button>
               </div>
               <div id="lblGoldenStatus" className="wizard-help golden-dataset-status" />
             </section>

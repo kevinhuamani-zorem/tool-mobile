@@ -1,4 +1,6 @@
 import fs from 'fs';
+import os from 'os';
+import { ApprovedGoldenStore, goldenDatasetRoot } from '../../../core/automation';
 import path from 'path';
 import { ipcMain } from 'electron';
 import { projectPaths } from '../../../core/workspace';
@@ -27,7 +29,7 @@ import { qaDecisionPromptsFromPlan, mergedResolutionsWithQa, applyQaDecisionsToP
 import { AutomationResponseImporter } from './automation/responseImport';
 import { AutomationAgentLaunchService, LaunchAutomationAgentInput } from './automation/agentLaunch';
 import { applyReviewedAutomation } from './automation/applyAutomation';
-import { saveGoldenCaseFromPackage, SaveGoldenCaseRequest } from './automation/goldenCase';
+import { GoldenCaseController, SaveGoldenCaseRequest } from './automation/goldenCase';
 import { ReuseAnalyzer } from '../../../core/indexing';
 import { FrameworkRecoveryController } from './automation/frameworkRecovery';
 import type { FrameworkRecoveryRequest } from '../../../core/automation';
@@ -345,38 +347,25 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
 
     ipcMain.handle('get-automation-memory-stats', async () => ({
         success: true,
-        stats: automationMemory.stats(),
+        stats: new ApprovedGoldenStore(goldenDatasetRoot()).stats(),
     }));
 
-    // El QA aprueba el caso al terminar (o dias despues, tras ejecutarlo y
-    // corregir un step): se valida lo aceptado, se aplican sus correcciones
-    // al framework y el caso queda en el dataset de referencia.
+    const golden = new GoldenCaseController(context);
+    ipcMain.handle('preview-golden-case', async (_, input: SaveGoldenCaseRequest) => {
+        try { return golden.prepare(input); } catch (error: any) { return { success: false, error: error.message }; }
+    });
     ipcMain.handle('save-golden-case', async (_, input: SaveGoldenCaseRequest) => {
-        try {
-            const packageDirectory = input?.recordingId
-                ? path.join(
-                    recordingCoverageAnalyzer.findRecordingDirectory(
-                        input.squad || state.activeSquad,
-                        input.recordingId,
-                        state.activeEnvironment,
-                    ),
-                    'generation',
-                    'automation',
-                )
-                : state.activeAutomationPackage;
-            if (!packageDirectory || !fs.existsSync(path.join(packageDirectory, 'agent-response.json'))) {
-                throw new Error('No hay una automatización aplicada que guardar: aplica el caso primero.');
-            }
-            const saved = saveGoldenCaseFromPackage({
-                packageDirectory,
-                frameworkRoot: projectPaths.frameworkRoot,
-                reuseAnalyzer,
-                automationResponseValidator,
-                generatedFileRegistry,
-            }, input);
-            return { success: true, ...saved };
-        } catch (e: any) {
-            return { success: false, error: e.message, ...(e.validation ? { validation: e.validation } : {}) };
-        }
+        try { return golden.save(input); } catch (error: any) { return { success: false, error: error.message }; }
+    });
+    ipcMain.handle('list-golden-cases', async () => {
+        try { return golden.list(); } catch (error: any) { return { success: false, error: error.message }; }
+    });
+    ipcMain.handle('rebuild-golden-index', async () => {
+        try { return { success: true, index: new ApprovedGoldenStore(goldenDatasetRoot()).rebuildIndex() }; }
+        catch (error: any) { return { success: false, error: error.message }; }
+    });
+    ipcMain.handle('revoke-golden-case', async (_, input: { goldenId: string; versionHash: string }) => {
+        try { return { success: true, ...new ApprovedGoldenStore(goldenDatasetRoot()).revoke(input.goldenId, input.versionHash, os.userInfo().username) }; }
+        catch (error: any) { return { success: false, error: error.message }; }
     });
 }

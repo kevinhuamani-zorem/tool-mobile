@@ -363,7 +363,8 @@ producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
 - No se recuperan respuestas de otro intento ni se usa un `agent-response.json`
   anterior como caché. Los cachés temporales de autores/revisión se ubican bajo
   `agents/derek/attempt-cache/`, que se reinicia en cada ejecución. El índice de
-  ejemplos derivados de revisiones golden aprobadas se implementará en F6.
+  revisiones golden aprobadas existe desde F6; la selección y entrega de ejemplos
+  a los agentes corresponde a F7.
 - La normalización nunca renombra identificadores heredados del framework (los
   declarados en el baseline de un archivo `update`, como `titleVentas`):
   traducirlos destruiría una API existente. Y el importador nunca convierte una
@@ -869,48 +870,80 @@ de salida incompleta.
 - La IA solo resuelve gaps del plan y su salida nunca se escribe sin preview.
 - Si una validación falla, no debe quedar una generación parcial.
 
-## Golden dataset
+## Golden aprobado por QA (F6)
 
-Un caso golden es una automatización que el QA **aprobó** al terminar el
-flujo: en el paso 3 de la revisión, una vez aplicado el caso, «Guardar como
-dataset» lo congela bajo `tests/golden/<tc>-<rec>/`; `npm run golden:save`
-hace lo mismo desde la terminal para una grabación aplicada días antes. Cada
-caso lleva lo que hace falta para volver a juzgar al recorder sin depender del
-framework vivo ni de la memoria de una máquina:
+**Guardar como golden verificado por QA** abre una revisión de los archivos
+concretos. El QA marca la aprobación y declara por separado si ejecutó el caso.
+El token queda ligado al paquete, revisión, contenido y checkout. Un cambio
+posterior requiere otro preview. No exige score 100, validación verde, ejecución
+adicional, commit ni PR integrado. Conserva los diagnósticos tal como se obtuvieron.
 
-- `package/`: `scenario.json`, `generation-plan.json` (y el efectivo tras las
-  decisiones de QA), `resolved/unresolved-context.json`, `gaps.json`,
-  `hints.json`, `reuse-context.json`, `collision-report.json`,
-  `validation.json`, `application-receipt.json`, `agent-run.json`.
-- `catalog.json`: el `SquadReuseCatalog` tal como lo vio el resolver, sin
-  telemetría. Con él el replay reproduce el plan aunque el framework haya
-  cambiado de rama.
-- `baselines/`: el contenido previo de los archivos `update`, para que el
-  replay del resolver y del validador partan del estado anterior a aplicar.
-- `expected/<capa>-<archivo>` y `agent-response.json`: los cuatro archivos
-  **aceptados**. Si el QA corrigió un step tras ejecutar el caso (en el editor
-  de la revisión o directamente en el framework), lo aceptado es esa versión:
-  la corrección se revalida, se escribe en el framework cuando viene del
-  editor, el recibo de aplicación y `config/generated-files.json` adoptan los
-  bytes nuevos, y el manifiesto lo marca con `edited: true` y
-  `validation.source: golden`. Una corrección que no pasa la validación no se
-  guarda ni toca el framework.
-- `manifest.json`: caso, grabación, squad, plataforma, fecha y autor,
-  `executed` (`passed` | `failed` | `not-run`, lo declara el QA: el recorder no
-  ejecuta el caso), notas, perfil de validación y el HEAD del framework.
+Publicar golden no escribe el framework, el recibo de exportación ni la entrega
+del agente. Exportar sigue siendo la operación de F3/F5. Para correcciones externas,
+usa **Recuperar cambios del framework → Guardar revisión QA → Revisar como golden**.
+F6 toma el artefacto inmutable de esa revisión, incluyendo las dependencias del caso,
+sus asociaciones pendientes y referencia de PR. Puede repetirse después de otro PR,
+regrabación o regeneración. Las trazas pendientes no se convierten en eventos Appium.
 
-`tests/goldenDataset.test.js` reproduce cada caso: el resolver, con
-`catalog.json` y un snapshot de baselines, tiene que producir la misma
-proyección del plan (reuseTarget, archivos y operaciones, decisión y locator de
-cada acción, gaps y si bloquean); y el validador, sobre un framework aislado
-devuelto al estado previo (baselines aplicados, `create` retirados), tiene que
-aceptar los archivos aprobados con el mismo perfil de errores. Los datos de
-prueba de la grabación viajan con el caso: revísalos antes de versionarlo.
+El almacenamiento es `tests/golden/` en desarrollo y `runtime/golden/` en la app:
 
-El comando `golden:seed-memory` está retirado y termina con un mensaje explícito
-sin escribir memoria. Los golden existentes se conservan para replay. El índice
-reconstruible que consumirá únicamente revisiones aprobadas por QA corresponde a
-F6 de [las fases de implementación](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md).
+- `approved/<goldenId>/versions/<versionHash>/`: snapshot inmutable con manifiesto
+  v2, paquete, baselines, código esperado, dependencias, diagnósticos, entregas de
+  agentes y eventos históricos verificados. `qa-changes.json` conserva contenido y
+  hashes antes/después. `catalog.json` es el catálogo consultado durante el preview
+  de aprobación; no afirma reconstruir un catálogo del resolver que no se guardó.
+- `approved/<goldenId>/publications/`: eventos encadenados por hash de aprobación
+  o revocación. Fijan versión/manifiesto, revisión, actor local, fecha, declaración
+  QA de ejecución y notas. Son la autoridad; se publican después de escribir y
+  comprobar el snapshot. Nunca se reemplaza un evento previo.
+- `approved-index.json`: proyección descartable. Incluye solo la última versión
+  aprobada activa por caso, con ámbito, plataforma, contrato y procedencia. Cada
+  lectura comprueba publicaciones, hashes y artefactos; un caso corrupto se excluye
+  con un diagnóstico, sin rescatar silenciosamente una aprobación anterior.
+
+La versión depende del código aceptado, dependencias, recording y contexto
+congelado (incluidos los diagnósticos). Repetir la aprobación del mismo snapshot
+no duplica versiones. Otra declaración de ejecución/notas puede publicar una
+aprobación nueva sobre la misma versión; el historial conserva ambas declaraciones.
+Cambiar código o contexto crea otra versión y sustituye la referencia activa.
+Un cambio de reglas conserva sus nuevos diagnósticos aunque el código coincida.
+
+Un fallo previo a la publicación no activa el snapshot; un reintento puede adoptar
+una versión íntegra ya escrita. Si falla solo la proyección del índice o el evento
+auxiliar en el historial del recording, la aprobación permanece confirmada y se
+informa el problema. Los archivos temporales y el índice no se versionan en Git.
+Los hashes verifican integridad local, no identidad remota del QA ni éxito funcional.
+`execution.json` describe la primera declaración del snapshot; para la declaración
+vigente se lee su publicación. No se fabrica evidencia de ejecución automática.
+
+**Casos golden**, en Configuración, permite retirar versiones del índice,
+reconstruirlo y revisar casos legacy v1 para aprobarlos explícitamente. Su score,
+existencia o estado del PR nunca los promueve automáticamente. Los originales
+legacy permanecen intactos y su manifiesto viaja como procedencia al promoverlos.
+
+`ApprovedGoldenStore.compatible` comprueba ámbito/contrato y hashes actuales del
+framework antes de ofrecer referencias. Para una recuperación compartida verifica
+el hash completo observado por F4, conservando la proyección del caso como ejemplo.
+Es conservador: una edición externa exige recuperación/revisión. El fingerprint
+cambia al aprobar, sustituir, revocar o detectar corrupción; cualquier caché futura
+debe depender de él. Las lecturas legacy siguen vacías. La selección semántica de
+fragmentos y su entrega a Lorem/Zorem/Sumrak corresponden a F7.
+
+Desde terminal:
+
+```sh
+npm run golden:save -- <grabación>
+# Revisar el código, contexto y diagnósticos impresos; copiar approvalDigest.
+npm run golden:save -- <grabación> --approve <approvalDigest> --executed passed --notes "Validado por QA"
+npm run golden:seed-memory
+npm run test:golden
+```
+
+`--source recovery` selecciona la revisión QA recuperada. `golden:seed-memory`
+conserva su nombre como alias de reconstrucción del índice aprobado; no reactiva
+memoria legacy. Informa conteos e integridad y falla si detecta corrupción.
+El replay completo de corpus curado, las equivalencias y el piloto real siguen
+pendientes en F7; guardar con aprobación QA no garantiza que el agente no falle.
 
 ## Conformidad con el review de PR
 

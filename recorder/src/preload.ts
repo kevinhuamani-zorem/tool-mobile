@@ -1,3 +1,4 @@
+import type { GoldenReviewRequest } from './goldenContracts';
 import type { FrameworkRecoveryRequest, FrameworkRecoveryPreview, FrameworkRecoverySaved } from './frameworkRecoveryContracts';
 import type { AutomationExportResult } from './automationExportContracts';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -126,7 +127,11 @@ contextBridge.exposeInMainWorld('api', {
     saveFrameworkRecovery: (token: string): Promise<{ success: boolean; error?: string; result?: FrameworkRecoverySaved }> =>
         ipcRenderer.invoke('save-framework-recovery', token),
     getAutomationMemoryStats: () => ipcRenderer.invoke('get-automation-memory-stats'),
-    saveGoldenCase: (input: { recordingId?: string; squad?: string; executed?: 'passed' | 'failed' | 'not-run'; notes?: string; reviewedContents?: Record<string, string> }) =>
+    previewGoldenCase: (input: GoldenReviewRequest) => ipcRenderer.invoke('preview-golden-case', input),
+    listGoldenCases: () => ipcRenderer.invoke('list-golden-cases'),
+    rebuildGoldenIndex: () => ipcRenderer.invoke('rebuild-golden-index'),
+    revokeGoldenCase: (input: { goldenId: string; versionHash: string }) => ipcRenderer.invoke('revoke-golden-case', input),
+    saveGoldenCase: (input: GoldenReviewRequest) =>
         ipcRenderer.invoke('save-golden-case', input),
     generateFiles:       (f: string, s: string) => ipcRenderer.invoke('generate-files', f, s),
     // [visual-recorder] Continuar una grabacion existente (p. ej. para agregar el Then que falta).

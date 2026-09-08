@@ -179,3 +179,12 @@ sustituye ni acredita aprobación golden.
 exportación, la preparación desde QA y regrabación, protecciones compartidas,
 concurrencia, integridad y rollback. Prueba ciclos después de rebase/merge en Git
 local. Las respuestas del agente están simuladas; el piloto real sigue en F7.
+
+## Aprobación golden (F6)
+
+QA aprobado, ejecución declarada y diagnóstico automático son resultados distintos.
+Un golden con score bajo conserva el error para contrastar la regla. Aprobar la
+corrección no convierte el intento fallido previo en éxito del agente.
+`ApprovedGoldenStore` comprueba integridad y versiones activas; no mide éxito
+funcional. Corpus, selección por capa, denominadores y piloto real siguen en F7.
+Ver [el contrato de F6](AUTOMATION_GOLDEN_APPROVAL.md).

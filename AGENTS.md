@@ -114,8 +114,8 @@ generadores, validadores o plantillas.
     casos, fragmentos, vocabulario y cachés anteriores se archivan bajo
     `runtime/automation-memory/legacy-v1/`, sin borrarlos ni convertirlos en
     golden. Ninguna generación recupera respuestas de otro intento. El índice
-    derivado de revisiones golden aprobadas por QA se implementará en F6;
-    mientras tanto las lecturas legacy devuelven vacío. La reutilización exacta
+    derivado de revisiones golden aprobadas por QA existe desde F6;
+    las lecturas legacy siguen vacías y F7 conectará los ejemplos a los agentes. La reutilización exacta
     del framework permanece disponible y no acredita aprobación golden.
 14. **El historial precede a las modificaciones.** `AutomationHistoryStore`
     conserva eventos y blobs por hash en `generation/automation/history/v1`.
@@ -238,11 +238,14 @@ generadores, validadores o plantillas.
   plan crea Feature/Steps y marca Screen/Locators como `update`. `update` puede
   ser una referencia pura: conserva el baseline sin cambios cuando las APIs
   existentes cubren todas las acciones y añade únicamente símbolos faltantes.
-- El golden dataset (`tests/golden/`, `core/automation/infrastructure/goldenDataset.ts`)
-  congela casos que el QA aprobó: lo aceptado (con sus correcciones) manda sobre
-  lo que el agente entregó; el replay usa `catalog.json` y los baselines, nunca
-  el framework vivo. Un cambio que altere el plan o rechace un caso golden es
-  una regresión salvo que el QA vuelva a aprobar el caso.
+- El golden dataset exige aprobación QA explícita sobre un preview con token.
+  Publicaciones y snapshots son inmutables; el índice es descartable y solo incluye
+  versiones aprobadas activas. Verifica hashes al leer y compatibilidad antes de
+  reutilizar. La aprobación no escribe el framework ni borra fallos del agente;
+  ejecución declarada y diagnóstico automático son campos distintos. No exige
+  score 100 ni validación verde. No cambies expected para esconder discrepancias.
+  Los legacy solo se promueven tras revisión explícita. Ver
+  `docs/AUTOMATION_GOLDEN_APPROVAL.md`.
 - Un gap `blocking` es un defecto de la grabación que solo el QA corrige
   (aserción ausente, candidato ambiguo, selector que el framework no compone):
   el paquete no se arma. El estado del framework (claves vacías del módulo que
