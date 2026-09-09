@@ -248,33 +248,25 @@ export function ScenarioBuilderModal() {
               </div>
             </div>
             <div id="lblGenerateResult" className="generate-result review-generation-result" />
-            <section id="goldenDatasetPanel" className="qa-observations-panel golden-dataset-panel" style={{display: 'none'}}>
-              <div className="qa-observations-heading">
-                <div>
-                  <strong>📌 Guardar como golden verificado por QA</strong>
-                  <small>
-                    Revisa los archivos y aprueba esta versión como referencia. Se conservan las correcciones,
-                    los diagnósticos y tu declaración de ejecución. Puedes recuperar y aprobar nuevas revisiones después del PR.
-                  </small>
+            <section id="goldenDatasetPanel" className="golden-dataset-panel" style={{display: 'none'}}>
+              <div className="golden-dataset-heading">
+                <span className="golden-bookmark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17l-6-4-6 4V4Z" /><path d="m9 10 2 2 4-4" /></svg></span>
+                <div><span className="eyebrow">GOLDEN DATASET</span><h3>Guarda este caso como ejemplo para el equipo</h3>
+                  <p>Un golden es una versión revisada por QA que los agentes pueden consultar para generar otros casos.</p></div>
+                <button type="button" className="btn btn-navy" id="btnSaveGolden">Revisar y guardar golden →</button>
+              </div>
+              <div className="golden-dataset-next"><span>1. Revisa los archivos</span><span aria-hidden="true">→</span><span>2. Aprueba la versión</span><span aria-hidden="true">→</span><span>3. Comparte por PR</span></div>
+              <details className="golden-dataset-options"><summary>Añadir resultado de ejecución y notas <span>(opcional)</span></summary>
+                <div className="golden-dataset-fields">
+                  <label className="golden-dataset-field"><span>Resultado en dispositivo</span>
+                    <select id="cmbGoldenExecution" className="field-select"><option value="not-run">Todavía no ejecutado</option><option value="passed">Ejecutado correctamente</option><option value="failed">La ejecución falló</option></select>
+                  </label>
+                  <label className="golden-dataset-field golden-dataset-notes"><span>Notas del QA</span>
+                    <input id="txtGoldenNotes" className="field-input" type="text" placeholder="Qué corregiste o verificaste en este caso…" />
+                  </label>
                 </div>
-              </div>
-              <div className="golden-dataset-fields">
-                <label className="golden-dataset-field">
-                  <span>Ejecución en dispositivo</span>
-                  <select id="cmbGoldenExecution" className="field-select">
-                    <option value="not-run">Todavía no ejecutado</option>
-                    <option value="passed">Ejecutado en verde</option>
-                    <option value="failed">Falló al ejecutar (explica en notas)</option>
-                  </select>
-                </label>
-                <label className="golden-dataset-field golden-dataset-notes">
-                  <span>Notas</span>
-                  <input id="txtGoldenNotes" className="field-input" type="text"
-                    placeholder="p. ej. corregido el selector del botón cerrar en el step 5" />
-                </label>
-                <button type="button" className="btn btn-green" id="btnSaveGolden">Revisar versión golden</button>
-              </div>
-              <div id="lblGoldenStatus" className="wizard-help golden-dataset-status" />
+              </details>
+              <div id="lblGoldenStatus" className="wizard-help golden-dataset-status" role="status" />
             </section>
           </section>
         </main>

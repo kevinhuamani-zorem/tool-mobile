@@ -124,3 +124,19 @@ La compactación comprueba integridad; no acredita equivalencia de replay. El
 catálogo de aprobación puede diferir del catálogo del plan original y los módulos
 compartidos pueden estar guardados como proyecciones. Conserva y reporta esas
 discrepancias con `golden:replay`, sin ajustar los esperados aprobados.
+
+## Interfaz del Recorder
+
+La biblioteca **Casos golden** usa el tema oscuro del Recorder. Permite buscar
+por caso, squad o QA y filtrar referencias o casos reservados para evaluación.
+Cada tarjeta muestra su uso y aprobación; la versión y la acción de retirada
+quedan en **Detalles de la versión**. **Repositorio compartido** muestra la ruta
+y permite cambiar el checkout. **Actualizar lista** reconstruye los índices locales.
+
+En la revisión del caso, **Revisar y guardar golden** abre los archivos propios;
+las dependencias y los diagnósticos se despliegan por separado. El QA declara
+el resultado en dispositivo, elige el uso y marca la aprobación explícita antes
+de guardar. La exportación mantiene su flujo independiente. Los resultados y
+notas opcionales del panel se conservan al abrir esta revisión. Escape cierra
+el modal y devuelve el foco al control de origen; durante una escritura no se
+cierra ni se envía una segunda aprobación.
