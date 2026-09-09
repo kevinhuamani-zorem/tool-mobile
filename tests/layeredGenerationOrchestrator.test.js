@@ -1782,3 +1782,32 @@ test('si Lorem se recupera en la segunda pasada, Zorem recibe por primera vez su
     assert.equal(zorem[0].hasBehaviorDependency, false);
     assert.equal(zorem[1].hasBehaviorDependency, true);
 });
+
+test('las consultas golden se atienden dentro de las tres invocaciones existentes', async t => {
+    const root = fixture();
+    const { withGoldenRoot } = require('./helpers/goldenCaseFixture');
+    withGoldenRoot(t, { root });
+    const calls = [], base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const requestFile = path.join(input.cwd, 'golden-request.json');
+        writeJson(requestFile, { id: 'catalog-in-pass', operation: 'catalog' });
+        let response;
+        for (let i = 0; i < 150; i++) {
+            const file = path.join(input.cwd, 'golden-response.json');
+            if (fs.existsSync(file)) {
+                const current = JSON.parse(fs.readFileSync(file));
+                if (current.requestId === 'catalog-in-pass') { response = current; break; }
+            }
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        assert.equal(response?.success, true, 'the recorder serves the mailbox while the provider is running');
+        assert.equal(response.data.total, 0);
+        return base.execute(input);
+    } };
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+    assert.equal(result.success, true);
+    assert.equal(calls.length, 3); assert.ok(calls.every(call => !call.allowValidationScripts || call.agentName === 'Zorem'));
+    const report = JSON.parse(fs.readFileSync(result.reportFile));
+    assert.ok(report.stages.every(stage => stage.goldenRetrieval.requests === 1));
+    assert.ok(report.stages.every(stage => stage.attempt === 0));
+});

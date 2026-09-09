@@ -424,3 +424,11 @@ comparación controlada; no deshabilita reutilización actual del framework.
 Los avisos técnicos de presupuesto permanecen en telemetría; no se renderizan.
 Corpus QA, piloto `.app` y comparación real están detallados en
 [AUTOMATION_GOLDEN_LEARNING.md](AUTOMATION_GOLDEN_LEARNING.md).
+
+## Pruebas de recuperación progresiva golden
+
+`goldenRetrieval.test.js` cubre invalidación incremental, integridad de cachés,
+agrupación, paginación, lecturas por rol y consultas durante una invocación fallida.
+`layeredGenerationOrchestrator.test.js` comprueba el canal durante las invocaciones
+de Lorem, Zorem y Sumrak. `agents:evaluate` añade métricas de contexto ofrecido,
+no tokens ni lecturas confirmadas. Ver [contrato](AUTOMATION_GOLDEN_RETRIEVAL.md).

@@ -29,3 +29,5 @@ test-results/
 # Selección local del checkout compartido; no viaja entre máquinas.
 /config/golden-repository.json
 /config/golden-repository.json.*.tmp
+
+/tests/golden/retrieval-index.json

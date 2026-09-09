@@ -98,6 +98,11 @@ export interface LayeredGenerationStageReport {
     budget?: { maxDurationMs: number; maxContextBytes: number; hangStopMs: number };
     /** Avisos de presupuesto superado; solo telemetría interna, sin alertas al QA. */
     budgetWarnings?: string[];
+    goldenRetrieval?: {
+        candidates: number; groups: number; examples: number; bytes: number; indexMs: number; rebuiltCases: number; reusedCases: number;
+        requests: number; rejected: number; responseBytes: number; retrievalMs: number;
+        references: Array<{ goldenId: string; versionHash: string; revisionId: string }>; observation: string;
+    };
     timedOut?: boolean;
     error?: string;
 }

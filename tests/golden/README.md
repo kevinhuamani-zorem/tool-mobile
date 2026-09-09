@@ -62,7 +62,7 @@ ocultar cambios en el código aprobado.
 - Este README y `.gitattributes`: preservan los bytes aprobados entre sistemas,
   incluso al usar `core.autocrlf`. No normalices saltos de línea de los snapshots.
 
-El índice `approved-index.json`, los locks, temporales, selección de repositorio
+Los índices `approved-index.json` y `retrieval-index.json`, los locks, temporales y la selección de repositorio
 local y archivos de runtime no se versionan. El índice se reconstruye desde los
 snapshots y publicaciones; copiar solamente el índice no comparte el dataset.
 
@@ -93,3 +93,7 @@ compatibilidad, consulta [F7](../../docs/AUTOMATION_GOLDEN_LEARNING.md) y el
 `npm run golden:compact` reduce los archivos físicos de versiones anteriores
 sin cambiar sus aprobaciones ni hashes. Actualiza la app antes de consumir el
 formato compacto. Consulta [lectura y migración](../../docs/AUTOMATION_GOLDEN_APPROVAL.md).
+
+La [recuperación progresiva](../../docs/AUTOMATION_GOLDEN_RETRIEVAL.md) agrupa
+referencias equivalentes, conserva los archivos completos y permite ampliar
+ejemplos y dependencias durante las dos pasadas, sin cargar todo el corpus.

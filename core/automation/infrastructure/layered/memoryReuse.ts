@@ -148,6 +148,7 @@ export function designReviewPrompt(memoryCases: string[]): string {
         'behavior-result.json ya está escrito por Derek con Feature y Steps reutilizados del framework' +
         (memoryCases.length ? ` (${memoryCases.join(', ')})` : '') + '. No lo modifiques ni lo reescribas.',
         'Lee scenario.json (objective, acceptanceCriteria, actions), generation-plan.json y behavior-result.json. golden-examples.json contiene referencias QA opcionales; aprende de las correcciones sin copiar datos ni requisitos de otro caso.',
+        'Para ampliar una referencia golden, sigue retrieval en golden-examples.json: crea golden-request.json y lee golden-response.json con el mismo requestId. El recorder atiende la consulta dentro de esta pasada; no explores el framework ni generes otra ronda. No entregues el resultado final mientras esperas un detalle necesario.',
         'Evalúa únicamente el diseño funcional de ESTE caso: contrasta objective y acceptanceCriteria con las acciones y verificaciones grabadas.',
         'Usa status "suggestion" si observas oportunidades de mejorar el diseño; son recomendaciones no bloqueantes: no exijas una aserción tras cada interacción, acepta una validación consolidada al final y no inventes requisitos fuera de acceptanceCriteria.',
         'Usa status "pass" cuando no tengas recomendaciones útiles.',

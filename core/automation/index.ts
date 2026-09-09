@@ -67,3 +67,6 @@ export * from './infrastructure/agentEvaluation';
 
 export { GoldenSnapshotReader, GOLDEN_EVIDENCE_ARCHIVE } from './infrastructure/goldenSnapshot';
 export { goldenCaseContext, goldenPrimaryPaths } from './infrastructure/goldenCaseContext';
+
+export { GoldenRetrievalIndex, selectGoldenCoverage } from './infrastructure/goldenRetrievalIndex';
+export { GoldenReferenceSession, withGoldenRetrieval } from './infrastructure/goldenRetrieval';

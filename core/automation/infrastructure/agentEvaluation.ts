@@ -43,15 +43,17 @@ export function evaluateAutomationPackages(packageDirectories: string[], goldenR
                 const contexts = own.filter(event => event.stage?.startsWith('golden-context:')).flatMap(event => event.artifacts.map(item => {
                     const value = JSON.parse(history.readArtifact(item).toString('utf8'));
                     return { role: value.role, pass: value.pass, contract: value.contract, selectionVersion: value.selectionVersion, sha256: item.sha256, fingerprint: value.fingerprint, enabled: value.enabled,
+                        initialBytes: item.bytes, retrievalVersion: value.retrieval?.version, candidateCases: value.retrieval?.candidateCases,
                         references: (value.examples || []).map((example: any) => ({ goldenId: example.goldenId, revisionId: example.revisionId, versionHash: example.versionHash })) };
                 }));
+                const retrieval = own.filter(event => event.stage?.startsWith('golden-retrieval:')).flatMap(event => event.artifacts.map(item => JSON.parse(history.readArtifact(item).toString('utf8'))));
                 const duration = run ? Date.parse(run.completedAt) - Date.parse(run.startedAt) : null;
                 attempts.push({ attemptId, recordingId: start.recordingId, revisionId: start.revisionId, caseId: start.caseId,
                     status: end?.result || 'not-evaluated', agentInvoked: invoked.length > 0, invocations: artifact ? invoked.length : null,
                     firstPass: first?.result || 'not-evaluated', passes, validation, timedOut: invoked.some(stage => stage.timedOut),
                     wallTimeMs: duration !== null && Number.isFinite(duration) ? Math.max(0, duration) : null,
                     qaInterventions: corrections.length + own.filter(event => event.kind === 'qa-validation-result').length, qaApproved: approved,
-                    functionalVerification: 'not-evaluated', contexts,
+                    functionalVerification: 'not-evaluated', contexts, retrieval,
                     models: [...new Set(stages.flatMap(stage => stage.actualModels || []))],
                 });
             }
@@ -73,12 +75,17 @@ export function evaluateAutomationPackages(packageDirectories: string[], goldenR
     const groups = (enabled: boolean) => completed.filter(attempt => attempt.contexts.length && attempt.contexts.every((context: any) => context.enabled === enabled));
     const comparison = (group: any[]) => ({ autonomousFinal: fraction(group.filter(attempt => attempt.status === 'passed').length, group.length),
         sampleSize: group.length, actuallyReceivedExamples: group.filter(attempt => attempt.contexts.some((context: any) => context.references.length)).length });
-    return { schemaVersion: 1, evaluationVersion: 'agent-evaluation/v1', generatedAt: new Date().toISOString(),
+    const retrieval = completed.flatMap(attempt => attempt.retrieval || []);
+    const sum = (field: string) => retrieval.reduce((total: number, item: any) => total + (Number(item[field]) || 0), 0);
+    return { schemaVersion: 1, evaluationVersion: 'agent-evaluation/v2', generatedAt: new Date().toISOString(),
         status: index.entries.length && reserved.length && completed.length ? 'observational' : 'not-evaluated',
         ruleObservations: completed.flatMap(attempt => attempt.validation.flatMap((validation: any) => validation.issues.map((issue: any) => ({ attemptId: attempt.attemptId, pass: validation.pass, code: issue.code, layer: issue.layer, file: issue.file })))),
         corpus: { active: index.entries.length, references: index.entries.length - reserved.length, reserved: reserved.length, fingerprint: index.fingerprint,
             issues: index.issues, curatedTarget: '5–8 QA-approved cases; separate evaluation cases' },
-        metrics: { autonomousFirstPass: fraction(firstKnown.filter(attempt => attempt.firstPass === 'passed').length, firstKnown.length, attempts.length - firstKnown.length),
+        metrics: { goldenRetrieval: { measuredStages: retrieval.length, notEvaluatedAttempts: completed.filter(attempt => !attempt.retrieval?.length).length,
+                candidateCases: sum('candidates'), initialExamples: sum('examples'), initialBytes: sum('bytes'), requests: sum('requests'), rejected: sum('rejected'),
+                responseBytes: sum('responseBytes'), indexMs: sum('indexMs'), retrievalMs: sum('retrievalMs'), rebuiltCases: sum('rebuiltCases'), reusedCases: sum('reusedCases'),
+                observation: 'Context made available; actual model reads are not measured.' }, autonomousFirstPass: fraction(firstKnown.filter(attempt => attempt.firstPass === 'passed').length, firstKnown.length, attempts.length - firstKnown.length),
             autonomousFinal: fraction(completed.filter(attempt => attempt.status === 'passed').length, completed.length, attempts.length - completed.length),
             qaIntervention: fraction(completed.filter(attempt => attempt.qaInterventions > 0).length, completed.length),
             qaApprovalAfterFailure: fraction(completed.filter(attempt => attempt.status === 'failed' && attempt.qaApproved).length, completed.filter(attempt => attempt.status === 'failed').length),

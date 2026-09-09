@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { goldenHash, goldenPath } from './goldenFiles';
+import { goldenHash, goldenPath, goldenTreeSignature } from './goldenFiles';
 import { GoldenSnapshotReader, writeGoldenSnapshot, GOLDEN_EVIDENCE_ARCHIVE } from './goldenSnapshot';
 export { goldenHash, goldenPath } from './goldenFiles';
 
@@ -27,6 +27,9 @@ function atomic(file: string, content: string) {
     finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
 }
 
+// Verified only in this process; serialized indexes never authorize a cache hit.
+const verifiedSnapshots = new Map<string, { signature: string; manifestHash: string; manifest: any }>();
+
 /** Publication records are authority. The index is a disposable projection. */
 export class ApprovedGoldenStore {
     constructor(readonly root: string) {}
@@ -50,6 +53,12 @@ export class ApprovedGoldenStore {
         if (!/^[a-f0-9]{64}$/.test(versionHash)) throw new Error('Versión golden inválida.');
         const relative = `approved/${goldenId}/versions/${versionHash}`;
         const directory = stagedDirectory || goldenPath(this.root, relative);
+        const signature = goldenTreeSignature(directory);
+        const cached = verifiedSnapshots.get(directory);
+        if (cached && cached.signature === signature && (!manifestHash || cached.manifestHash === manifestHash)
+            && cached.manifest.goldenId === goldenId && cached.manifest.versionHash === versionHash)
+            return { directory, manifest: structuredClone(cached.manifest) };
+        verifiedSnapshots.delete(directory);
         const reader = new GoldenSnapshotReader(directory);
         const manifestBytes = bytes(directory, 'manifest.json');
         if (manifestHash && goldenHash(manifestBytes) !== manifestHash) throw new Error('El manifiesto golden fue alterado.');
@@ -76,6 +85,8 @@ export class ApprovedGoldenStore {
             const expected = reader.require(`expected/${file.expected}`);
             if (goldenHash(expected) !== file.sha256 || !response.files.some((item: any) => item.path === file.path && item.layer === file.layer && Buffer.from(item.content).equals(expected))) throw new Error('Las capas golden no coinciden con lo aprobado.');
         }
+        if (goldenTreeSignature(directory) !== signature) throw new Error('El golden cambió durante la lectura.');
+        if (!stagedDirectory) verifiedSnapshots.set(directory, { signature, manifestHash: goldenHash(manifestBytes), manifest: structuredClone(manifest) });
         return { directory, manifest };
     }
     read(goldenId: string, versionHash?: string) {
@@ -204,6 +215,9 @@ export class ApprovedGoldenStore {
                     caseId: manifest.caseId, featureScope: manifest.featureScope, environment: manifest.environment, source: manifest.source || 'qa', usage: manifest.usage || 'reference', approval: manifest.approval });
             } catch (error: any) { issues.push(`${name}: ${error.message}`); }
         }
+        const activeDirectories = new Set(entries.map(entry => entry.directory));
+        const prefix = path.resolve(this.root, 'approved') + path.sep;
+        for (const cached of verifiedSnapshots.keys()) if (cached.startsWith(prefix) && !activeDirectories.has(cached)) verifiedSnapshots.delete(cached);
         return { schemaVersion: 1, fingerprint: goldenHash(JSON.stringify({ heads, issues })), entries, issues, versions };
     }
     rebuildIndex(): ApprovedGoldenIndex {

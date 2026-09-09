@@ -18,8 +18,10 @@ Ver [configuración, versionado y actualizaciones](../tests/golden/README.md).
 `goldenExamples.ts` verifica publicaciones y hashes, exige squad, plataforma,
 ambiente, subruta Feature y contrato compatibles, y comprueba los bytes actuales
 del framework. Ordena por coincidencia de acciones (65 %) e intención (35 %),
-con coincidencia no nula en ambas. Incluye todas las referencias pertinentes, sin
-recortarlas por cantidad o bytes. La compatibilidad sigue siendo conservadora: cambiar un módulo compartido puede excluir el ejemplo hasta que
+con coincidencia no nula en ambas. Desde `golden-selection/v3` conserva todas las
+referencias pertinentes como candidatas, agrupa patrones y entrega inicialmente
+las que aportan necesidades distintas. Las demás se consultan durante la pasada,
+con archivos completos y listados paginados. La compatibilidad sigue siendo conservadora: cambiar un módulo compartido puede excluir el ejemplo hasta que
 QA revise y publique su versión actualizada.
 
 El modal permite elegir **Referencia para los agentes** o **Reservado para evaluación**.
@@ -37,9 +39,10 @@ revocación retira la referencia.
 
 Los archivos `golden-examples.json` de cada workspace se registran en el manifiesto
 y en `history/v1`: rol, pasada, hash, versión de selección, fingerprint del índice
-y versiones efectivamente entregadas. Desde `golden-selection/v2` no hay límite
-de 24 KB ni de cantidad de ejemplos. Cada autor recibe íntegros los archivos propios
-de sus capas. Login, Home y helpers reutilizados se identifican como dependencias
+y versiones efectivamente entregadas. Se mantienen eliminados los topes de 24 KB
+y de cantidad de casos; la recuperación progresiva evita cargar todos los cuerpos
+al inicio. Ver [índice, consultas y métricas](AUTOMATION_GOLDEN_RETRIEVAL.md). Cada autor recibe íntegros los archivos propios
+de las referencias seleccionadas para sus capas. Login, Home y helpers reutilizados se identifican como dependencias
 por ruta, símbolos y hashes del código aprobado y del framework observado, junto
 con el commit del framework cuando existe. Las relaciones determinan qué autor
 necesita cada referencia; los renombrados recuperados conservan su identidad de

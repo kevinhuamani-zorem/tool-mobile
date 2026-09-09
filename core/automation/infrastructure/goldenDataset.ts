@@ -231,7 +231,7 @@ export function saveGoldenCase(input: SaveGoldenCaseInput) {
     }
     const history = new AutomationHistoryStore(input.packageDirectory);
     const events = history.events().map(event => ({ ...event, artifacts: event.artifacts.filter(item =>
-        /(?:evaluation-pass|evaluation-validation|agent-response|response|interaction-result|behavior-result|design-review-result|integration-result|baseline-response|framework-recovery|framework-baseline|exported-files|validation|generation-plan|scenario)\.json$/.test(item.name) || item.name.startsWith('golden-examples/')) }));
+        /(?:evaluation-pass|evaluation-validation|agent-response|response|interaction-result|behavior-result|design-review-result|integration-result|baseline-response|framework-recovery|framework-baseline|exported-files|validation|generation-plan|scenario)\.json$/.test(item.name) || item.name.startsWith('golden-examples/') || item.name.startsWith('golden-retrieval/')) }));
     for (const event of events) for (const artifact of event.artifacts) add(`provenance/blobs/${artifact.sha256}`, history.readArtifact(artifact));
     addJson('provenance/events.json', events);
     const original = workspace.read('agent-response.json');

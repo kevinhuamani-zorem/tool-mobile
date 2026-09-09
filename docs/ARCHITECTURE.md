@@ -616,3 +616,14 @@ verificadas, datos exactos y una definición única del framework actual.
 reproduce el contexto guardado en un checkout temporal de un commit fijado.
 Ambos declaran falta de evidencia. No convierten aprobaciones QA en éxito autónomo
 ni escriben en el framework. Ver [F7](AUTOMATION_GOLDEN_LEARNING.md).
+
+### Recuperación progresiva del corpus QA
+
+`GoldenRetrievalIndex` deriva metadata y relaciones de las aprobaciones verificadas.
+La selección por cobertura alimenta el contexto inicial de cada rol.
+`GoldenReferenceSession` autoriza lecturas de ejemplos, grafos y dependencias
+conocidas. `withGoldenRetrieval` atiende su protocolo por archivos durante la
+invocación existente, conserva respuestas en el historial y cierra el canal en
+`finally`. No amplía permisos del proveedor ni agrega sesiones. Los índices son
+locales y descartables; los snapshots y publicaciones siguen en Git. Ver
+[contrato y pruebas](AUTOMATION_GOLDEN_RETRIEVAL.md).

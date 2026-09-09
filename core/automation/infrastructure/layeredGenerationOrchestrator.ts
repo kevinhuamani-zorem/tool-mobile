@@ -1,5 +1,6 @@
 import { recordEvaluationPass } from './agentEvaluation';
 import { writeGoldenRoleExamples } from './goldenExamples';
+import { withGoldenRetrieval } from './goldenRetrieval';
 import { AutomationHistoryStore } from './automationHistoryStore';
 import { AgentRunStore } from './agentRunStore';
 /**
@@ -351,7 +352,7 @@ export class LayeredGenerationOrchestrator {
         fs.writeFileSync(path.join(stageDirectory, 'agent-task.md'), prompt, 'utf8');
         writeJsonUtf8(path.join(stageDirectory, 'result.schema.json'), designReviewSchema());
         writeAgentProfile(stageDirectory, role, prompt);
-        writeGoldenRoleExamples(packageDirectory, stageDirectory, role, 1);
+        const golden = writeGoldenRoleExamples(packageDirectory, stageDirectory, role, 1);
         const inputs = ['scenario.json', 'generation-plan.json', 'behavior-result.json', 'golden-examples.json']
             .map(file => path.join(stageDirectory, file))
             .filter(file => fs.existsSync(file));
@@ -412,7 +413,7 @@ export class LayeredGenerationOrchestrator {
             }
         }
         report.invoked = true;
-        const run = await this.controlledProvider.execute({
+        const run = await withGoldenRetrieval(golden, packageDirectory, stageDirectory, report, () => this.controlledProvider.execute({
             cwd: stageDirectory,
             prompt,
             timeoutMs: budget.hangStopMs,
@@ -426,7 +427,7 @@ export class LayeredGenerationOrchestrator {
                 outputFile: './test-design-review.json',
                 schemaFile: './result.schema.json', stopAfterFirstOutput: true,
             },
-        });
+        }));
         report.durationMs = run.durationMs;
         report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
         report.requestedModel = run.modelUsage?.requestedModel;
@@ -510,7 +511,7 @@ export class LayeredGenerationOrchestrator {
                 errors: repairErrors,
             });
         }
-        const golden = writeGoldenRoleExamples(packageDirectory, stageDirectory, role, attempt === 0 ? 1 : 2);
+        const golden = writeGoldenRoleExamples(packageDirectory, stageDirectory, role, attempt === 0 ? 1 : 2, repairErrors);
         const inputArtifacts = [
             golden.file,
             ...ROLE_INPUT_FILES[role]
@@ -655,14 +656,14 @@ export class LayeredGenerationOrchestrator {
         // One materialized delivery per pass. Validation happens after the session
         // closes; a rejection is routed by the outer loop to the second pass.
         report.invoked = true;
-        const run = await this.controlledProvider.execute({
+        const run = await withGoldenRetrieval(golden, packageDirectory, stageDirectory, report, () => this.controlledProvider.execute({
             cwd: stageDirectory, prompt, timeoutMs: budget.hangStopMs, model: options.model,
             agentName: identity.name, allowValidationScripts: role === 'interaction-author',
             sessionName: namedSession, traceFile: './agent-execution.log', traceLabel: role,
             stopOnValidatedOutput: {
                 outputFile: `./${ROLE_OUTPUTS[role]}`, schemaFile: './result.schema.json', stopAfterFirstOutput: true,
             },
-        });
+        }));
         report.durationMs = run.durationMs;
         report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
         report.requestedModel = run.modelUsage?.requestedModel;
@@ -827,7 +828,7 @@ export class LayeredGenerationOrchestrator {
         } else {
             report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!);
             report.invoked = true;
-            const run = await this.reviewProvider.execute({
+            const run = await withGoldenRetrieval(golden, packageDirectory, stageDirectory, report, () => this.reviewProvider.execute({
                 cwd: stageDirectory,
                 prompt,
                 timeoutMs: budget.hangStopMs,
@@ -841,7 +842,7 @@ export class LayeredGenerationOrchestrator {
                     outputFile: './agent-response.json',
                     schemaFile: './agent-response.schema.json', stopAfterFirstOutput: true,
                 },
-            });
+            }));
             report.durationMs = run.durationMs;
             report.model = run.modelUsage?.actualModels?.[0] || run.modelUsage?.requestedModel;
             report.requestedModel = run.modelUsage?.requestedModel;

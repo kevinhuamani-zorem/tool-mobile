@@ -256,9 +256,16 @@ generadores, validadores o plantillas.
   la evidencia completa vive en `evidence.pack.gz`, deduplicada y sin pérdida.
   Lee artefactos con `GoldenSnapshotReader`, no con rutas físicas asumidas.
   `golden:compact` preserva manifiestos, publicaciones y bytes lógicos aprobados.
-  Los ejemplos no tienen topes de bytes/cantidad; cada rol recibe código propio
-  completo y referencias de dependencias por ruta, símbolos y hash. Se mantienen
-  pertinencia, compatibilidad, reservas de evaluación y las dos pasadas.
+  Los ejemplos no tienen topes de bytes/cantidad: la selección inicial cubre
+  necesidades distintas, agrupa patrones y entrega íntegro el código propio.
+  `GoldenRetrievalIndex` mantiene metadata incremental y un índice local
+  descartable; nunca confíes en una proyección serializada como aprobación.
+  Dentro de la misma invocación, `withGoldenRetrieval` atiende solicitudes de
+  lectura de referencias conocidas y vuelve a verificar autoridad y compatibilidad.
+  Los listados son paginados y los archivos completos. No concede búsquedas de
+  framework fuera de `GapQueryPolicy`, ni nuevas sesiones o pasadas. Se mantienen
+  roles, reservas de evaluación y trazabilidad de cada respuesta. Ver
+  `docs/AUTOMATION_GOLDEN_RETRIEVAL.md`.
   Conserva `.gitattributes` para no cambiar bytes/hash entre máquinas. Sin checkout,
   la generación/exportación sigue disponible sin referencias golden.
   Los legacy solo se promueven tras revisión explícita. Ver

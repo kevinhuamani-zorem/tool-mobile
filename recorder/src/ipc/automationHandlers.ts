@@ -1,6 +1,6 @@
 import fs from 'fs';
 import os from 'os';
-import { ApprovedGoldenStore, goldenDatasetRoot } from '../../../core/automation';
+import { ApprovedGoldenStore, GoldenRetrievalIndex, goldenDatasetRoot } from '../../../core/automation';
 import path from 'path';
 import { dialog, ipcMain } from 'electron';
 import { projectPaths, saveGoldenRepository } from '../../../core/workspace';
@@ -370,7 +370,11 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         try { return golden.list(); } catch (error: any) { return { success: false, error: error.message }; }
     });
     ipcMain.handle('rebuild-golden-index', async () => {
-        try { return { success: true, index: new ApprovedGoldenStore(goldenDatasetRoot()).rebuildIndex() }; }
+        try {
+            const root = goldenDatasetRoot(); const index = new ApprovedGoldenStore(root).rebuildIndex();
+            const retrieval = new GoldenRetrievalIndex(root).refresh(true);
+            return { success: true, index, retrieval: retrieval.metrics };
+        }
         catch (error: any) { return { success: false, error: error.message }; }
     });
     ipcMain.handle('revoke-golden-case', async (_, input: { goldenId: string; versionHash: string }) => {
