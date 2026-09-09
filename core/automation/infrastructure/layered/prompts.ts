@@ -22,7 +22,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
     const ownership = role === 'behavior-author'
         ? [
             'Genera únicamente Feature y Steps.',
-            'Lee test-data-context.json: comprueba los usuarios de Examples con sus resultados de existencia. No añadas filas para conciliar datos contradictorios entre la grabación y el caso QA; conserva el caso aprobado e informa el conflicto para QA. Un cambio de usuario explícito debe existir en el framework, y no autoriza duplicar el Scenario.',
+            'Lee test-data-context.json: comprueba los usuarios de Examples con sus resultados de existencia. Si selection.mode es automatic, usa la selección real propuesta; availableUsers enumera los usuarios únicos del squad por nombre y archivo, sin credenciales. Puedes preferir otro candidato solo con evidencia, sin suponer saldo ni movimientos. Si QA indicó un usuario explícito, no lo sustituyas. Nunca uses Usuario QA Temporal como dato ficticio. No añadas filas para conciliar datos contradictorios entre la grabación y el caso QA; conserva el caso aprobado e informa el conflicto para QA. Un cambio de usuario explícito debe existir en el framework, y no autoriza duplicar el Scenario.',
             'Usa deterministic-draft.json como punto de partida rápido, no como restricción: mejora su Gherkin y reutilización cuando el plan lo autorice.',
             'El Gherkin debe ser declarativo, conservar tags y formato del framework y cada acción grabada debe quedar trazada.',
             'Cada columna de Examples se nombra como <columna> en el step que la usa y la definition pasa ese argumento al método del Screen Object: el dato de la grabación nunca queda fijo en el código (ni en Steps ni en el Screen).',
@@ -46,11 +46,11 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
             'Lee screen-api.json: cada método identifica su módulo, posiciones/tipos de argumentos, uso del retorno y secuencias. Debes aceptar todas sus llamadas con firmas compatibles (incluidos opcionales/rest y sobrecargas). No cambies firmas heredadas; añade una API compatible si hace falta. No edites este contrato derivado.',
             'Para operation update parte de baselines y preserva byte a byte toda API, import y locator no afectado.',
             'La operación y decisión del plan mandan: si indica create, crea la key y getter homónimos con el primary exacto aunque exista un elemento semánticamente parecido; reutiliza solo cuando el plan lo autorice.',
-            'No construyas locators dentro de métodos de acción: cada secuencia traza su getter y ningún selector literal. Varias secuencias pueden compartir screenMethod si ese método consume todos sus getters, sin agregar rutas alternativas.',
+            'No construyas locators dentro de métodos de acción: cada secuencia traza su getter y ningún selector literal. Varias secuencias pueden compartir screenMethod si ese método consume todos sus getters, sin agregar rutas alternativas. Declara en tu actionTrace el locatorName de cada secuencia con locator, también reuse: Derek conserva tus correcciones al integrar, aunque Lorem haya omitido ese campo.',
             'Los datos parametrizados (columnas de Examples y DataTables de scenario.json) llegan a tus métodos como argumentos desde la definition del step: úsalos en setValue/comparaciones y nunca escribas su valor literal (por ejemplo el correo grabado) en el Screen; un parámetro declarado y sin usar es el mismo error.',
             'Conserva exactamente el nombre de clase, singleton exportado, APIs e imports del baseline salvo el cambio explícitamente requerido.',
             'Reutiliza solo candidatos autorizados. No inventes selectores ni copies selectores Android al bloque iOS.',
-            'Cada getter debe usar el TypeLocator y valor primary de la plataforma grabada; la otra plataforma conserva su valor existente o una clave vacía.',
+            'El Recorder fija la pareja locatorType/locatorValue grabada: no la reinfieras, no uses XPATH por defecto y respeta getElement.platformOrder del framework-api. Cada getter, incluido reuse, debe usar ese par en la plataforma grabada; la otra plataforma conserva su valor existente o una clave vacía.',
             'Usa aliases del framework y nunca imports relativos en lo que TÚ agregas; los imports heredados del baseline no se tocan.',
             'Para comprobar tu resultado ejecuta `node tools/check.js` en esta carpeta: aplica las mismas reglas mecánicas del validador (las de validation-contract.json) y la sintaxis TypeScript sobre interaction-result.json, y te dice qué corregir. Es la única verificación que necesitas: no busques tsc, babel ni node_modules, no uses /tmp y no leas agent-execution.log; si necesitas un archivo temporal, créalo en esta carpeta.',
         ].join(' ');
@@ -83,7 +83,7 @@ export function integrationPrompt(repair = false): string {
         'Incluye exactamente una resolución por cada gap de generation-plan.json.unresolvedGapIds; no omitas ni inventes gapId.',
         'Las resoluciones deterministas por secuencia del plan son autoridad: no cambies create a reuse por similitud de nombre.',
         'Reuse exige coincidencia simultánea de TypeLocator y selector normalizado, además de selectedCandidate autorizado.',
-        'Copia actionTrace desde behavior-result.json; no inventes otros screenMethod ni locatorName.',
+        'Derek ensambla actionTrace por secuencia: conserva gherkinStep y screenMethod de Lorem y locatorName de Zorem cuando coincide el método. No cambies esa interfaz ni inventes trazas; los locators siguen sujetos al plan y a la validación del código.',
         'Comprueba trazabilidad cruzada entre Gherkin, Steps, Screen Object y Locators.',
         'Escribe solo agent-response.json cumpliendo agent-response.schema.json.',
         'Esta es la salida visible que el QA podrá revisar y corregir.',

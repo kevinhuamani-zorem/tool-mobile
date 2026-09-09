@@ -70,7 +70,7 @@ export function ScenarioBuilderModal() {
               </div>
               <div className="input-group">
                 <label className="field-label">Usuario data (si se conoce):</label>
-                <input type="text" id="txtDataName" className="field-input" placeholder="El agente lo marcará como gap si falta" />
+                <input type="text" id="txtDataName" className="field-input" placeholder="Opcional: se elegirá un usuario del squad" />
               </div>
             </div>
             <div className="copilot-model-settings">

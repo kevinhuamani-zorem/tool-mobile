@@ -47,7 +47,7 @@ export interface FrameworkLocator {
  * que ya esta escrito a mano.
  */
 export function frameworkLocator(selector = '', platform: MobilePlatform = 'android'): FrameworkLocator {
-    const raw = String(selector).trim().replace(/\s+/g, ' ');
+    const raw = String(selector).trim();
     if (!raw) return { type: 'XPATH', value: '' };
 
     if (raw.startsWith('id=')) {
@@ -339,3 +339,32 @@ export const locatorStrategy = {
     frameworkLocator, roundTrip, strategyOf, strategyValue, inferredStrategy,
     indexDeclaredStrategies, indexModuleImports, importsOf,
 };
+
+/** Reads persisted evidence without replacing it with a new guess. Legacy inputs are inferred only when unambiguous. */
+export function recordedLocator(
+    step: { selector?: string; locatorType?: string; locatorValue?: string; platform?: string },
+    platform: MobilePlatform,
+    contract: Pick<FrameworkContract, 'locatorComposition'> = frameworkContract(projectPaths.frameworkRoot),
+): RoundTrip {
+    const raw = String(step.selector || '').trim();
+    const inferred = frameworkLocator(raw, platform);
+    const explicit = step.locatorType !== undefined || step.locatorValue !== undefined;
+    const type = (step.locatorType || inferred.type) as LocatorTypeName;
+    const value = step.locatorValue === undefined ? inferred.value : step.locatorValue;
+    const invalid = (reason: string): RoundTrip => ({ type, value, ok: false, reason });
+    if (step.platform && step.platform !== platform) return invalid('La plataforma del locator no coincide con la grabación.');
+    if (explicit && (!step.locatorType || typeof step.locatorValue !== 'string')) return invalid('El locator guardado necesita tipo y valor juntos.');
+    if (!['ID', 'XPATH', 'ANDROID', 'CLASSNAME', 'PREDICATESTRING', 'CLASSCHAIN'].includes(type)) return invalid('TypeLocator desconocido.');
+    if (!value) return invalid('El selector está vacío.');
+    if ((type === 'ANDROID' && platform !== 'android') || (['PREDICATESTRING', 'CLASSCHAIN'].includes(type) && platform !== 'ios')) return invalid('TypeLocator incompatible con la plataforma.');
+    // A bare value can be resolved by explicit evidence, never by a default XPATH.
+    const recognizable = inferred.type !== 'XPATH' || raw.startsWith('id=') || /^[(/]/.test(raw);
+    if (explicit && recognizable && (type !== inferred.type || value !== inferred.value)) return invalid('El tipo o valor guardado contradice el selector original.');
+    if (explicit && !recognizable && raw !== value) return invalid('El valor guardado no coincide con el selector original.');
+    if (!explicit && !recognizable) return invalid('La grabación antigua no identifica una estrategia inequívoca; no se puede asumir XPath. Verifica el selector.');
+    const composed = composeLocator(contract, type, value, platform);
+    if (composed === undefined) return invalid(`El framework no compone TypeLocator.${type} en ${platform}.`);
+    const again = frameworkLocator(composed, platform);
+    if (again.type !== type || again.value !== value || (type === 'XPATH' && !/^[(/]/.test(value))) return invalid('El framework reconstruye otra estrategia o valor.');
+    return { type, value, composed, ok: true };
+}

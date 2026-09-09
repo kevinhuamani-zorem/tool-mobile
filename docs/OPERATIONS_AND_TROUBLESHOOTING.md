@@ -244,6 +244,11 @@ El procedimiento CLI, formato y recuperación ante fallos están en
 
 ### Completar un recording que solo carece de iOS o Android
 
+Al seleccionar una grabación, el listado muestra su nombre descriptivo. Si el
+formulario conservó «Escenario grabado» o un nombre vacío, muestra el objetivo
+guardado. Esto también funciona sin el paquete generado y no modifica las
+acciones ni los snapshots golden.
+
 Inicia una sesión en la plataforma faltante, elige **Completar una grabación** y
 selecciona el recording del ambiente/squad activo. Captura y verifica únicamente
 los locators pendientes. Cada asignación conserva la otra plataforma y actualiza
@@ -533,3 +538,18 @@ comprueba primero **Reconstruir índice aprobado**, su uso (referencia/evaluaci�
 y compatibilidad con el framework actual. El índice no necesita copiarse entre
 máquinas. Flujo y migración de datos anteriores en
 [tests/golden/README.md](../tests/golden/README.md).
+
+
+## TypeLocator distinto al capturado
+
+Actualiza y recompila el Recorder en la PC afectada. El informe del intento
+`agents/zorem/locator-fidelity.json` muestra las acciones comprobadas, diferencias
+originales y correcciones deterministas; el informe de importación vive en
+`generation/automation/locator-fidelity.json`. Ambos quedan en el historial.
+Incluyen el contrato de composición y orden de plataformas del framework local.
+
+`recorded-locator-conflict` requiere verificar la evidencia original;
+`locator-type-unverified` indica que no se pudo seguir la declaración del getter;
+`locator-type-mismatch` muestra acción, getter, plataforma y tipo esperado/recibido.
+La exportación con observaciones sigue disponible. Una revisión verde es estática:
+no acredita que el elemento exista hoy en el dispositivo ni aprueba un golden.

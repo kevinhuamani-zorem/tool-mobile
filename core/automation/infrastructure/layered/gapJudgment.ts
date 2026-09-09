@@ -193,7 +193,7 @@ export const INTERACTION_RULE_CODES = new Set([
     'completion-unauthorized', 'create-locator-contract', 'destructive-update',
     'duplicate-screen-method', 'framework-locator-collision', 'invalid-locator-access',
     'invented-selector', 'locator-type-mismatch', 'platform-coverage',
-    'trace-locator', 'trace-screen-method',
+    'trace-locator', 'trace-screen-method', 'interaction-trace',
     'framework-symbol', 'framework-import-alias', 'missing-update-target', 'interaction-path',
     // Reglas mecanicas del Screen Object (screenObjectProblems): son de Zorem.
     'json-import-attribute', 'locator-import-alias', 'locator-import-identifier', 'locator-bracket-notation',

@@ -1811,3 +1811,91 @@ test('las consultas golden se atienden dentro de las tres invocaciones existente
     assert.ok(report.stages.every(stage => stage.goldenRetrieval.requests === 1));
     assert.ok(report.stages.every(stage => stage.attempt === 0));
 });
+
+test('Recorder repairs an Android getter before handoff and preserves the original provider mistake', async t => {
+    const root = fixture(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const planPath = path.join(root, 'generation-plan.json'), plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
+    plan.resolutions = [{ sequence: 1, action: 'CLICK', resolution: 'create', locatorName: 'movementsButton' }];
+    writeJson(planPath, plan);
+    const action = { action: 'CLICK', sequence: 1, selector: 'android=new UiSelector().text("Movimientos")', selectorVerified: true,
+        locatorType: 'ANDROID', locatorValue: 'new UiSelector().text("Movimientos")' };
+    writeJson(path.join(root, 'scenario.json'), { recordingId: 'rec-1', platform: 'android', actions: [action], request: { caseId: 'TC-1', pathType: 'Happy Path' } });
+    const history = new AutomationHistoryStore(root);
+    history.beginRevision({ recordingId: 'rec-1', caseId: 'TC-1', source: 'recording' });
+    const contract = require('../dist/core/workspace').frameworkContract(FRAMEWORK_ROOT);
+    const trace = [{ sequence: 1, gherkinStep: 'When consulta movimientos', screenMethod: 'viewMovements', locatorName: 'movementsButton' }];
+    const broken = `import ${contract.locatorFactorySymbol} from '${contract.locatorFactoryImport}';\nimport { ${contract.typeLocatorSymbol} } from '${contract.typeLocatorImport}';\nimport Locators from '@locators/payment/case.locator.json' with { type: 'json' };\nexport class CaseScreen { public get movementsButton() { const locator = ${contract.locatorFactorySymbol}.getElement(${contract.locatorSignature.platformOrder.map(p => `TypeLocator.XPATH, Locators.case${p === 'android' ? 'Android' : 'Ios'}.movementsButton`).join(', ')}); return $(locator); } public async viewMovements(): Promise<void> { await this.movementsButton.click(); } }`;
+    const calls = [], base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const result = await base.execute(input);
+        if (input.agentName === 'Lorem' || input.agentName === 'Zorem') {
+            const file = path.join(input.cwd, input.agentName === 'Lorem' ? 'behavior-result.json' : 'interaction-result.json');
+            const output = JSON.parse(fs.readFileSync(file, 'utf8')); output.actionTrace = trace;
+            if (input.agentName === 'Zorem') {
+                output.files[0].content = broken;
+                output.files[1].content = JSON.stringify({ caseAndroid: { movementsButton: action.locatorValue }, caseIos: { movementsButton: '' } });
+            }
+            writeJson(file, output);
+        }
+        return result;
+    } };
+    const result = await new LayeredGenerationOrchestrator(fake, fake).run(root);
+    assert.equal(result.success, true, result.errorMessage);
+    assert.equal(calls.filter(call => call.agentName === 'Zorem').length, 1);
+    const report = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/locator-fidelity.json'), 'utf8'));
+    assert.equal(report.checked, 1); assert.equal(report.matched, 0); assert.equal(report.corrected, true);
+    const response = JSON.parse(fs.readFileSync(path.join(root, 'agent-response.json'), 'utf8'));
+    assert.match(response.files.find(file => file.layer === 'screen').content, /TypeLocator\.ANDROID/);
+    const originalEvent = history.events().find(event => event.stage === 'interaction-author:provider-output');
+    assert.ok(originalEvent);
+    const original = JSON.parse(history.readArtifact(originalEvent.artifacts[0]).toString('utf8'));
+    assert.equal(original.files[0].content, broken);
+});
+
+test('ambos integradores conservan la traza reparada por Zorem en la segunda pasada', async t => {
+    for (const deterministic of [true, false]) {
+        const root = fixture();
+        t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+        new AutomationHistoryStore(root).beginRevision({ recordingId: 'rec-1', caseId: 'TC-1', source: 'recording' });
+        const plan = JSON.parse(fs.readFileSync(path.join(root, 'generation-plan.json')));
+        if (deterministic) plan.unresolvedGapIds = [];
+        writeJson(path.join(root, 'generation-plan.json'), plan);
+        const calls = [], base = provider(calls);
+        const fake = { ...base, async execute(input) {
+            const result = await base.execute(input);
+            const name = input.agentName === 'Lorem' ? 'behavior-result.json'
+                : input.agentName === 'Zorem' ? 'interaction-result.json' : 'agent-response.json';
+            const file = path.join(input.cwd, name);
+            const value = JSON.parse(fs.readFileSync(file));
+            value.actionTrace = [1, 2, 3].map(sequence => ({ sequence,
+                gherkinStep: 'When el usuario consulta todos sus movimientos', screenMethod: 'viewAllMovements',
+                ...(sequence === 3 ? { locatorName: 'seeAllButton' } : {}) }));
+            if (input.agentName === 'Zorem' && /repair-1$/.test(input.sessionName)) {
+                value.actionTrace[0].locatorName = 'movementsButton';
+            }
+            // Sumrak still copies the incomplete Lorem result on both passes.
+            writeJson(file, value);
+            return result;
+        } };
+        let validations = 0;
+        const result = await new LayeredGenerationOrchestrator(fake, fake, (_root, response) => {
+            validations++;
+            return response.actionTrace[0].locatorName === 'movementsButton'
+                ? { valid: true, errors: [] }
+                : { valid: false, errors: [{ code: 'trace-locator', file: plan.files.find(f => f.layer === 'locators').path,
+                    message: 'La acción 1 debe trazar movementsButton.' }] };
+        }).run(root);
+        assert.equal(result.success, true, result.error);
+        assert.equal(validations, 2);
+        assert.equal(calls.filter(c => c.agentName === 'Lorem').length, 1);
+        assert.equal(calls.filter(c => c.agentName === 'Zorem').length, 2);
+        assert.equal(calls.filter(c => c.agentName === 'Sumrak').length, deterministic ? 0 : 2);
+        const read = name => JSON.parse(fs.readFileSync(path.join(root, name)));
+        assert.equal(read('agent-response.json').actionTrace[0].locatorName, 'movementsButton');
+        assert.equal(read('agents/lorem/behavior-result.json').actionTrace[0].locatorName, undefined);
+        const history = new AutomationHistoryStore(root);
+        const original = history.events().find(e => e.stage === 'integration:before-assembly');
+        assert.ok(original, 'conserva evidencia previa al ensamblado');
+        assert.equal(JSON.parse(history.readArtifact(original.artifacts[0])).actionTrace[0].locatorName, undefined);
+    }
+});

@@ -51,6 +51,16 @@ function readJson<T>(file: string): T | undefined {
     }
 }
 
+// El formulario conserva un nombre predeterminado en recordings antiguos y
+// regenerados. El objetivo es una etiqueta estable incluso después de limpiar
+// el paquete generado; resolver el nombre no modifica la evidencia grabada.
+function recordingName(scenario: AutomationScenario): string {
+    const name = scenario.request.scenarioName?.trim() || '';
+    const description = name.replace(/^(?:\[[^\]]+\]\s*)+/, '').trim();
+    if (description && !/^escenario[-\s]+grabado$/i.test(description)) return name;
+    return scenario.objective?.trim() || 'Grabación sin nombre';
+}
+
 function scenarioSteps(scenario: AutomationScenario): ExistingScenarioInfo['steps'] {
     const rows = Array.isArray(scenario.request.scenarioRows)
         ? scenario.request.scenarioRows
@@ -222,7 +232,7 @@ export class RecordingCoverageAnalyzer {
                     plan && (fs.existsSync(path.join(packageDirectory, 'application-receipt.json'))
                         || fs.existsSync(path.join(packageDirectory, 'framework-baseline.json')) || (generated && response))
                 );
-                const name = scenario.request.scenarioName || scenario.objective || 'Grabación sin nombre';
+                const name = recordingName(scenario);
                 const info: RecordingScenarioInfo = {
                     id: scenario.recordingId,
                     recordingId: scenario.recordingId,

@@ -43,3 +43,5 @@ export {
 } from './infrastructure/validationRuleCatalogFileAdapter';
 
 export { featureLoginUsers } from './infrastructure/rules/testDataRules';
+
+export { auditRecordedLocators, reconcileRecordedLocatorTypes } from './infrastructure/rules/recordedLocatorRules';

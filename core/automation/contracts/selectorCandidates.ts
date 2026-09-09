@@ -1,5 +1,5 @@
 import type { AutomationScenario } from './automationScenario';
-import { MobilePlatform, roundTrip } from '../../indexing';
+import { MobilePlatform, roundTrip, recordedLocator } from '../../indexing';
 import type { LocatorTypeName } from '../../indexing';
 import type { RecordedStep, SelectorCandidate, SelectorCandidateStability } from './models';
 
@@ -98,7 +98,8 @@ export function candidateAllowlist(step: RecordedStep, platform: MobilePlatform)
     // selector ejecutado como verificado. Los clientes nuevos envían false de
     // forma explícita, por lo que un texto no verificado ya no se promociona.
     if (!step.selector || step.selectorVerified === false) return [];
-    const check = roundTrip(step.selector, platform);
+    const check = recordedLocator(step, platform);
+    if (!check.ok) return [];
     return [{
         candidateId: `legacy-primary-${step.sequence || 0}`,
         selector: step.selector.trim(),

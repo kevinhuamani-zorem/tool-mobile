@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import type { AutomationScenario } from '../contracts';
-import { readFrameworkUserCatalog } from '../../workspace';
+import { readFrameworkUserCatalog, availableSquadUsers } from '../../workspace';
 import { featureLoginUsers } from '../../validation';
 import { readJsonUtf8, writeJsonUtf8 } from '../../shared';
 
-/** Exposes only lookup results for names already present in this case, never the fixture contents. */
+/** Exposes requested-name checks and eligible squad names, never fixture credentials or contents. */
 export function prepareTestDataContext(packageDirectory: string): void {
     const scenario = readJsonUtf8<AutomationScenario>(path.join(packageDirectory, 'scenario.json'));
     const baselinePath = path.join(packageDirectory, 'baseline-response.json');
@@ -16,8 +16,11 @@ export function prepareTestDataContext(packageDirectory: string): void {
     }
     const catalog = readFrameworkUserCatalog();
     writeJsonUtf8(path.join(packageDirectory, 'test-data-context.json'), {
-        schemaVersion: 1, status: catalog.status, source: 'resources/data/**/*.yml', filesRead: catalog.filesRead,
+        schemaVersion: 2, status: catalog.status, source: 'resources/data/**/*.yml', filesRead: catalog.filesRead,
         users: [...names].map(name => ({ name, exists: catalog.names.has(name.toUpperCase()) ? true : catalog.status === 'available' ? false : null })),
-        instructions: 'Solo se comprueba existencia, no ejecución ni estado de ventas. Conserva los Examples del caso QA al regenerar; no añadas otra fila para conciliar un dataName obsoleto. Si el dato solicitado no existe o contradice el baseline, informa la discrepancia. No inventes usuarios ni datos; la exportación sigue disponible para corrección QA.',
+        squad: scenario.squad || scenario.request?.squad || '',
+        selection: scenario.request?.testDataSelection || { mode: 'requested', name: scenario.request?.dataName || '' },
+        availableUsers: availableSquadUsers(catalog, scenario.squad || scenario.request?.squad || ''),
+        instructions: 'Solo se comprueba existencia, no ejecución, saldo ni movimientos. availableUsers contiene únicamente nombres únicos del squad y su archivo de origen, sin credenciales. Si selection.mode es automatic, usa el usuario seleccionado o uno de availableUsers si existe evidencia para preferirlo; nunca inventes un nombre ni condiciones de la cuenta. Si QA indicó el usuario, consérvalo y reporta si no existe. Conserva los Examples del caso QA al regenerar; no añadas otra fila para conciliar datos contradictorios. Sin candidatos, deja el dato pendiente para QA; la exportación sigue disponible.',
     });
 }

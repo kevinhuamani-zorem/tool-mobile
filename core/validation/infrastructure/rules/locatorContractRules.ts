@@ -31,6 +31,7 @@ import {
 import { screenClassNameFor, screenLocatorTypes, screenMethodGetterUsage } from './screenInspection';
 import { ResponseRuleContext, RuleReport } from './ruleContext';
 import { screenReturnedBooleanGetters, stepBooleanAssertions } from './returnedBooleanUsage';
+import { validatedTextAssertionGetters } from './textAssertionRules';
 
 export function locatorContractRules(context: ResponseRuleContext, report: RuleReport): void {
     const { scenario, plan, response, relaxedContract } = context;
@@ -135,6 +136,7 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
         const referencedTypes = screenLocatorTypes(screenContent, contract, screenClassName);
         const methodUsage = screenMethodGetterUsage(screenContent, screenClassName);
         const returnedBooleans = screenReturnedBooleanGetters(screenContent, screenClassName);
+        const verifiedTextGetters = validatedTextAssertionGetters(context);
         const stepsFile = response.files.find(file => file.layer === 'steps');
         const assertsBoolean = stepBooleanAssertions(
             stepsFile?.content || '', screenFile?.path || '', frameworkModuleResolver(stepsFile?.path || ''),
@@ -301,6 +303,8 @@ export function locatorContractRules(context: ResponseRuleContext, report: RuleR
             const usesReturnedBoolean = action?.action === 'VERIFICAR_EXISTE' && trace?.screenMethod && returned?.size;
             const assertedReturn = usesReturnedBoolean && assertsBoolean(trace!.screenMethod!, trace!.gherkinStep);
             const consumedGetters = new Set(usage?.getters || []);
+            const verifiedTextGetter = verifiedTextGetters.get(resolution.sequence);
+            if (verifiedTextGetter) consumedGetters.add(verifiedTextGetter);
             if (assertedReturn) returned!.forEach(getter => consumedGetters.add(getter));
             const candidates = action ? candidateAllowlist(action, scenario.platform) : [];
             const candidateLiterals = candidates

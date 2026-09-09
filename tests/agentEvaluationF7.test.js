@@ -73,3 +73,17 @@ test('F7 reports autonomous denominators, retries, timeouts and QA approval with
     assert.ok(report.limitations.includes('No QA-approved golden corpus.'));
     assert.ok(report.attempts.every(attempt => attempt.functionalVerification === 'not-evaluated'));
 });
+
+test('locator fidelity counts provider mistakes before Recorder correction without claiming device execution', t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'f7-locator-')); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const pkg = path.join(root, 'pkg'), history = new AutomationHistoryStore(pkg), run = new AgentRunStore(pkg);
+    history.beginRevision({ recordingId: 'rec-locator', caseId: 'TC-1', source: 'recording' });
+    run.start('rec-locator', 'plan-1');
+    history.capture('agents/zorem/locator-fidelity.json', JSON.stringify({ checked: 4, matched: 3, corrected: true,
+        corrections: [{ file: 'case.screen.ts', typeStart: 12 }], unverified: [] }), 'recorder', 'locator-fidelity', 1);
+    history.append({ ...history.identity(), kind: 'generation-result', origin: 'recorder', result: 'passed' }, [{ name: 'layered-generation-run.json', content: JSON.stringify({ stages: [{ invoked: true, execution: 'agent' }] }) }]);
+    const result = evaluateAutomationPackages([pkg], path.join(root, 'golden'));
+    assert.equal(result.metrics.locatorFidelity.beforeRecorderCorrection.rate, 0.75);
+    assert.equal(result.metrics.locatorFidelity.correctedGetters, 1);
+    assert.equal(result.attempts[0].functionalVerification, 'not-evaluated');
+});

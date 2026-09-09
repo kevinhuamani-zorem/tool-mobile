@@ -99,7 +99,7 @@ const EXAMPLE_RESPONSE_SHAPE =
 
 const RULE_GUIDANCE: Record<string, RuleGuidance> = {
     'test-data-user-missing': {
-        requirement: 'Cada usuario enviado al login debe existir por nombre en resources/data/**/*.yml; conserva el dato QA y comunica discrepancias sin inventar filas adicionales.',
+        requirement: 'Cada usuario enviado al login debe existir por nombre en resources/data/**/*.yml. test-data-context.json enumera availableUsers del squad y la selección automática cuando QA no indicó uno. Conserva el dato QA explícito y los Examples aprobados al regenerar; comunica discrepancias sin inventar usuarios ni filas adicionales.',
         minimalExample: 'resources/data/payment/qa.yml: name: QA Aprobado\nExamples:\n  | username |\n  | QA Aprobado |',
     },
     assertion: {
@@ -352,8 +352,16 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             `${EXAMPLE_LOCATOR_BLOCK}\n` +
             'El valor coincide con el selector verificado de la accion.',
     },
+    'recorded-locator-conflict': {
+        requirement: 'Tipo, valor, selector y plataforma grabados deben concordar. Conserva la evidencia y solicita verificación QA ante contradicción.',
+        minimalExample: 'android=new UiSelector().text("Movimientos") → ANDROID + new UiSelector().text("Movimientos")',
+    },
+    'locator-type-unverified': {
+        requirement: 'El getter debe declarar un TypeLocator y una referencia del JSON verificables mediante el contrato getElement del framework.',
+        minimalExample: EXAMPLE_SCREEN_GETTER,
+    },
     'locator-type-mismatch': {
-        requirement: 'TypeLocator usado en getElement debe coincidir con el tipo real del selector primary.',
+        requirement: 'TypeLocator y valor deben coincidir con la evidencia grabada, incluso en getters reutilizados o si el JSON no cambió. Respeta el orden de plataformas del framework.',
         minimalExample: EXAMPLE_SCREEN_GETTER,
     },
     'missing-examples': {
@@ -490,7 +498,7 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             '{ "sequence": 1, "locatorName": "salesButton" }',
     },
     'trace-screen-method': {
-        requirement: 'actionTrace.screenMethod debe consumir el getter correcto sin selectores literales. Varias acciones pueden compartir método si consume todos sus getters. En VERIFICAR_EXISTE puede devolver isDisplayed/isExisting (también const + && o await Promise.all + every(Boolean)), pero el Step trazado debe esperar y afirmar ese booleano con expect(...).toBe(true); una lectura descartada no cuenta.',
+        requirement: 'actionTrace.screenMethod debe consumir el getter correcto sin selectores literales. Varias acciones pueden compartir método si consume todos sus getters. En VERIFICAR_EXISTE puede devolver isDisplayed/isExisting (también const + && o await Promise.all + every(Boolean)), pero el Step trazado debe esperar y afirmar ese booleano con expect(...).toBe(true); una lectura descartada no cuenta. En VERIFICAR_TEXTO también cuenta devolver la lectura de readRecordedText desde el getter trazado si el helper es el contractual y el Step compara el texto devuelto con el valor y operador grabados; no exige una espera artificial.',
         minimalExample:
             'Screen: async isContactDisplayed(): Promise<boolean> { return await this.contact.isDisplayed(); }\n' +
             'Steps: const visible: boolean = await contactsScreen.isContactDisplayed(); expect(visible).toBe(true);',

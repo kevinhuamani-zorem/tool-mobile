@@ -1,3 +1,4 @@
+import { reconcileRecordedLocatorTypes } from '../../validation';
 import { recordEvaluationPass } from './agentEvaluation';
 import { writeGoldenRoleExamples } from './goldenExamples';
 import { withGoldenRetrieval } from './goldenRetrieval';
@@ -103,6 +104,7 @@ import {
 } from './layered/budget';
 import { buildScreenApi, validateScreenApi } from './layered/screenApi';
 import { assertLayeredEnvelope, readLayeredOutput } from './layered/outputEnvelope';
+import { assembleActionTrace } from './layered/traceAssembly';
 import { RecoverableDraftStore } from './layered/recoverableDraft';
 
 export type {
@@ -694,6 +696,15 @@ export class LayeredGenerationOrchestrator {
             throw new Error(report.error);
         }
         const typedResult = result as LayeredAgentResult;
+        if (role === 'interaction-author') {
+            const corrected = reconcileRecordedLocatorTypes(readJsonUtf8<any>(path.join(packageDirectory, 'scenario.json')), plan, result as AutomationAgentResponse);
+            const reportPath = path.join(stageDirectory, 'locator-fidelity.json');
+            const report = { ...corrected.audit, pass: attempt === 0 ? 1 : 2, corrections: corrected.corrections, corrected: corrected.changed };
+            writeJsonUtf8(reportPath, report);
+            new AutomationHistoryStore(packageDirectory).captureFile(reportPath, 'recorder', 'locator-fidelity', attempt === 0 ? 1 : 2);
+            if (corrected.changed) { Object.assign(result!, corrected.response); writeJsonUtf8(outputFile, result); }
+        }
+
         if (role === 'behavior-author' && typedResult.testDesignReview) {
             writeJsonUtf8(
                 path.join(packageDirectory, 'test-design-review.json'),
@@ -863,12 +874,15 @@ export class LayeredGenerationOrchestrator {
         const behavior = readJsonUtf8<LayeredAgentResult>(behaviorFile);
         const interaction = readJsonUtf8<LayeredAgentResult>(interactionFile);
         // Los autores son propietarios exclusivos del código. El integrador
-        // decide resoluciones y trazabilidad, pero no puede reescribir una capa
+        // decide resoluciones; Derek combina la interfaz de Lorem y los locators
+        // de Zorem, sin permitir que el integrador reescriba una capa
         // ya entregada y protegida por handoff. Las resoluciones que el plan ya
         // fijó las firma Derek: Sumrak solo aporta las de los gaps abiertos.
+        const traceAssembly = assembleActionTrace(behavior, interaction);
         const fixedGapIds = new Set(judgment.fixed.map(resolution => resolution.gapId));
         const response: AutomationAgentResponse = {
             ...proposedResponse,
+            actionTrace: traceAssembly.actionTrace,
             resolutions: [
                 ...judgment.fixed,
                 ...(proposedResponse.resolutions || []).filter(resolution => !fixedGapIds.has(resolution.gapId)),
@@ -900,7 +914,7 @@ export class LayeredGenerationOrchestrator {
                     message: `La capa ${layer} debe conservar la ruta ${expectedPath}.`,
                 }]
         );
-        fileContractErrors.push(...validateScreenApi(behavior, interaction));
+        fileContractErrors.push(...traceAssembly.errors, ...validateScreenApi(behavior, interaction));
         if (response.files.length !== integratedFiles.size) {
             fileContractErrors.push({ code: 'duplicate-layer', message: 'La respuesta integrada contiene capas duplicadas.' });
         }

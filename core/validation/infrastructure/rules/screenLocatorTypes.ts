@@ -7,12 +7,19 @@ import ts from 'typescript';
 import { FrameworkContract } from '../../../workspace';
 import { bindingNames, propertyChain } from './screenAst';
 
+export interface ScreenLocatorBinding {
+    getter: string; platform: string; file: string; block: string; name: string; type: string;
+    typeStart: number; typeEnd: number;
+}
+
 export function screenLocatorTypes(
     content: string,
     contract: Pick<FrameworkContract,
         'locatorFactoryImport' | 'locatorFactorySymbol' |
         'typeLocatorImport' | 'typeLocatorSymbol' | 'locatorSignature'>,
     expectedClassName: string,
+    bindings?: ScreenLocatorBinding[],
+    declaredGetters?: Set<string>,
 ): Map<string, Set<string>> {
     const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const locatorFilesByIdentifier = new Map<string, string>();
@@ -147,6 +154,10 @@ export function screenLocatorTypes(
             const referencedTypes = types.get(key) || new Set<string>();
             referencedTypes.add(typeChain.properties[0]);
             types.set(key, referencedTypes);
+            const typeExpression = expression.arguments[index * 2];
+            if (ts.isPropertyAccessExpression(typeExpression)) bindings?.push({ getter: getterName, platform, file,
+                block: blockName, name, type: typeChain.properties[0],
+                typeStart: typeExpression.name.getStart(source), typeEnd: typeExpression.name.end });
         });
     };
     const screenClass = source.statements.find(
@@ -158,6 +169,7 @@ export function screenLocatorTypes(
         const getterName = ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name)
             ? member.name.text
             : undefined;
+        if (getterName) declaredGetters?.add(getterName);
         const returned = member.body.statements.filter(
             (statement): statement is ts.ReturnStatement =>
                 ts.isReturnStatement(statement) && Boolean(statement.expression)

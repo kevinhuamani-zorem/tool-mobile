@@ -157,9 +157,29 @@ function stepComparisons(steps: ts.SourceFile, screenMethod: string): { calls: n
  * escribe y apunta al archivo del autor responsable: Screen para Zorem,
  * Steps para Lorem.
  */
-export function textAssertionRules({ scenario, response }: ResponseRuleContext, report: RuleReport): void {
+export function textAssertionRules(context: ResponseRuleContext, report: RuleReport): void {
+    inspectTextAssertions(context, report);
+}
+
+/** Only complete, checked Screen → Steps text assertions establish getter consumption. */
+export function validatedTextAssertionGetters(context: ResponseRuleContext): Map<number, string> {
+    const verified = inspectTextAssertions(context, { errors: [], warnings: [] });
+    // Legacy VERIFICAR_TEXTO reads the element itself. Runtime used includes;
+    // generated framework tests used exact text. Recognize both established
+    // comparisons without changing the recording or inferring a container.
+    const legacy = context.scenario.actions.filter(action => action.action === 'VERIFICAR_TEXTO' && !action.textAssertion);
+    if (legacy.length) for (const operator of ['contains', 'equals'] as const) {
+        const scenario = { ...context.scenario, actions: legacy.map(action => ({ ...action,
+            textAssertion: { version: 1 as const, source: 'element' as const, operator } })) };
+        for (const [sequence, getter] of inspectTextAssertions({ ...context, scenario }, { errors: [], warnings: [] })) verified.set(sequence, getter);
+    }
+    return verified;
+}
+
+function inspectTextAssertions({ scenario, response }: ResponseRuleContext, report: RuleReport): Map<number, string> {
+    const verified = new Map<number, string>();
     const actions = scenario.actions.filter(action => action.textAssertion);
-    if (!actions.length) return;
+    if (!actions.length) return verified;
     const file = response.files.find(file => file.layer === 'screen');
     const stepsFile = response.files.find(file => file.layer === 'steps');
     const source = ts.createSourceFile('screen.ts', file?.content || '', ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -283,8 +303,9 @@ export function textAssertionRules({ scenario, response }: ResponseRuleContext, 
             valid = true;
             break;
         }
-        if (valid) continue;
+        if (valid) { verified.set(action.sequence, trace.locatorName); continue; }
         if (stepsDetail && !detail) failSteps(stepsDetail);
         else fail(detail || stepsDetail || `debe leer ${assertion.source} con ${HELPER} desde this.${trace.locatorName} y comparar mediante ${assertion.operator} con el valor grabado.`);
     }
+    return verified;
 }

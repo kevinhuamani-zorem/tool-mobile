@@ -1,3 +1,4 @@
+import { reconcileRecordedLocatorTypes } from '../../../../core/validation';
 import { loadFrameworkBaseline, planForReconciliation } from '../../../../core/automation';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -190,6 +191,13 @@ export class AutomationResponseImporter {
             ]);
         }
         if (!frameworkBaseline) response = normalizeJsonUnicode(response);
+        if (!frameworkBaseline && !options.manualCorrection && !options.reviewedContents) {
+            const corrected = reconcileRecordedLocatorTypes(scenario, plan, response);
+            const report = { ...corrected.audit, corrections: corrected.corrections, corrected: corrected.changed };
+            history.capture('locator-fidelity.json', JSON.stringify(report), 'recorder', 'import:locator-fidelity');
+            writeJsonUtf8(path.join(packageDirectory, 'locator-fidelity.json'), report);
+            response = corrected.response;
+        }
         const asDelivered = response;
         // Los identificadores que ya viven en el framework (baselines de los
         // archivos update) no se traducen: renombrar `titleVentas` a
@@ -289,6 +297,14 @@ export class AutomationResponseImporter {
                 `Normalización de identificadores ES→EN aplicada: ${Object.keys(normalized.renamed).length}; ` +
                 `omitida: ${normalized.skipped.length}.`
             );
+        }
+        if (!frameworkBaseline && !options.manualCorrection && !options.reviewedContents) {
+            const reports = [path.join(packageDirectory, 'locator-fidelity.json'), path.join(packageDirectory, 'agents/zorem/locator-fidelity.json')];
+            const corrections = reports.filter(file => fs.existsSync(file)).flatMap(file => {
+                try { const report = readJsonUtf8<any>(file); return report.corrected && report.planId === plan.planId ? report.corrections || [] : []; } catch { return []; }
+            });
+            const getters = [...new Set(corrections.map((entry: any) => `${entry.getter} (${entry.platform}: ${entry.actual} → ${entry.expected})`))];
+            if (getters.length) validation.warnings.push(`El Recorder corrigió TypeLocator según la grabación: ${getters.join(', ')}. La salida original se conserva en el historial.`);
         }
         if (tagged.added.length > 0) {
             validation.warnings.push(

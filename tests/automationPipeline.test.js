@@ -577,14 +577,15 @@ test('completar iOS conserva Android y sincroniza únicamente locator y estrateg
     assert.match(completedResponse.files.find(file => file.layer === 'feature').content, /@android @ios/);
 });
 
-test('resolver propone dataName editable cuando el recording no lo especifica', () => {
+test('resolver propone un usuario real editable cuando el recording no lo especifica', () => {
     const recorded = scenario([{
         action: 'VERIFICAR_EXISTE', selector: 'id=resultado', selectorVerified: true,
         elementIntent: 'resultado esperado'
     }]);
     recorded.request.dataName = '';
     const result = new DeterministicResolver(emptyCatalog).resolve(recorded);
-    assert.equal(result.scenario.request.dataName, 'Usuario QA Temporal');
+    assert.ok(require('../dist/core/workspace').readFrameworkUserCatalog().names.has(result.scenario.request.dataName.toUpperCase()));
+    assert.equal(result.scenario.request.testDataSelection.mode, 'automatic');
     assert.equal(result.unresolvedContext.gaps.some(gap => gap.id === 'gap-test-data'), false);
 });
 

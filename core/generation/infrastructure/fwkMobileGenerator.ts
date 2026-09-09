@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { translateToEnglish, screenObjectNames } from '../../shared';
 import { aliasImport, frameworkContract, projectPaths } from '../../workspace';
-import { frameworkLocator } from '../../indexing';
+import { frameworkLocator, recordedLocator } from '../../indexing';
 import { withGeneratedFileMetadata } from '../application/generatedFileMetadata';
 import type { GeneratedPreview, ReusedLocator } from '../domain/generatedPreview';
 import type { LocatorNaming } from '../domain/locatorBlocks';
@@ -144,6 +144,14 @@ export class FwkMobileGenerator {
             locatorNaming?: LocatorNaming;
         } = {},
     ): GeneratedPreview {
+        const canonical = (step: RecordedStep): RecordedStep => {
+            if (!step.selector) return step;
+            const locator = recordedLocator(step, request.platform);
+            if (!locator.ok) throw new Error(`Locator de acción ${step.sequence || ''}: ${locator.reason}`);
+            return { ...step, selector: locator.composed };
+        };
+        steps = steps.map(canonical);
+        request = { ...request, scenarioRows: request.scenarioRows?.map(row => ({ ...row, actions: row.actions?.map(canonical) })) };
         const normalized = this.normalizeRequest(request);
         // Solo sirven los que traen referencia para la plataforma del caso: sin
         // eso no hay nada que escribir y es mas seguro crear el locator.
@@ -648,8 +656,8 @@ export class FwkMobileGenerator {
             androidType: string, androidReference: string
         ): string[] => [
             `        const locator = ${contract.locatorFactorySymbol}.getElement(`,
-            `            ${contract.typeLocatorSymbol}.${iosType}, ${iosReference},`,
-            `            ${contract.typeLocatorSymbol}.${androidType}, ${androidReference}`,
+            ...contract.locatorSignature.platformOrder.map((platform, index, order) =>
+                `            ${contract.typeLocatorSymbol}.${platform === 'ios' ? iosType : androidType}, ${platform === 'ios' ? iosReference : androidReference}${index < order.length - 1 ? ',' : ''}`),
             `        );`,
             `        return $(locator);`,
         ];
@@ -657,6 +665,7 @@ export class FwkMobileGenerator {
         const gettersFor = (name: string): string => {
             const external = reused.get(name);
             if (external) {
+                if (!external.type[request.platform]) throw new Error(`El locator reutilizado ${name} no declara TypeLocator para ${request.platform}.`);
                 const fallback = external.reference.android || external.reference.ios || '';
                 return [
                     `    public get ${name}() {`,

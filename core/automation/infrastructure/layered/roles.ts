@@ -92,7 +92,7 @@ export const DELEGATES = [
 
 export const MAX_LAYERED_REPAIR_ATTEMPTS = 1;
 
-export const LAYERED_CACHE_SCHEMA_VERSION = 3;
+export const LAYERED_CACHE_SCHEMA_VERSION = 5;
 
 export type AuthorRole = LayeredAgentResult['role'];
 

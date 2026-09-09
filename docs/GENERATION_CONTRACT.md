@@ -195,6 +195,17 @@ importación.
   `Unhappy Path`.
 - Usa `Scenario Outline` y `Examples` cuando existan parámetros/data.
 - Cada placeholder del escenario debe estar representado en Examples.
+- El usuario de login debe existir en `resources/data/**/*.yml`. Si QA no indica
+  `dataName` ni `Examples.username`, el resolver elige un nombre único del squad
+  con una selección reproducible por `recordingId`; no crea «Usuario QA Temporal».
+  `request.testDataSelection` registra nombre, archivo y motivo. Una elección QA
+  explícita se conserva incluso si necesita corrección; nunca se sustituye en silencio.
+- `test-data-context.json` expone la selección y los candidatos del squad por
+  nombre y ruta, sin credenciales ni contenido YAML. Se excluyen nombres ambiguos
+  en el lookup global del framework. Sin catálogo válido o candidatos, el dato
+  queda pendiente para QA y el borrador sigue siendo exportable. Existencia no
+  acredita saldo, movimientos ni ejecución correcta.
+
 - Redacta comportamiento declarativo: cada step describe la intención o el
   resultado observable, no la mecánica de la interfaz.
 - No conviertas cada acción grabada en una línea Gherkin. Clicks, botones,
@@ -518,6 +529,21 @@ resource-id, así que un `id=` capturado por el inspector se convierte:
 `UiSelector` y no XPath para resource-id porque es la forma mayoritaria de este
 framework (33 usos contra 18), así que el código generado se parece al escrito
 a mano.
+
+La pareja persistida es la autoridad: `recordedLocator` comprueba selector,
+tipo, valor y plataforma sin reemplazar datos contradictorios. Una grabación
+antigua solo se interpreta si la estrategia es inequívoca; un valor desnudo
+requiere un tipo explícito. Los espacios interiores y diacríticos se conservan.
+Todos los getters deterministas siguen `locatorSignature.platformOrder` del
+framework seleccionado; no asumen que iOS ocupa los primeros argumentos.
+
+`recordedLocatorRules` revisa también getters reutilizados y tipos que cambiaron
+sin modificar el JSON. Antes del handoff de Zorem o de la importación automática,
+el Recorder puede corregir exclusivamente el enum cuando el valor coincide
+exactamente y la referencia es verificable. Conserva la salida original en el
+historial y registra `locator-fidelity.json`. No corrige ediciones revisadas por
+QA ni baselines recuperados del framework. Los diagnósticos no impiden exportar
+un borrador autorizado. Ver [fidelidad de locators](LOCATOR_FIDELITY.md).
 
 Cada acción grabada guarda su `locatorType` y su `locatorValue` en
 `actions.json`, y el par se comprueba de ida y vuelta: se compone con la tabla
@@ -1125,3 +1151,29 @@ exportación y hash del checkout separados; en módulos compartidos el código
 guardado excluye modificaciones actuales ajenas al caso. No modifica los eventos
 Appium ni sustituye la respuesta histórica del agente. F5 concilia esta revisión
 al regenerar/reexportar. Ver [AUTOMATION_FRAMEWORK_RECOVERY.md](AUTOMATION_FRAMEWORK_RECOVERY.md).
+
+### Trazabilidad de lecturas de texto devueltas
+
+Un método puede devolver `readRecordedText(this.<getter>, source)` y dejar la
+comparación en el Step. Cuenta como consumo del getter solo cuando se verifican
+el helper contractual, la lectura, el retorno y la comparación con el valor
+registrado; no requiere añadir una espera para satisfacer al analizador. En
+`VERIFICAR_TEXTO` antiguo sin `textAssertion` se admite la lectura del elemento
+con igualdad o `contains`, las formas usadas por el framework y el recorder.
+Esto no convierte una grabación antigua en una lectura de contenedor ni cambia
+su evidencia.
+
+### Integración de trazas entre autores
+
+Derek conserva el orden, `gherkinStep` y `screenMethod` de Lorem y combina el
+`locatorName` de Zorem por secuencia, únicamente cuando coincide el método.
+Esto aplica a la integración automática y a la asistida, incluida la segunda
+pasada. Las correcciones de locators de Zorem no se pierden por copiar una
+traza incompleta de Lorem. Si Zorem omite el campo se conserva la traza de
+Lorem, sin inferir locators ni acciones ausentes. Duplicados, secuencias ajenas
+y métodos incompatibles producen `interaction-trace`, dirigido a Zorem.
+
+La combinación no acredita corrección: el validador comprueba el locator
+contra el plan y el getter utilizado por el código. Se conservan los resultados
+originales de los autores y la salida previa a ensamblar en el historial. No
+requiere otra invocación ni extiende las dos pasadas disponibles.

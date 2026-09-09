@@ -6,7 +6,7 @@ import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERS
 import { GenerationRequest, MobilePlatform } from '../contracts';
 import { RecordedStep, recordedStepContext, parseTextAssertion } from '../contracts';
 import { projectPaths } from '../../workspace';
-import { frameworkLocator, roundTrip } from '../../indexing';
+import { frameworkLocator, recordedLocator } from '../../indexing';
 import {
     readJsonUtf8,
     readUtf8File,
@@ -87,7 +87,7 @@ function locatorFields(step: RecordedStep, platform: MobilePlatform): Partial<Re
     if (!step.selector) return {};
     let check;
     try {
-        check = roundTrip(step.selector, platform);
+        check = recordedLocator(step, platform);
     } catch {
         // Sin framework legible se guarda el selector tal cual; el resolver
         // vuelve a intentarlo con el contrato ya resuelto.

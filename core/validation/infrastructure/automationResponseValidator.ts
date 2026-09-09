@@ -1,3 +1,4 @@
+import { recordedLocatorRules } from './rules/recordedLocatorRules';
 /**
  * Validador determinista de la respuesta del agente.
  *
@@ -115,6 +116,7 @@ export class AutomationResponseValidator {
         gapRules(context, report);
         locatorContractRules(context, report);
         const existingAutomationWithoutNewLocators = existingAutomationRules(context, report);
+        if (!existingAutomationWithoutNewLocators) recordedLocatorRules(context, report);
 
         if (!existingAutomationWithoutNewLocators &&
             !errors.some(error => ['missing-layer', 'path', 'extra-layer'].includes(error.code))) {

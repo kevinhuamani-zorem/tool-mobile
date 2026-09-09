@@ -29,3 +29,5 @@
 Las reglas vinculantes para agentes están en [`../AGENTS.md`](../AGENTS.md).
 Cuando documentación y código difieran, detén el cambio, confirma el contrato
 con las pruebas y actualiza ambos en el mismo commit.
+
+- [Fidelidad de locators](LOCATOR_FIDELITY.md): tipo/valor grabado, corrección determinista, compatibilidad y métricas.

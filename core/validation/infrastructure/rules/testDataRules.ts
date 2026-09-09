@@ -25,6 +25,6 @@ export const testDataRules: ResponseRule = ({ scenario, response }, report) => {
     }
     for (const name of users) if (!catalog.names.has(name.toUpperCase())) report.errors.push({
         code: 'test-data-user-missing', file: feature.path,
-        message: `El usuario «${name}» no existe en resources/data/**/*.yml. El login fallará antes de ejecutar el caso. Corrige Examples o incorpora el dato al framework; puedes exportar el borrador para corregirlo.`,
+        message: !name.trim() ? 'Falta seleccionar un usuario real para el login. Revisa los usuarios del squad en resources/data; puedes exportar el borrador para completar el dato.' : `El usuario «${name}» no existe en resources/data/**/*.yml. El login fallará antes de ejecutar el caso. Corrige Examples o incorpora el dato al framework; puedes exportar el borrador para corregirlo.`,
     });
 };

@@ -21,6 +21,8 @@ export interface GenerationRequest {
      */
     executionTag?: string;
     dataName?: string;
+    /** Procedencia de una selección automática; nunca incluye credenciales del fixture. */
+    testDataSelection?: { mode: 'automatic'; name: string; file?: string; reason: string };
     examples?: Record<string, string>;
     platform: MobilePlatform;
     createdAt?: string;

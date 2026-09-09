@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { projectPaths, readFrameworkUserCatalog } = require('../dist/core/workspace');
+const { projectPaths, readFrameworkUserCatalog, availableSquadUsers, selectFrameworkUser } = require('../dist/core/workspace');
 const { testDataRules, featureLoginUsers } = require('../dist/core/validation/infrastructure/rules/testDataRules');
 const { prepareTestDataContext } = require('../dist/core/automation/infrastructure/testDataContext');
 
@@ -79,4 +79,73 @@ test('agent gets only existence for requested and current case baseline names, e
     const output = fs.readFileSync(path.join(pkg, 'test-data-context.json'), 'utf8');
     assert.deepEqual(JSON.parse(output).users, [{ name: 'Jose Mendoza Dni10', exists: false }, { name: 'Jose Mendoza Dni7 AutoFE', exists: true }]);
     assert.ok(!output.includes('UNRELATED-PRIVATE')); assert.ok(!output.includes('DO-NOT-DISCLOSE'));
+});
+
+
+test('automatic selection stays in the squad, is reproducible and leaves explicit QA users untouched', t => {
+    const f = fixture(t);
+    fs.writeFileSync(path.join(f.data, 'second.yml'), 'name: Otro usuario payment\npassword: ANOTHER-SECRET\n');
+    const other = path.join(f.root, 'resources/data/other'); fs.mkdirSync(other);
+    fs.writeFileSync(path.join(other, 'foreign.yml'), 'name: Usuario ajeno\n');
+    const catalog = readFrameworkUserCatalog();
+    assert.deepEqual(availableSquadUsers(catalog, 'payment').map(user => user.name), ['Jose Mendoza Dni7 AutoFE', 'Otro usuario payment']);
+    const chosen = selectFrameworkUser('payment', 'rec-one');
+    assert.equal(chosen.automatic, true);
+    assert.ok(availableSquadUsers(catalog, 'payment').some(user => user.name === chosen.name && user.file === chosen.file));
+    assert.deepEqual(selectFrameworkUser('payment', 'rec-one'), chosen);
+    assert.deepEqual(selectFrameworkUser('payment', 'rec-one', 'QA explicitly requested'), {
+        name: 'QA explicitly requested', automatic: false, file: undefined, reason: 'Usuario indicado por QA.' });
+    assert.equal(selectFrameworkUser('absent', 'rec-one').name, '');
+    assert.ok(!JSON.stringify(catalog).includes('SECRET'));
+});
+
+test('automatic selection excludes globally ambiguous names and never fabricates a user on catalog failure', t => {
+    const f = fixture(t);
+    const other = path.join(f.root, 'resources/data/other'); fs.mkdirSync(other);
+    fs.writeFileSync(path.join(other, 'duplicate.yml'), 'name: JOSE MENDOZA DNI7 AUTOFE\n');
+    assert.deepEqual(availableSquadUsers(readFrameworkUserCatalog(), 'payment'), []);
+    assert.equal(selectFrameworkUser('payment', 'rec-one').name, '');
+    fs.unlinkSync(path.join(other, 'duplicate.yml'));
+    fs.writeFileSync(path.join(f.data, 'bad.yml'), 'name: [BAD-SECRET\n');
+    const unavailable = selectFrameworkUser('payment', 'rec-one');
+    assert.equal(unavailable.name, '');
+    assert.ok(!JSON.stringify(unavailable).includes('BAD-SECRET'));
+});
+
+test('agent gets eligible squad candidates and selection provenance without unrelated names or credentials', t => {
+    const f = fixture(t), pkg = path.join(f.root, 'pkg'); fs.mkdirSync(pkg);
+    const selected = selectFrameworkUser('payment', 'rec-one');
+    const selection = { mode: 'automatic', name: selected.name, file: selected.file, reason: selected.reason };
+    fs.writeFileSync(path.join(pkg, 'scenario.json'), JSON.stringify({ squad: 'payment', request: { caseId: 'TC-10239', dataName: selected.name, testDataSelection: selection } }));
+    const other = path.join(f.root, 'resources/data/other'); fs.mkdirSync(other);
+    fs.writeFileSync(path.join(other, 'foreign.yml'), 'name: UNRELATED-PRIVATE\npassword: FOREIGN-SECRET\n');
+    prepareTestDataContext(pkg);
+    const output = fs.readFileSync(path.join(pkg, 'test-data-context.json'), 'utf8');
+    const context = JSON.parse(output);
+    assert.equal(context.schemaVersion, 2);
+    assert.deepEqual(context.selection, selection);
+    assert.deepEqual(context.availableUsers, [{ name: selected.name, squad: 'payment', file: 'resources/data/payment/approved.yml' }]);
+    assert.ok(!output.includes('UNRELATED-PRIVATE')); assert.ok(!output.includes('SECRET')); assert.ok(!output.includes('password'));
+});
+
+test('resolver fills both dataName and Examples from a real squad user without rewriting the recording', t => {
+    const f = fixture(t);
+    const { DeterministicResolver } = require('../dist/core/automation');
+    const catalog = { getCatalog: () => ({ stepDefinitions: [], screenMethods: [], locators: [], scenarios: [], features: [] }) };
+    const scenario = { schemaVersion: 1, pipelineVersion: '1.0.0', recordingId: 'rec-one', revision: 1, fingerprint: 'fp',
+        createdAt: '2026-09-08T00:00:00.000Z', squad: 'payment', platform: 'android', environment: 'qa',
+        objective: 'Consultar movimientos', acceptanceCriteria: 'Se muestra el resultado',
+        request: { squad: 'payment', platform: 'android', featureName: 'Movimientos', scenarioName: 'Consultar movimientos',
+            fileName: 'movements', locatorModule: 'movements', caseId: 'TC-1', tag: 'movements', pathType: 'Happy Path', dataName: '' },
+        actions: [{ action: 'VERIFICAR_EXISTE', sequence: 1, selector: '~Resultado', selectorVerified: true, contextHint: 'resultado' }] };
+    const original = structuredClone(scenario);
+    const result = new DeterministicResolver(catalog).resolve(scenario);
+    assert.equal(result.scenario.request.dataName, 'Jose Mendoza Dni7 AutoFE');
+    assert.equal(result.scenario.request.examples.username, 'Jose Mendoza Dni7 AutoFE');
+    assert.equal(result.scenario.request.testDataSelection.mode, 'automatic');
+    assert.deepEqual(scenario, original);
+    fs.rmSync(f.data, { recursive: true }); fs.mkdirSync(f.data);
+    const empty = new DeterministicResolver(catalog).resolve(scenario);
+    assert.equal(empty.scenario.request.dataName, '');
+    assert.equal(empty.scenario.request.examples.username, '');
 });

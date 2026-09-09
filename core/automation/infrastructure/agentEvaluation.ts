@@ -47,13 +47,15 @@ export function evaluateAutomationPackages(packageDirectories: string[], goldenR
                         references: (value.examples || []).map((example: any) => ({ goldenId: example.goldenId, revisionId: example.revisionId, versionHash: example.versionHash })) };
                 }));
                 const retrieval = own.filter(event => event.stage?.startsWith('golden-retrieval:')).flatMap(event => event.artifacts.map(item => JSON.parse(history.readArtifact(item).toString('utf8'))));
+                const locatorFidelity = own.filter(event => event.stage === 'locator-fidelity').flatMap(event => event.artifacts
+                    .filter(item => item.name === 'locator-fidelity.json' || item.name.endsWith('/locator-fidelity.json')).map(item => JSON.parse(history.readArtifact(item).toString('utf8'))));
                 const duration = run ? Date.parse(run.completedAt) - Date.parse(run.startedAt) : null;
                 attempts.push({ attemptId, recordingId: start.recordingId, revisionId: start.revisionId, caseId: start.caseId,
                     status: end?.result || 'not-evaluated', agentInvoked: invoked.length > 0, invocations: artifact ? invoked.length : null,
                     firstPass: first?.result || 'not-evaluated', passes, validation, timedOut: invoked.some(stage => stage.timedOut),
                     wallTimeMs: duration !== null && Number.isFinite(duration) ? Math.max(0, duration) : null,
                     qaInterventions: corrections.length + own.filter(event => event.kind === 'qa-validation-result').length, qaApproved: approved,
-                    functionalVerification: 'not-evaluated', contexts, retrieval,
+                    functionalVerification: 'not-evaluated', contexts, retrieval, locatorFidelity,
                     models: [...new Set(stages.flatMap(stage => stage.actualModels || []))],
                 });
             }
@@ -77,12 +79,20 @@ export function evaluateAutomationPackages(packageDirectories: string[], goldenR
         sampleSize: group.length, actuallyReceivedExamples: group.filter(attempt => attempt.contexts.some((context: any) => context.references.length)).length });
     const retrieval = completed.flatMap(attempt => attempt.retrieval || []);
     const sum = (field: string) => retrieval.reduce((total: number, item: any) => total + (Number(item[field]) || 0), 0);
+    const locatorReports = completed.flatMap(attempt => attempt.locatorFidelity || []);
+    const locatorTotal = (key: string) => locatorReports.reduce((total: number, report: any) => total + (Number(report[key]) || 0), 0);
     return { schemaVersion: 1, evaluationVersion: 'agent-evaluation/v2', generatedAt: new Date().toISOString(),
         status: index.entries.length && reserved.length && completed.length ? 'observational' : 'not-evaluated',
         ruleObservations: completed.flatMap(attempt => attempt.validation.flatMap((validation: any) => validation.issues.map((issue: any) => ({ attemptId: attempt.attemptId, pass: validation.pass, code: issue.code, layer: issue.layer, file: issue.file })))),
         corpus: { active: index.entries.length, references: index.entries.length - reserved.length, reserved: reserved.length, fingerprint: index.fingerprint,
             issues: index.issues, curatedTarget: '5–8 QA-approved cases; separate evaluation cases' },
-        metrics: { goldenRetrieval: { measuredStages: retrieval.length, notEvaluatedAttempts: completed.filter(attempt => !attempt.retrieval?.length).length,
+        metrics: { locatorFidelity: {
+                measuredStages: locatorReports.length,
+                beforeRecorderCorrection: fraction(locatorTotal('matched'), locatorTotal('checked'), completed.filter(attempt => !attempt.locatorFidelity?.length).length),
+                correctedGetters: locatorReports.reduce((total: number, report: any) => total + (report.corrected ? new Set((report.corrections || []).map((item: any) => `${item.file}:${item.typeStart}`)).size : 0), 0),
+                unverified: locatorReports.reduce((total: number, report: any) => total + (report.unverified?.length || 0) + (report.invalidEvidence?.length || 0), 0),
+                scope: 'static bindings per author pass; functional failures are not inferred',
+            }, goldenRetrieval: { measuredStages: retrieval.length, notEvaluatedAttempts: completed.filter(attempt => !attempt.retrieval?.length).length,
                 candidateCases: sum('candidates'), initialExamples: sum('examples'), initialBytes: sum('bytes'), requests: sum('requests'), rejected: sum('rejected'),
                 responseBytes: sum('responseBytes'), indexMs: sum('indexMs'), retrievalMs: sum('retrievalMs'), rebuiltCases: sum('rebuiltCases'), reusedCases: sum('reusedCases'),
                 observation: 'Context made available; actual model reads are not measured.' }, autonomousFirstPass: fraction(firstKnown.filter(attempt => attempt.firstPass === 'passed').length, firstKnown.length, attempts.length - firstKnown.length),
