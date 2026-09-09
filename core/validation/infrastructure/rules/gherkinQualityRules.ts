@@ -11,6 +11,7 @@ import fs from 'fs';
 import {
     featureStepLines,
     missingExamples,
+    normalizeGherkinStep,
     recordedStepContext,
     rewrittenReusedSteps,
 } from '../../../automation/contracts';
@@ -37,6 +38,16 @@ export function gherkinQualityRules(context: PreviewRuleContext, report: RuleRep
     const reusedStepTexts = new Set((scenario.request?.scenarioRows || []).filter(row => row.status === 'reused')
         .map(row => selectorNormalization.normalizeStepText(row.text)));
     const inheritedLines = new Set((context.updateBaselines.get('feature') || '').split(/\r?\n/).map(line => line.trim()));
+    const preservedWording = new Set([
+        ...(scenario.request?.scenarioRows || []).filter(row => row.status === 'reused').map(row => row.text),
+        ...featureStepLines(context.updateBaselines.get('feature') || ''),
+    ].map(normalizeGherkinStep));
+    // Style applies only to newly authored wording. Existing bindings keep exact
+    // case/accents; metadata labels such as `qa` or `memory` grant no exemption.
+    const authoredFeature = preview.featureContent.split(/\r?\n/).filter(line => {
+        const step = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
+        return !step || !preservedWording.has(normalizeGherkinStep(step[1]));
+    }).join('\n');
             if (!/^\s*Then\s+\S+/m.test(preview.featureContent)) {
                 errors.push({
                     code: 'assertion',
@@ -78,14 +89,14 @@ export function gherkinQualityRules(context: PreviewRuleContext, report: RuleRep
                     });
                 }
             }
-            for (const step of imperativeGherkinSteps(preview.featureContent)) {
+            for (const step of imperativeGherkinSteps(authoredFeature)) {
                 errors.push({
                     code: 'imperative-gherkin',
                     message: `Gherkin técnico/imperativo: ${step}. Describe la intención de negocio y agrupa las acciones.`,
                     file: response.files.find(file => file.layer === 'feature')?.path,
                 });
             }
-            for (const step of genericTemplateGherkinSteps(preview.featureContent)) {
+            for (const step of genericTemplateGherkinSteps(authoredFeature)) {
                 errors.push({
                     code: 'generic-template-gherkin',
                     message: `Gherkin genérico generado por plantilla: ${step}. Consolida el ciclo y describe un único comportamiento o resultado observable.`,
@@ -111,10 +122,7 @@ export function gherkinQualityRules(context: PreviewRuleContext, report: RuleRep
             }
             // Los steps reutilizados ya existen en el framework con esa redaccion:
             // no se juzgan, solo lo que este caso escribe.
-            const reusedTexts = new Set((scenario.request?.scenarioRows || [])
-                .filter(row => row.status === 'reused')
-                .map(row => selectorNormalization.normalizeStepText(row.text)));
-            for (const problem of gherkinPersonProblems(preview.featureContent, reusedTexts)) {
+            for (const problem of gherkinPersonProblems(authoredFeature)) {
                 errors.push({
                     code: 'gherkin-person',
                     message: `Redacción en ${problem.problem === 'first-person' ? 'primera persona'

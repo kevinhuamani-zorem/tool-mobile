@@ -563,6 +563,7 @@ function packageContractManifest(): Record<string, unknown> {
             'english-vocabulary.json',
             'validation-contract.json',
             'screen-object-contract.js',
+            'gherkin-contract.js',
             'instructions.md',
         ],
         contentFiles: [
@@ -622,7 +623,7 @@ function instructions(result: ResolverResult): string {
         `- NO SEARCH WITHOUT GAP: no solicites contexto si no hay un gap abierto; usa únicamente sus allowedQueries y respeta maxQueries. Un gap blocked-qa no se entrega al agente.\n` +
         `- Consulta reuse-context.json o collision-report.json solo cuando la evidencia de un hint/gap apunte a ellos.\n` +
         `- No explores el repositorio ni leas XML/capturas salvo que un gap lo pida explícitamente.\n` +
-        `- CONTRATO (cerrado, siempre completo): ./agent-response.schema.json, ./gap-resolutions.schema.json, ./query-requests.schema.json, ./framework-api.json, ./english-vocabulary.json, ./validation-contract.json, ./screen-object-contract.js y ./instructions.md.\n` +
+        `- CONTRATO (cerrado, siempre completo): ./agent-response.schema.json, ./gap-resolutions.schema.json, ./query-requests.schema.json, ./framework-api.json, ./english-vocabulary.json, ./validation-contract.json, ./screen-object-contract.js, ./gherkin-contract.js y ./instructions.md.\n` +
         `- CONTENIDO (bajo demanda por gap/query): ./scenario.json, ./generation-plan.json, ./hints.json, ./gaps.json, ./reuse-context.json, ./collision-report.json, ./query-results.json, ./resolved-context.json y ./unresolved-context.json.\n` +
         `- No uses búsquedas globales ni shell para descubrir archivos.\n` +
         `- Usa rutas RELATIVAS al directorio actual.\n` +
@@ -636,6 +637,7 @@ function instructions(result: ResolverResult): string {
         `  - english-vocabulary.json -> mapeo ES→EN de vocabulario del scenario (contextHint/objetivo/criterio) para nombrar en inglés sin adivinar.\n` +
         `  - validation-contract.json -> catálogo completo de reglas del validador con requisito y ejemplo.\n` +
         `  - screen-object-contract.js -> contrato ejecutable de Screen Object (nombres/estructura).\n` +
+        `  - gherkin-contract.js -> contrato ejecutable compartido de Gherkin y redacción declarativa.\n` +
         `  - generation-plan.json -> rutas/capas/decisiones deterministas que no se cambian.\n` +
         `  - scenario.json -> acciones y contexto funcional de la grabación.\n` +
         `  - hints.json -> pistas de resolución por gap.\n` +
@@ -734,7 +736,7 @@ function regenerationInstructions(
 }
 
 /**
- * Escribe el verificador y, a su lado, el modulo de reglas del Screen Object.
+ * Escribe el verificador y los contratos compartidos de Screen Object y Gherkin.
  *
  * Se copia el compilado en vez de reescribir las reglas dentro del verificador:
  * duplicar logica entre el sandbox y el validador fue lo que dejo divergir el
@@ -746,6 +748,10 @@ function writeVerifier(packageDirectory: string): void {
     fs.copyFileSync(
         path.join(__dirname, '..', 'contracts', 'screenObjectContract.js'),
         path.join(packageDirectory, 'screen-object-contract.js')
+    );
+    fs.copyFileSync(
+        path.join(__dirname, '..', 'contracts', 'gherkinContract.js'),
+        path.join(packageDirectory, 'gherkin-contract.js')
     );
 }
 
@@ -815,14 +821,17 @@ try{const document=JSON.parse(locator);for(const platform of ['android','ios']){
 for(const platform of requiredPlatforms){if(!new RegExp('^\\s*(?:@[^\\s@]+\\s+)*@'+platform+'(?:\\s|$)','mi').test(feature))errors.push('Falta tag @'+platform)}
 if(!/Scenario(?: Outline)?: \[TC-\d+\]\[(?:Happy|Unhappy) Path\]\[AUTO-FRONT\]/.test(feature))errors.push('Formato Scenario inválido');
 if(!/^\s*Then\s+\S+/m.test(feature))errors.push('Scenario sin Then');
-const normStep=v=>String(v||'').replace(/\s+/g,' ').trim();
-const featureLines=[...feature.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gmi)].map(x=>x[1].trim());
+const {gherkinBusinessWordingProblem,featureStepLines,normalizeGherkinStep:normStep}=require('./gherkin-contract.js');
+const featureLines=featureStepLines(feature);
 const presentSteps=new Set(featureLines.map(normStep));
 for(const row of (scenario.request&&scenario.request.scenarioRows)||[]){if(row.status!=='reused')continue;if(!presentSteps.has(normStep(row.text)))errors.push('Step reutilizado reescrito: "'+row.text+'". Copialo literal: lo resuelve un step definition que ya existe')}
 const params=[...new Set(featureLines.flatMap(x=>[...x.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)].map(y=>y[1])))];
 if(params.length){if(!/^\s*Scenario\s+Outline\s*:/mi.test(feature))errors.push('El Feature usa <'+params.join('>, <')+'> pero declara "Scenario:": debe ser "Scenario Outline:" con su tabla Examples');const cols=new Set();const flines=feature.split(/\r?\n/);for(let i=0;i<flines.length;i++){if(!/^\s*Examples\s*:/i.test(flines[i]))continue;const head=flines.slice(i+1).find(x=>x.trim().startsWith('|'));if(!head)continue;head.split('|').slice(1,-1).map(x=>x.trim()).filter(Boolean).forEach(x=>cols.add(x))}const missingCols=params.filter(x=>!cols.has(x));if(missingCols.length)errors.push('Faltan columnas en Examples para: <'+missingCols.join('>, <')+'>')}
-const imperative=/^\s*(?:Given|When|Then|And|But)\s+.*(?:\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b|\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:bot[oó]n|elemento|campo)\b|\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b|\b(?:espera|esperar)\s+\d+\s*segundos?\b|\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b)/gmi;
-for(const match of feature.matchAll(imperative))errors.push('Gherkin técnico/imperativo: '+match[0].trim());
+// Existing framework wording stays literal; only additions/changes are reviewed.
+const inheritedStepWording=new Set(((scenario.request&&scenario.request.scenarioRows)||[]).filter(row=>row.status==='reused').map(row=>normStep(row.text)));
+const featurePath=(response.files||[]).find(file=>file.layer==='feature')?.path;
+for(const baseline of reuse.updateBaselines||[]){if(baseline.layer!=='feature'||baseline.path!==featurePath)continue;let content='';try{content=fs.readFileSync(baseline.reference,'utf8')}catch(e){continue}for(const text of featureStepLines(content))inheritedStepWording.add(normStep(text))}
+for(const text of featureLines){if(inheritedStepWording.has(normStep(text)))continue;const problem=gherkinBusinessWordingProblem(text);if(problem)errors.push('Gherkin técnico/imperativo: '+text+'. '+problem)}
 const normalizeText=value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/<[^>]+>/g,'<param>').replace(/[^a-z0-9<>]+/g,' ').replace(/\s+/g,' ').trim();
 const featureSteps=[...feature.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gmi)].map(match=>normalizeText(match[1]));
 for(const action of scenario.actions){const hint=normalizeText(action.contextHint||action.elementIntent||action.description);if(hint&&featureSteps.includes(hint))errors.push('Pista contextual copiada literalmente como Step en acción '+action.sequence)}

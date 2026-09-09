@@ -186,8 +186,8 @@ a lo añadido).
 definición Gherkin ni texto contractual. El preprocesador y el agente pueden
 usarla para comprender el dominio, pero deben sintetizar los Steps a partir del
 objetivo, criterio de aceptación y conjunto ordenado de acciones. Copiar una
-pista literalmente al Feature produce `verbatim-context-hint` y bloquea la
-importación.
+pista literalmente al Feature produce `verbatim-context-hint`: es un diagnóstico
+de calidad; el borrador continúa disponible para revisión y exportación.
 
 - Debe tener tag sin `@` duplicado.
 - El ID válido es `TC-<número>`.
@@ -212,8 +212,32 @@ importación.
   escritura en campos, scrolls, swipes y esperas son detalles del Screen
   Object y sus helpers.
 - Agrupa acciones técnicas consecutivas que sirven al mismo objetivo en un
-  solo step funcional. La trazabilidad conserva cada secuencia original y
-  permite enlazarlas al mismo texto Gherkin.
+  solo step funcional. Interpreta el grupo completo con el objetivo y la
+  aceptación; la última etiqueta no determina su nombre. «El usuario selecciona
+  cerrar» o «el usuario selecciona seleccionar número destino» no explican el
+  propósito del grupo. Las comprobaciones positivas solo pueden describir lo
+  que la grabación permite verificar.
+- Ejemplos de redacción, sujetos a la evidencia: «el usuario identifica al
+  destinatario mediante el número <number>» y «el usuario solicita sus
+  movimientos al correo <email>». «El usuario inicia un yapeo» solo corresponde
+  si el grupo grabado acredita ese inicio; no es un reemplazo automático para
+  cerrar un modal ni acredita que el pago terminó. El contrato se aplica a
+  cualquier flujo: estas frases no son plantillas obligatorias.
+- Los permisos, cierres auxiliares y demás acciones técnicas quedan en Screen
+  Objects y helpers. Si cancelar, cerrar o volver es el objetivo del caso, el
+  step nombra la entidad y el efecto observado. No se omite esa acción ni se
+  incorpora una acción posterior dentro de una expectativa anterior.
+- La trazabilidad conserva todas las secuencias originales y su orden aunque
+  compartan un texto Gherkin. Feature, definición y `gherkinStep` se actualizan
+  juntos; los parámetros permanecen en Gherkin, Examples/DataTable y argumentos
+  del Screen. Los steps reutilizados se conservan literales, incluso cuando su
+  redacción heredada no cumple estas convenciones.
+- La redacción no crea cobertura: observar una pantalla o un control no acredita
+  envío, entrega, pago ni una condición de negocio. Si falta una aserción del
+  efecto esperado, conserva la comprobación grabada y devuelve
+  `testDesignReview.status: suggestion` con el pendiente para QA. La sugerencia
+  no bloquea generación, revisión ni exportación y no autoriza inventar una
+  aserción, selector o dato.
 - Si un ciclo repite `abrir opción -> elegir variante -> verificar resultado`,
   expresa todas las vueltas como una sola expectativa declarativa. No generes
   una pareja genérica de comportamiento/resultado por cada variante. Por
@@ -238,9 +262,9 @@ importación.
   impersonal («se muestra el filtro») y, si el objetivo del QA viene en
   infinitivo, redacta la acción con las intenciones en tercera persona.
 - Un dato escrito por el usuario viaja como `<param>` con su columna en
-  `Examples` y el step lo nombra («el usuario ingresa su correo <email> y
-  selecciona enviar correo»); la definition lo recibe como argumento y el
-  Screen Object lo usa, nunca lo deja fijo en código.
+  `Examples` y el step lo nombra («el usuario solicita sus movimientos al correo
+  <email>»); la definition lo recibe como argumento y el Screen Object lo usa,
+  nunca lo deja fijo en código.
 
 Ejemplo:
 
@@ -315,8 +339,9 @@ plan; la propuesta normalizada sigue pasando por preview y validación completa.
   `^el usuario ingresa su (.*) y (.*)$`, que atrapa «el usuario ingresa su
   correo <email> y selecciona enviar» de payment además de la definición
   propia. Un regex con captura final se traga cualquier sufijo, así que el
-  borrador reformula la frase (verbo sinónimo: «el usuario escribe su correo
-  <email> y selecciona enviar»; o conjunción «, luego ») antes de sufijar;
+  borrador busca una alternativa que conserve el propósito y los parámetros,
+  cambiando verbo o conjunción. Tampoco añade slugs, IDs de caso o «variante N»
+  ante una colisión exacta. Sin alternativa segura conserva el diagnóstico;
   `collision-report.json → reservedStepExpressions` marca con `swallows` los
   regex que aún atrapan una frase, y el validador rechaza `step-ambiguous`
   (con la reformulación sugerida) y `step-undefined`. Ambas son de Lorem.
@@ -342,14 +367,26 @@ se registran sus nombres; los existentes no se reescriben.
 
 ### Redacción de las filas del borrador
 
-Orden de preferencia para el texto de cada fila: frase de dominio redactada a
-mano (`domainBehaviorText`/`domainAssertionText`), las palabras del QA en el
-objetivo/criterio cuando hay un único bloque, una frase construida desde la
-pista contextual de la acción que define el bloque (`el usuario selecciona
-ultimos 30 dias`, `se muestra la opción ultimos 30 dias`), y solo al final la
-plantilla de máquina (`wording: template`). La frase por intención es única
-por elemento, así que grabaciones que alternan click y verificación dejan de
-producir "se obtiene el resultado esperado de … para tc-…" con sufijos.
+Los bloques nuevos de comportamiento priorizan una frase de dominio
+(`domainBehaviorText`) solo para clicks/gestos sin datos de entrada. Después
+se considera el objetivo QA solo si existe un bloque y no contiene `ESCRIBIR`;
+luego, la síntesis del grupo completo con su contexto anterior y posterior.
+Así un objetivo que omite datos no puede borrar sus parámetros. Nunca se elige
+simplemente la etiqueta de la última acción. Si falta evidencia para una
+intención específica se conserva una descripción limitada y el diagnóstico
+para el agente, sin inventar el propósito.
+
+Los bloques nuevos de verificación priorizan la intención observable de las
+aserciones grabadas (`domainAssertionText`/`intentAssertionText`). El criterio
+QA describe lo que se desea comprobar y no se copia como si la grabación ya
+lo demostrara. La plantilla (`wording: template`) queda como último recurso.
+Los ciclos consolidados también describen únicamente las verificaciones
+observadas de cada vuelta, incluidas las negaciones; no copian la aceptación
+QA como éxito comprobado. Una fila reutilizada o con su propia tabla no se
+reescribe para consolidarla. Los steps existentes se copian literales; las
+reformulaciones de steps nuevos
+conservan todas las secuencias, parámetros y bindings y no incorporan sufijos
+artificiales para eludir colisiones.
 
 ### Nombres en inglés: diccionario, detección y aprendizaje
 

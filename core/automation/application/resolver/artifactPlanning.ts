@@ -15,7 +15,7 @@ import {
 import { ArtifactBundle, ReuseAnalyzer, SquadReuseCatalog, CodeGraph } from '../../../indexing';
 import type { BaselineSnapshotPort } from '../../ports/baselineSnapshotPort';
 import { similarity, words } from './naming';
-import { domainAssertionText, qaSentence } from './wording';
+import { intentAssertionText } from './wording';
 import { conceptSimilarity } from './selectorHeuristics';
 
 
@@ -272,7 +272,7 @@ export function consolidateRepeatedValidationCycle(
     repetition: NonNullable<ReturnType<typeof detectRepetition>>,
     actions: RecordedStep[],
     resolutions: ActionResolution[],
-    acceptanceCriteria: string,
+    _acceptanceCriteria: string,
 ): NonNullable<GenerationRequest['scenarioRows']> | undefined {
     const coveredSequences = new Set(repetition.sequences.flat());
     // Recordings anteriores al versionado de trazas no persistían `sequence`
@@ -295,6 +295,11 @@ export function consolidateRepeatedValidationCycle(
         return [index];
     });
     if (affectedIndexes.length < repetition.repetitions * 2) return undefined;
+    // Una consolidación nunca reescribe un Step existente ni descarta datos
+    // tabulares ya asociados a otra fila del caso.
+    if (affectedIndexes.some(index => rows[index].status === 'reused' || rows[index].dataTable)) return undefined;
+    const mappedSequences = new Set(affectedIndexes.flatMap(index => (rows[index].actions || []).map(action => Number(action.sequence))));
+    if ([...coveredSequences].some(sequence => !mappedSequences.has(sequence))) return undefined;
 
     const firstIndex = Math.min(...affectedIndexes);
     const affected = new Set(affectedIndexes);
@@ -310,14 +315,19 @@ export function consolidateRepeatedValidationCycle(
         .filter(action => coveredSequences.has(Number(action.sequence)))
         .map(action => actionBySequence.get(Number(action.sequence)) || action);
     const intentBySequence = new Map(resolutions.map(resolution => [resolution.sequence, resolution.intent]));
-    const intents = orderedActions.map(action => intentBySequence.get(Number(action.sequence)) || recordedStepContext(action));
-    const domainText = domainAssertionText(intents);
-    const qaText = qaSentence(acceptanceCriteria, 'assertion');
+    // La expectativa del QA no acredita lo que cada vuelta verifica. Deriva
+    // el texto solo de las comprobaciones grabadas, conservando también
+    // negaciones y tipos distintos de resultado del mismo ciclo.
+    const observed = orderedActions.filter(action => /^VERIFICAR_/.test(action.action)).map(action =>
+        intentAssertionText([action], [intentBySequence.get(Number(action.sequence)) || recordedStepContext(action)]));
+    if (observed.some(text => !text)) return undefined;
+    const assertions = [...new Set(observed as string[])];
+    if (!assertions.length) return undefined;
     const cycleContext = orderedActions.map(recordedStepContext).join(' ');
     const parameter = /\bfiltr(?:o|ar|ado|ada|ados|adas)?\b/i.test(cycleContext)
         ? 'filtro'
         : repetition.parameter.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() || 'variante';
-    let text = domainText || qaText || 'se muestran los resultados esperados';
+    let text = assertions.join(' y ');
     if (!words(text).includes(words(parameter)[0])) text += ` al aplicar cada ${parameter}`;
 
     const hasPreviousAssertion = rows.slice(0, firstIndex).some(row =>
@@ -327,7 +337,7 @@ export function consolidateRepeatedValidationCycle(
         keyword: (hasPreviousAssertion ? 'And' : 'Then') as 'And' | 'Then',
         text,
         status: 'missing' as const,
-        wording: (domainText ? 'domain' : qaText ? 'qa' : 'domain') as 'domain' | 'qa',
+        wording: 'qa' as const,
         actions: orderedActions,
     };
 

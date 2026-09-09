@@ -960,9 +960,9 @@ test('resolver agrupa acciones técnicas en comportamiento y propone rutas compa
     assert.equal(result.scenario.request.scenarioRows.length, 3);
     assert.equal(result.scenario.request.scenarioRows[1].text, 'el usuario consulta todos sus movimientos');
     assert.equal(result.scenario.request.scenarioRows[1].actions.length, 4);
-    // La verificación es sobre el filtro, no sobre los movimientos: el criterio
-    // del QA ("verificar que existe…") sale impersonal.
-    assert.equal(result.scenario.request.scenarioRows[2].text, 'se muestra el filtro de movimientos');
+    // La acción grabada comprueba la presencia del control de filtro. El Then
+    // describe esa evidencia; no afirma que se hayan filtrado movimientos.
+    assert.equal(result.scenario.request.scenarioRows[2].text, 'se muestra la opción filtro de movimientos');
 });
 
 test('resolver usa contextHint como pista sin copiarlo literalmente al Gherkin', () => {
@@ -2840,7 +2840,7 @@ test('reuse-context declara los elementos existentes que el caso toca', () => {
     assert.match(instructions, /status: "missing"/);
 });
 
-test('package builder mantiene baselines grandes fuera del contexto mínimo', () => {
+test('package builder mantiene baselines íntegros por referencia sin duplicar cuerpos ni listas completas en contexto', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-update-package-'));
     const framework = path.join(root, 'framework');
     const recording = path.join(root, 'recording');
@@ -2901,13 +2901,22 @@ test('package builder mantiene baselines grandes fuera del contexto mínimo', ()
     assert.equal(Object.hasOwn(baseline, 'content'), false);
     assert.equal(baseline.preserve.count, 800);
     assert.equal(baseline.preserve.sample.length, 12);
-    assert.ok(fs.statSync(path.join(result.packageDirectory, baseline.reference)).size > 20_000);
+    const referencedContent = fs.readFileSync(path.join(result.packageDirectory, baseline.reference), 'utf8');
+    assert.equal(referencedContent, fs.readFileSync(baselineFile, 'utf8'), 'la referencia conserva todos los bytes del baseline');
+    assert.equal([...referencedContent.matchAll(/public async existingMethod\d+\(/g)].length, 800);
     assert.equal(typeof gapsProjection.gaps[0].allowedQueryArgsSchemas, 'object');
-    const mandatoryBytes = [
+    const mandatoryFiles = [
         'scenario.json', 'generation-plan.json', 'reuse-context.json',
         'collision-report.json', 'unresolved-context.json', 'instructions.md'
-    ].reduce((total, file) => total + fs.statSync(path.join(result.packageDirectory, file)).size, 0);
-    assert.ok(mandatoryBytes <= 20_000, `contexto obligatorio: ${mandatoryBytes} bytes`);
+    ];
+    const sampledNames = new Set(baseline.preserve.sample);
+    for (const file of mandatoryFiles) {
+        const content = fs.readFileSync(path.join(result.packageDirectory, file), 'utf8');
+        assert.doesNotMatch(content, /public\s+async\s+existingMethod\d+/, `${file} no debe duplicar cuerpos del baseline`);
+        for (const [name] of content.matchAll(/\bexistingMethod\d+\b/g)) {
+            assert.ok(sampledNames.has(name), `${file} debe referenciar el baseline, no incluir su lista completa de métodos`);
+        }
+    }
 });
 
 test('reprocesar una grabación siempre reconstruye el paquete y conserva evidencia e historial', () => {

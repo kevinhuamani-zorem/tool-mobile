@@ -18,9 +18,8 @@ import {
     matchingStepDefinitions,
     normalizeStepText as normalizeStepTextShared,
     stepTextEscaping,
-    swallowingStepDefinitions,
 } from '../../../shared';
-import { selectorAliases, titleFromSlug } from './naming';
+import { selectorAliases } from './naming';
 
 /**
  * Reutiliza un locator existente SOLO si coinciden la estrategia TypeLocator y
@@ -197,8 +196,7 @@ export function existingStepFor(
  * Cuando un regex ajeno con capturas atrapa la frase (`^el usuario ingresa
  * su (.*) y (.*)$` de login traga «el usuario ingresa su correo <email> y
  * selecciona enviar»), sufijar no sirve: la captura final se lo come igual.
- * Ahi se cambia primero la redaccion (verbo sinonimo, conjuncion) y solo
- * despues se recurre a los sufijos. Si nada escapa se devuelve el texto tal
+ * Se cambia la redaccion (verbo sinonimo, conjuncion) sin agregar sufijos. Si nada escapa se devuelve el texto tal
  * cual: el validador lo rechaza como `step-ambiguous` y el agente lo ve en
  * `reservedStepExpressions`.
  */
@@ -206,39 +204,21 @@ export function disambiguateStepText(
     baseText: string,
     usedCanonicals: Set<string>,
     definitions: ReadonlyArray<Pick<StepDefinitionInfo, 'expression'>>,
-    technicalName: string,
-    caseId: string,
+    _technicalName: string,
+    _caseId: string,
 ): string {
     const trimmed = String(baseText || '').trim().replace(/\s+/g, ' ');
-    const scope = titleFromSlug(technicalName).toLowerCase();
-    const caseToken = String(caseId || '').toLowerCase();
-    const reworded = swallowingStepDefinitions(trimmed, definitions).length
-        ? stepTextEscaping(trimmed, definitions, candidate =>
-            usedCanonicals.has(canonicalStepExpressionShared(candidate)))
-        : undefined;
-    const candidates = [
-        trimmed,
-        ...(reworded ? [reworded] : []),
-        `${trimmed} en ${scope}`,
-        `${trimmed} para ${scope}`,
-        `${trimmed} para ${caseToken}`,
-        `${trimmed} en ${scope} ${caseToken}`,
-    ].filter(Boolean);
-    for (const candidate of candidates) {
+    const reworded = stepTextEscaping(trimmed, definitions, candidate =>
+        usedCanonicals.has(canonicalStepExpressionShared(candidate)));
+    for (const candidate of [trimmed, ...(reworded ? [reworded] : [])]) {
         const canonical = canonicalStepExpressionShared(candidate);
-        if (usedCanonicals.has(canonical)) continue;
-        if (collidesWithFrameworkStep(candidate, definitions)) continue;
+        if (usedCanonicals.has(canonical) || collidesWithFrameworkStep(candidate, definitions)) continue;
         usedCanonicals.add(canonical);
         return candidate;
     }
-    for (let attempt = 2; attempt <= 12; attempt += 1) {
-        const candidate = `${trimmed} en ${scope} variante ${attempt}`;
-        const canonical = canonicalStepExpressionShared(candidate);
-        if (usedCanonicals.has(canonical)) continue;
-        if (collidesWithFrameworkStep(candidate, definitions)) continue;
-        usedCanonicals.add(canonical);
-        return candidate;
-    }
+    // Sin una reformulación segura, la colisión queda visible para Lorem y el
+    // validador. Un slug, TC o "variante N" no aporta significado de negocio.
+
     return trimmed;
 }
 

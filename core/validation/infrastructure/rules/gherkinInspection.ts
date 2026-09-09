@@ -10,6 +10,7 @@ import { expandExampleRow, selectorNormalization } from '../../../shared';
 import {
     gherkinKeywordAccepted,
     gherkinPersonProblem,
+    gherkinBusinessWordingProblem,
     gherkinStepKind,
     expectedGherkinKeyword,
 } from '../../../automation/contracts';
@@ -36,14 +37,6 @@ export function responseScenarioSteps(content: string): string[][] {
     return scenarios;
 }
 
-const IMPERATIVE_GHERKIN_PATTERNS = [
-    /\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b/,
-    /\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:boton|elemento|campo)\b/,
-    /\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b/,
-    /\b(?:espera|esperar)\s+\d+\s*(?:segundo|segundos)\b/,
-    /\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b/,
-];
-
 const GENERIC_TEMPLATE_GHERKIN_PATTERNS = [
     /^el usuario completa\b/,
     /^se obtiene el resultado esperado de\b/,
@@ -57,8 +50,7 @@ export function imperativeGherkinSteps(content: string): string[] {
     return content.split(/\r?\n/).flatMap(line => {
         const match = line.match(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/i);
         if (!match) return [];
-        const normalized = selectorNormalization.normalizeStepText(match[1]);
-        return IMPERATIVE_GHERKIN_PATTERNS.some(pattern => pattern.test(normalized))
+        return gherkinBusinessWordingProblem(match[1])
             ? [match[1].trim()]
             : [];
     });

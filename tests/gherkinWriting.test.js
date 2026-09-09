@@ -100,11 +100,11 @@ test('el borrador de 18167698 alterna When/Then, nombra el dato escrito y no rep
         'el usuario <username> inicia sesión en Yape',
         'el usuario consulta todos sus movimientos',
         'se muestra la pantalla de movimientos',
-        'el usuario selecciona correo',
+        'el usuario prepara el envío de sus movimientos por correo',
         'se muestra la pantalla de enviar movimientos',
-        'el usuario ingresa su correo <email> y selecciona enviar correo',
+        'el usuario solicita sus movimientos en el correo <email>',
         'se muestra el mensaje de correo enviado',
-        'el usuario selecciona atras',
+        'el usuario finaliza la consulta del envío por correo',
     ]);
     assert.equal(result.scenario.request.examples.email, 'joseamendoza@yape.com.pe');
     for (const row of rows) assert.equal(gherkinPersonProblem(row.text), undefined, row.text);
@@ -194,4 +194,74 @@ test('el validador señala keywords sin semántica y redacción fuera de tercera
         .replace('    And el usuario selecciona correo', '    When el usuario selecciona correo')
         .replace('    And se muestra la pantalla de enviar movimientos', '    Then se muestra la pantalla de enviar movimientos');
     assert.deepEqual(gherkinKeywordProblems(clean, actionTrace, actions), []);
+});
+
+
+test('el yapeo se redacta por intención del bloque sin perder acciones ni parámetros', () => {
+    const recorded = [
+        action('CLICK', 'boton yapear', '~Yapear'),
+        action('CLICK', 'boton permitir', '~Permitir'),
+        action('CLICK', 'boton cerrar', '~Cerrar'),
+        action('VERIFICAR_EXISTE', 'pantalla yapear', '~Pantalla Yapear'),
+        action('ESCRIBIR', 'ingresar numero destino', '~Número', '900000001'),
+        action('CLICK', 'boton seleccionar numero destino', '~Destinatario'),
+        action('VERIFICAR_EXISTE', 'numero del yapero', '~Número del destinatario'),
+        action('ESCRIBIR', 'ingresar monto', '~Monto', '1'),
+        action('ESCRIBIR', 'agregar mensaje', '~Mensaje', 'Prueba'),
+        action('CLICK', 'boton yapear', '~Yapear'),
+        action('VERIFICAR_EXISTE', 'monto yapeado', '~Monto yapeado'),
+        action('VERIFICAR_EXISTE', 'numero de celular ofuscado', '~Número ofuscado'),
+        action('CLICK', 'boton cerrar', '~Cerrar'),
+    ];
+    const result = new DeterministicResolver(emptyCatalog).resolve(scenario(recorded,
+        'realizar el flujo de yapeo', 'se realiza un yapeo exitoso'));
+    const rows = result.scenario.request.scenarioRows;
+    assert.deepEqual(rows.filter(row => row.keyword === 'When').map(row => row.text), [
+        'el usuario inicia un yapeo',
+        'el usuario identifica al destinatario mediante el número <number>',
+        'el usuario solicita un yapeo por <amount> con el comentario <addMessage>',
+        'el usuario cierra el detalle del yapeo',
+    ]);
+    assert.deepEqual(rows.flatMap(row => row.actions.map(a => a.sequence)), recorded.map((_, i) => i + 1));
+    assert.deepEqual(rows[1].actions.map(a => a.action), ['CLICK', 'CLICK', 'CLICK']);
+    for (const [key, value] of Object.entries({ number: '900000001', amount: '1', addMessage: 'Prueba' })) {
+        assert.equal(result.scenario.request.examples[key], value);
+        assert.ok(rows.some(row => row.text.includes(`<${key}>`)));
+    }
+    assert.ok(rows.some(row => row.text === 'se muestra el número de celular ofuscado'));
+    assert.ok(rows.every(row => !/exitoso|selecciona cerrar|selecciona seleccionar/.test(row.text)));
+});
+
+test('un objetivo de éxito no convierte la existencia de una pantalla en confirmación de negocio', () => {
+    const result = new DeterministicResolver(emptyCatalog).resolve(scenario([
+        action('CLICK', 'boton yapear', '~Yapear'),
+        action('VERIFICAR_EXISTE', 'pantalla yapear', '~Pantalla Yapear'),
+    ], 'el usuario inicia un yapeo', 'se realiza un yapeo exitoso'));
+    const assertions = result.scenario.request.scenarioRows.filter(row => row.keyword === 'Then');
+    assert.deepEqual(assertions.map(row => row.text), ['se muestra la pantalla de yapear']);
+});
+
+test('no se atribuye el objetivo completo a cerrar cuando falta contexto del bloque', () => {
+    const { intentBehaviorText } = require('../dist/core/automation/application/resolver/wording');
+    assert.equal(intentBehaviorText([action('CLICK', 'boton cerrar', '~Cerrar')], ['boton cerrar']), undefined);
+    assert.equal(intentBehaviorText([action('CLICK', 'boton yapear', '~Yapear'),
+        action('CLICK', 'boton cancelar pago', '~Cancelar pago')], ['boton yapear', 'boton cancelar pago'],
+        { nextAssertions: ['pantalla yapear'] }), 'el usuario solicita un yapeo y cancela pago');
+    const text = intentBehaviorText([
+        action('ESCRIBIR', 'nombre', '~Nombre', '<name>'),
+        action('ESCRIBIR', 'apellido', '~Apellido', '<surname>'),
+    ], ['nombre', 'apellido']);
+    assert.match(text, /<name>.*<surname>/);
+});
+
+
+test('el objetivo de un único bloque no sustituye los parámetros de sus datos grabados', () => {
+    const result = new DeterministicResolver(emptyCatalog).resolve(scenario([
+        action('ESCRIBIR', 'correo', '~Correo', 'qa@example.invalid'),
+        action('VERIFICAR_EXISTE', 'pantalla de envío', '~Envío'),
+    ], 'el usuario configura el destino de sus movimientos', 'se muestra la pantalla de envío'));
+    const behavior = result.scenario.request.scenarioRows.find(row => row.keyword === 'When');
+    assert.ok(behavior.text.includes('<email>'));
+    assert.equal(behavior.actions[0].value, '<email>');
+    assert.equal(result.scenario.request.examples.email, 'qa@example.invalid');
 });

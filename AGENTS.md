@@ -195,9 +195,14 @@ generadores, validadores o plantillas.
 - Nombre: `[TC-10239][Happy Path|Unhappy Path][AUTO-FRONT] descripción`.
 - Capas: Feature, Steps, Screen Object y Locators según
   `docs/GENERATION_CONTRACT.md`.
-- El Gherkin es declarativo: expresa intención, capacidad y resultado de
-  negocio. No replica el historial como una línea por click, botón, campo,
-  scroll, swipe o espera.
+- El Gherkin nuevo es declarativo: expresa la intención de negocio o el
+  resultado observado del grupo completo de acciones, junto al objetivo y
+  aceptación. No usa la última etiqueta como nombre («selecciona cerrar»,
+  «selecciona seleccionar número»), ni replica el historial como una línea por
+  click, botón, campo, permiso, scroll, swipe o espera. Esos detalles viven en
+  Screen Objects; si cerrar/cancelar es el objetivo, nombra la entidad y efecto.
+  Los steps reutilizados se conservan literales. El diagnóstico existente
+  `imperative-gherkin` incluye esta redacción técnica de los steps nuevos.
 - Keywords por semántica: `Given` contexto o estado inicial; `When` acción
   que ejecuta el usuario o evento que ocurre; `Then` resultado esperado;
   `And`/`But` complementan el paso anterior y heredan su tipo (la acción que
@@ -210,9 +215,15 @@ generadores, validadores o plantillas.
   y el método lo usa. Nunca se escribe su literal en Steps ni en el Screen
   (`examples-unused-column`, `parameter-not-forwarded`, `parameter-unused`,
   `example-value-hardcoded`).
-- Las acciones técnicas consecutivas se engloban en un único step funcional.
-  `actionTrace` conserva el orden completo permitiendo que varias secuencias
-  apunten al mismo `gherkinStep`.
+- Las acciones técnicas consecutivas del mismo propósito se engloban en un
+  único step funcional. `actionTrace` conserva todas las secuencias y su orden,
+  permitiendo que varias apunten al mismo `gherkinStep`. Al reformular, actualiza
+  Feature, definición y trazas juntos y conserva cada parámetro hasta el Screen.
+  Una frase declarativa no acredita éxito: sin aserción grabada del efecto de
+  negocio conserva la comprobación observada y devuelve
+  `testDesignReview.status: suggestion`; la sugerencia no bloquea generación ni
+  exportación. No inventes
+  resultados, selectores o datos para justificar una frase más ambiciosa.
 - Los nombres de archivos, módulos, métodos y variables deben ser estables,
   legibles y normalizados; no dependas de índices visuales como `view_93` si
   existe semántica suficiente.

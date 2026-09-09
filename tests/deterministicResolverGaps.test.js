@@ -153,8 +153,11 @@ test('desambigua un step cuando el texto ya existe en el framework', () => {
     ]));
     const behavior = result.scenario.request.scenarioRows.find(row => row.keyword === 'When');
     assert.ok(behavior, 'debe existir un row de comportamiento');
-    assert.notEqual(behavior.text, 'el usuario consulta todos sus movimientos');
-    assert.match(behavior.text, /^el usuario consulta todos sus movimientos /);
+    assert.equal(behavior.text, 'el usuario revisa todos sus movimientos');
+    const reserved = new RegExp(catalog.getCatalog().stepDefinitions[0].expression);
+    assert.equal(reserved.test(behavior.text), false, 'la nueva frase deja de resolver la definición ajena');
+    assert.doesNotMatch(behavior.text, /tc-\d+|variante \d+|movimientos en /i, 'no agrega sufijos artificiales');
+    assert.deepEqual(behavior.actions.map(item => item.sequence), [1]);
 });
 
 test('no marca la aserción cuando el selector no depende del valor', () => {
@@ -617,8 +620,9 @@ test('el gap de duplicado publica los candidatos que ofrece', () => {
 
 // El texto del step salia de una plantilla armada con el slug tecnico —"el
 // usuario completa saldo disponible consultar etiqueta"— ignorando que el QA ya
-// habia escrito el comportamiento y el resultado esperado en espanol.
-test('el objetivo y el criterio del QA se usan como texto de los steps', () => {
+// habia escrito el comportamiento en español. El criterio esperado no es
+// evidencia de que la comprobación grabada acredite ese resultado.
+test('el objetivo QA orienta la acción y el Then conserva la evidencia grabada', () => {
     const recorded = scenario([
         action('CLICK', 'opcion de recarga', '~btnRecarga'),
         action('VERIFICAR_EXISTE', 'confirmacion de recarga', '~lblRecarga'),
@@ -631,7 +635,9 @@ test('el objetivo y el criterio del QA se usan como texto de los steps', () => {
     const then = rows.find(row => row.keyword === 'Then');
     assert.equal(when.text, 'el usuario recarga su celular con un monto');
     assert.equal(when.wording, 'qa');
-    assert.equal(then.text, 'se muestra la constancia de la recarga realizada');
+    assert.equal(then.text, 'se muestra confirmacion de recarga');
+    assert.doesNotMatch(then.text, /constancia|realizada/, 'la aceptación no se convierte en una afirmación sin evidencia');
+    assert.equal(then.actions[0].action, 'VERIFICAR_EXISTE');
     assert.equal(then.wording, 'qa');
     assert.doesNotMatch(rows.map(row => row.text).join(' '), /el usuario completa|resultado esperado de/);
 });
@@ -702,9 +708,9 @@ test('un objetivo procedimental no se usa y la fila queda marcada template', () 
 });
 
 // Grabaciones que alternan click y verificacion por accion: cada fila se
-// redacta con las palabras del QA en vez de la plantilla, y por ser unica por
-// elemento no necesita sufijo.
-test('redacta filas desde la pista contextual cuando no hay frase de dominio', () => {
+// redacta desde la evidencia disponible. Un atrás sin destino conocido sigue
+// pendiente de redacción; no se inventa una navegación de negocio.
+test('redacta desde las pistas y conserva como pendiente un atrás sin contexto suficiente', () => {
     const recorded = scenario([
         action('CLICK', 'boton filtros de movimientos', '~Botón de filtrar'),
         action('VERIFICAR_TEXTO', 'verificar si existe boton ultimos 30 dias', 'android=new UiSelector().text("Últimos 30 días")'),
@@ -716,14 +722,20 @@ test('redacta filas desde la pista contextual cuando no hay frase de dominio', (
     recorded.acceptanceCriteria = 'el usuario visualiza los movimientos filtrados';
     const rows = new DeterministicResolver(emptyCatalog()).resolve(recorded).scenario.request.scenarioRows
         .filter(row => row.status === 'missing');
-    assert.deepEqual(rows.map(row => row.text), [
+    assert.deepEqual(rows.slice(0, 4).map(row => row.text), [
         'el usuario selecciona filtros de movimientos',
         'se muestra la opción ultimos 30 dias',
         'el usuario selecciona ultimos 30 dias',
-        'se muestra fecha',
-        'el usuario selecciona atras',
+        'se muestra la fecha',
     ]);
-    assert.ok(rows.every(row => !/resultado esperado de|el usuario completa/.test(row.text)), 'sin plantillas');
+    assert.equal(rows.length, 5);
+    const pendingNavigation = rows[4];
+    assert.equal(pendingNavigation.wording, 'template', 'sin destino conocido el agente debe resolver la redacción');
+    assert.match(pendingNavigation.text, /^el usuario completa /);
+    assert.doesNotMatch(pendingNavigation.text, /regresa|finaliza|selecciona atras/, 'no inventa el propósito del último click');
+    assert.deepEqual(rows.flatMap(row => row.actions.map(item => [item.sequence, item.action])),
+        recorded.actions.map((item, index) => [index + 1, item.action]), 'todas las acciones siguen presentes en su orden original');
+    assert.equal(pendingNavigation.actions[0].selector, '~Atrás');
 });
 
 // Una pantalla nueva no se "extiende" sobre un Screen ajeno solo porque ambos

@@ -76,11 +76,11 @@ test('borrador: una frase atrapada por un regex ajeno se reformula en vez de suf
     const used = new Set();
     const text = disambiguateStepText(EMAIL_STEP, used, [LOGIN_LAX, LOGIN_PREAMBLE], 'enter-email-send-report', 'TC-10239');
     assert.equal(text, 'el usuario escribe su correo <email> y selecciona enviar');
-    // Un texto que solo repite otro (misma expresión canónica) sigue sufijándose.
+    // Las colisiones exactas también se reformulan sin agregar el slug o TC.
     const duplicate = { expression: '^se muestran los movimientos esperados$', file: 'payment/movements.steps.ts' };
     assert.equal(
         disambiguateStepText('se muestran los movimientos esperados', new Set(), [duplicate], 'enter-email-send-report', 'TC-10239'),
-        'se muestran los movimientos esperados en enter email send report',
+        'se visualizan los movimientos esperados',
     );
 });
 
@@ -254,4 +254,13 @@ test('validador: sin catálogo del framework no se afirma que una línea quede u
         emailDefinition: 'el usuario escribe su correo (.*) y selecciona enviar',
     });
     assert.equal(validation.errors.some(error => error.code === 'step-undefined'), false);
+});
+
+
+test('una colisión sin alternativa segura queda pendiente y no inventa sufijos de negocio', () => {
+    const text = 'el usuario solicita un yapeo';
+    const definitions = [{ expression: '^el usuario solicita un yapeo$' }];
+    const result = disambiguateStepText(text, new Set(), definitions, 'yapeo-number', 'TC-10240');
+    assert.equal(result, text);
+    assert.equal(collidesWithFrameworkStep(result, definitions), true);
 });

@@ -711,8 +711,7 @@ export class DeterministicResolver {
             }));
         });
         const behaviorChunks = memoryChunks.filter(chunk => !chunk.assertion && !chunk.memory).length;
-        const assertionChunks = memoryChunks.filter(chunk => chunk.assertion && !chunk.memory).length;
-        memoryChunks.forEach(chunk => {
+        memoryChunks.forEach((chunk, chunkIndex) => {
             const intents = chunk.entries.map(entry => entry.resolution.intent);
             const parameterizedActions = chunk.entries.map(({ step, resolution }) => {
                 if (step.action !== 'ESCRIBIR') return {
@@ -735,22 +734,19 @@ export class DeterministicResolver {
                     contextHint: recordedStepContext(step),
                 };
             });
-            const inputParameter = (parameterizedActions.find(action => action.action === 'ESCRIBIR')
-                ?.value || '').match(/^<([A-Za-z_][A-Za-z0-9_]*)>$/)?.[1];
-            const behavior = inputParameter && intents.some(intent => /yapear/i.test(intent))
-                ? `el usuario busca el número <${inputParameter}> para yapear`
-                // Con un solo bloque de comportamiento, el objetivo del QA ES
-                // ese comportamiento; con varios no se puede repartir y se
-                // vuelve a la plantilla.
-                // Orden deliberado: la frase de dominio esta redactada a mano y
-                // gana; si no aplica, las palabras del QA; la plantilla solo
-                // cuando no hay ninguna de las dos.
-                : domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName)
-                    || (behaviorChunks === 1 ? qaSentence(rawScenario.objective) : undefined)
-                    || intentBehaviorText(parameterizedActions, intents)
-                    || behaviorTemplate(technicalName);
+            const behavior = domainBehaviorText(chunk.entries.map(entry => entry.step), intents, technicalName)
+                || (behaviorChunks === 1 && !parameterizedActions.some(action => action.action === 'ESCRIBIR')
+                    ? qaSentence(rawScenario.objective) : undefined)
+                || intentBehaviorText(parameterizedActions, intents, {
+                    previousAssertions: memoryChunks[chunkIndex - 1]?.assertion
+                        ? memoryChunks[chunkIndex - 1].entries.map(entry => entry.resolution.intent) : [],
+                    nextAssertions: memoryChunks[chunkIndex + 1]?.assertion
+                        ? memoryChunks[chunkIndex + 1].entries.map(entry => entry.resolution.intent) : [],
+                })
+                || behaviorTemplate(technicalName);
+            // El criterio QA describe lo deseado. El Then del borrador solo
+            // afirma lo observado por las verificaciones de este bloque.
             const assertionRow = domainAssertionText(intents)
-                || (assertionChunks === 1 ? qaSentence(rawScenario.acceptanceCriteria, 'assertion') : undefined)
                 || intentAssertionText(chunk.entries.map(entry => entry.step), intents)
                 || assertionTemplate(technicalName);
             const wording: 'domain' | 'qa' | 'template' = chunk.assertion

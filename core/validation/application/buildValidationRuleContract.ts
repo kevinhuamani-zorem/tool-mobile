@@ -226,14 +226,14 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
         requirement: 'Cada línea del Feature debe resolver a exactamente una step definition de todo el framework: Cucumber carga las de todos los squads, no distingue Given de When y un regex ajeno con capturas que atrape la frase la deja ambigua (Multiple step definitions match). Si collision-report.json marca un regex con swallows, hay que cambiar la redacción de la frase (verbo o conjunción), no sufijarla.',
         minimalExample:
             '# ^el usuario ingresa su (.*) y (.*)$ (login) atrapa «el usuario ingresa su correo <email> y selecciona enviar»\n' +
-            'When el usuario escribe su correo <email> y selecciona enviar\n' +
-            'When(/^el usuario escribe su correo (.*) y selecciona enviar$/, async (email: string) => { ... });',
+            'When el usuario solicita sus movimientos al correo <email>\n' +
+            'When(/^el usuario solicita sus movimientos al correo (.*)$/, async (email: string) => { await movementsScreen.requestByEmail(email); });',
     },
     'step-undefined': {
         requirement: 'Toda línea del Feature debe tener su definición en Steps, o copiarse literal si reutiliza una definición existente del framework: una línea que ningún regex resuelve queda undefined al ejecutar.',
         minimalExample:
-            'When el usuario selecciona enviar reporte de movimiento\n' +
-            'When(/^el usuario selecciona enviar reporte de movimiento$/, async () => { ... });',
+            'When el usuario solicita el reporte de movimientos\n' +
+            'When(/^el usuario solicita el reporte de movimientos$/, async () => { await movementsScreen.requestReport(); });',
     },
     'framework-symbol': {
         requirement: 'Los simbolos usados en Screen/Steps deben existir en el contrato del framework-api entregado.',
@@ -248,10 +248,18 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             '"resolutions": [{ "gapId": "gap-duplicate-element-1", "decision": "reuse", "reason": "..." }]',
     },
     'imperative-gherkin': {
-        requirement: 'Cada paso Gherkin debe describir comportamiento de negocio, no acciones tecnicas click/scroll/wait.',
+        requirement: 'Cada paso Gherkin nuevo debe describir la intención de negocio o el resultado observado del grupo completo de acciones, ' +
+            'no la última etiqueta ni una cadena técnica como «el usuario selecciona cerrar» o «el usuario selecciona seleccionar número». ' +
+            'Clicks, permisos, cierres auxiliares, scrolls, esperas y selectores pertenecen al Screen Object. ' +
+            'Si cerrar/cancelar es el objetivo, debe nombrar la entidad y el efecto observado. ' +
+            'Los steps reutilizados deben conservar su texto literal. Al agrupar, debe conservar todas las secuencias y su orden en actionTrace, ' +
+            'y cada parámetro en Gherkin, Examples/DataTable y argumentos del Screen. Un nombre de éxito no sustituye una aserción grabada; ' +
+            'si solo se observa la pantalla, debe expresar esa comprobación y emitir testDesignReview.status suggestion sin bloquear exportación.',
         minimalExample:
-            'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
-            'When el usuario consulta todos sus movimientos',
+            'When el usuario identifica al destinatario mediante el número <number>\n' +
+            'When el usuario solicita sus movimientos al correo <email>\n' +
+            '# Solo cuando una verificación grabada acredita la confirmación:\n' +
+            'Then se muestra la confirmación de la solicitud',
     },
     'examples-unused-column': {
         requirement: 'Cada columna de Examples debe nombrarse como <columna> en algún step del Scenario que la ' +
@@ -624,10 +632,10 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             '"actionTrace": { "items": { "required": ["sequence","gherkinStep"], "additionalProperties": false } }',
     },
     'ungrouped-technical-action': {
-        requirement: 'Acciones tecnicas consecutivas deben agruparse en un unico step funcional de negocio.',
+        requirement: 'Las acciones técnicas consecutivas del mismo propósito deben agruparse en un step funcional de negocio que represente el grupo completo. Debe conservar cada secuencia original en actionTrace y su orden, sin omitir datos ni aserciones; no debe agrupar propósitos distintos ni absorber una acción posterior en una verificación.',
         minimalExample:
             'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
-            'When(/^el usuario consulta todos sus movimientos$/, async () => { ... scrollToSeeAllMovementsButton(); ... });',
+            'When(/^el usuario consulta todos sus movimientos$/, async () => { await movementsScreen.consultAllMovements(); });',
     },
     'unresolved-gap-without-reason': {
         requirement: 'Toda decision unresolved debe incluir reason explicito y completo.',
@@ -636,7 +644,7 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             '{ "gapId": "gap-repetition", "decision": "unresolved", "reason": "El contrato debe ser un objeto JSON." }',
     },
     'verbatim-context-hint': {
-        requirement: 'El contextHint debe sintetizarse en lenguaje funcional y no copiarse textual al Gherkin.',
+        requirement: 'El contextHint debe usarse como pista del elemento junto al objetivo, aceptación y grupo completo de acciones. El step nuevo debe sintetizar su propósito, sin copiar la etiqueta literal ni la última acción; los steps reutilizados se conservan literales.',
         minimalExample:
             'features/yape-steps-definitions/payment/confirmacion-envio-email-movements.steps.ts\n' +
             'When el usuario consulta todos sus movimientos',

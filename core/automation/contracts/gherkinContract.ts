@@ -250,6 +250,37 @@ export function gherkinPersonProblem(text: string): GherkinPersonIssue | undefin
     return undefined;
 }
 
+/**
+ * Detect explicit UI mechanics; third person alone does not describe business intent.
+ * This pure contract is also copied to the agent verifier. It never rewrites text
+ * or infers outcomes, and permits business choices, inputs and observable screens.
+ */
+export function gherkinBusinessWordingProblem(text: string): string | undefined {
+    const normalized = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/\s+/g, ' ').trim().replace(/^(?:given|when|then|and|but)\s+/, '');
+    // Preserve quoted navigation labels, but do not inspect expected message text.
+    const step = normalized.replace(/["'«“‘]\s*(cerrar|atras|volver|regresar|siguiente|continuar|entendido|permitir|aceptar|boton(?:es)?|elementos?|campos?|iconos?|checkbox|input)\s*["'»”’]/g, '$1')
+        .replace(/"[^"]*"|'[^']*'|«[^»]*»|“[^”]*”|‘[^’]*’/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b/.test(step)
+        || /\b(?:presiona|presionar|pulsa|pulsar|toca|tocar|selecciona|seleccionar|elige|elegir|marca|marcar)\s+(?:(?:en|sobre)\s+)?(?:(?:el|la|los|las|un|una)\s+)?(?:boton(?:es)?|elementos?|campos?|iconos?|checkbox|input)\b/.test(step)
+        || /\b(?:mantiene|mantener)\s+presionad[oa]\b/.test(step)
+        || /\b(?:escribe|escribir|ingresa|ingresar|digita|digitar|rellena|rellenar|limpia|limpiar)\s+(?:en\s+)?(?:(?:el|un)\s+)?(?:campo|input)\b/.test(step)) {
+        return 'Narra una operación sobre controles de interfaz; expresa la intención que cumple.';
+    }
+    if (/\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b/.test(step)
+        || /\b(?:espera|esperar)\s+(?:\d+|<[^>]+>)\s*(?:segundos?|milisegundos?|ms)\b/.test(step)) {
+        return 'Narra gestos o esperas técnicas; agrúpalos dentro del comportamiento que permiten.';
+    }
+    if (/\b(?:selecciona|seleccionar|elige|elegir)\s+(?:selecciona|seleccionar|elige|elegir)\b/.test(step)
+        || /\b(?:ingresa\s+ingresar|escribe\s+escribir|registra\s+registrar)\b/.test(step)) {
+        return 'Repite mecánicamente el verbo de la acción; redacta una intención de negocio.';
+    }
+    if (/(?:^(?:el usuario(?:\s+<[^>]+>)?\s+)?|\by\s+)(?:selecciona|elige|presiona|pulsa|toca)\s+(?:(?:la\s+)?opcion\s+)?(?:cerrar|atras|volver|regresar|siguiente|continuar|entendido|permitir|aceptar)(?=$|[.!?;,:]|\s+(?:en|para)\b)/.test(step)) {
+        return 'Narra la selección de una etiqueta de interfaz; describe el destino o propósito del usuario.';
+    }
+    return undefined;
+}
+
 export const gherkinContract = {
     normalizeGherkinStep,
     featureStepLines,
@@ -262,4 +293,5 @@ export const gherkinContract = {
     semanticGherkinKeywords,
     gherkinKeywordAccepted,
     gherkinPersonProblem,
+    gherkinBusinessWordingProblem,
 };

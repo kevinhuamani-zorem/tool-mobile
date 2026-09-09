@@ -7,18 +7,12 @@ import path from 'path';
 import {
     RecordedStep,
     gherkinPersonProblem,
+    gherkinBusinessWordingProblem,
 } from '../../contracts';
 import {
     translateToEnglish,
 } from '../../../shared';
 import { camel, titleFromSlug, words } from './naming';
-
-/**
- * Texto procedimental que no puede ser un step: narra la interfaz en vez del
- * comportamiento. Es el mismo criterio que aplica el validador al Feature.
- */
-export const PROCEDURAL_TEXT =
-    /\b(?:hace|hacer|da|dar)\s+(?:clic|click)\b|\b(?:presiona|presionar|pulsa|pulsar|toca|tocar)\s+(?:el\s+)?(?:bot[oó]n|elemento|campo)\b|\b(?:scroll|swipe|desplaza|desplazar|arrastra|arrastrar)\b|\b(?:espera|esperar)\s+\d+\s*segundos?\b|\b(?:escribe|escribir|ingresa|ingresar)\s+(?:en\s+)?(?:el\s+)?campo\b/i;
 
 /**
  * Frase del QA lista para usarse como texto de step, o `undefined`.
@@ -34,7 +28,7 @@ export function qaSentence(value: string | undefined, kind: 'behavior' | 'assert
     if (text.length < 12 || text.split(' ').length < 4) return undefined;
     // Un keyword dentro del texto rompe el parseo del Feature.
     if (/^(?:Given|When|Then|And|But|Dado|Cuando|Entonces)\b/i.test(text)) return undefined;
-    if (PROCEDURAL_TEXT.test(text)) return undefined;
+    if (gherkinBusinessWordingProblem(text)) return undefined;
     // Un step no nombra controles: eso es narrar la interfaz, no el negocio.
     if (/\b(?:bot[oó]n|campo|icono|checkbox|men[uú]|input|label|etiqueta)\b/i.test(text)) return undefined;
     // `<param>` sin columna en Examples deja el step sin enlazar.
@@ -68,6 +62,7 @@ function impersonalAssertion(text: string): string {
 export function domainBehaviorText(
     actions: RecordedStep[], intents: string[], technicalName: string
 ): string | undefined {
+    if (actions.some(action => !['CLICK', 'SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'ESPERAR', 'SCREENSHOT'].includes(action.action))) return undefined;
     const relevantIndex = actions.map(action => !['SCROLL_DOWN', 'SCROLL_UP', 'SWIPE'].includes(action.action))
         .lastIndexOf(true);
     const intent = intents[relevantIndex >= 0 ? relevantIndex : intents.length - 1] || titleFromSlug(technicalName).toLowerCase();
@@ -111,47 +106,88 @@ export function intentObject(intent: string): string {
         .trim();
 }
 
+export interface BehaviorWordingContext {
+    previousAssertions?: string[];
+    nextAssertions?: string[];
+}
+
 /**
- * Frase construida con las palabras del QA para la accion que define el
- * bloque. Peor que una frase de dominio, mucho mejor que la plantilla: el
- * texto es unico por elemento, asi que no hace falta sufijarlo, y le da a
- * Lorem un punto de partida con sentido.
+ * Sintetiza el bloque completo entre verificaciones. Las frases de dominio
+ * requieren acciones que las sostengan; el nombre del caso no basta para
+ * atribuir un propósito a un click aislado. Lo desconocido queda para Lorem.
  */
-export function intentBehaviorText(actions: RecordedStep[], intents: string[]): string | undefined {
-    const relevant = (action: RecordedStep) =>
-        !['SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'ESPERAR', 'SCREENSHOT'].includes(action.action);
-    const relevantIndex = actions.map(relevant).lastIndexOf(true);
-    if (relevantIndex < 0) return undefined;
-    const phrase = (index: number): string | undefined => {
-        const action = actions[index];
-        const object = intentObject(intents[index] || '');
-        if (!object || /^[\w\s]{0,2}$/.test(object)) return undefined;
-        switch (action.action) {
-            case 'CLICK': return `selecciona ${object}`;
-            case 'PRESION_LARGA': return `mantiene presionado ${object}`;
-            case 'ESCRIBIR': {
-                // El dato que escribe el usuario viaja como <param> a Examples:
-                // el step lo nombra para que la definition lo reciba y el
-                // Screen no lo deje fijo en codigo.
-                const parameter = String(action.value || '').match(/^<([A-Za-z_][A-Za-z0-9_]*)>$/)?.[1];
-                return `ingresa su ${object}${parameter ? ` <${parameter}>` : ''}`;
-            }
-            case 'LIMPIAR': return `limpia ${object}`;
-            default: return undefined;
-        }
-    };
-    // Un bloque que escribe un dato y luego confirma se narra completo:
-    // "ingresa su correo <email> y selecciona enviar". Sin dato escrito, la
-    // ultima accion define el comportamiento, como siempre.
-    const inputIndex = actions.findIndex((action, index) => relevant(action) && action.action === 'ESCRIBIR');
-    if (inputIndex >= 0 && inputIndex !== relevantIndex) {
-        const input = phrase(inputIndex);
-        const closing = phrase(relevantIndex);
-        if (input && closing) return `el usuario ${input} y ${closing}`;
-        if (input) return `el usuario ${input}`;
+export function intentBehaviorText(
+    actions: RecordedStep[], intents: string[], context: BehaviorWordingContext = {},
+): string | undefined {
+    const entries = actions.map((action, index) => ({ action, object: intentObject(intents[index] || '') }))
+        .filter(({ action }) => !['SCROLL_DOWN', 'SCROLL_UP', 'SWIPE', 'ESPERAR', 'SCREENSHOT'].includes(action.action));
+    if (!entries.length) return undefined;
+    const folded = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const objects = entries.map(entry => folded(entry.object));
+    const inputs = entries.filter(entry => entry.action.action === 'ESCRIBIR');
+    const parameter = (entry: typeof entries[number]) => String(entry.action.value || '').match(/^<([A-Za-z_][A-Za-z0-9_]*)>$/)?.[0];
+    const previous = folded((context.previousAssertions || []).join(' '));
+    const next = folded((context.nextAssertions || []).join(' '));
+    const last = entries[entries.length - 1];
+    const allClicks = entries.every(entry => entry.action.action === 'CLICK');
+    // Permisos y avisos no sustituyen la intención inicial de entrar al flujo.
+    if (allClicks && /^(?:yapear|iniciar yapeo)$/.test(objects[0])
+        && objects.slice(1).every(object => /^(?:permitir|cerrar|aceptar|entendido)$/.test(object))
+        && /\b(?:yapear|contactos|destinatario)\b/.test(next)) {
+        return 'el usuario inicia un yapeo';
     }
-    const text = phrase(relevantIndex);
-    return text ? `el usuario ${text}` : undefined;
+    const emailInput = inputs.find(entry => /\b(?:correo|email)\b/.test(folded(entry.object)));
+    if (emailInput && inputs.length === 1 && parameter(emailInput)
+        && entries.every(entry => entry === emailInput || (entry.action.action === 'CLICK'
+            && /^(?:enviar(?: correo)?|confirmar(?: envio)?)$/.test(folded(entry.object))))
+        && last !== emailInput && /movimientos/.test(previous)) {
+        return `el usuario solicita sus movimientos en el correo ${parameter(emailInput)}`;
+    }
+    if (entries.length === 1 && allClicks && /^(?:correo|enviar (?:por )?correo)$/.test(objects[0])
+        && /enviar movimientos/.test(next)) {
+        return 'el usuario prepara el envío de sus movimientos por correo';
+    }
+    const recipient = inputs.find(entry => /^(?:(?:su|el) )?(?:numero|telefono|celular)(?: (?:de )?(?:destino|destinatario))?$/.test(folded(entry.object)));
+    if (recipient && inputs.length === 1 && parameter(recipient)
+        && entries.every(entry => entry === recipient || (entry.action.action === 'CLICK'
+            && /^(?:seleccionar |elegir )?(?:numero|telefono|celular)(?: (?:de )?(?:destino|destinatario))?$/.test(folded(entry.object))))
+        && last !== recipient) {
+        return `el usuario identifica al destinatario mediante el número ${parameter(recipient)}`;
+    }
+    const amount = inputs.find(entry => /^(?:el )?monto$/.test(folded(entry.object)));
+    const comment = inputs.find(entry => /^(?:(?:agregar|anadir) )?(?:mensaje|comentario)$/.test(folded(entry.object)));
+    if (amount && parameter(amount) && (!comment || parameter(comment))
+        && last.action.action === 'CLICK' && folded(last.object) === 'yapear'
+        && entries.every(entry => entry === amount || entry === comment || entry === last)) {
+        return `el usuario solicita un yapeo por ${parameter(amount)}${comment ? ` con el comentario ${parameter(comment)}` : ''}`;
+    }
+    // Cerrar un detalle conocido expresa navegación, nunca éxito de la operación.
+    if (allClicks && objects.every(object => /^(?:cerrar|entendido|atras|volver)$/.test(object))) {
+        if (/correo enviado|envio.*correo/.test(previous)) return 'el usuario finaliza la consulta del envío por correo';
+        if (/yapeo|yapeado/.test(previous)) return 'el usuario cierra el detalle del yapeo';
+        return undefined;
+    }
+    // El respaldo conserva TODOS los datos del bloque, no solo el primer input.
+    const phrases = entries.map(({ action, object }) => {
+        if (!object || /^[\w\s]{0,2}$/.test(object)) return undefined;
+        if (action.action === 'ESCRIBIR') {
+            const param = String(action.value || '').match(/^<([A-Za-z_][A-Za-z0-9_]*)>$/)?.[0];
+            const noun = object.replace(/^(?:agregar|añadir)\s+/i, '');
+            return `ingresa ${noun}${param ? ` ${param}` : ''}`;
+        }
+        if (action.action === 'CLICK') {
+            const verbs: Record<string, string> = { enviar: 'envía', confirmar: 'confirma', buscar: 'busca',
+                consultar: 'consulta', filtrar: 'filtra', compartir: 'comparte', cancelar: 'cancela',
+                guardar: 'guarda', eliminar: 'elimina', descargar: 'descarga', yapear: 'solicita un yapeo' };
+            const match = object.match(/^(enviar|confirmar|buscar|consultar|filtrar|compartir|cancelar|guardar|eliminar|descargar|yapear)(?:\s+(.+))?$/i);
+            if (match) return `${verbs[match[1].toLowerCase()]}${match[2] ? ` ${match[2]}` : ''}`;
+            return `selecciona ${object}`;
+        }
+        return undefined;
+    });
+    if (phrases.some(phrase => !phrase)) return undefined;
+    const text = `el usuario ${phrases.join(' y ')}`;
+    return gherkinBusinessWordingProblem(text) ? undefined : text;
 }
 
 export function intentAssertionText(actions: RecordedStep[], intents: string[]): string | undefined {
@@ -166,13 +202,15 @@ export function intentAssertionText(actions: RecordedStep[], intents: string[]):
     const screen = raw.match(/^(?:se\s+)?(?:(?:verificar|verifica|validar|valida|comprobar|comprueba)\s+)?(?:que\s+|si\s+)?(?:se\s+muestr[ae]n?\s+|exist[ae]n?\s+|aparezcan?\s+)?(?:la\s+)?pantalla\s+(?:de\s+)?(.+)$/i)?.[1];
     if (screen) return `${negated ? 'no ' : ''}se muestra la pantalla de ${screen.trim()}`;
     const message = raw.match(/^(?:se\s+)?(?:(?:verificar|verifica|validar|valida|comprobar|comprueba)\s+)?(?:que\s+|si\s+)?(?:se\s+muestr[ae]n?\s+|exist[ae]n?\s+|aparezcan?\s+)?(?:el\s+)?(?:texto|mensaje)\s+(?:de\s+)?(.+)$/i)?.[1];
-    if (message) return `${negated ? 'no ' : ''}se muestra el mensaje de ${message.trim()}`;
-    const object = intentObject(raw);
+    if (message) return `${negated ? 'no ' : ''}se muestra el mensaje${/^(?:del|de)\b/i.test(message.trim()) ? ' ' : ' de '}${message.trim()}`;
+    const object = intentObject(raw).replace(/^numero\b/i, 'número');
     if (!object) return undefined;
+    const article = /^(?:filtro|número|monto|nombre|saldo|correo)\b/i.test(object) ? 'el '
+        : /^(?:informaci[oó]n|fecha|lista|cuenta)\b/i.test(object) ? 'la ' : '';
     const uiNoun = /\b(?:bot[oó]n|opci[oó]n)\b/i.test(raw);
     return negated
-        ? `no se muestra ${uiNoun ? 'la opción ' : ''}${object}`
-        : `se muestra ${uiNoun ? 'la opción ' : ''}${object}`;
+        ? `no se muestra ${uiNoun ? 'la opción ' : article}${object}`
+        : `se muestra ${uiNoun ? 'la opción ' : article}${object}`;
 }
 
 /** Ultimo recurso: arma la frase con el slug tecnico. Sale de maquina. */
