@@ -89,6 +89,7 @@ import {
 } from './resolver/wording';
 import {
     exactLocators,
+    equivalentLocatorAliases,
     REUSE_SCOPE_ORDER,
     CANDIDATE_STABILITY_ORDER,
     normalizeStepText,
@@ -282,6 +283,7 @@ export class DeterministicResolver {
                     && match.candidate.priority === reused.candidate.priority
                     && `${match.locator.module}#${match.locator.name}`
                         !== `${reused.locator.module}#${reused.locator.name}`
+                    && !equivalentLocatorAliases(reused.locator, match.locator)
                 )
                 : [];
             if (reused && materiallyTied.length) {
@@ -304,6 +306,8 @@ export class DeterministicResolver {
                 // adopta si el locator vive en el modulo que este caso extiende
                 // (se decide en cuanto se conoce ese modulo, mas abajo).
                 const unspecific = selectorIsUnspecific(reused.candidate.selector);
+                const aliases = reuseMatches.filter(match => match.locator.name !== reused.locator.name
+                    && equivalentLocatorAliases(reused.locator, match.locator));
                 return {
                     sequence, action: step.action, intent,
                     resolution: 'reuse', locatorName: reused.locator.name,
@@ -318,7 +322,9 @@ export class DeterministicResolver {
                     },
                     reason: `Mismo par TypeLocator/selector normalizado (${reused.strategy}) que ` +
                         `${reused.locator.module}.${reused.locator.name}; coincidencia causada por ` +
-                        `${reused.candidate.candidateId}${reused.candidate.primary ? ' (primary)' : ' (backup)'}.`,
+                        `${reused.candidate.candidateId}${reused.candidate.primary ? ' (primary)' : ' (backup)'}.`
+                        + (aliases.length ? ` Claves equivalentes en el mismo archivo: ${[reused, ...aliases]
+                            .map(match => match.locator.name).join(', ')}; se conserva ${reused.locator.name} por orden estable.` : ''),
                 };
             }
             const primary = selectorChoices.find(candidate => candidate.primary);

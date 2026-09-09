@@ -56,6 +56,35 @@ export function exactLocators(
     });
 }
 
+/**
+ * Different keys may be aliases after combining QA cases in the same module.
+ * Treat them as equivalent only with the same file, blocks and typed values
+ * on every populated platform. An empty opposite platform has no selector;
+ * its placeholder enum does not establish a different element.
+ */
+export function equivalentLocatorAliases(left: LocatorInfo, right: LocatorInfo): boolean {
+    if (!left.file || left.file !== right.file || !left.module || left.module !== right.module
+        || left.scope !== right.scope || left.platform !== right.platform) return false;
+    for (const platform of ['android', 'ios'] as const) {
+        const leftValue = left[`${platform}Selector`];
+        const rightValue = right[`${platform}Selector`];
+        if (!leftValue?.trim() && !rightValue?.trim()) {
+            if (platform === left.platform) return false;
+            continue;
+        }
+        if (!leftValue?.trim() || !rightValue?.trim()) return false;
+        const leftBlock = left[`${platform}Block`];
+        if (!leftBlock || leftBlock !== right[`${platform}Block`]) return false;
+        const leftType = left[`${platform}Strategy`] || inferredStrategy(leftValue);
+        const rightType = right[`${platform}Strategy`] || inferredStrategy(rightValue);
+        const allowed = platform === 'android' ? ['ID', 'XPATH', 'ANDROID', 'CLASSNAME']
+            : ['ID', 'XPATH', 'CLASSCHAIN', 'PREDICATESTRING', 'CLASSNAME'];
+        if (!leftType || !allowed.includes(leftType) || leftType !== rightType
+            || strategyValue(leftValue, platform) !== strategyValue(rightValue, platform)) return false;
+    }
+    return true;
+}
+
 export const REUSE_SCOPE_ORDER: Record<'squad' | 'home', number> = { squad: 0, home: 1 };
 export const CANDIDATE_STABILITY_ORDER: Record<SelectorCandidateStability, number> = {
     stable: 0,

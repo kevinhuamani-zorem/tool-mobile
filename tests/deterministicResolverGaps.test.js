@@ -272,15 +272,14 @@ test('el reuse depende exclusivamente del selector primary, no de la estabilidad
 });
 
 test('abre un gap QA bloqueante ante matches materialmente ambiguos', () => {
-    // La ambiguedad ya no nace de comparar varios candidatos: con un unico
-    // selector verificado por accion, el gap aparece cuando ese selector
-    // coincide con mas de un locator existente del mismo rango.
+    // Un mismo selector en módulos distintos no prueba que las claves sean
+    // aliases: pueden pertenecer a pantallas diferentes.
     const provider = {
         getCatalog: () => ({
             ...emptyCatalog().getCatalog(),
             locators: [
                 locator('firstMatch', '~Stable'),
-                locator('secondMatch', '~Stable'),
+                { ...locator('secondMatch', '~Stable'), file: 'resources/locators/payment/other.locator.json', module: 'payment/other' },
             ],
         }),
     };
@@ -888,4 +887,67 @@ test('la frase de dominio de consulta no se adjudica a un bloque que termina en 
         action('VERIFICAR_EXISTE', 'titulo movimientos', '~Movimientos', ''),
     ]));
     assert.equal(onlyView.scenario.request.scenarioRows.find(row => row.keyword === 'When').text, 'el usuario consulta todos sus movimientos');
+});
+
+
+test('claves equivalentes del mismo archivo se reutilizan de forma estable al actualizar main', () => {
+    const first = locator('movementsButton', 'new UiSelector().text("Mostrar movimientos")', 'ANDROID');
+    const second = locator('showMovementsButton', first.androidSelector, 'ANDROID');
+    // Empty iOS placeholder types do not change Android identity.
+    first.iosStrategy = 'XPATH'; second.iosStrategy = 'ID';
+    for (const entries of [[first, second], [second, first]]) {
+        const provider = { getCatalog: () => ({ ...emptyCatalog().getCatalog(), locators: entries }) };
+        const result = new DeterministicResolver(provider).resolve(scenario([{
+            ...action('CLICK', 'mostrar movimientos', 'android=' + first.androidSelector), selectorVerified: true,
+        }]));
+        const resolution = result.plan.resolutions[0];
+        assert.equal(resolution.resolution, 'reuse');
+        assert.equal(resolution.locatorName, 'movementsButton');
+        assert.equal(resolution.source.file, LOCATORS);
+        assert.match(resolution.reason, /Claves equivalentes.*movementsButton, showMovementsButton/);
+        assert.equal(result.unresolvedContext.gaps.some(g => g.id === 'gap-locator-candidate-ambiguity-1'), false);
+    }
+});
+
+test('las diferencias de archivo, bloque o plataforma conservan la decisión QA', () => {
+    const first = locator('firstMatch', 'Stable', 'ID');
+    for (const change of [
+        { file: 'resources/locators/payment/other.locator.json' },
+        { module: 'payment/other' },
+        { androidBlock: 'otherAndroid' },
+        { androidBlock: undefined },
+        { iosSelector: 'Different', iosStrategy: 'ID' },
+    ]) {
+        const second = { ...locator('secondMatch', 'Stable', 'ID'), ...change };
+        const provider = { getCatalog: () => ({ ...emptyCatalog().getCatalog(), locators: [first, second] }) };
+        const result = new DeterministicResolver(provider).resolve(scenario([{
+            ...action('CLICK', 'resultado', '~Stable'), selectorVerified: true,
+        }]));
+        assert.ok(result.unresolvedContext.gaps.some(g => g.id === 'gap-locator-candidate-ambiguity-1' && g.blocking), JSON.stringify(change));
+    }
+});
+
+test('aliases no ocultan una tercera coincidencia en otro módulo', () => {
+    const provider = { getCatalog: () => ({ ...emptyCatalog().getCatalog(), locators: [
+        locator('firstMatch', 'Stable', 'ID'), locator('secondMatch', 'Stable', 'ID'),
+        { ...locator('thirdMatch', 'Stable', 'ID'), module: 'other', file: 'resources/locators/payment/other.locator.json' },
+    ] }) };
+    const result = new DeterministicResolver(provider).resolve(scenario([{
+        ...action('CLICK', 'resultado', '~Stable'), selectorVerified: true,
+    }]));
+    assert.ok(result.unresolvedContext.gaps.some(g => g.id === 'gap-locator-candidate-ambiguity-1' && g.blocking));
+});
+
+test('equivalencia exige estrategias conocidas y valores exactos en ambas plataformas', () => {
+    const { equivalentLocatorAliases } = require('../dist/core/automation/application/resolver/stepReuse');
+    const first = { ...locator('first', 'Stable', 'ID'), iosSelector: 'Last  30 days', iosStrategy: 'ID' };
+    const second = { ...first, name: 'second' };
+    assert.equal(equivalentLocatorAliases(first, second), true);
+    for (const change of [
+        { androidStrategy: 'XPATH' }, { iosStrategy: 'XPATH' }, { iosStrategy: undefined },
+        { iosSelector: 'Last 30 days' }, { iosBlock: 'otherIos' },
+        { iosSelector: '' }, { file: '' }, { androidSelector: '' },
+    ]) assert.equal(equivalentLocatorAliases(first, { ...second, ...change }), false, JSON.stringify(change));
+    const iosFirst = { ...first, platform: 'ios', androidSelector: '', androidStrategy: 'XPATH' };
+    assert.equal(equivalentLocatorAliases(iosFirst, { ...iosFirst, name: 'second', androidStrategy: 'ID' }), true);
 });

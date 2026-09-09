@@ -1177,3 +1177,17 @@ La combinación no acredita corrección: el validador comprueba el locator
 contra el plan y el getter utilizado por el código. Se conservan los resultados
 originales de los autores y la salida previa a ensamblar en el historial. No
 requiere otra invocación ni extiende las dos pasadas disponibles.
+
+### Claves equivalentes tras actualizar el framework
+
+Dos claves distintas no bloquean el análisis cuando pertenecen al mismo archivo,
+módulo y bloques de plataforma, y conservan exactamente los mismos pares
+`TypeLocator`/valor en todas las plataformas con selector. Si la plataforma
+contraria está vacía en ambas claves, su enum de relleno no cambia la identidad.
+El resolver conserva la primera clave según su orden estable y registra los
+aliases en `resolution.reason`; no borra ni renombra APIs del framework.
+
+El selector primary sigue siendo la autoridad. Distintos archivos o bloques,
+tipos desconocidos, valores diferentes o cobertura distinta de la plataforma
+contraria no se consideran equivalentes. Una tercera coincidencia ajena al grupo
+conserva el gap QA bloqueante. La generación sigue validando tipos y selectores.
