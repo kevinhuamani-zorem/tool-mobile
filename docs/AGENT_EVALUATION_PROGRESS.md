@@ -16,6 +16,62 @@ Su cierre con corpus QA y piloto real sigue abierto; el checklist en
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md) conserva todos
 los pendientes hasta terminar el ciclo completo.
 
+## Continuación: aceptación y evaluación — 2026-09-09
+
+| Fase de esta continuación | Entrega | Estado |
+| --- | --- | --- |
+| 1. Diagnósticos e identidad | Separación de señales; TC duplicado y pérdida de cobertura; regeneración conserva decisiones de reutilización y evidencia | Implementada |
+| 2. Criterios del QA | Editor en Análisis, persistencia, comprobación sobre el Feature/Step/Screen y hash de los archivos; Revalidar usa las ediciones actuales | Implementada |
+| 3. Calidad del evaluador | Regresiones de 30→90 días, aserciones ausentes/inalcanzables y control de TypeLocator; runner de fallos inyectados; precisión/recall con etiquetas independientes | Implementada; interpretación del corpus histórico requiere revisar discrepancias |
+| 4. Piloto repetido | Preparación/ejecución/informe de generaciones nuevas, commit/modelo/corpus fijos, brazos con/sin ejemplos y 3 o 5 repeticiones | Herramienta probada con proveedor simulado; ejecución real pendiente |
+
+Un criterio desconocido queda sin evaluar. El perfil inicial de rango comprueba
+estáticamente la aserción Android conocida del framework que valida la fecha
+más antigua; cambios de helpers, otras implementaciones o iOS no reciben crédito
+automático. La ejecución funcional permanece pendiente hasta disponer de su
+evidencia. Una declaración QA se vincula a la revisión golden y no convierte
+las correcciones humanas en éxitos autónomos.
+
+Las métricas `agent-evaluation/v3` conservan intentos interrumpidos, numeradores,
+denominadores y observaciones sin evaluar. La reutilización se mide sobre el
+Feature final y métodos existentes en un baseline independiente. Las decisiones
+del resolver se presentan por separado. El dataset aprobado sigue versionado en
+`tests/golden`; esta entrega no modifica ni crea aprobaciones.
+
+Pendientes del cierre experimental: ampliar y reservar casos con aprobación QA,
+fijar sus criterios/etiquetas independientes, ejecutar el piloto con LLM y
+registrar la ejecución en dispositivo. Todavía no hay una tasa medida que
+permita afirmar cuánto mejoraron los agentes.
+
+Guías: [criterios de aceptación](ACCEPTANCE_CRITERIA.md) y
+[evaluación y piloto](AGENT_EVALUATION_PILOT.md).
+
+Verificación local sobre el framework `09674ce8ba298f650ad116c8d1dd82c7e19e8577`:
+
+- Suite completa: **955/956 pruebas aprobadas**. Tipos y arquitectura pasan.
+  `quality` mantiene salida fallida por la discrepancia del golden de ventas
+  TC-10239. También se reprodujo con el Recorder anterior
+  `c739deb8d30369023cc6a34d539a5f3fe277bdcb`: su plan conserva Feature `create` y
+  locators `create`, mientras su catálogo produce Feature `update` y locators
+  `reuse`. La aprobación QA y los archivos esperados permanecen intactos; hace
+  falta revisar la procedencia de ese snapshot antes de usarlo como oracle.
+- Corregidos dos problemas de contexto revelados por la suite: Phase43 fija su
+  commit histórico `57e60c58b28ad4981e9a0b20ec50563c36ff854c`, y replay v2 separa
+  el control de regeneración añadido por PackageBuilder de las decisiones del
+  resolver. Conserva el control en el reporte y no ignora otros gaps, rutas ni
+  resoluciones. Las expectativas de los fixtures/golden no se cambiaron.
+- El evaluador de fallos controlados examinó un golden reproducible: control
+  válido y dos defectos inyectados detectados por su regla específica (TC
+  duplicado y TypeLocator). El golden de ventas queda **sin evaluar** porque su
+  snapshot de `locator-provider.ts` requiere un baseline completo. Dos defectos
+  detectados no estiman la precisión general ni el éxito de los agentes.
+- Las nuevas pruebas de aceptación usan un framework mínimo versionado en
+  `tests/fixtures/acceptance-framework`, independiente del HEAD local. El piloto
+  se verificó con proveedor simulado, preparación/compilador reales y fallos de
+  integridad/pipeline; no se ejecutó Copilot ni Appium en esta entrega.
+- Interfaz: pruebas automatizadas de formularios y flujo aprobadas; inspección
+  visual en navegador pendiente (Chrome no pudo arrancar en el entorno restringido).
+
 ## Punto de partida y medición
 
 - Recorder antes del cambio funcional: `64423280de47681e6fa782eb324b9e0de2006374`.

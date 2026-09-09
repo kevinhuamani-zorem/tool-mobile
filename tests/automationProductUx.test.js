@@ -105,14 +105,11 @@ test('controller corre pipeline automático con y sin resolución semántica', (
     assert.match(review, /on\(btnStartAutomationCorrection, 'click', async \(\) => \{/);
     assert.match(review, /on\(btnDeferAutomationCorrection, 'click', \(\) => \{/);
     assert.match(review, /Reimportando la corrección del agente/);
-    assert.match(generation, /if \(isAutomationWorkflow\(\) && deps\.hasInvalidAutomationDraft\(\)\) await revalidateReviewedAutomation\(\);/);
-    assert.match(generation, /else if \(isAutomationWorkflow\(\)\) await importAutomationResponse\(false\);/);
+    assert.match(generation, /if \(isAutomationWorkflow\(\)\) await revalidateReviewedAutomation\(\);/);
+    assert.doesNotMatch(generation, /importAutomationResponse\(false\)/);
     assert.match(review, /const imported = await importAutomationResponse\(false, true\);/);
-    assert.equal(
-        (generation.match(/importAutomationResponse\(false\)/g) || []).length +
-        (review.match(/importAutomationResponse\(false, true\)/g) || []).length,
-        2
-    );
+    assert.equal((review.match(/importAutomationResponse\(false, true\)/g) || []).length, 1,
+        'la reimportación manual conserva su acción propia; Revalidar envía los bytes revisados');
     assert.match(review, /on\(btnUsePreviousAutomation, 'click', \(\) => \{/);
     assert.match(review, /generation\.showPreviewDocuments\(state\.invalidAutomationDraft, false, false\);/);
     assert.match(review, /api\.revalidateAutomationResponse\(reviewedContents\)/);

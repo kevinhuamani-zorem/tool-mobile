@@ -455,6 +455,30 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'agent-response.schema.json\n' +
             '{ "needs": [{ "query": "searchFrameworkContent", "args": { "pattern": "TypeLocator" } }] }',
     },
+    'case-identity-unavailable': {
+        requirement: 'La identidad del TC debe comprobarse contra un catálogo del framework disponible. Una consulta fallida conserva el borrador con diagnóstico, sin acreditar ausencia de colisiones.',
+        minimalExample: 'Si el índice no puede leerse, conservar los archivos y reanalizar el framework; no declarar que TC-10140 es único sin evidencia.',
+    },
+    'case-duplicate': {
+        requirement: 'Un TC debe identificar un solo Scenario o Scenario Outline en el Feature. Cambiar la descripción no autoriza duplicarlo; varias filas Examples pertenecen al mismo escenario.',
+        minimalExample: 'Actualizar [TC-10140] Filtro de movimientos conservando su cobertura; no añadir [TC-10140] Visualiza movimientos como segundo escenario.',
+    },
+    'framework-case-collision': {
+        requirement: 'Cuando el TC ya existe en el catálogo, debe conservar su Feature de origen; no crees una segunda identidad en otra ruta.',
+        minimalExample: 'TC-10140 existe en payment/movements.feature: actualizar ese archivo, no crear payment/view-movements.feature con el mismo TC.',
+    },
+    'acceptance-contract': {
+        requirement: 'Los criterios estructurados deben conservar la autoridad de la confirmación QA. Conserva identificadores, tipo, acciones y valores esperados; un criterio manual permanece no evaluado hasta registrar evidencia QA de esta versión.',
+        minimalExample: 'Un criterio manual de éxito en dispositivo conserva estado not-evaluated; la respuesta del agente o la presencia de una fecha no lo aprueba.',
+    },
+    'acceptance-date-range': {
+        requirement: 'El criterio de rango debe tener una aserción reconocida sobre fechas y el número de días esperado, enlazada al caso final. isDisplayed o existencia del elemento no demuestran el rango.',
+        minimalExample: 'Para 30 días, comprobar la fecha leída con una aserción de rango de 30 días; no sustituirla por expect(await date.isDisplayed()).toBe(true).',
+    },
+    'acceptance-recorded-assertion': {
+        requirement: 'El criterio debe quedar enlazado a la verificación grabada y al código final que la ejecuta. Conserva locator, operador, origen y esperado; corrige la capa del archivo informado.',
+        minimalExample: 'Una acción VERIFICAR_TEXTO con equals exige comparar el texto leído por igualdad al esperado; una mera comprobación de presencia no satisface ese criterio.',
+    },
     'case-coverage-review': {
         requirement: 'El mismo TC debe conservar su cobertura previa; la reducción requiere reconciliar la propuesta visible con el caso existente.',
         minimalExample: 'TC-10140 existente: hoy, 7, 15, 30 y 90 días; propuesta: 30 y 90. Conservar los días anteriores al actualizar el caso.',

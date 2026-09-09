@@ -9,7 +9,8 @@ const { AutomationResponseValidator } = require('../dist/core/validation');
 const { canonicalResponse } = require('./helpers/phase43Canonical.js');
 const { isolatedFramework } = require('./helpers/isolatedFramework');
 
-const FIXTURE_ROOT = path.join(process.cwd(), 'tests/fixtures/phase43');
+const FIXTURE_ROOT = path.join(__dirname, 'fixtures', 'phase43');
+const FRAMEWORK_COMMIT = '57e60c58b28ad4981e9a0b20ec50563c36ff854c';
 const CASES = [
     { id: 'rec-7588c175', folder: 'rec-7588c175' },
     { id: 'rec-f7c98dff', folder: 'rec-f7c98dff' },
@@ -30,10 +31,10 @@ async function copyFixture(srcDir, dstDir) {
 }
 
 test('phase43 deterministic fixtures remain stable and valid', async (t) => {
-    // Las fixtures se contrastan contra el estado commiteado del framework:
-    // lo que el QA tenga sin commitear (casos encadenados) no puede alterar
-    // este contrato ni hacer que colisione con sus propios artefactos.
-    isolatedFramework(t, 'avr-phase43-');
+    // The saved expected output belongs to this reviewed framework revision.
+    // Later main commits may correctly report collisions with newly added cases;
+    // that is a different input, not a reason to rewrite these expectations.
+    isolatedFramework(t, 'avr-phase43-', { commit: FRAMEWORK_COMMIT });
     const validator = new AutomationResponseValidator();
     for (const fixture of CASES) {
         const sourceDir = path.join(FIXTURE_ROOT, fixture.folder);

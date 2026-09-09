@@ -1,5 +1,6 @@
 import type { BehaviorReuseReport } from './behaviorReuse';
 export * from './behaviorReuse';
+export * from './acceptanceCriteria';
 export * from './automationHistory';
 import type { RecordedStep } from './models';
 

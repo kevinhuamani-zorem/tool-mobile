@@ -11,6 +11,7 @@
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
 import { isInheritDesignReviewEnabled } from '../shared/recorderPreferences.js';
 import { createCopilotModelControls } from './copilotModelControls.js';
+import { createAcceptanceControls } from './acceptanceControls.js';
 
 const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
 
@@ -40,6 +41,7 @@ const PRODUCT_STAGE_ALIASES = {
 export function createReviewFeature(deps) {
     const { api, state, setStatus, generation, stepSummary } = deps;
     const copilotModel = createCopilotModelControls(document, api);
+    const acceptanceControls = createAcceptanceControls({ document, state, invalidatePreview: generation.invalidatePreview });
 
     const enlazarModal         = document.getElementById('enlazarModal');
     const enlazarStepsList     = document.getElementById('enlazarStepsList');
@@ -731,7 +733,7 @@ export function createReviewFeature(deps) {
         state.automationWorkflow = true;
         renderQaObservations(result.qaObservations || []);
         generation.showPreviewDocuments(result, preserveReviewed);
-        automationPackageStatus.textContent = '✓ Automatización validada y lista para revisión';
+        automationPackageStatus.textContent = '✓ Validación técnica completada; revisa el resultado del caso';
         automationPackageStatus.className = 'generate-result ok';
         setWizardPage(3);
         return { ...result, reviewAvailable: true };
@@ -761,6 +763,10 @@ export function createReviewFeature(deps) {
         let model;
         try { model = copilotModel.selected(); }
         catch (error) { setStatus(error.message, 'red'); return; }
+        const acceptanceError = acceptanceControls.validate();
+        const errorLabel = document.getElementById('acceptanceChecksError');
+        if (errorLabel) errorLabel.textContent = acceptanceError;
+        if (acceptanceError) { setWizardPage(2); return; }
         resetAgentStages();
         const objective = txtAutomationObjective.value.trim();
         const acceptanceCriteria = txtAutomationAcceptance.value.trim();
@@ -934,6 +940,7 @@ export function createReviewFeature(deps) {
     }
 
     function mount() {
+        acceptanceControls.mount();
         ipcUnsubscribers.push(api.onAutomationProgress?.(progress => {
             if (!progress || !progress.stage) return;
             trackAgentStage(progress);
@@ -962,6 +969,7 @@ export function createReviewFeature(deps) {
             copilotModel.reset();
             const sr = await api.getSteps();
             enlazarSteps = sr.steps || [];
+            acceptanceControls.setActions(enlazarSteps);
             state.automationWorkflow = false;
             state.invalidAutomationDraft = null;
             renderQaObservations([]);
@@ -1286,6 +1294,7 @@ export function createReviewFeature(deps) {
     }
 
     function unmount() {
+        acceptanceControls.unmount();
         copilotModel.dispose();
         bound.forEach(({ target, type, handler, options }) => target?.removeEventListener?.(type, handler, options));
         bound.length = 0;
@@ -1295,6 +1304,12 @@ export function createReviewFeature(deps) {
 
     /** Arranca el flujo del wizard con un paquete de regeneración ya preparado (dueño: platform-completion). */
     function startRegeneratedAutomationWorkflow(result) {
+        if (result.scenario) {
+            deps.applyResumedScenarioMetadata?.(result.scenario);
+            enlazarSteps = result.scenario.actions || [];
+            acceptanceControls.setActions(enlazarSteps);
+            renderEnlazarSteps();
+        }
         state.automationWorkflow = true;
         generation.invalidatePreview();
         if (automationPackageStatus) {
@@ -1319,5 +1334,6 @@ export function createReviewFeature(deps) {
         updateAutomationProgress,
         setWizardPage,
         startRegeneratedAutomationWorkflow,
+        restoreAcceptanceChecks: (scenario) => acceptanceControls.restore(scenario?.request, scenario?.actions || []),
     };
 }

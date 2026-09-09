@@ -1,10 +1,13 @@
 import type { RecordedStep } from './models';
+import type { AcceptanceCriterion } from './acceptanceCriteria';
 
 export type TestPathType = 'Happy Path' | 'Unhappy Path';
 export type MobilePlatform = 'android' | 'ios';
 
 export interface GenerationRequest {
     squad: string;
+    /** Criterios confirmados por QA; su evaluación no acredita ejecución móvil. */
+    acceptanceChecks?: AcceptanceCriterion[];
     /** Ruta opcional bajo features/yape-features/<squad>; no altera las demás capas. */
     featureScope?: string;
     featureName: string;

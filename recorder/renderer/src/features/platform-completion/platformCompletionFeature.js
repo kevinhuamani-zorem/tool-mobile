@@ -711,6 +711,7 @@ export function createPlatformCompletionFeature(deps) {
         });
 
         on(btnOnboardingNew, 'click', () => {
+            deps.applyResumedScenarioMetadata(undefined);
             state.workflowMode = 'new';
             state.activeScenarioCoverage = null;
             state.currentAssignment = null;

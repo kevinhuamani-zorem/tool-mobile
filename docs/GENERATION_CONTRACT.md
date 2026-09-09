@@ -751,6 +751,28 @@ El contrato final sigue siendo un solo `agent-response.json` con:
 - una traza por cada secuencia grabada;
 - contenido completo de Feature, Steps, Screen Object y Locators.
 
+La segunda pasada de cada autor recibe `previous-author-result.json`, capturado
+antes de reiniciar su carpeta, y `repair-baseline.json` con identidad, pasada y
+SHA-256. Es exclusivamente la entrega propia de la primera pasada de esta
+invocación; no se recuperan intentos anteriores ni se acredita un golden. El
+proceso verifica los hashes esperados fuera del workspace del agente. El autor
+parte de esa entrega, conserva las partes correctas y aplica solo las
+correcciones necesarias y la interfaz vigente. `repair-feedback.json` conserva
+los errores que recibió; `repair-outcome.json` registra el resultado posterior.
+`agents/derek/repair-comparison.json` e historial distinguen diagnósticos
+resueltos, persistentes y nuevos por comparación exacta, sin convertir un
+borrador anterior en éxito ni iniciar otra pasada.
+
+La validación de integración evalúa también los bytes preparados por el mismo
+aplicador de la exportación, con sus baselines y reconciliación. Los cambios a
+métodos/getters compartidos que el patch aditivo descarta se reportan antes de
+la reparación. Si una acción falla porque necesita otra implementación de un
+método heredado, Derek coordina a Lorem y Zorem en la segunda pasada: nueva API
+del caso, Steps y trazas compatibles, conservando el método compartido. Una
+reutilización fijada por QA no se sustituye automáticamente. Los originales y
+los bytes preparados se conservan por separado en historial; se mantienen las
+dos pasadas y la exportación de borradores con observaciones.
+
 En el pipeline por capas Derek coordina tres artefactos intermedios controlados:
 
 - `deterministic-draft.json`: referencia local de las cuatro capas antes de
@@ -1205,3 +1227,14 @@ revisión. Las colisiones previas de archivos compartidos no se atribuyen a la
 nueva definición; un Step ambiguo usado por el escenario sigue siendo un error.
 El reporte muestra operaciones reutilizadas, métodos y pendientes; la cobertura
 determinista de locators no se presenta como porcentaje de Steps reutilizados.
+
+
+### Comprobación local de locators
+
+Zorem recibe el par canónico `TypeLocator`/valor en la proyección del plan.
+Su `tools/check.js` contrasta los creates con esa evidencia y verifica getter,
+clave de plataforma y uso por la acción, además de estructura y sintaxis.
+Un nombre traducido conserva validez cuando mantiene la identidad del locator.
+La reutilización, completions y pruebas que enlazan Steps con una lectura de
+Screen mantienen su validación completa en integración. Ningún comprobador
+necesita explorar el framework desde la sesión del agente.

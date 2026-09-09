@@ -96,6 +96,7 @@ export async function applyReviewedAutomation(
         response = prepared.response;
         const validatorStarted = process.hrtime.bigint();
         const validation = automationResponseValidator.validate(scenario, plan, response);
+        validation.warnings.push(...(prepared.diagnostics || []).map(item => item.message));
         const compilation = new FrameworkCompilationValidator().validate(projectPaths.frameworkRoot, prepared.files);
         includeFrameworkCompilation(validation, compilation);
         writeJsonUtf8(path.join(state.activeAutomationPackage, 'framework-compilation.json'), compilation);

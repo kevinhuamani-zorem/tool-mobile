@@ -58,6 +58,7 @@ function createSharedState() {
         // review
         automationWorkflow: false,
         invalidAutomationDraft: null,
+        acceptanceChecks: [],
     };
     return state;
 }
@@ -123,6 +124,7 @@ export async function initializeRecorder() {
         }
         if (scenario?.objective) txtAutomationObjective.value = scenario.objective;
         if (scenario?.acceptanceCriteria) txtAutomationAcceptance.value = scenario.acceptanceCriteria;
+        review.restoreAcceptanceChecks(scenario);
     }
 
     // ─── Composición: cada feature declara sus dependencias explícitas. Las
@@ -207,6 +209,7 @@ export async function initializeRecorder() {
         state,
         setStatus,
         generation,
+        applyResumedScenarioMetadata,
         stepSummary: step => recording.stepSummary(step),
     });
 

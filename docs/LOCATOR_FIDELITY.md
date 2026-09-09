@@ -57,3 +57,25 @@ respectivas, comparar los informes y ejecutar el caso en el dispositivo. Una
 firma diferente debe producir argumentos adecuados a esa firma; una estrategia
 no soportada debe producir diagnóstico. Los fixtures de esta suite no acreditan
 esta ejecución ni sustituyen una revisión QA/golden.
+
+## Comprobación local del autor
+
+Zorem recibe en cada resolución del plan una `recordedLocator` con plataforma,
+`locatorType` y `locatorValue` canónicos. En un `create`, ese par alimenta el
+getter y el JSON; el campo `selector` conserva la representación original del
+Inspector y no debe copiarse como valor JSON cuando difiere del valor canónico.
+Una traducción de nombre, por ejemplo `permitirButton` a `allowButton`, sigue
+permitida si conserva el par verificado y la relación getter/clave.
+
+`node tools/check.js` ejecuta los lectores AST del validador sobre las capas de
+Zorem. Comprueba el par exacto de cada create, getter, clave de la otra plataforma
+y método trazado para las interacciones. Usa una proyección capturada antes de
+la sesión y módulos portables del Recorder; no consulta ni importa código del
+framework destino. El script también confina la ruta del resultado al paquete.
+No repara los bytes entregados.
+
+Las reutilizaciones/completions que adoptan un contrato distinto y la prueba de
+que un retorno booleano o de texto se afirma en Steps se evalúan en integración.
+El comprobador informa esas dependencias; no exige a Zorem escribir Feature o
+Steps, ni interpreta el resultado local como validación de las cuatro capas o
+de los archivos finales preparados para exportación.

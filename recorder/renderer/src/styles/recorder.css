@@ -2655,3 +2655,41 @@ body {
 .reuse-analysis-details ul { padding-left: 22px; }
 .reuse-analysis-details li { margin: 10px 0; overflow-wrap: anywhere; }
 .reuse-analysis-details small { color: var(--text-secondary, #aaa7c5); }
+
+/* QA acceptance criteria use the same controls and surfaces as the Recorder. */
+.acceptance-editor, .acceptance-assessment {
+    padding: 20px; margin: 16px 0; border: 1px solid var(--border);
+    border-radius: 12px; background: var(--bg3); color: var(--text);
+}
+.acceptance-editor-heading, .acceptance-check-heading, .assessment-heading {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+}
+.acceptance-editor-heading h3 { margin-bottom: 6px; font-size: 16px; }
+.acceptance-editor-heading .btn, .acceptance-check-heading .btn { flex: 0 0 auto; }
+.acceptance-checks-list { display: grid; gap: 14px; }
+.acceptance-check { display: grid; gap: 12px; margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg2); }
+.acceptance-check-heading strong { font-size: 13px; color: var(--accent); }
+.acceptance-check-fields { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; gap: 14px; }
+.acceptance-check .input-group { margin: 0; min-width: 0; }
+.acceptance-check .field-input, .acceptance-check .field-select { width: 100%; }
+.acceptance-days { width: 110px; }
+.acceptance-critical { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+.acceptance-critical input { accent-color: var(--blue); }
+.acceptance-checks-error, .assessment-critical { color: #ffb3ad; font-size: 13px; }
+.acceptance-checks-error:empty { display: none; }
+.acceptance-checks-error { margin-top: 12px; }
+.acceptance-assessment p { color: var(--text2); line-height: 1.5; margin-top: 8px; }
+.assessment-heading { align-items: start; }
+.assessment-heading > span { color: var(--text2); font-size: 13px; }
+.assessment-criteria { list-style: none; display: grid; gap: 10px; margin-top: 14px; }
+.assessment-criteria li { padding: 12px; border-left: 3px solid var(--accent); background: var(--bg2); border-radius: 5px; }
+.assessment-criteria li > span { display: inline-block; margin-top: 6px; color: var(--text2); font-size: 12px; }
+.assessment-criteria .assessment-passed { border-left-color: #80d5a1; }
+.assessment-criteria .assessment-failed { border-left-color: #e5918c; }
+.assessment-critical-label { color: var(--accent); font-size: 11px; margin-left: 8px; }
+.acceptance-assessment .assessment-execution { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
+@media (max-width: 1000px) {
+    .acceptance-check-fields { grid-template-columns: 1fr; }
+    .acceptance-days { width: 100%; }
+    .acceptance-editor-heading, .assessment-heading { align-items: start; flex-direction: column; }
+}

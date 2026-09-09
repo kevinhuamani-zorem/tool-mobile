@@ -329,9 +329,25 @@ export function goldenBaselineSnapshotPort(goldenCase: GoldenCase): BaselineSnap
     };
 }
 
+/** The builder appends this control after resolving. It is not a selector/naming decision. */
+function packageRefinementControl(plan: GenerationPlan, gap: UnresolvedGap, gaps: UnresolvedGap[]): boolean {
+    return plan.status === 'regeneration' && !!plan.reconciliation?.revisionId
+        && gap.id === 'gap-regeneration-refinement' && gap.type === 'refinement' && !gap.blocking
+        && (plan.unresolvedGapIds || []).filter(id => id === gap.id).length === 1
+        && gaps.filter(item => item.id === gap.id).length === 1;
+}
+
+/** Keep control metadata visible in replay reports without pretending the resolver produces it. */
+export function goldenRegenerationControls(plan: GenerationPlan, gaps: UnresolvedGap[] = []): UnresolvedGap[] {
+    return gaps.filter(gap => packageRefinementControl(plan, gap, gaps)).map(gap => ({ ...gap }));
+}
+
 /**
- * Proyeccion del plan que el replay compara: lo que decide el resolver, sin
- * ids, hashes ni fechas que cambian por corrida.
+ * Compares only resolver decisions, without execution IDs/hashes/timestamps.
+ * The unique, nonblocking regeneration control is appended by PackageBuilder;
+ * its metadata is reported separately by goldenRegenerationControls and remains
+ * in the immutable snapshot and the plan used to validate the approved response.
+ * Every other gap, including malformed/lookalike controls, remains comparable.
  */
 export function goldenPlanProjection(plan: GenerationPlan, gaps: UnresolvedGap[] = []): Record<string, unknown> {
     return {
@@ -346,6 +362,6 @@ export function goldenPlanProjection(plan: GenerationPlan, gaps: UnresolvedGap[]
             locatorName: resolution.locatorName || null,
             module: resolution.source?.module || null,
         })),
-        gaps: gaps.map(gap => ({ id: gap.id, type: gap.type, blocking: Boolean(gap.blocking) })),
+        gaps: gaps.filter(gap => !packageRefinementControl(plan, gap, gaps)).map(gap => ({ id: gap.id, type: gap.type, blocking: Boolean(gap.blocking) })),
     };
 }

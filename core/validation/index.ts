@@ -42,6 +42,9 @@ export {
     validatorRuleSourcePaths,
 } from './infrastructure/validationRuleCatalogFileAdapter';
 
+export { refreshAssessmentStatic } from './infrastructure/rules/acceptanceCriteriaRules';
+
 export { featureLoginUsers } from './infrastructure/rules/testDataRules';
 
 export { auditRecordedLocators, reconcileRecordedLocatorTypes } from './infrastructure/rules/recordedLocatorRules';
+export { writeInteractionLocatorTools } from './infrastructure/interactionLocatorTools';

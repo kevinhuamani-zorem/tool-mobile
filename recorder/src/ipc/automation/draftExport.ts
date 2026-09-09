@@ -6,10 +6,11 @@ import { projectPaths } from '../../../../core/workspace';
 import { readJsonUtf8 } from '../../../../core/shared';
 import { AutomationApplier, AutomationHistoryStore, AutomationApplicationReceipt, AutomationScenario, GenerationPlan,
     LayeredGenerationResult, PackagedAutomationScenario, planAgainstApplicationReceipt,
-    requireUnchangedAppliedFiles, loadUpdateBaselinesForCorrection } from '../../../../core/automation';
+    requireUnchangedAppliedFiles, loadUpdateBaselinesForCorrection, recoveredResponseMetadata,
+    withRecoveredResponseMetadata, recoverDraftMetadata } from '../../../../core/automation';
 import type { AutomationResponseImporterDependencies } from './responseImport';
 import { layeredDraftPreview } from './layeredDraftPreview';
-import { FrameworkCompilationValidator, includeFrameworkCompilation } from '../../../../core/validation';
+import { FrameworkCompilationValidator, includeFrameworkCompilation, refreshAssessmentStatic, AutomationValidation } from '../../../../core/validation';
 
 /** Recovery is an export candidate, never a new successful agent response. */
 export function prepareRecoveredExport(deps: AutomationResponseImporterDependencies, packageDirectory: string,
@@ -43,9 +44,12 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
                 throw new Error(`Archivo editado fuera del borrador: ${file}`);
             }
         }
+        draft = recoverDraftMetadata(packageDirectory, draft, plan);
+        const metadata = recoveredResponseMetadata(draft, plan);
         const response = { schemaVersion: 1, recordingId: scenario.recordingId, planId: plan.planId,
+            actionTrace: [], resolutions: [], ...metadata,
             files: draft.files.map(file => ({ layer: file.layer, path: file.path,
-                content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content })), actionTrace: [], resolutions: [] };
+                content: reviewedContents?.[path.join(projectPaths.frameworkRoot, file.path)] ?? file.content })) };
         const history = new AutomationHistoryStore(packageDirectory);
         history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
         if (reviewedContents && response.files.some((file, index) => file.content !== draft.files[index].content)) {
@@ -57,15 +61,28 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
         const prepared = (deps.automationApplier || new AutomationApplier()).prepare(scenario, plan, response,
             deps.automationResponseValidator.toPreview(response), correctionBaselines,
             frameworkBaseline ? { baseline: frameworkBaseline, reviewed: Boolean(reviewedContents) } : undefined);
-        const recoveredDraft = { ...draft, files: prepared.response.files.map(file => {
+        const recoveredDraft = withRecoveredResponseMetadata({ ...draft, files: prepared.response.files.map(file => {
             const original = draft.files.find(item => item.layer === file.layer)!;
             return { ...original, ...file, ...(reviewedContents && file.content !== original.content ? { origin: 'qa' as const, pass: undefined } : {}) };
-        }) };
+        }) }, prepared.response, plan);
         result.preview = { ...layeredDraftPreview(recoveredDraft, projectPaths.frameworkRoot).preview, ...prepared.preview };
-        if (reviewedContents) {
-            const validation = deps.automationResponseValidator.validate(scenario, plan, prepared.response);
+        let validation: AutomationValidation;
+        try {
+            validation = deps.automationResponseValidator.validate(scenario, plan, prepared.response);
             includeFrameworkCompilation(validation, new FrameworkCompilationValidator().validate(projectPaths.frameworkRoot, prepared.files));
-            result.validation = { ...validation, valid: false, errors: [...result.validation.errors, ...validation.errors] };
+        } catch (error: any) {
+            // Quality evaluation cannot disable export of bytes already checked by the write contract.
+            validation = { valid: false, qualityScore: 0, warnings: [], errors: [
+                { code: 'draft-validation', message: `No se pudo completar la validación del borrador: ${error.message}` },
+            ] };
+        }
+        validation.warnings.push(...(prepared.diagnostics || []).map(item => item.message));
+        result.validation = { ...validation, valid: validation.valid && !draft.diagnostics.length,
+            errors: [...result.validation.errors, ...validation.errors] };
+        refreshAssessmentStatic(result.validation);
+        history.capture('prepared-response.json', JSON.stringify(prepared.response), 'recorder', 'draft:prepared');
+        history.capture('validation.json', JSON.stringify(result.validation), 'recorder', 'draft:prepared-validation');
+        if (reviewedContents) {
             history.append({ ...history.identity()!, kind: 'qa-validation-result', origin: 'qa', result: validation.valid ? 'passed' : 'failed' }, [
                 { name: 'validation.json', content: JSON.stringify(validation) },
             ]);

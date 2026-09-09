@@ -1,3 +1,4 @@
+import { refreshAssessmentStatic } from './rules/acceptanceCriteriaRules';
 import fs from 'fs';
 import path from 'path';
 import ts from 'typescript';
@@ -165,7 +166,7 @@ export class FrameworkCompilationValidator {
     }
 }
 
-/** Preserve editable drafts, but do not promote or apply code with new compilation errors. */
+/** Preserve exportable drafts while reporting compilation errors separately from QA approval. */
 export function includeFrameworkCompilation(validation: AutomationValidation, report: FrameworkCompilationReport): void {
     for (const item of report.diagnostics) {
         validation.errors.push({ code: 'framework-typescript', file: item.file,
@@ -185,4 +186,5 @@ export function includeFrameworkCompilation(validation: AutomationValidation, re
         // Existing groups were calculated before compilation and would omit these errors.
         delete validation.repairContext.groups;
     }
+    refreshAssessmentStatic(validation);
 }

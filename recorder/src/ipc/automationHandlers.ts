@@ -220,7 +220,8 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
                 projectPaths.automationAgent,
                 result.packageDirectory
             );
-            return { success: true, result, handoff, mode };
+            const scenario = JSON.parse(fs.readFileSync(path.join(result.packageDirectory, 'scenario.json'), 'utf8'));
+            return { success: true, result: { ...result, scenario }, handoff, mode };
         } catch (e: any) {
             return { success: false, error: e.message };
         }

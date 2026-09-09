@@ -11,6 +11,21 @@ al recorder y en qué medida, y **(B)** en qué orden implementarlo.
 La secuencia F0–F7 de ese documento desarrolla las decisiones de esta revisión y
 sustituye la tabla resumida de entregas de abajo para organizar la implementación.
 
+## Continuación implementada — 2026-09-09
+
+La ampliación añade criterios estructurados del QA, evaluación ligada a los
+archivos revisados, regresiones de identidad/reutilización y herramientas de
+medición. La interfaz separa validación técnica, implementación de criterios y
+ejecución funcional. Se conservan las dos pasadas y la exportación de borradores.
+
+El protocolo de generaciones nuevas está implementado y probado con proveedor
+simulado; todavía falta ejecutar el piloto real con corpus reservado revisado
+por QA. Sus resultados no se sustituyen por el pass rate de pruebas unitarias.
+Consultar [criterios en el Recorder](ACCEPTANCE_CRITERIA.md) y
+[medición y piloto](AGENT_EVALUATION_PILOT.md) para los contratos, comandos,
+denominadores y límites de cada señal. Esta continuación actualiza el estado
+técnico del runner que la propuesta histórica de abajo había aplazado.
+
 ## Decisión de producto actualizada — 2026-09-08
 
 **Estado: F0–F6 implementadas y verificadas; F7 tiene implementación técnica y pruebas.**

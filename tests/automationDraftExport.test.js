@@ -242,3 +242,85 @@ test('F3 exports the reviewed Feature with a missing fixture user and preserves 
     const receipt = JSON.parse(fs.readFileSync(path.join(f.pkg, 'application-receipt.json')));
     assert.ok(receipt.validation.errors.some(error => error.code === 'test-data-user-missing'));
 });
+
+
+test('F3 conserva trazas y resoluciones de una entrega identificada al preparar, editar y exportar', async t => {
+    const f = fixture(t);
+    const response = { schemaVersion: 1, recordingId: f.scenario.recordingId, planId: f.plan.planId,
+        files: f.draft.files.map(({ layer, path, content }) => ({ layer, path, content })),
+        actionTrace: [{ sequence: 1, gherkinStep: 'Then se verifica el resultado', screenMethod: 'verify', locatorName: 'result' }],
+        resolutions: [{ gapId: 'gap-result', decision: 'resolved', reason: 'Recorded result' }] };
+    fs.writeFileSync(path.join(f.pkg, 'agent-response.json'), JSON.stringify(response));
+    const preview = f.importer.prepareRecoveredDraft(f.pkg, f.draft);
+    assert.equal(preview.exportReady, true, preview.exportBlockers.join(' '));
+    assert.deepEqual(f.state.automationPreview.response.actionTrace, response.actionTrace);
+    assert.deepEqual(f.state.automationPreview.response.resolutions, response.resolutions);
+    // Once captured, metadata survives a missing mutable integration file and QA edits.
+    fs.unlinkSync(path.join(f.pkg, 'agent-response.json'));
+    const file = path.join(f.root, response.files[0].path);
+    const content = 'export class CaseScreen { public async verify() { return true; } }\n';
+    const edited = await f.importer.importFromPackage(f.pkg, { reviewedContents: { [file]: content }, trackRepair: false });
+    assert.equal(edited.draft.exportReady, true, edited.draft.exportBlockers.join(' '));
+    assert.deepEqual(f.state.automationPreview.response.actionTrace, response.actionTrace);
+    assert.deepEqual(f.state.automationPreview.response.resolutions, response.resolutions);
+    const exported = await applyReviewedAutomation(f.deps, edited.draft.previewToken);
+    assert.equal(exported.success, true, exported.error);
+    const saved = JSON.parse(fs.readFileSync(path.join(f.pkg, 'agent-response.json')));
+    assert.deepEqual(saved.actionTrace, response.actionTrace);
+    assert.deepEqual(saved.resolutions, response.resolutions);
+    assert.ok(f.history.events().some(event => event.kind === 'generation-result' && event.result === 'failed'));
+    assert.equal(f.history.events().some(event => event.kind === 'generation-result' && event.result === 'passed'), false);
+});
+
+test('F3 no toma trazas de otra identidad, bytes distintos o un sobre malformado', t => {
+    const f = fixture(t);
+    const response = { recordingId: f.scenario.recordingId, planId: f.plan.planId,
+        files: f.draft.files, actionTrace: [{ sequence: 1, gherkinStep: 'Then result', screenMethod: 'verify' }], resolutions: [] };
+    for (const candidate of [
+        { ...response, recordingId: 'another-recording' },
+        { ...response, planId: 'another-plan' },
+        { ...response, files: [{ ...response.files[0], content: 'another delivery' }] },
+        { ...response, actionTrace: [{ sequence: 'bad', gherkinStep: 'Then result' }] },
+        { ...response, files: [...response.files, response.files[0]] },
+    ]) {
+        fs.writeFileSync(path.join(f.pkg, 'agent-response.json'), JSON.stringify(candidate));
+        const preview = f.importer.prepareRecoveredDraft(f.pkg, f.draft);
+        assert.equal(preview.exportReady, true, preview.exportBlockers.join(' '));
+        assert.deepEqual(f.state.automationPreview.response.actionTrace, []);
+    }
+});
+
+test('F3 valida el contenido preparado desde el primer preview y conserva el método compartido', t => {
+    const f = fixture(t);
+    const file = f.plan.files[2];
+    const baseline = 'export class CaseScreen { public async existing() { return "baseline"; } }\n';
+    fs.mkdirSync(path.join(f.root, 'screenobjects'));
+    fs.writeFileSync(path.join(f.root, file.path), baseline);
+    Object.assign(file, { operation: 'update', baseHash: hash(baseline) });
+    fs.writeFileSync(path.join(f.pkg, 'generation-plan.json'), JSON.stringify(f.plan));
+    f.draft.files[0].content = 'export class CaseScreen { public async existing() { return "repair"; } public async verify() {} }\n';
+    const validator = f.deps.automationResponseValidator;
+    const originalValidate = validator.validate.bind(validator);
+    let checked;
+    validator.validate = (scenario, plan, response, ...rest) => {
+        checked = response.files[0].content;
+        return originalValidate(scenario, plan, response, ...rest);
+    };
+    const preview = f.importer.prepareRecoveredDraft(f.pkg, f.draft);
+    assert.equal(preview.exportReady, true, preview.exportBlockers.join(' '));
+    assert.equal(checked, preview.preview.screenContent);
+    assert.match(checked, /baseline/);
+    assert.doesNotMatch(checked, /return "repair"/);
+    assert.ok(preview.validation.warnings.some(message => message.includes('existing')));
+    assert.equal(fs.readFileSync(path.join(f.root, file.path), 'utf8'), baseline);
+});
+
+
+test('F3 un fallo del evaluador queda diagnosticado sin impedir exportar el borrador seguro', t => {
+    const f = fixture(t);
+    f.deps.automationResponseValidator.validate = () => { throw new Error('Incomplete evaluator input'); };
+    const preview = f.importer.prepareRecoveredDraft(f.pkg, f.draft);
+    assert.equal(preview.exportReady, true, preview.exportBlockers.join(' '));
+    assert.equal(preview.validation.valid, false);
+    assert.ok(preview.validation.errors.some(error => error.code === 'draft-validation'));
+});

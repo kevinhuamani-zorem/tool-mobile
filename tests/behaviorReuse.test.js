@@ -186,7 +186,7 @@ test('R5: reducción de cobertura queda como conflicto visible, nunca sobrescrit
 test('R6: métricas usan expectativas independientes y no acreditan ejecución ni golden', () => {
     const decisions=[{kind:'step',sequences:[1,2,3],method:'open'},{kind:'create',sequences:[4]},{kind:'method',sequences:[5],method:'back'}];
     const report={decisions};const groups=[{sequences:[1,2,3],expected:'reuse',method:'open'},{sequences:[4],expected:'reuse'},{sequences:[5],expected:'create'}];
-    const result=evaluateBehaviorReuse(report,{groups});assert.equal(result.reuseRate,0.5);assert.equal(result.incorrectlyReused,1);assert.equal(result.missedReuse,1);assert.equal(result.qaMinutes,null);assert.equal(result.goldenApproval,'not-granted');
+    const result=evaluateBehaviorReuse(report,{groups});assert.equal(result.reuseRate,null);assert.equal(result.status,'not-evaluated');assert.equal(result.plannedDecisionAudit.reuseRate,0.5);assert.equal(result.plannedDecisionAudit.incorrectlyReused,1);assert.equal(result.plannedDecisionAudit.missedReuse,1);assert.equal(result.qaMinutes,null);assert.equal(result.goldenApproval,'not-granted');
     assert.throws(()=>evaluateBehaviorReuse(report,{groups:[]}),/independientes/);
     assert.throws(()=>evaluateBehaviorReuse(report,{groups:[...groups,groups[0]]}),/solaparse/);
 });

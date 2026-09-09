@@ -50,6 +50,13 @@ test('F6 approval freezes exact bytes, context and diagnostics without altering 
     assert.equal(new GoldenSnapshotReader(saved.directory).json('catalog.json').frameworkMetrics, undefined);
     assert.equal(new GoldenSnapshotReader(saved.directory).json('execution.json').automaticVerification, 'not-reported');
     assert.deepEqual(listGoldenCases(root), [saved.directory]);
+    const history = new AutomationHistoryStore(f.packageDirectory);
+    const event = history.events().filter(event => event.kind === 'qa-verification').at(-1);
+    const declaration = JSON.parse(history.readArtifact(event.artifacts.find(item => item.name === 'golden-publication.json')).toString('utf8'));
+    assert.equal(declaration.executed, 'passed');
+    assert.equal(declaration.qaCorrected, false);
+    assert.equal(declaration.artifactHash, require('../dist/core/automation/contracts').acceptanceArtifactHash(f.response.files));
+    assert.equal(declaration.revisionId, event.revisionId);
 });
 
 test('F6 accepts explicit QA approval with failing diagnostics, keeping original response and framework untouched', t => {

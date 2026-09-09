@@ -31,8 +31,8 @@ import {
     VisibleCopilotProvider,
     AgentOrchestrator,
     LayeredGenerationOrchestrator,
+    validatePreparedAgentResponse,
 } from '../../core/automation';
-import { readJsonUtf8 } from '../../core/shared';
 import { RecordingCoverageAnalyzer, RecordingPlatformUpdater } from '../../core/coverage';
 import {
     embeddedInspectorAssetsAvailable,
@@ -162,10 +162,8 @@ app.whenReady().then(async () => {
     const layeredGenerationOrchestrator = new LayeredGenerationOrchestrator(
         copilotCliAdapter,
         copilotCliAdapter,
-        (packageDirectory, response) => automationResponseValidator.validate(
-            readJsonUtf8(path.join(packageDirectory, 'scenario.json')),
-            readJsonUtf8(path.join(packageDirectory, 'generation-plan.json')),
-            response,
+        (packageDirectory, response, pass) => validatePreparedAgentResponse(
+            packageDirectory, response, automationResponseValidator, automationApplier, pass,
         ),
     );
     const embeddedInspectorProxy = new EmbeddedInspectorProxy();

@@ -52,6 +52,14 @@ export function ScenarioBuilderModal() {
                   placeholder="Ej.: el usuario visualiza movimientos disponibles sin validar un saldo fijo" />
               </div>
             </div>
+            <section className="acceptance-editor" aria-labelledby="acceptanceChecksTitle">
+              <div className="acceptance-editor-heading">
+                <div><h3 id="acceptanceChecksTitle">Criterios de aceptación</h3><p id="acceptanceChecksHint" className="wizard-help">Opcional. Define resultados concretos que debe comprobar el caso.</p></div>
+                <button type="button" id="btnAddAcceptanceCheck" className="btn btn-dark">+ Añadir criterio</button>
+              </div>
+              <div id="acceptanceChecksList" className="acceptance-checks-list" />
+              <p id="acceptanceChecksError" className="acceptance-checks-error" role="status" />
+            </section>
             <div className="wizard-case-config automation-metadata-form">
               <div className="input-group">
                 <label className="field-label">ID de ejecución:</label>
@@ -248,6 +256,7 @@ export function ScenarioBuilderModal() {
                 <button className="btn btn-green btn-generate-final" id="btnGenerate">Aplicar automatización</button>
               </div>
             </div>
+            <section id="acceptanceAssessment" className="acceptance-assessment" aria-label="Evaluación de criterios" aria-live="polite" style={{display: 'none'}} />
             <div id="lblGenerateResult" className="generate-result review-generation-result" />
             <section id="goldenDatasetPanel" className="golden-dataset-panel" style={{display: 'none'}}>
               <div className="golden-dataset-heading">

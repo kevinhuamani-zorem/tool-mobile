@@ -91,6 +91,84 @@ function resetAutomationPackage(
     }
 }
 
+
+/** Same verified reuse evidence for a new package and a regenerated revision. */
+function writeReuseEvidence(
+    packageDirectory: string,
+    scenario: AutomationScenario,
+    plan: GenerationPlan,
+    resolvedContext: ResolvedContext,
+    updateBaselines: unknown[],
+): void {
+        const reuseCandidates = (resolvedContext.frameworkAwareness?.candidates || [])
+            .slice(0, 3)
+            .map(candidate => ({
+                feature: candidate.feature,
+                scenario: candidate.scenario,
+                caseId: candidate.caseId,
+                file: candidate.file,
+                score: candidate.score,
+                selectorCoverage: candidate.selectorCoverage,
+                matchedSteps: candidate.matchedSteps.slice(0, 3),
+                paths: candidate.paths,
+            }));
+        writeJson(path.join(packageDirectory, 'reuse-context.json'), {
+            schemaVersion: resolvedContext.schemaVersion,
+            recordingId: scenario.recordingId,
+            decision: resolvedContext.frameworkAwareness?.decision || 'create-new',
+            existingCase: plan.existingCase,
+            reuseTarget: plan.reuseTarget,
+            behaviorReuse: plan.behaviorReuse,
+            candidates: reuseCandidates,
+            // Tipo, bloque, valor y expresión exacta de cada elemento existente
+            // que el caso toca, agrupados por módulo: es lo que permite
+            // referenciarlo en vez de copiar su valor a un módulo nuevo.
+            elements: resolvedContext.elementDeclarations || [],
+            updateBaselines,
+        });
+        // Cada definicion que resolveria alguna fila del borrador, con el
+        // motivo: la que una fila `reused` adopta (se copia literal) o un
+        // regex de cualquier squad que atrapa una frase nueva por sus
+        // capturas (Cucumber la resolveria ademas de la propia: ambiguo).
+        const draftRows = scenario.request.scenarioRows || [];
+        const reservedStepExpressions = (resolvedContext.frameworkAwareness?.exactStepDefinitions || [])
+            .map(item => {
+                const canonical = selectorNormalization.canonicalStepExpression(item.expression);
+                const reused = draftRows.some(row => row.status === 'reused'
+                    && selectorNormalization.canonicalStepExpression(row.text) === canonical);
+                const swallowed = draftRows
+                    .filter(row => row.status !== 'reused' && matchingStepDefinitions(row.text, [item]).length > 0)
+                    .map(row => row.text);
+                return {
+                    expression: item.expression,
+                    canonical,
+                    file: item.file,
+                    scope: item.scope,
+                    reason: swallowed.length
+                        ? `Regex que atrapa «${swallowed.join('», «')}»: Cucumber resolvería esa línea con esta ` +
+                            'definición además de la tuya (step ambiguo). Cambia el verbo o la conjunción de la frase.'
+                        : reused
+                            ? 'Step reutilizado: se copia literal en el Feature y no se define de nuevo.'
+                            : 'Expresión reservada en framework; una variante equivalente produce step ambiguo.',
+                    ...(swallowed.length ? { swallows: swallowed } : {}),
+                };
+            });
+        writeJson(path.join(packageDirectory, 'collision-report.json'), {
+            schemaVersion: resolvedContext.schemaVersion,
+            recordingId: scenario.recordingId,
+            exactStepDefinitions: resolvedContext.frameworkAwareness?.exactStepDefinitions || [],
+            reservedStepExpressions,
+            selectorCollisions: resolvedContext.frameworkAwareness?.selectorCollisions || [],
+            requiresReuse: Boolean(resolvedContext.frameworkAwareness?.selectorCollisions?.length),
+            // Bloquea solo lo que de verdad choca: un step reutilizado no es
+            // una colision, es la definicion que ejecuta esa linea.
+            blocking: !plan.existingCase && reservedStepExpressions.some(item =>
+                item.swallows || !draftRows.some(row => row.status === 'reused'
+                    && selectorNormalization.canonicalStepExpression(row.text) === item.canonical)
+            ),
+        });
+}
+
 function writePackageArtifactJson(packageDirectory: string, fileName: string, value: unknown): void {
     writeJson(resolvePackageArtifactPath(packageDirectory, fileName), value);
 }
@@ -939,6 +1017,9 @@ export class AutomationPackageBuilder {
             'Realizar una revisión general del caso y mejorar claridad, mantenibilidad y consistencia sin cambiar su comportamiento.';
         const scenario = recordingOverride || read<AutomationScenario>('scenario.json');
         const previousPlan = read<GenerationPlan>('generation-plan.json');
+        // Read authoritative resolver evidence before resetting mutable package files.
+        const previousResolved = fs.existsSync(path.join(packageDirectory, 'resolved-context.json'))
+            ? read<ResolvedContext>('resolved-context.json') : undefined;
         const runStore = new AgentRunStore(packageDirectory);
         const history = new AutomationHistoryStore(packageDirectory);
         history.ensureRevision(scenario.recordingId, scenario.request?.caseId);
@@ -1011,15 +1092,23 @@ export class AutomationPackageBuilder {
             budgets: normalizeAgentOperationalBudgets(previousPlan.budgets || DEFAULT_AGENT_OPERATIONAL_BUDGETS),
         };
         const pathMap = new Map((fresh?.plan.files || previousPlan.files).map(file => [file.path, plan.files.find(item => item.layer === file.layer)!.path]));
-        const remap = (value: any): any => typeof value === 'string' ? pathMap.get(value) || value
-            : Array.isArray(value) ? value.map(remap) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remap(item)])) : value;
+        const pathKeys = new Set(['file', 'path', 'screenFile', 'stepFile', 'feature', 'steps', 'screen', 'locators']);
+        const remap = (value: any, field = ''): any => typeof value === 'string'
+            ? (pathKeys.has(field) ? pathMap.get(value) || value : value)
+            : Array.isArray(value) ? value.map(item => remap(item, field))
+                : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remap(item, key)])) : value;
         plan.resolutions = remap(plan.resolutions);
         plan.reuseTarget = remap(plan.reuseTarget);
+        plan.behaviorReuse = remap(plan.behaviorReuse);
+        const resolvedContext: ResolvedContext | undefined = fresh?.resolvedContext || previousResolved
+            ? { ...remap(fresh?.resolvedContext || previousResolved), planId: plan.planId } : undefined;
         const reconciliation = baselineFromRecovery(recovered, plan.planId, plan.reconciliation!.revisionId);
         for (const file of plan.files) if (!reconciliation.files.some(item => item.path === file.path)) reconciliation.files.push({
             path: file.path, layer: file.layer, content: workspace.read(file.path), symbols: workspace.read(file.path) === null ? ['*'] : [], shared: workspace.read(file.path) !== null });
         const revisedScenario: AutomationScenario = {
-            ...scenario,
+            // The normalized rows own frozen method/getter bindings. Keeping only
+            // fresh.plan silently disabled reuse validation after an export.
+            ...remap(fresh?.scenario || scenario),
             revision: scenario.revision + 1,
         };
         const unresolvedContext = {
@@ -1118,23 +1207,25 @@ export class AutomationPackageBuilder {
                 },
             };
         });
-        writeJson(path.join(packageDirectory, 'reuse-context.json'), {
-            schemaVersion: revisedScenario.schemaVersion,
-            recordingId: revisedScenario.recordingId,
-            decision: 'regeneration',
-            candidates: [],
-            elements: [],
-            updateBaselines,
-        });
-        writeJson(path.join(packageDirectory, 'collision-report.json'), {
-            schemaVersion: revisedScenario.schemaVersion,
-            recordingId: revisedScenario.recordingId,
-            exactStepDefinitions: [],
-            reservedStepExpressions: [],
-            selectorCollisions: [],
-            requiresReuse: false,
-            blocking: false,
-        });
+        if (resolvedContext) {
+            writeJson(path.join(packageDirectory, 'resolved-context.json'), resolvedContext);
+            writeReuseEvidence(packageDirectory, revisedScenario, plan, resolvedContext, updateBaselines);
+        } else {
+            // Older packages may have no resolver context. Retain their explicit
+            // decisions without fabricating declarations or collision clearance.
+            writeJson(path.join(packageDirectory, 'reuse-context.json'), {
+                schemaVersion: revisedScenario.schemaVersion,
+                recordingId: revisedScenario.recordingId,
+                decision: 'regeneration',
+                reuseTarget: plan.reuseTarget,
+                behaviorReuse: plan.behaviorReuse,
+                candidates: [], elements: [], updateBaselines,
+            });
+            writeJson(path.join(packageDirectory, 'collision-report.json'), {
+                schemaVersion: revisedScenario.schemaVersion, recordingId: revisedScenario.recordingId,
+                contextAvailable: false, exactStepDefinitions: [], reservedStepExpressions: [], selectorCollisions: [],
+            });
+        }
         fs.writeFileSync(path.join(packageDirectory, 'baseline-response.json'), JSON.stringify({ ...baseline, origin: 'qa-framework', pending: recovered.pending, relations: recovered.relations, dependencies: recovered.files.filter(file => file.layer === 'dependency').map(file => ({ path: file.path, content: file.content })) }, null, 2) + '\n', 'utf8');
         writeJson(path.join(packageDirectory, 'unresolved-context.json'), unresolvedContext);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
@@ -1180,11 +1271,10 @@ export class AutomationPackageBuilder {
         });
         runStore.start(revisedScenario.recordingId, plan.planId);
         runStore.setExecutionMode(resolveAgentExecutionMode(process.env.RECORDER_AGENT_EXECUTION_MODE || DEFAULT_AGENT_EXECUTION_MODE));
-        const resolvedContextFile = path.join(packageDirectory, 'resolved-context.json');
         writeContextProjections(packageDirectory, {
             scenario: revisedScenario,
             plan,
-            resolvedContext: fs.existsSync(resolvedContextFile) ? read<ResolvedContext>('resolved-context.json') : undefined,
+            resolvedContext,
             unresolvedContext: unresolvedContext as UnresolvedContext,
         }, runStore);
         contextBytes += ['hints.json', 'gaps.json'].reduce((total, name) =>
@@ -1203,6 +1293,7 @@ export class AutomationPackageBuilder {
             recordingId: revisedScenario.recordingId,
             planId: plan.planId,
             status: plan.status,
+            behaviorReuse: plan.behaviorReuse,
             deterministicCoverage: plan.deterministicCoverage,
             unresolvedGaps: plan.unresolvedGapIds.length,
             agentRequired: true,
@@ -1297,73 +1388,7 @@ export class AutomationPackageBuilder {
                     },
                 };
             });
-        const reuseCandidates = (result.resolvedContext.frameworkAwareness?.candidates || [])
-            .slice(0, 3)
-            .map(candidate => ({
-                feature: candidate.feature,
-                scenario: candidate.scenario,
-                caseId: candidate.caseId,
-                file: candidate.file,
-                score: candidate.score,
-                selectorCoverage: candidate.selectorCoverage,
-                matchedSteps: candidate.matchedSteps.slice(0, 3),
-                paths: candidate.paths,
-            }));
-        writeJson(path.join(packageDirectory, 'reuse-context.json'), {
-            schemaVersion: result.resolvedContext.schemaVersion,
-            recordingId: result.scenario.recordingId,
-            decision: result.resolvedContext.frameworkAwareness?.decision || 'create-new',
-            existingCase: result.plan.existingCase,
-            reuseTarget: result.plan.reuseTarget,
-            behaviorReuse: result.plan.behaviorReuse,
-            candidates: reuseCandidates,
-            // Tipo, bloque, valor y expresión exacta de cada elemento existente
-            // que el caso toca, agrupados por módulo: es lo que permite
-            // referenciarlo en vez de copiar su valor a un módulo nuevo.
-            elements: result.resolvedContext.elementDeclarations || [],
-            updateBaselines,
-        });
-        // Cada definicion que resolveria alguna fila del borrador, con el
-        // motivo: la que una fila `reused` adopta (se copia literal) o un
-        // regex de cualquier squad que atrapa una frase nueva por sus
-        // capturas (Cucumber la resolveria ademas de la propia: ambiguo).
-        const draftRows = result.scenario.request.scenarioRows || [];
-        const reservedStepExpressions = (result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [])
-            .map(item => {
-                const canonical = selectorNormalization.canonicalStepExpression(item.expression);
-                const reused = draftRows.some(row => row.status === 'reused'
-                    && selectorNormalization.canonicalStepExpression(row.text) === canonical);
-                const swallowed = draftRows
-                    .filter(row => row.status !== 'reused' && matchingStepDefinitions(row.text, [item]).length > 0)
-                    .map(row => row.text);
-                return {
-                    expression: item.expression,
-                    canonical,
-                    file: item.file,
-                    scope: item.scope,
-                    reason: swallowed.length
-                        ? `Regex que atrapa «${swallowed.join('», «')}»: Cucumber resolvería esa línea con esta ` +
-                            'definición además de la tuya (step ambiguo). Cambia el verbo o la conjunción de la frase.'
-                        : reused
-                            ? 'Step reutilizado: se copia literal en el Feature y no se define de nuevo.'
-                            : 'Expresión reservada en framework; una variante equivalente produce step ambiguo.',
-                    ...(swallowed.length ? { swallows: swallowed } : {}),
-                };
-            });
-        writeJson(path.join(packageDirectory, 'collision-report.json'), {
-            schemaVersion: result.resolvedContext.schemaVersion,
-            recordingId: result.scenario.recordingId,
-            exactStepDefinitions: result.resolvedContext.frameworkAwareness?.exactStepDefinitions || [],
-            reservedStepExpressions,
-            selectorCollisions: result.resolvedContext.frameworkAwareness?.selectorCollisions || [],
-            requiresReuse: Boolean(result.resolvedContext.frameworkAwareness?.selectorCollisions?.length),
-            // Bloquea solo lo que de verdad choca: un step reutilizado no es
-            // una colision, es la definicion que ejecuta esa linea.
-            blocking: !result.plan.existingCase && reservedStepExpressions.some(item =>
-                item.swallows || !draftRows.some(row => row.status === 'reused'
-                    && selectorNormalization.canonicalStepExpression(row.text) === item.canonical)
-            ),
-        });
+        writeReuseEvidence(packageDirectory, result.scenario, result.plan, result.resolvedContext, updateBaselines);
         writeJson(path.join(packageDirectory, 'agent-response.schema.json'), responseSchema());
         writeJson(
             path.join(packageDirectory, 'gap-resolutions.schema.json'),

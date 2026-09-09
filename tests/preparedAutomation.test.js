@@ -26,7 +26,7 @@ function fixture(t, Applier = AutomationApplier) {
         { layer: 'feature', path: relative, content: original + '\n  @payment @android\n  Scenario: New\n    Then new result\n' },
         { layer: 'steps', path: 'features/new.steps.ts', content: "import { Then } from '@wdio/cucumber-framework';\n" },
     ] };
-    const plan = { files: response.files.map(file => ({ layer: file.layer, path: file.path, operation: file.layer === 'feature' ? 'update' : 'create' })), resolutions: [] };
+    const plan = { files: response.files.map(file => ({ layer: file.layer, path: file.path, operation: file.layer === 'feature' ? 'update' : 'create' })), resolutions: [], unresolvedGapIds: [] };
     const preview = { featurePath: path.join(root, relative), featureContent: response.files[0].content,
         stepPath: path.join(root, response.files[1].path), stepContent: response.files[1].content,
         files: response.files.map(file => path.join(root, file.path)) };
@@ -342,11 +342,59 @@ test('importar un envelope inválido prepara sus capas seguras para exportar', a
     assert.equal(result.draft.preview.stepContent, f.response.files[1].content);
     assert.equal(result.draft.preview.featurePath, '');
     assert.deepEqual(result.draft.missingLayers, ['feature']);
-    assert.ok(result.draft.previewToken);
+    assert.ok(result.draft.previewToken, JSON.stringify(result.draft.exportBlockers));
     assert.equal(result.draft.exportReady, true);
     assert.equal(state.automationPreview.token, result.draft.previewToken);
     assert.equal(fs.readFileSync(path.join(f.root, f.relative), 'utf8'), f.original);
     const history = new AutomationHistoryStore(packageDirectory);
     const original = history.events().find(event => event.stage === 'import:original');
     assert.equal(history.readArtifact(original.artifacts[0]).toString(), raw);
+});
+
+
+test('preparación informa correcciones compartidas descartadas y permite exportar el borrador', t => {
+    const f = fixture(t);
+    const target = 'features/contacts.screen.ts';
+    const baseline = `class Contacts {
+    public async inputNumberToYapear(value: string) { await this.tap(this.btnselectNumber); }
+}
+`;
+    fs.writeFileSync(path.join(f.root, target), baseline);
+    f.plan.files.push({ layer: 'screen', path: target, operation: 'update' });
+    const proposed = baseline.replace('this.btnselectNumber', 'this.selectDestinationNumberButton')
+        .replace('class Contacts {', 'class Contacts {\n    private get selectDestinationNumberButton() { return "recorded"; }');
+    f.response.files.push({ layer: 'screen', path: target, content: proposed });
+    f.response.actionTrace = [{ sequence: 6, screenMethod: 'inputNumberToYapear', locatorName: 'selectDestinationNumberButton' }];
+    f.preview.screenPath = path.join(f.root, target);
+    f.preview.files.push(f.preview.screenPath);
+    const prepared = f.applier.prepare(f.scenario, f.plan, f.response, f.preview);
+    assert.match(proposed, /tap\(this.selectDestinationNumberButton\)/);
+    assert.match(prepared.response.files.find(file => file.layer === 'screen').content, /tap\(this.btnselectNumber\)/,
+        'la evaluación posterior debe usar prepared.response, donde el método compartido sigue intacto');
+    assert.deepEqual(prepared.response.actionTrace, f.response.actionTrace);
+    assert.deepEqual(prepared.diagnostics.map(item => [item.code, item.symbol]),
+        [['shared-symbol-change-discarded', 'inputNumberToYapear']]);
+    assert.equal(fs.readFileSync(f.preview.screenPath, 'utf8'), baseline, 'preparar sigue siendo read-only');
+    const applied = f.applier.commit(prepared, f.scenario, f.plan);
+    assert.deepEqual(applied.patched.diagnostics, prepared.diagnostics);
+    assert.equal(fs.readFileSync(f.preview.screenPath, 'utf8'), prepared.preview.screenContent,
+        'la advertencia no bloquea exportación y se escriben exactamente los bytes revisados');
+});
+
+test('un método nuevo evita el descarte y el diagnóstico usa el baseline de corrección', t => {
+    const f = fixture(t);
+    const target = 'features/contacts.screen.ts';
+    const baseline = `class Contacts { public async shared() { await this.tap(this.oldButton); } }`;
+    const current = baseline.replace('class Contacts {', 'class Contacts { public async generated() { await this.old(); }');
+    const proposed = baseline.replace('class Contacts {', 'class Contacts { public async generated() { await this.tap(this.recordedButton); }');
+    fs.writeFileSync(path.join(f.root, target), current);
+    f.plan.files.push({ layer: 'screen', path: target, operation: 'update' });
+    f.response.files.push({ layer: 'screen', path: target, content: proposed });
+    f.preview.screenPath = path.join(f.root, target);
+    f.preview.files.push(f.preview.screenPath);
+    const prepared = f.applier.prepare(f.scenario, f.plan, f.response, f.preview, new Map([[target, baseline]]));
+    assert.deepEqual(prepared.diagnostics, [], 'el método generado no es compartido en el baseline autorizado');
+    assert.match(prepared.preview.screenContent, /tap\(this.recordedButton\)/);
+    assert.match(prepared.preview.screenContent, /tap\(this.oldButton\)/);
+    assert.equal(fs.readFileSync(f.preview.screenPath, 'utf8'), current);
 });

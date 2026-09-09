@@ -295,6 +295,27 @@ generadores, validadores o plantillas.
 - Nunca registres valores de los ambientes del framework, username/access key de BrowserStack ni
   datos sensibles en logs, previews o errores.
 
+## Contrato de evaluación del caso
+
+- `request.acceptanceChecks` pertenece al QA. Valida sus campos antes de
+  modificar la grabación y consérvalos al retomar o regenerar. El agente no
+  puede añadir una aprobación al contrato de salida.
+- `validation.assessment` distingue diagnóstico técnico, implementación de
+  criterios y ejecución funcional. La evidencia estática se enlaza al Feature
+  del TC objetivo, sus Steps y Screen, y a los bytes por `artifactHash`.
+  Desconocido significa `not-evaluated`; mostrar un elemento no demuestra una
+  condición de negocio. No conviertas score técnico en porcentaje de éxito.
+- Editar archivos invalida la evaluación visible; Revalidar examina los bytes
+  actuales. Los diagnósticos mantienen disponibles los borradores exportables.
+- Las tasas publican numerador, denominador y casos sin evaluar. La corrección
+  QA no cambia el resultado autónomo original. Las etiquetas de reutilización
+  y fallos controlados son independientes del resolver que se está midiendo.
+- Un piloto fija commit, entradas, modelo, código y referencias; cada repetición
+  usa un checkout temporal y no consume salidas anteriores. Excluye el propio
+  caso y los golden reservados. Nunca declares mejora del LLM a partir de un
+  proveedor simulado. Ver `docs/AGENT_EVALUATION_PILOT.md` y
+  `docs/ACCEPTANCE_CRITERIA.md`.
+
 ## Flujo obligatorio para cambios
 
 1. Inspecciona `git status` y preserva cambios ajenos.

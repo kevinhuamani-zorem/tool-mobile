@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "description": "Reconocimiento estático del rango de la fecha más antigua del framework 09674ce; no acredita ejecución ni todos los movimientos.",
+  "members": {
+    "validateOldestMovementWithinDays": "b967d7ae49ce9a75d47bfff0da85a146265b31498c995358215677a026e201a5",
+    "scrollToOldestMovement": "f1cda8e1b0f40a99c6438e71f364eb7d12573f0ca14009c9b0f7d0b8680c11fd",
+    "getVisibleMovementDates": "7542930b59b764d1bf5ab70bb7dbc8d0b2ed1ab379320cc85db780bc2fcacda6",
+    "movementDates": "c159ec849689d9cc07be8d85f27f14d23e16c0b65bba87a3395cbe7550c2ef03"
+  },
+  "dependencies": [
+    {
+      "file": "support/utils/payment.ts",
+      "hash": "bd9c2471b17b73c977946f0d3e1c41960152970ba62f781b03fba8f3f7d44324"
+    },
+    {
+      "file": "support/common/assertions/assertions.ts",
+      "hash": "12b82a7b2eee3fb539f9dacb7e71aa249e17203e6221e8c0d4eebc8cb1f22beb"
+    }
+  ],
+  "locators": {
+    "movementsAndroid": "new UiSelector().textMatches(\"^(Hoy|Ayer|\\d{1,2} \\w{3}\\.? \\d{4}).*\")",
+    "movementsIos": ""
+  }
+}

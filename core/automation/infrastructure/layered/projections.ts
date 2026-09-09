@@ -3,6 +3,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { candidateAllowlist } from '../../contracts';
 import { frameworkModuleResolver, missingImports } from '../../../generation';
 import {
     readJsonUtf8,
@@ -95,6 +96,19 @@ export function draftFileForInteraction(packageDirectory: string, file: any): an
 }
 
 export function projectRoleJson(relativePath: string, value: any, role: AuthorRole, packageDirectory: string): any {
+    if (relativePath === 'generation-plan.json' && role === 'interaction-author') {
+        const scenarioFile = path.join(packageDirectory, 'scenario.json');
+        if (!fs.existsSync(scenarioFile)) return value;
+        const scenario = readJsonUtf8<any>(scenarioFile);
+        return { ...value, resolutions: (value.resolutions || []).map((resolution: any) => {
+            const action = (scenario.actions || []).find((item: any) => item.sequence === resolution.sequence);
+            const primary = action && candidateAllowlist(action, scenario.platform).find(candidate => candidate.primary);
+            return primary ? { ...resolution, recordedLocator: {
+                platform: scenario.platform, locatorType: primary.locatorType, locatorValue: primary.locatorValue,
+                instruction: 'En create conserva este par exacto en getter y JSON; selector es la representación original, no el valor del JSON. Reuse/completion conservan el contrato ofrecido del framework.',
+            } } : resolution;
+        }) };
+    }
     if (relativePath === 'gaps.json') {
         // Un aviso que solo atañe a una capa (claves vacias del modulo de
         // locators que se extiende) no gasta contexto del otro autor.

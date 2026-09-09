@@ -509,7 +509,7 @@ test('la segunda entrega corrige la capa sin feedback dentro de la sesión', asy
     const result = await new LayeredGenerationOrchestrator(fake, fake, validator).run(root);
     assert.equal(result.success, true);
     assert.equal(calls.filter(call => call.agentName === 'Zorem').length, 2);
-    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
+    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-outcome.json'), 'utf8'));
     assert.equal(feedback.status, 'accepted');
 });
 
@@ -844,7 +844,7 @@ test('Derek dirige el feedback por código de regla aunque el mensaje no delate 
     assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Zorem', 'Sumrak']);
     // Tras aceptar la reparación, Derek deja el feedback de Zorem en `accepted`;
     // Lorem nunca recibió el error.
-    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
+    const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-outcome.json'), 'utf8'));
     assert.equal(feedback.status, 'accepted');
     assert.equal(fs.existsSync(path.join(root, 'agents/lorem/repair-feedback.json')), false, 'Lorem no recibe un error de locator');
 });
@@ -1181,7 +1181,8 @@ test('si Lorem cambia la interfaz del contrato, Zorem se sincroniza con el resul
     assert.equal(handoff.from, 'behavior-author', 'la segunda pasada de Zorem parte del resultado real de Lorem');
     const feedback = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
     assert.equal(feedback.attempt, 1);
-    assert.equal(feedback.status, 'accepted');
+    assert.equal(feedback.status, 'awaiting-output');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-outcome.json'), 'utf8')).status, 'accepted');
 });
 
 test('parallelAuthors:false conserva la secuencia Lorem -> Zorem aunque exista borrador', async () => {
@@ -1898,4 +1899,151 @@ test('ambos integradores conservan la traza reparada por Zorem en la segunda pas
         assert.ok(original, 'conserva evidencia previa al ensamblado');
         assert.equal(JSON.parse(history.readArtifact(original.artifacts[0])).actionTrace[0].locatorName, undefined);
     }
+});
+
+test('la reparación recibe su entrega previa con hash y conserva el feedback que realmente leyó', async t => {
+    const root = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const calls = [];
+    const base = provider(calls);
+    let firstBytes;
+    const fake = {
+        ...base,
+        async execute(input) {
+            const repair = /repair-1$/.test(input.sessionName);
+            if (input.agentName === 'Zorem') {
+                const previous = path.join(input.cwd, 'previous-author-result.json');
+                assert.equal(fs.existsSync(previous), repair, 'solo la segunda pasada recibe una entrega propia');
+                if (repair) {
+                    assert.deepEqual(fs.readFileSync(previous), firstBytes);
+                    const contract = JSON.parse(fs.readFileSync(path.join(input.cwd, 'repair-baseline.json'), 'utf8'));
+                    const manifest = JSON.parse(fs.readFileSync(path.join(input.cwd, 'input-manifest.json'), 'utf8'));
+                    const expected = require('node:crypto').createHash('sha256').update(firstBytes).digest('hex');
+                    assert.equal(contract.result.sha256, expected);
+                    assert.equal(manifest.artifacts.find(item => item.path === 'previous-author-result.json').sha256, expected);
+                    assert.equal(contract.sourcePass, 1);
+                    assert.equal(contract.targetPass, 2);
+                    assert.match(input.prompt, /previous-author-result.json/);
+                }
+            }
+            const result = await base.execute(input);
+            if (input.agentName === 'Zorem') {
+                const file = path.join(input.cwd, 'interaction-result.json');
+                const response = JSON.parse(fs.readFileSync(file, 'utf8'));
+                response.files[0].content = repair ? 'export class CaseScreen { /* FIXED */ }' : 'export class CaseScreen { /* CORRECT_OTHER_SYMBOL */ }';
+                writeJson(file, response);
+                if (!repair) firstBytes = fs.readFileSync(file);
+            }
+            return result;
+        },
+    };
+    const issue = { code: 'trace-screen-method', message: 'La acción 6 requiere su getter.', file: 'screenobjects/payment/case.screen.ts' };
+    const result = await new LayeredGenerationOrchestrator(fake, fake, (_root, response) => ({
+        valid: response.files.some(file => file.content.includes('FIXED')), errors: [issue],
+    })).run(root);
+    assert.equal(result.success, true, result.error);
+    const original = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-feedback.json'), 'utf8'));
+    const outcome = JSON.parse(fs.readFileSync(path.join(root, 'agents/zorem/repair-outcome.json'), 'utf8'));
+    assert.equal(original.status, 'awaiting-output');
+    assert.match(original.errors.join(), /acción 6/);
+    assert.equal(outcome.status, 'accepted');
+    assert.deepEqual(outcome.errors, []);
+    const comparison = JSON.parse(fs.readFileSync(path.join(root, 'agents/derek/repair-comparison.json'), 'utf8'));
+    assert.equal(comparison.valid, true);
+    assert.equal(comparison.resolved.length, 1);
+    assert.deepEqual(comparison.introduced, []);
+});
+
+test('una reparación que altera su base queda como borrador aunque reescriba los hashes visibles', async t => {
+    const root = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const calls = [];
+    const base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const result = await base.execute(input);
+        if (input.agentName === 'Zorem' && /repair-1$/.test(input.sessionName)) {
+            const file = path.join(input.cwd, 'previous-author-result.json');
+            fs.appendFileSync(file, ' ');
+            const contractFile = path.join(input.cwd, 'repair-baseline.json');
+            const contract = JSON.parse(fs.readFileSync(contractFile, 'utf8'));
+            contract.result.sha256 = require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+            writeJson(contractFile, contract);
+        }
+        return result;
+    } };
+    const result = await new LayeredGenerationOrchestrator(fake, fake, () => ({
+        valid: false, errors: [{ code: 'trace-screen-method', message: 'Corrige la acción 6.' }],
+    })).run(root);
+    assert.equal(result.success, false);
+    assert.match(result.error, /repair-baseline-integrity/);
+    assert.equal(calls.filter(call => call.agentName === 'Zorem').length, 2);
+    assert.equal(result.draft.files.length, 4);
+});
+
+test('compara los diagnósticos de ambas pasadas sin ocultar una regresión bajo el borrador anterior', async t => {
+    const root = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const calls = [];
+    let validations = 0;
+    const fake = provider(calls, cwd => {
+        const file = path.join(cwd, 'interaction-result.json');
+        const response = JSON.parse(fs.readFileSync(file, 'utf8'));
+        response.files[0].content = `export class CaseScreen { /* ${validations ? 'NEW_MISMATCH' : 'ORIGINAL'} */ }`;
+        writeJson(file, response);
+    });
+    const result = await new LayeredGenerationOrchestrator(fake, fake, () => ({ valid: false,
+        errors: [++validations === 1
+            ? { code: 'trace-screen-method', message: 'La acción 6 requiere su getter.' }
+            : { code: 'locator-type-mismatch', message: 'La acción 2 cambió su par verificado.' }],
+    })).run(root);
+    assert.equal(result.success, false);
+    assert.equal(validations, 2);
+    const comparison = JSON.parse(fs.readFileSync(path.join(root, 'agents/derek/repair-comparison.json'), 'utf8'));
+    assert.deepEqual(comparison.resolved, ['[trace-screen-method] La acción 6 requiere su getter.']);
+    assert.deepEqual(comparison.introduced, ['[locator-type-mismatch] La acción 2 cambió su par verificado.']);
+    assert.deepEqual(comparison.persisting, []);
+    assert.equal(comparison.valid, false);
+    assert.match(result.draft.files.find(file => file.layer === 'screen').content, /NEW_MISMATCH/);
+    const history = new AutomationHistoryStore(root);
+    assert.ok(history.events().some(event => event.reason === 'repair:comparison' || event.stage === 'repair:comparison'));
+});
+
+test('coordina las dos capas al reparar una acción cuyo método pertenece al baseline compartido', async t => {
+    const root = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const planFile = path.join(root, 'generation-plan.json');
+    const plan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+    plan.files.find(file => file.layer === 'screen').operation = 'update';
+    writeJson(planFile, plan);
+    fs.mkdirSync(path.join(root, 'baselines'));
+    fs.writeFileSync(path.join(root, 'baselines/screen-case.screen.ts'), 'export class CaseScreen { async enterNumber(value: string) {} }');
+    const calls = [];
+    const base = provider(calls);
+    const fake = { ...base, async execute(input) {
+        const repair = /repair-1$/.test(input.sessionName);
+        if (repair && ['Lorem', 'Zorem'].includes(input.agentName)) {
+            const feedback = JSON.parse(fs.readFileSync(path.join(input.cwd, 'repair-feedback.json'), 'utf8'));
+            assert.match(feedback.errors.join(), /shared-method-repair/);
+            assert.match(feedback.errors.join(), /enterNumber/);
+        }
+        const result = await base.execute(input);
+        if (['Lorem', 'Zorem'].includes(input.agentName)) {
+            const file = path.join(input.cwd, input.agentName === 'Lorem' ? 'behavior-result.json' : 'interaction-result.json');
+            const output = JSON.parse(fs.readFileSync(file, 'utf8'));
+            output.actionTrace = [{ sequence: 6, gherkinStep: 'el usuario elige el destino', screenMethod: repair ? 'enterCaseDestination' : 'enterNumber', locatorName: 'destinationButton' }];
+            if (input.agentName === 'Lorem') output.files[1].content = `import caseScreen from '@screenobjects/payment/case.screen.ts'; async function run() { await caseScreen.${repair ? 'enterCaseDestination' : 'enterNumber'}('123'); }`;
+            else output.files[0].content = `class CaseScreen { async enterNumber(value: string) {} ${repair ? 'async enterCaseDestination(value: string) {}' : ''} } export default new CaseScreen();`;
+            writeJson(file, output);
+        }
+        return result;
+    } };
+    const result = await new LayeredGenerationOrchestrator(fake, fake, (_root, response) => ({
+        valid: response.actionTrace[0].screenMethod === 'enterCaseDestination',
+        errors: [{ code: 'trace-screen-method', message: 'La acción 6 debe consumir su getter.', file: 'screenobjects/payment/case.screen.ts' }],
+    })).run(root, { parallelAuthors: false });
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(calls.map(call => call.agentName), ['Lorem', 'Zorem', 'Sumrak', 'Lorem', 'Zorem', 'Sumrak']);
+    const output = JSON.parse(fs.readFileSync(result.responseFile, 'utf8'));
+    assert.match(output.files.find(file => file.layer === 'screen').content, /async enterNumber\(value: string\) \{\}/);
+    assert.equal(output.actionTrace[0].screenMethod, 'enterCaseDestination');
 });

@@ -281,3 +281,60 @@ test('F5 puede preparar otra solicitud sin exportar ni heredar salidas, conserva
     }
     assert.notEqual(attempts[0], attempts[1]);
 });
+
+test('F1 regenerar tras exportar conserva las filas y contratos del resolver actualizado', t => {
+    const f = fixture(t);
+    const crypto = require('node:crypto');
+    const ts = require('typescript');
+    const { behaviorReuseRules } = require('../dist/core/validation/infrastructure/rules/behaviorReuseRules');
+    const source = ts.createSourceFile(f.paths.screen, f.read(f.paths.screen), ts.ScriptTarget.Latest, true);
+    const method = source.statements.filter(ts.isClassDeclaration).flatMap(owner => owner.members.filter(ts.isMethodDeclaration))
+        .find(item => item.name.getText(source) === 'verify');
+    const binding = { kind: 'step', className: 'CaseScreen', screenFile: f.paths.screen, stepFile: f.paths.steps,
+        methodName: 'verify', signature: 'verify(): Promise<boolean>', returnType: 'boolean',
+        sourceHash: crypto.createHash('sha256').update(method.getText(source)).digest('hex'),
+        dependencies: {}, helpers: [], sequences: [1], catalogRevision: 'checkout-new', reason: 'Operación existente verificada' };
+    const raw = { ...f.scenario, request: { ...f.scenario.request, scenarioRows: [] } };
+    const fresh = new DeterministicResolver(catalog).resolve(raw);
+    fresh.scenario.request.scenarioRows = [{ keyword: 'Then', text: 'el usuario observa el resultado', status: 'reused',
+        methodName: 'verify', actions: raw.actions, reuse: binding }];
+    const freshScreenPath = 'screenobjects/payment/fresh-candidate.screen.ts';
+    fresh.plan.files = f.plan.files.map(file => file.layer === 'screen' ? { ...file, path: freshScreenPath } : file);
+    fresh.scenario.request.scenarioRows[0].reuse = { ...binding, screenFile: freshScreenPath };
+    fresh.scenario.objective = freshScreenPath; // Literal QA text must never be remapped as a file reference.
+    fresh.plan.behaviorReuse = { schemaVersion: 1, catalogRevision: 'checkout-new',
+        metrics: { functionalRows: 1, reusedSteps: 1, reusedMethods: 0, newImplementations: 0, coveredActions: 1 },
+        decisions: [{ text: 'el usuario observa el resultado', kind: 'step', method: 'verify', file: f.paths.screen, sequences: [1], reason: 'Contrato existente' }],
+        sameCase: [], observations: [] };
+    fresh.resolvedContext.elementDeclarations = [{ module: 'payment/case', file: f.paths.locators,
+        elements: [{ name: 'result', android: { type: 'ID', value: 'result' } }] }];
+    fresh.resolvedContext.frameworkAwareness = { decision: 'extend-existing', candidates: [],
+        exactStepDefinitions: [{ expression: '^el usuario observa el resultado$', file: f.paths.steps, scope: 'squad' }],
+        selectorCollisions: [{ sequence: 1, locatorName: 'result', file: f.paths.locators, module: 'payment/case', scope: 'squad' }] };
+    const builder = new AutomationPackageBuilder({ resolve: () => fresh }, undefined, undefined, undefined, f.root);
+    const result = builder.prepareRegeneration(f.recording, 'Usar main actualizado', raw);
+    const read = name => JSON.parse(fs.readFileSync(path.join(f.pkg, name)));
+    const packaged = read('scenario.json');
+    assert.equal(packaged.revision, raw.revision + 1);
+    assert.equal(packaged.objective, freshScreenPath);
+    assert.deepEqual(packaged.request.scenarioRows[0].reuse, binding);
+    assert.deepEqual(packaged.request.scenarioRows[0].actions, [{ sequence: 1 }], 'el paquete conserva referencias sin duplicar evidencia');
+    assert.deepEqual(read('reuse-context.json').behaviorReuse, fresh.plan.behaviorReuse);
+    assert.deepEqual(result.behaviorReuse, fresh.plan.behaviorReuse);
+    assert.deepEqual(read('reuse-context.json').elements, fresh.resolvedContext.elementDeclarations);
+    assert.equal(read('resolved-context.json').planId, result.planId);
+    assert.equal(read('collision-report.json').reservedStepExpressions[0].reason, 'Step reutilizado: se copia literal en el Feature y no se define de nuevo.');
+    const report = { errors: [], warnings: [] };
+    behaviorReuseRules({ scenario: packaged, response: { ...f.response, files: f.response.files.map(file => file.layer === 'screen'
+        ? { ...file, content: file.content.replace('=== "5"', '=== "9"') } : file) } }, report);
+    assert.ok(report.errors.some(error => error.code === 'reuse-implementation-changed'), 'el validador ya no pierde los vínculos al regenerar');
+    const historical = f.history.events().find(event => event.kind === 'generation-result');
+    assert.equal(historical.result, 'failed', 'la nueva evidencia no reescribe el fallo autónomo previo');
+    assert.deepEqual(read('baseline-response.json').files, f.response.files, 'se conserva el checkout QA como baseline');
+    // A second refinement without new recording actions must retain this evidence
+    // after reset too, even though the resolver is not invoked on that path.
+    builder.prepareRegeneration(f.recording, 'Segunda revisión QA');
+    assert.deepEqual(read('scenario.json').request.scenarioRows[0].reuse, binding);
+    assert.equal(read('resolved-context.json').planId, read('generation-plan.json').planId);
+    assert.deepEqual(read('reuse-context.json').elements, fresh.resolvedContext.elementDeclarations);
+});

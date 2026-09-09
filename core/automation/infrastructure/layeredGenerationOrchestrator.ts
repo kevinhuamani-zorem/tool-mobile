@@ -106,6 +106,7 @@ import { buildScreenApi, validateScreenApi } from './layered/screenApi';
 import { assertLayeredEnvelope, readLayeredOutput } from './layered/outputEnvelope';
 import { assembleActionTrace } from './layered/traceAssembly';
 import { RecoverableDraftStore } from './layered/recoverableDraft';
+import { captureRepairBaseline, writeRepairBaseline, verifyRepairBaseline, recordRepairComparison, routeSharedMethodRepair } from './layered/repairBaseline';
 
 export type {
     LayeredGenerationOptions,
@@ -187,7 +188,7 @@ export class LayeredGenerationOrchestrator {
         const finishFeedback = (next: LayeredRepairFeedback, attempt: number) => {
             for (const [role, key] of [['behavior-author', 'behavior'], ['interaction-author', 'interaction']] as const) {
                 const file = path.join(agentsRoot, LAYERED_GENERATION_AGENTS[role].directory, 'repair-feedback.json');
-                if (fs.existsSync(file)) writeJsonUtf8(file, {
+                if (fs.existsSync(file)) writeJsonUtf8(path.join(path.dirname(file), 'repair-outcome.json'), {
                     schemaVersion: 1, owner: 'Derek', assignee: LAYERED_GENERATION_AGENTS[role].name,
                     attempt, status: next[key].length ? 'requires-qa' : 'accepted', errors: next[key],
                 });
@@ -270,6 +271,7 @@ export class LayeredGenerationOrchestrator {
                         const responseFile = await this.runIntegration(root, agentsRoot, plan, behavior, interaction,
                             options, stages, attempt, attempt > 0 ? feedback : undefined, attempt < MAX_LAYERED_REPAIR_ATTEMPTS);
                         if (!next.all.length) {
+                            if (attempt > 0) recordRepairComparison(root, plan, feedback, next);
                             recordEvaluationPass(root, attempt === 0 ? 1 : 2, true, next);
                             finishFeedback(next, attempt);
                             promoteAuthorCache(behavior, behaviorCache);
@@ -286,6 +288,8 @@ export class LayeredGenerationOrchestrator {
                         if (stage) { stage.state = attempt === 0 ? 'repairing' : 'failed'; stage.error = issues.all.join(' | '); options.onStageChange?.({ ...stage }); }
                     }
                 }
+                if (attempt > 0) recordRepairComparison(root, plan, feedback, next);
+                if (attempt === 0) routeSharedMethodRepair(root, plan, next, behavior);
                 recordEvaluationPass(root, attempt === 0 ? 1 : 2, false, next);
                 feedback = next;
                 if (attempt === MAX_LAYERED_REPAIR_ATTEMPTS) finishFeedback(next, attempt);
@@ -466,9 +470,12 @@ export class LayeredGenerationOrchestrator {
     ): Promise<string> {
         const identity = LAYERED_GENERATION_AGENTS[role];
         const stageDirectory = path.join(agentsRoot, identity.directory);
+        const previousAuthorResult = captureRepairBaseline(path.join(stageDirectory, ROLE_OUTPUTS[role]), plan, role, attempt);
         new AutomationHistoryStore(packageDirectory).captureFile(path.join(stageDirectory, ROLE_OUTPUTS[role]), 'agent', `${role}:before-stage-reset`, attempt === 0 ? 1 : 2);
         fs.rmSync(stageDirectory, { recursive: true, force: true });
         fs.mkdirSync(stageDirectory, { recursive: true });
+        const repairBaseline = writeRepairBaseline(stageDirectory, previousAuthorResult, plan, role, repairErrors);
+        for (const item of repairBaseline || []) new AutomationHistoryStore(packageDirectory).captureFile(item.file, 'recorder', `${role}:repair-input`, 2);
         const judgment = gapJudgment(packageDirectory, plan);
         for (const file of ROLE_INPUT_FILES[role]) {
             copyRoleInput(packageDirectory, stageDirectory, file, role, judgment);
@@ -524,6 +531,7 @@ export class LayeredGenerationOrchestrator {
             ...(dependencyFile ? [path.join(stageDirectory, path.basename(dependencyFile))] : []),
             ...(dependencyFile ? [path.join(stageDirectory, 'lorem-handoff.json')] : []),
             ...(repairErrors.length ? [path.join(stageDirectory, 'repair-feedback.json')] : []),
+            ...(repairBaseline?.map(item => item.file) || []),
         ]
             .map(file => artifact(file, stageDirectory));
         const contextBytes = inputArtifacts.reduce((total, item) => total + item.bytes, 0);
@@ -560,7 +568,7 @@ export class LayeredGenerationOrchestrator {
             artifacts: inputArtifacts,
         });
         writeJsonUtf8(path.join(stageDirectory, 'result.schema.json'), layeredResultSchema(role));
-        const prompt = partialPrompt(role, ROLE_OUTPUTS[role], repairErrors.length > 0);
+        const prompt = partialPrompt(role, ROLE_OUTPUTS[role], attempt > 0);
         fs.writeFileSync(path.join(stageDirectory, 'agent-task.md'), prompt, 'utf8');
         writeAgentProfile(stageDirectory, role, prompt);
         writeHandoff(path.join(stageDirectory, 'input-handoff.json'), {
@@ -673,6 +681,7 @@ export class LayeredGenerationOrchestrator {
         report.timedOut = Boolean(run.timedOut);
         report.budgetWarnings = budgetWarnings(identity.name, budget, report.contextBytes!, run.durationMs);
         new AutomationHistoryStore(packageDirectory).captureFile(outputFile, 'agent', `${role}:provider-output`, attempt === 0 ? 1 : 2);
+        verifyRepairBaseline(repairBaseline);
         if (!run.success || !fs.existsSync(outputFile)) {
             report.state = 'failed';
             report.error = run.errorMessage || `No se generó ${ROLE_OUTPUTS[role]}.`;
@@ -942,7 +951,7 @@ export class LayeredGenerationOrchestrator {
                 });
             }
         }
-        const officialValidation = this.responseValidator?.(packageDirectory, response);
+        const officialValidation = this.responseValidator?.(packageDirectory, response, attempt === 0 ? 1 : 2);
         if (officialValidation && !officialValidation.valid) {
             fileContractErrors.push(...officialValidation.errors.map(error => ({ code: error.code, message: error.message, file: error.file })));
         }

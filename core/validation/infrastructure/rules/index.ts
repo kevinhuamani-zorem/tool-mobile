@@ -34,3 +34,5 @@ export { stepDefinitionExpressions } from './gherkinInspection';
 export { emptyOnRecordedPlatform } from './screenInspection';
 
 export { testDataRules } from './testDataRules';
+
+export { caseIdentityRules } from './caseIdentityRules';

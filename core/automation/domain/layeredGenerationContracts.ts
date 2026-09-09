@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { AgentGeneratedFile, TestDesignReview } from '../contracts';
+import type { AgentGeneratedFile, AutomationAgentResponse, TestDesignReview } from '../contracts';
 
 export const LAYERED_GENERATION_SCHEMA_VERSION = 1;
 
@@ -132,6 +132,11 @@ export interface RecoverableLayeredDraft {
     files: Array<AgentGeneratedFile & { origin: 'agent' | 'deterministic' | 'qa'; pass?: 1 | 2 }>;
     missingLayers: AgentGeneratedFile['layer'][];
     diagnostics: string[];
+    /** Associations from one identified response, bound to recovered bytes. Not QA approval. */
+    responseMetadata?: {
+        response: Omit<AutomationAgentResponse, 'files'>;
+        files: Array<Pick<AgentGeneratedFile, 'layer' | 'path'> & { sha256: string }>;
+    };
 }
 
 export interface LayeredGenerationRunReport {

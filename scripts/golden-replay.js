@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { projectPaths, configureWorkspacePaths } = require('../dist/core/workspace');
-const { ApprovedGoldenStore, GoldenSnapshotReader, goldenDatasetRoot, goldenPath, readGoldenCase, goldenBaselineSnapshotPort, goldenPlanProjection, DeterministicResolver } = require('../dist/core/automation');
+const { ApprovedGoldenStore, GoldenSnapshotReader, goldenDatasetRoot, goldenPath, readGoldenCase, goldenBaselineSnapshotPort, goldenPlanProjection, goldenRegenerationControls, DeterministicResolver } = require('../dist/core/automation');
 const { AutomationResponseValidator } = require('../dist/core/validation');
 
 function replayGoldenDataset({ root = goldenDatasetRoot(), frameworkRoot = projectPaths.frameworkRoot } = {}) {
@@ -48,12 +48,14 @@ function replayGoldenDataset({ root = goldenDatasetRoot(), frameworkRoot = proje
             const discrepancies = codes.filter(code => (counts[code] || 0) !== (golden.manifest.validation.errorCounts[code] || 0));
             results.push({ goldenId: entry.goldenId, revisionId: entry.revisionId, versionHash: entry.versionHash, frameworkCommit: commit,
                 status: planEquivalent && validation.valid === golden.manifest.validation.valid && !discrepancies.length ? 'matched' : 'discrepant',
-                planEquivalent, recordedValidation: golden.manifest.validation, actualValidation: { valid: validation.valid, errorCounts: counts }, discrepancies,
+                planEquivalent, planScope: 'deterministic-resolver-decisions',
+                recordedRegenerationControls: goldenRegenerationControls(golden.plan, golden.gaps),
+                replayRegenerationControls: goldenRegenerationControls(plan.plan, plan.unresolvedContext.gaps), recordedValidation: golden.manifest.validation, actualValidation: { valid: validation.valid, errorCounts: counts }, discrepancies,
                 qaApproval: golden.manifest.approval, functionalVerification: 'not-evaluated' });
         } catch (error) { results.push({ goldenId: entry.goldenId, versionHash: entry.versionHash, status: 'unreproducible', reason: error.message }); }
         finally { configureWorkspacePaths(original); if (temporary) fs.rmSync(temporary, { recursive: true, force: true }); }
     }
-    return { schemaVersion: 1, replayVersion: 'golden-replay/v1', status: index.issues.length ? 'requires-review' : !results.length ? 'not-evaluated'
+    return { schemaVersion: 1, replayVersion: 'golden-replay/v2', status: index.issues.length ? 'requires-review' : !results.length ? 'not-evaluated'
         : results.every(result => result.status === 'matched') && !index.issues.length ? 'matched' : 'requires-review',
         corpusSize: results.length, fingerprint: index.fingerprint, issues: index.issues, results };
 }

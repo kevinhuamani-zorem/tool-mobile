@@ -496,3 +496,39 @@ test('completar rechaza un bloque distinto del mapping autorizado', t => {
         },
     }, ctx.root), AdditivePatchError);
 });
+
+
+test('descartes de Screen comparan sintaxis y detectan cambios de método y TypeLocator', () => {
+    const { discardedScreenChanges } = require('../dist/core/automation');
+    const baseline = `class Contacts {
+        private get allowButton() { return helper.get(TypeLocator.ANDROID, 'permission'); }
+        public async inputNumberToYapear(value: string) { await this.tap(this.btnselectNumber); }
+    }`;
+    const proposed = baseline
+        .replace('TypeLocator.ANDROID', 'TypeLocator.XPATH')
+        .replace('this.btnselectNumber', 'this.selectDestinationNumberButton');
+    const diagnostics = discardedScreenChanges('contacts.screen.ts', baseline, proposed, baseline);
+    assert.deepEqual(diagnostics.map(item => [item.code, item.symbol, item.symbolKind]), [
+        ['shared-symbol-change-discarded', 'allowButton', 'getter'],
+        ['shared-symbol-change-discarded', 'inputNumberToYapear', 'method'],
+    ]);
+    assert.ok(diagnostics.every(item => item.file === 'contacts.screen.ts' && item.layer === 'screen'));
+    assert.deepEqual(discardedScreenChanges('contacts.screen.ts', baseline, proposed, proposed), [],
+        'un cambio que sí está en los bytes finales no se reporta como descartado');
+});
+
+test('descartes ignoran formato, comentarios y comillas, sin ignorar texto de selector', () => {
+    const { discardedScreenChanges } = require('../dist/core/automation');
+    const baseline = `class Screen { public async open() { await this.tap('some text'); } }`;
+    const formatted = `class Screen {
+        // comentario del agente
+        public async open ( ) {
+            await this.tap("some text");
+        }
+        public async added() { await this.open(); }
+    }`;
+    assert.deepEqual(discardedScreenChanges('screen.ts', baseline, formatted, baseline), []);
+    const changed = formatted.replace('some text', 'some  text');
+    assert.equal(discardedScreenChanges('screen.ts', baseline, changed, baseline).length, 1,
+        'los espacios dentro de un selector siguen siendo significativos');
+});

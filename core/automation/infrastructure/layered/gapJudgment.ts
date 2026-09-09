@@ -165,6 +165,7 @@ export function gapJudgment(packageDirectory: string, plan: GenerationPlan): Gap
  * feedback de reparacion: un error llega solo al agente que puede corregirlo.
  */
 export const BEHAVIOR_RULE_CODES = new Set([
+    'case-identity-unavailable', 'case-duplicate', 'framework-case-collision', 'acceptance-contract',
     'case-coverage-review', 'reuse-binding-mismatch', 'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
     'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
     // Cada linea del Feature resuelve a exactamente una definicion de todo
@@ -187,7 +188,7 @@ export const BEHAVIOR_RULE_CODES = new Set([
 ]);
 
 export const INTERACTION_RULE_CODES = new Set([
-    'reuse-implementation-changed',
+    'acceptance-date-range', 'reuse-implementation-changed',
     'recorded-text-assertion',
     'completion-duplicate', 'completion-file', 'completion-key', 'completion-occupied',
     'completion-platform', 'completion-sequence', 'completion-shape',

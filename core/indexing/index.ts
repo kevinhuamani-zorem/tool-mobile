@@ -12,6 +12,6 @@ export * from './infrastructure/recorderCodeGraph';
 export * from './infrastructure/locatorStrategy';
 export * from './infrastructure/reuseAnalyzer';
 
-export { stepDelegation } from './domain/behaviorContract';
+export { stepDelegation, indexMethodBehaviors } from './domain/behaviorContract';
 
-export { verifiedFrameworkHelpers } from './infrastructure/behaviorHelpers';
+export { verifiedFrameworkHelpers, helperBodyHash } from './infrastructure/behaviorHelpers';

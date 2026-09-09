@@ -70,7 +70,7 @@ export function createGoldenFeature({ api }) {
         const observations = [...(p.diagnostics.errors || []), ...(p.diagnostics.warnings || []), ...(p.pending || [])];
         el('goldenDiagnosticsSummary').textContent = `Comprobaciones del Recorder · ${observations.length ? `${observations.length} observaciones` : p.diagnostics.valid ? 'Sin observaciones' : 'Revisar resultado'}`;
         el('goldenDiagnosticsDetails').open = false;
-        el('goldenDiagnostics').textContent = `Estructura: ${p.diagnostics.valid ? 'válida' : 'con observaciones'} · Calidad ${p.diagnostics.qualityScore}\n`
+        el('goldenDiagnostics').textContent = `Estructura: ${p.diagnostics.valid ? 'válida' : 'con observaciones'} · Diagnóstico técnico ${p.diagnostics.qualityScore} (no mide ejecución funcional)\n`
             + observations.map(item => item.message || String(item)).join('\n') + '\nVerificación funcional automática: no reportada. El resultado en dispositivo lo declara el QA.';
         el('goldenExecution').value = p.executionDeclaration || 'not-run'; el('goldenNotes').value = p.notes || ''; el('goldenUsage').value = p.usage || 'reference'; usageHelp();
     }

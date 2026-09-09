@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { projectPaths } from '../../../../core/workspace';
+import { acceptanceArtifactHash } from '../../../../core/automation/contracts';
 import { AutomationHistoryStore, acceptedGoldenFiles, goldenDatasetRoot, goldenCaseUsage, saveGoldenCase, ApprovedGoldenStore, listLegacyGoldenCases, readGoldenCase, goldenHash, goldenPath } from '../../../../core/automation';
 import type { GoldenExecutionStatus, AcceptedGoldenFiles, AutomationValidation, AutomationScenario, GenerationPlan } from '../../../../core/automation';
 import { RecoveryWorkspace, recoveryGitContext } from '../../../../core/automation';
@@ -111,7 +112,9 @@ export class GoldenCaseReview {
         try {
             const history = new AutomationHistoryStore(this.deps.packageDirectory);
             history.append({ ...history.identity()!, kind: 'qa-verification', origin: 'qa', result: 'approved', stage: 'golden-publication' }, [
-                { name: 'golden-publication.json', content: JSON.stringify({ goldenId: saved.manifest.goldenId, versionHash: saved.manifest.versionHash, approval: saved.manifest.approval }) },
+                { name: 'golden-publication.json', content: JSON.stringify({ goldenId: saved.manifest.goldenId, versionHash: saved.manifest.versionHash, revisionId: pending.revisionId,
+                    artifactHash: acceptanceArtifactHash(pending.accepted.response.files), executed: input.executed || 'not-run',
+                    qaCorrected: pending.accepted.edited || pending.source === 'framework-recovery', approval: saved.manifest.approval }) },
             ]);
         } catch { historyWarning = 'Aprobación publicada; no se pudo actualizar la vista del historial de la grabación.'; }
         return { ...saved, historyWarning, appliedEdits: [] };

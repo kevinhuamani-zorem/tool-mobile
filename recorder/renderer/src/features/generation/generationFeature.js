@@ -9,6 +9,7 @@
 // `invalidatePreview`) en vez de duplicarlos.
 
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
+import { renderAcceptanceAssessment } from './assessmentSummary.js';
 
 /**
  * @param {object} deps
@@ -58,6 +59,9 @@ export function createGenerationFeature(deps) {
     const lblGenerationFileCount = document.getElementById('lblGenerationFileCount');
     const reviewValidationIcon = document.getElementById('reviewValidationIcon');
     const reviewValidationTitle = document.getElementById('reviewValidationTitle');
+    const acceptanceAssessment = document.getElementById('acceptanceAssessment');
+    let currentAssessment;
+    let currentTechnicalValid;
     const goldenDatasetPanel = document.getElementById('goldenDatasetPanel');
     const cmbGoldenExecution = document.getElementById('cmbGoldenExecution');
     const txtGoldenNotes = document.getElementById('txtGoldenNotes');
@@ -107,7 +111,8 @@ export function createGenerationFeature(deps) {
             caseId: txtCaseId.value.trim(),
             pathType: cmbPathType.value,
             tag: txtFeatureTag.value.trim(),
-            dataName: txtDataName.value.trim()
+            dataName: txtDataName.value.trim(),
+            acceptanceChecks: (state.acceptanceChecks || []).map(check => ({ ...check, description: check.description.trim() }))
         };
     }
 
@@ -126,6 +131,9 @@ export function createGenerationFeature(deps) {
 
     function invalidatePreview() {
         state.lastPreviewToken = '';
+        currentAssessment = undefined;
+        currentTechnicalValid = undefined;
+        if (acceptanceAssessment) acceptanceAssessment.style.display = 'none';
         if (isAutomationWorkflow()) btnGenerate.disabled = true;
         state.previewDocuments = [];
         state.activePreviewDocumentIndex = -1;
@@ -224,6 +232,19 @@ export function createGenerationFeature(deps) {
         const document = state.previewDocuments[state.activePreviewDocumentIndex];
         if (!document) return;
         const modified = document.content !== document.originalContent;
+        if (isAutomationWorkflow()) {
+            const edited = state.previewDocuments.some(item => item.content !== item.originalContent);
+            renderAcceptanceAssessment(acceptanceAssessment, currentAssessment, edited);
+            if (edited) {
+                if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación técnica: pendiente de revalidar';
+                if (reviewValidationIcon) reviewValidationIcon.textContent = '↻';
+                if (lblGenerationFileCount) lblGenerationFileCount.textContent = 'Hay archivos editados. Revalida para comprobar esta versión.';
+            } else if (currentTechnicalValid !== undefined) {
+                if (reviewValidationTitle) reviewValidationTitle.textContent = currentTechnicalValid ? 'Validación técnica: sin errores' : 'Validación técnica: con observaciones';
+                if (reviewValidationIcon) reviewValidationIcon.textContent = currentTechnicalValid ? '✓' : '⚠';
+                if (lblGenerationFileCount) lblGenerationFileCount.textContent = `${state.previewDocuments.length} archivo(s) comprobados${currentTechnicalValid ? '' : ' con observaciones'}. El resultado funcional se verifica por separado.`;
+            }
+        }
         const validation = validatePreviewDocument(document);
         if (preparedDiffPanel && preparedDiffContent) {
             preparedDiffPanel.style.display = document.before !== undefined ? 'block' : 'none';
@@ -400,6 +421,8 @@ export function createGenerationFeature(deps) {
             ? new Map(state.previewDocuments.map(document => [document.path, document.content]))
             : new Map();
         state.lastPreviewToken = result.previewToken || '';
+        currentAssessment = result.validation?.assessment;
+        currentTechnicalValid = valid;
         const proposedDocuments = [
             ...(result.preview.featurePath ? [{ path: result.preview.featurePath, content: result.preview.featureContent }] : []),
             ...(result.preview.locatorPath ? [{ path: result.preview.locatorPath, content: result.preview.locatorContent }] : []),
@@ -429,12 +452,12 @@ export function createGenerationFeature(deps) {
         btnGenerate.textContent = 'Exportar al framework';
         if (valid) {
             if (reviewValidationIcon) reviewValidationIcon.textContent = '✓';
-            if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación correcta';
-            lblGenerationFileCount.textContent = `${state.previewDocuments.length} archivo(s) validados al 100%.`;
-            setGenerate(`✓ Propuesta válida · ${state.previewDocuments.length} capas · lista para revisión`, 'ok');
+            if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación técnica: sin errores';
+            lblGenerationFileCount.textContent = `${state.previewDocuments.length} archivo(s) comprobados. El resultado funcional se verifica por separado.`;
+            setGenerate(`✓ Revisión técnica completada · ${state.previewDocuments.length} archivo(s) disponibles`, 'ok');
         } else {
             if (reviewValidationIcon) reviewValidationIcon.textContent = '⚠';
-            if (reviewValidationTitle) reviewValidationTitle.textContent = 'Borrador con observaciones';
+            if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación técnica: con observaciones';
             const missing = result.missingLayers?.length ? ` · Capas faltantes: ${result.missingLayers.join(', ')}` : '';
             const sources = [...new Set(Object.values(result.preview.provenance || {}).map(item =>
                 item.origin === 'deterministic' ? 'borrador determinista' : item.origin === 'qa' ? 'corrección QA' : `agente, pasada ${item.pass || '?'}`))];
@@ -443,6 +466,9 @@ export function createGenerationFeature(deps) {
             const diagnostics = (result.validation?.errors || []).map(error => error.message).join('\n');
             setGenerate(`⚠ Borrador disponible para revisión. Puedes exportar los archivos disponibles y corregirlos en el framework.${diagnostics ? `\n${diagnostics}` : ''}`, 'err');
         }
+        renderAcceptanceAssessment(acceptanceAssessment, currentAssessment,
+            state.previewDocuments.some(item => item.content !== item.originalContent));
+        if (state.previewDocuments.some(item => item.content !== item.originalContent)) updatePreviewDocumentState();
         if (result.exportBlockers?.length) setGenerate(`No se puede escribir sobre el destino: ${result.exportBlockers.join(' | ')}`, 'err');
     }
 
@@ -499,8 +525,7 @@ export function createGenerationFeature(deps) {
         });
 
         on(btnPreview, 'click', async () => {
-            if (isAutomationWorkflow() && deps.hasInvalidAutomationDraft()) await revalidateReviewedAutomation();
-            else if (isAutomationWorkflow()) await importAutomationResponse(false);
+            if (isAutomationWorkflow()) await revalidateReviewedAutomation();
             else await refreshGenerationPreview();
         });
 
@@ -522,12 +547,16 @@ export function createGenerationFeature(deps) {
                     'ok'
                 );
                 state.lastPreviewToken = '';
+                currentAssessment = result.validation?.assessment;
+                currentTechnicalValid = result.validation?.valid;
                 btnGenerate.disabled = true;
                 state.previewDocuments.forEach(document => {
                     document.originalContent = document.content;
                     document.generated = true;
                 });
                 renderPreviewFileTree();
+                renderAcceptanceAssessment(acceptanceAssessment, currentAssessment);
+                updatePreviewDocumentState();
                 showGoldenDatasetPanel(true);
                 return;
             }

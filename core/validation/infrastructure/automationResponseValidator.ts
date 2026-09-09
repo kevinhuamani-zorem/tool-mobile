@@ -1,3 +1,5 @@
+import { acceptanceCriteriaRules, buildAutomationAssessment } from './rules/acceptanceCriteriaRules';
+import { caseIdentityRules } from './rules/caseIdentityRules';
 import { behaviorReuseRules } from './rules/behaviorReuseRules';
 import { recordedLocatorRules } from './rules/recordedLocatorRules';
 /**
@@ -101,6 +103,7 @@ export class AutomationResponseValidator {
             const absolute = path.join(projectPaths.frameworkRoot, file.path);
             if (fs.existsSync(absolute)) updateBaselines.set(file.layer, fs.readFileSync(absolute, 'utf-8'));
         }
+        caseIdentityRules({ ...context, updateBaselines, reuseAnalyzer: this.reuseAnalyzer }, report);
         const proposedScreen = response.files.find(file => file.layer === 'screen')?.content || '';
         const baselineScreen = updateBaselines.get('screen');
         const baselineScreenNames = new Set(declaredIdentifiers({ screen: baselineScreen || '' })
@@ -143,6 +146,7 @@ export class AutomationResponseValidator {
                 errors.push({ code: 'preview', message: error.message });
             }
         }
+        const criteria = acceptanceCriteriaRules(context, report);
         const unique = errors.filter((error, index) =>
             errors.findIndex(candidate => candidate.code === error.code && candidate.message === error.message && candidate.file === error.file) === index
         );
@@ -150,6 +154,7 @@ export class AutomationResponseValidator {
         const affectedFiles = [...new Set(unique.map(error => error.file).filter(Boolean) as string[])];
         return {
             valid,
+            assessment: buildAutomationAssessment(context, unique, criteria),
             qualityScore: valid ? 100 : Math.max(0, 100 - unique.length * 10),
             errors: unique,
             warnings: report.warnings,

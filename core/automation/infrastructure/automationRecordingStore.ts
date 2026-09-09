@@ -3,7 +3,7 @@ import { AutomationHistoryStore } from './automationHistoryStore';
 import fs from 'fs';
 import path from 'path';
 import { AutomationScenario, AUTOMATION_PIPELINE_VERSION, AUTOMATION_SCHEMA_VERSION } from '../contracts';
-import { GenerationRequest, MobilePlatform } from '../contracts';
+import { GenerationRequest, MobilePlatform, parseAcceptanceCriteria } from '../contracts';
 import { RecordedStep, recordedStepContext, parseTextAssertion } from '../contracts';
 import { projectPaths } from '../../workspace';
 import { frameworkLocator, recordedLocator } from '../../indexing';
@@ -364,6 +364,7 @@ export class AutomationRecordingStore {
         acceptanceCriteria: string;
         environment: string;
     }): { scenario: AutomationScenario; directory: string } {
+        const acceptanceChecks = parseAcceptanceCriteria(input.request.acceptanceChecks, input.actions);
         const context = {
             squad: input.request.squad,
             platform: input.request.platform,
@@ -375,7 +376,7 @@ export class AutomationRecordingStore {
         );
         const createdAt = new Date().toISOString();
         const request = {
-            ...input.request, createdAt, actions,
+            ...input.request, ...(acceptanceChecks === undefined ? {} : { acceptanceChecks }), createdAt, actions,
             scenarioRows: input.request.scenarioRows?.map(row => ({
                 ...row, actions: (row.actions || []).map((step, index) => prepareRecordedStep(step, step.sequence || index + 1, input.request.platform)),
             })),

@@ -1,0 +1,10 @@
+{
+  "movementsAndroid": {
+    "movementDates": "new UiSelector().textMatches(\"^(Hoy|Ayer|\\d{1,2} \\w{3}\\.? \\d{4}).*\")",
+    "last15DaysOption": "new UiSelector().text(\"Útimos 15 días\")"
+  },
+  "movementsIos": {
+    "movementDates": "",
+    "last15DaysOption": ""
+  }
+}

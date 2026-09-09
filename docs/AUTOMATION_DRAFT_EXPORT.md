@@ -20,7 +20,9 @@ Un conjunto vacío no tiene token. No se crean archivos vacíos para completar c
 `AutomationApplier.prepare` calcula el contenido final antes de mostrarlo. En un
 archivo compartido incorpora únicamente adiciones y completions autorizados por
 el plan; conserva las implementaciones previas. Un update sin adiciones conserva
-el baseline, incluso si la propuesta intenta reemplazarlo. El QA ve el resultado
+el baseline, incluso si la propuesta intenta reemplazarlo. Cuando una modificación de método o getter compartido se descarta, el preview
+muestra `shared-symbol-change-discarded` con el símbolo afectado. No se sobrescribe
+el método previo ni se bloquea la exportación por esa advertencia. El QA ve el resultado
 final y el diff antes de exportar. Si una edición del preview no puede preservarse
 por el merge aditivo, se requiere revalidar y revisar ese resultado final.
 
@@ -67,3 +69,25 @@ recibos parciales, historial separado, preservación de código compartido, ruta
 symlinks, cambios concurrentes y el botón enviando código inválido al IPC.
 `preparedAutomation.test.js` verifica rollback ante la segunda escritura y ante
 un fallo al registrar el evento final, además de completions externos.
+
+## Trazas y validación de los archivos preparados
+
+La recuperación conserva `actionTrace`, `resolutions` y `completions` cuando
+pertenecen a una entrega identificada cuyos archivos coinciden exactamente con
+el borrador. `layered-draft.json` enlaza esa metadata con hashes por archivo,
+sin duplicar el contenido de las capas. Una combinación de entregas distintas,
+un ID ajeno o bytes diferentes no hereda asociaciones de otra respuesta.
+El borrador parcial sigue disponible; las asociaciones ausentes se diagnostican.
+
+El primer preview recuperado valida los bytes posteriores al merge y compila
+su overlay. Revalidar, editar y exportar conservan las asociaciones como entrada
+a esa validación; no certifican que sigan siendo correctas tras una edición.
+El historial captura el resultado preparado y su diagnóstico. Un fallo del
+evaluador se informa como `draft-validation`, manteniendo la exportación del
+conjunto que ya superó las comprobaciones de rutas y escritura.
+
+Antes de agotar la reparación automática, la integración también prepara y
+valida los archivos finales. Si una acción depende de modificar un método
+compartido, el feedback llega a ambos autores: Lorem propone una API nueva
+para el caso y ajusta los Steps; Zorem la implementa conservando el método
+anterior. La reconciliación de correcciones QA autorizadas mantiene su flujo.

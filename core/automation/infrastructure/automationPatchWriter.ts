@@ -63,6 +63,16 @@ export interface PatchOutcome {
 
 export interface PreparedPatch extends PatchOutcome { before: string; content: string }
 
+/** A quality warning; shared implementations remain protected during export. */
+export interface PreparationDiagnostic {
+    code: 'shared-symbol-change-discarded';
+    file: string;
+    layer: 'screen';
+    symbol: string;
+    symbolKind: 'getter' | 'method';
+    message: string;
+}
+
 export class AdditivePatchError extends Error {}
 
 /**
@@ -345,6 +355,45 @@ export function locatorAdditions(current: string, proposed: string): LocatorAddi
             android: String(after.parsed[after.android!][name] ?? ''),
             ios: String(after.parsed[after.ios!]?.[name] ?? ''),
         }));
+}
+
+function syntaxIdentity(node: ts.Node): unknown {
+    const children: unknown[] = [];
+    node.forEachChild(child => { children.push(syntaxIdentity(child)); });
+    const text = ts.isIdentifier(node) || ts.isPrivateIdentifier(node)
+        || ts.isLiteralExpression(node) || ts.isTemplateLiteralToken(node) ? node.text : undefined;
+    return [node.kind, text, children];
+}
+
+function screenMembers(content: string) {
+    const source = ts.createSourceFile('screen.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const declaration = source.statements.find(ts.isClassDeclaration);
+    const members = new Map<string, { kind: 'getter' | 'method'; identity: string }>();
+    for (const member of declaration?.members || []) {
+        if (!member.name || !ts.isIdentifier(member.name)) continue;
+        const kind = ts.isGetAccessorDeclaration(member) ? 'getter' : ts.isMethodDeclaration(member) ? 'method' : undefined;
+        if (kind) members.set(member.name.text, { kind, identity: JSON.stringify(syntaxIdentity(member)) });
+    }
+    return members;
+}
+
+/** Report edits the additive merge did not apply, using the actual prepared bytes. */
+export function discardedScreenChanges(file: string, current: string, proposed: string, prepared: string): PreparationDiagnostic[] {
+    const previous = screenMembers(current);
+    const next = screenMembers(prepared);
+    const diagnostics: PreparationDiagnostic[] = [];
+    for (const [symbol, attempted] of screenMembers(proposed)) {
+        const baseline = previous.get(symbol);
+        if (!baseline || attempted.identity === baseline.identity || next.get(symbol)?.identity === attempted.identity) continue;
+        const label = attempted.kind === 'getter' ? 'getter' : 'método';
+        diagnostics.push({ code: 'shared-symbol-change-discarded', file, layer: 'screen', symbol,
+            symbolKind: attempted.kind,
+            message: `El ${label} compartido ${symbol} conserva su implementación del framework; ` +
+                'la modificación propuesta no se aplicó. Crea un método o getter nuevo y conecta el caso a él, ' +
+                'o recupera una revisión autorizada por QA para modificar el existente. Revisa los archivos preparados.',
+        });
+    }
+    return diagnostics;
 }
 
 export function screenAdditions(current: string, proposed: string): { getters: MemberAddition[]; methods: MemberAddition[]; imports: string[] } {

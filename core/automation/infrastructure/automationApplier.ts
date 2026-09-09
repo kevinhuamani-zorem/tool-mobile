@@ -15,6 +15,8 @@ import {
     AutomationPatchWriter,
     PatchOutcome,
     PreparedPatch,
+    PreparationDiagnostic,
+    discardedScreenChanges,
     featureAdditions,
     locatorAdditions,
     screenAdditions,
@@ -27,6 +29,7 @@ export interface AdditiveUpdateResult {
     /** Rutas absolutas ya atendidas por el patch; la escritura completa las omite. */
     absolute: Set<string>;
     patches?: PreparedPatch[];
+    diagnostics?: PreparationDiagnostic[];
 }
 
 export interface PreparedAutomation {
@@ -35,6 +38,8 @@ export interface PreparedAutomation {
     preview: GeneratedPreview;
     files: Array<{ path: string; before: string | null; content: string }>;
     outcomes: PatchOutcome[];
+    /** Non-blocking differences between proposed and safely prepared shared code. */
+    diagnostics?: PreparationDiagnostic[];
     digest: string;
     conflicts?: string[];
     checkout?: ReturnType<typeof recoveryGitContext>;
@@ -160,6 +165,10 @@ export class AutomationApplier {
                 root, baselines,
             ));
         }
+        const diagnostics = screenPath && screenProposed && exists(screenPath)
+            ? discardedScreenChanges(screenPath, read(screenPath), screenProposed,
+                patches.find(patch => patch.file === screenPath)?.content ?? read(screenPath))
+            : [];
         if (!prepareOnly) {
             const written: PreparedPatch[] = [];
             try {
@@ -175,7 +184,7 @@ export class AutomationApplier {
         }
         const outcomes = patches.map(({ before, content, ...outcome }) => outcome);
         for (const outcome of outcomes) absolute.add(path.join(root, outcome.file));
-        return { outcomes, absolute, patches };
+        return { outcomes, absolute, patches, diagnostics };
     }
 
     /** Resolves every final byte before review; no target or registry writes. */
@@ -224,7 +233,8 @@ export class AutomationApplier {
                 .map(file => ({ path: this.target(file.path), content: file.content, before: file.before || '' })),
         };
         return { frameworkRoot: this.frameworkRoot, response: finalResponse, preview: finalPreview, files,
-            outcomes: patched.outcomes, digest: digest({ files, response: finalResponse }) };
+            outcomes: patched.outcomes, diagnostics: patched.diagnostics,
+            digest: digest({ files, response: finalResponse }) };
     }
 
     private prepareReconciled(scenario: AutomationScenario, plan: GenerationPlan, response: AutomationAgentResponse,
@@ -331,6 +341,7 @@ export class AutomationApplier {
             throw error;
         }
         return { managed, generated: prepared.preview, patched: { outcomes: prepared.outcomes,
+            diagnostics: prepared.diagnostics,
             absolute: new Set(prepared.outcomes.map(item => this.target(item.file))) } };
     }
 

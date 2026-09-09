@@ -15,7 +15,9 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { projectPaths } from '../../../workspace';
+import { frameworkContract, projectPaths } from '../../../workspace';
+import { writeInteractionLocatorTools } from '../../../validation';
+import { candidateAllowlist } from '../../contracts';
 
 export const INTERACTION_TOOLS_DIRECTORY = 'tools';
 export const INTERACTION_CHECK_SCRIPT = `${INTERACTION_TOOLS_DIRECTORY}/check.js`;
@@ -58,9 +60,20 @@ const readJson = file => JSON.parse(read(file));
 const resultFile = path.resolve(root, process.argv[2] || 'interaction-result.json');
 const problems = [];
 const notes = [];
+if (path.relative(root, resultFile).startsWith('..') || path.isAbsolute(path.relative(root, resultFile))) {
+    console.log('ERROR [path] El resultado debe permanecer dentro del paquete del autor.');
+    process.exit(1);
+}
 let result;
 try {
-    result = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+    const realRoot = fs.realpathSync(root);
+    const realResult = fs.realpathSync(resultFile);
+    const relative = path.relative(realRoot, realResult);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        console.log('ERROR [path] El resultado debe permanecer dentro del paquete del autor.');
+        process.exit(1);
+    }
+    result = JSON.parse(fs.readFileSync(realResult, 'utf8'));
 } catch (error) {
     console.log('ERROR ' + path.basename(resultFile) + ' ilegible: ' + error.message);
     process.exit(1);
@@ -176,8 +189,20 @@ if (screen && typescriptPath && fs.existsSync(typescriptPath)) {
         problems.push('[typescript-syntax] ' + path.basename(String(screen.path)) + ':' + (position.line + 1) + ':' + (position.character + 1)
             + ' ' + ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '));
     }
+    if (exists('tools/locator-evidence.json')) {
+        const { interactionLocatorProblems } = require('./interactionLocatorCheck.js');
+        const report = interactionLocatorProblems(readJson('tools/locator-evidence.json'), {
+            ...result, files, actionTrace: Array.isArray(result.actionTrace) ? result.actionTrace : [],
+        });
+        for (const problem of report.errors) problems.push('[' + problem.code + '] ' + problem.message);
+        notes.push(...report.notes);
+    }
 } else if (screen) {
-    notes.push('Sin typescript disponible: la sintaxis se comprobara al importar el resultado.');
+    if (exists('tools/locator-evidence.json') && (readJson('tools/locator-evidence.json').actions || []).some(action => action.primary)) {
+        problems.push('[locator-check-unavailable] TypeScript no está disponible para comprobar la fidelidad de locators. La integración debe verificarla; no se acredita un resultado local correcto.');
+    } else {
+        notes.push('Sin typescript disponible: la sintaxis se comprobará al importar el resultado.');
+    }
 }
 
 for (const note of notes) console.log('NOTA ' + note);
@@ -186,7 +211,7 @@ if (problems.length) {
     console.log(problems.length + ' problema(s). Corrige interaction-result.json y vuelve a ejecutar node tools/check.js');
     process.exit(1);
 }
-console.log('OK: Screen Object y Locators cumplen el contrato mecanico' + (typescriptPath ? ' y la sintaxis TypeScript.' : '.'));
+console.log('OK: comprobaciones locales de Screen Object y Locators aprobadas. La integración valida las cuatro capas y los archivos preparados.');
 `;
 }
 
@@ -200,6 +225,24 @@ export function writeInteractionTools(packageDirectory: string, stageDirectory: 
     const toolsDirectory = path.join(stageDirectory, INTERACTION_TOOLS_DIRECTORY);
     fs.mkdirSync(toolsDirectory, { recursive: true });
     fs.copyFileSync(contractSource, path.join(toolsDirectory, CONTRACT_FILE));
-    fs.writeFileSync(path.join(toolsDirectory, 'check.js'), interactionCheckScript(resolveSandboxTypescript()), 'utf8');
+    const typescriptPath = resolveSandboxTypescript();
+    const read = (name: string) => JSON.parse(fs.readFileSync(path.join(packageDirectory, name), 'utf8'));
+    const scenario = read('scenario.json');
+    const plan = read('generation-plan.json');
+    const contract = frameworkContract(projectPaths.frameworkRoot);
+    writeInteractionLocatorTools(toolsDirectory, {
+        platform: scenario.platform,
+        contract: {
+            locatorFactoryImport: contract.locatorFactoryImport, locatorFactorySymbol: contract.locatorFactorySymbol,
+            typeLocatorImport: contract.typeLocatorImport, typeLocatorSymbol: contract.typeLocatorSymbol,
+            locatorSignature: contract.locatorSignature,
+        },
+        actions: (scenario.actions || []).map((action: any) => ({
+            sequence: action.sequence, action: action.action,
+            ...(plan.resolutions || []).find((resolution: any) => resolution.sequence === action.sequence),
+            primary: candidateAllowlist(action, scenario.platform).find(candidate => candidate.primary),
+        })),
+    }, typescriptPath);
+    fs.writeFileSync(path.join(toolsDirectory, 'check.js'), interactionCheckScript(typescriptPath), 'utf8');
     return [INTERACTION_CHECK_SCRIPT, `${INTERACTION_TOOLS_DIRECTORY}/${CONTRACT_FILE}`];
 }

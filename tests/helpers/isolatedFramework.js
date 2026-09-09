@@ -1,7 +1,8 @@
 'use strict';
 // Framework fwk-mobile aislado para tests que escriben en el destino.
 //
-// Copia el estado COMMITEADO del framework padre (git archive HEAD) a una
+// Copia el estado COMMITEADO del framework padre (HEAD por defecto, o un
+// commit completo explícito para fixtures históricas) a una
 // carpeta temporal y apunta el workspace del recorder a ella, con su propio
 // runtime (recordings, memoria, registro de archivos generados). Asi el test
 // no depende de lo que el QA tenga sin commitear en su working tree y nunca
@@ -14,19 +15,27 @@ const { configureWorkspacePaths, projectPaths } = require('../../dist/core/works
 
 const SOURCE_FRAMEWORK_ROOT = projectPaths.frameworkRoot;
 
-function copyCommittedFramework(sourceRoot, targetRoot) {
+function copyCommittedFramework(sourceRoot, targetRoot, commit = 'HEAD') {
     fs.mkdirSync(targetRoot, { recursive: true });
-    const archive = execFileSync('git', ['-C', sourceRoot, 'archive', '--format=tar', 'HEAD'], {
+    const archive = execFileSync('git', ['-C', sourceRoot, 'archive', '--format=tar', commit], {
         maxBuffer: 256 * 1024 * 1024,
     });
     execFileSync('tar', ['-x', '-C', targetRoot], { input: archive });
 }
 
-function isolatedFramework(t, prefix = 'avr-isolated-') {
+function isolatedFramework(t, prefix = 'avr-isolated-', options = {}) {
+    const commit = options.commit || 'HEAD';
+    if (options.commit !== undefined) {
+        if (typeof options.commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(options.commit)) {
+            throw new Error('El framework de una fixture requiere el hash completo de un commit.');
+        }
+        // Fail explicitly when unavailable; never fall back to the current branch.
+        execFileSync('git', ['-C', SOURCE_FRAMEWORK_ROOT, 'cat-file', '-e', `${commit}^{commit}`], { stdio: 'pipe' });
+    }
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
     const frameworkRoot = path.join(root, 'framework');
     const runtimeRoot = path.join(root, 'recorder');
-    copyCommittedFramework(SOURCE_FRAMEWORK_ROOT, frameworkRoot);
+    copyCommittedFramework(SOURCE_FRAMEWORK_ROOT, frameworkRoot, commit);
     // Synthetic positive cases need real fixture names now that login data is validated.
     // This file exists only in this temporary checkout; no credentials or QA data are changed.
     const dataDirectory = path.join(frameworkRoot, 'resources/data/recorder-tests');

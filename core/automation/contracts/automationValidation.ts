@@ -1,3 +1,5 @@
+import type { AutomationAssessment } from './acceptanceCriteria';
+
 export interface ValidationIssue {
     code: string;
     message: string;
@@ -20,6 +22,8 @@ export interface ValidationRepairContext {
 
 export interface AutomationValidation {
     valid: boolean;
+    /** Verdict tied to these exact files; qualityScore is legacy technical telemetry. */
+    assessment?: AutomationAssessment;
     qualityScore: number;
     errors: ValidationIssue[];
     warnings: string[];

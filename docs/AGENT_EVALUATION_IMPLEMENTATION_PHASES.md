@@ -321,11 +321,18 @@ compatible; una prueba detecta si el error regresa; el reporte distingue el éxi
 autónomo del asistido y demuestra qué referencias recibió cada agente.
 
 Implementación técnica y pruebas: [contrato F7](AUTOMATION_GOLDEN_LEARNING.md).
-El chequeo de F7 encontró 0 golden aprobados y 7 intentos legacy sin evidencia
-suficiente: evaluación/replay `not-evaluated`. La limpieza posterior retiró esas
-ejecuciones antiguas y preservó las siete grabaciones. El dataset compartido
-en `tests/golden` sigue vacío hasta que QA apruebe los primeros casos. No se cierra la fase hasta curar
-el corpus y realizar el piloto/comparación reales de los puntos abiertos.
+El chequeo inicial de F7 encontró 0 golden aprobados y 7 intentos legacy sin
+evidencia suficiente. La limpieza posterior retiró esas ejecuciones y preservó
+las siete grabaciones. Al 2026-09-09, `tests/golden` contiene dos referencias
+aprobadas y ningún caso reservado. No se cierra la fase hasta curar el corpus y
+realizar el piloto/comparación reales de los puntos abiertos.
+
+La continuación incorpora `agents:pilot` (preparar, ejecutar y reportar),
+`validator:evaluate` y métricas de reutilización sobre el código final. El runner
+se verifica con un proveedor simulado; eso no marca completado el piloto real.
+Los criterios y señales separados están descritos en
+[el avance de las cuatro fases de continuación](AGENT_EVALUATION_PROGRESS.md)
+y [la guía de evaluación](AGENT_EVALUATION_PILOT.md).
 
 ## Verificación por fase y entrega
 
