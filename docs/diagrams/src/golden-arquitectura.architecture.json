@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Golden dataset — arquitectura integrada (F4 · F6 · F7)",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "aprobacion",
+        "label": "Aprobación del QA",
+        "focus": [
+          "goldenui",
+          "controller",
+          "review",
+          "store"
+        ],
+        "note": "El paquete se confina al recording y la aprobación es explícita, ligada al contenido revisado."
+      },
+      {
+        "id": "almacenamiento",
+        "label": "Autoridad y almacenamiento",
+        "focus": [
+          "store",
+          "git",
+          "reader",
+          "index"
+        ],
+        "note": "Las publicaciones encadenadas mandan; el índice es una proyección descartable."
+      },
+      {
+        "id": "consumo",
+        "label": "Consumo por los agentes",
+        "focus": [
+          "index",
+          "examples",
+          "session",
+          "agents",
+          "eval"
+        ],
+        "note": "Cada rol recibe lo suyo y puede pedir más por archivos, dentro de la misma invocación."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "goldenui",
+      "type": "frontend",
+      "label": "features/golden",
+      "sublabel": "GoldenModal",
+      "pos": [
+        30,
+        250
+      ],
+      "size": [
+        175,
+        64
+      ],
+      "tag": "sin dispositivo"
+    },
+    {
+      "id": "recovery",
+      "type": "backend",
+      "label": "FrameworkRecovery",
+      "sublabel": "revisión QA externa",
+      "pos": [
+        30,
+        460
+      ],
+      "size": [
+        175,
+        64
+      ],
+      "tag": "F4"
+    },
+    {
+      "id": "controller",
+      "type": "security",
+      "label": "GoldenCaseController",
+      "sublabel": "confina al recording",
+      "pos": [
+        320,
+        250
+      ],
+      "size": [
+        185,
+        64
+      ],
+      "tag": "5 canales"
+    },
+    {
+      "id": "review",
+      "type": "security",
+      "label": "GoldenCaseReview",
+      "sublabel": "token y aprobación",
+      "pos": [
+        320,
+        460
+      ],
+      "size": [
+        185,
+        64
+      ]
+    },
+    {
+      "id": "git",
+      "type": "external",
+      "label": "tests/golden",
+      "sublabel": "repo del recorder",
+      "pos": [
+        620,
+        40
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "tag": "en Git"
+    },
+    {
+      "id": "store",
+      "type": "backend",
+      "label": "ApprovedGoldenStore",
+      "sublabel": "publicaciones en cadena",
+      "pos": [
+        620,
+        250
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "tag": "autoridad"
+    },
+    {
+      "id": "reader",
+      "type": "backend",
+      "label": "GoldenSnapshotReader",
+      "sublabel": "suelto o comprimido",
+      "pos": [
+        620,
+        460
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "eval",
+      "type": "backend",
+      "label": "agentEvaluation",
+      "sublabel": "métricas y replay",
+      "pos": [
+        620,
+        670
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "index",
+      "type": "database",
+      "label": "GoldenRetrievalIndex",
+      "sublabel": "proyección descartable",
+      "pos": [
+        930,
+        40
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "tag": "local"
+    },
+    {
+      "id": "examples",
+      "type": "backend",
+      "label": "goldenExamples",
+      "sublabel": "selección por cobertura",
+      "pos": [
+        930,
+        250
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "session",
+      "type": "security",
+      "label": "GoldenReferenceSession",
+      "sublabel": "protocolo por archivos",
+      "pos": [
+        930,
+        460
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "agents",
+      "type": "cloud",
+      "label": "Lorem · Zorem · Sumrak",
+      "sublabel": "una sola invocación",
+      "pos": [
+        930,
+        670
+      ],
+      "size": [
+        190,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Aprobación explícita del QA",
+      "wraps": [
+        "controller",
+        "review"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Autoridad y almacenamiento inmutable",
+      "wraps": [
+        "git",
+        "store",
+        "reader"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "open",
+      "from": "goldenui",
+      "to": "controller",
+      "label": "abre y guarda"
+    },
+    {
+      "id": "confine",
+      "from": "controller",
+      "to": "review",
+      "label": "paquete confinado",
+      "labelDy": 26
+    },
+    {
+      "id": "external",
+      "from": "recovery",
+      "to": "review",
+      "label": "revisión externa",
+      "variant": "dashed"
+    },
+    {
+      "id": "approve",
+      "from": "review",
+      "to": "store",
+      "label": "aprobación explícita",
+      "variant": "emphasis"
+    },
+    {
+      "id": "publish",
+      "from": "store",
+      "to": "git",
+      "label": "snapshot y publicación",
+      "variant": "emphasis"
+    },
+    {
+      "id": "verify",
+      "from": "store",
+      "to": "reader",
+      "label": "verifica hashes",
+      "labelDy": 26
+    },
+    {
+      "id": "derive",
+      "from": "git",
+      "to": "index",
+      "label": "deriva metadata",
+      "variant": "dashed"
+    },
+    {
+      "id": "candidates",
+      "from": "index",
+      "to": "examples",
+      "label": "candidatos",
+      "labelDy": 26
+    },
+    {
+      "id": "authorize",
+      "from": "examples",
+      "to": "session",
+      "label": "referencias autorizadas",
+      "labelDy": 26
+    },
+    {
+      "id": "serve",
+      "from": "session",
+      "to": "agents",
+      "label": "ejemplos y consultas",
+      "variant": "emphasis",
+      "labelDy": 26
+    },
+    {
+      "id": "history",
+      "from": "agents",
+      "to": "eval",
+      "label": "historial inmutable",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "La autoridad son las publicaciones",
+      "items": [
+        "Eventos encadenados por hash de aprobación o revocación; nunca se reemplaza uno previo",
+        "El índice solo proyecta la última versión activa y se comprueba en cada lectura",
+        "Un caso corrupto se excluye con diagnóstico, sin rescatar una aprobación anterior"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Aprobar no es exportar",
+      "items": [
+        "Publicar golden no escribe el framework ni el recibo de exportación",
+        "El token queda ligado a paquete, revisión, contenido y checkout",
+        "Cambiar el código o el contexto crea otra versión y sustituye la referencia activa"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Qué recibe cada rol",
+      "items": [
+        "Lorem recibe Feature y Steps aceptados; Zorem, Screen Object y Locators",
+        "Sumrak solo recibe lecciones y relaciones verificadas de su error o gap abierto",
+        "Las consultas viajan por archivos dentro de la misma invocación: sin otra sesión ni shell"
+      ]
+    }
+  ]
+}

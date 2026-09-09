@@ -2,238 +2,43 @@
   "schema_version": 1,
   "diagram_type": "lifecycle",
   "meta": {
-    "title": "Ciclo de vida de un caso golden",
+    "title": "Ciclo de vida de una versión golden aprobada",
     "quality_profile": "showcase",
-    "viewBox": [
-      1080,
-      700
-    ],
+    "viewBox": [1080, 700],
     "views": [
-      {
-        "id": "camino",
-        "label": "Camino principal",
-        "focus": [
-          "applied",
-          "saving",
-          "check",
-          "write",
-          "stored"
-        ],
-        "note": "Del paquete aplicado al caso guardado en tests/golden."
-      },
-      {
-        "id": "correccion",
-        "label": "Cuando el QA corrige",
-        "focus": [
-          "check",
-          "edited",
-          "invalid",
-          "saving"
-        ],
-        "note": "Una corrección obliga a revalidar; si falla, no se escribe nada."
-      },
-      {
-        "id": "reuso",
-        "label": "Qué se hace después",
-        "focus": [
-          "stored",
-          "seed"
-        ],
-        "note": "Solo los casos válidos al 100 % con fingerprint nuevo llegan a la memoria."
-      }
+      { "id": "camino", "label": "Camino principal", "focus": ["ready", "preview", "approve", "publish", "active"], "note": "Del caso revisado a la referencia activa del índice, con aprobación explícita." },
+      { "id": "sin-publicar", "label": "Cuando no se publica", "focus": ["approve", "pending", "failed", "preview"], "note": "Sin aprobación no hay evento; un fallo previo deja el snapshot inactivo." },
+      { "id": "retirada", "label": "Retirada", "focus": ["active", "revoked"], "note": "La revocación es otro evento de la cadena: retira la referencia sin borrar el historial." }
     ]
   },
   "lanes": [
-    {
-      "id": "main",
-      "label": "Ciclo del caso"
-    },
-    {
-      "id": "revision",
-      "label": "Corrección y rechazo"
-    },
-    {
-      "id": "memoria",
-      "label": "Reutilización"
-    }
+    { "id": "main", "label": "Versión del caso" },
+    { "id": "sin", "label": "Sin publicar" },
+    { "id": "retiro", "label": "Retirada" }
   ],
   "states": [
-    {
-      "id": "applied",
-      "type": "start",
-      "label": "Paquete aplicado",
-      "sublabel": "4 capas en el fwk",
-      "lane": "main",
-      "col": 0,
-      "step": "01"
-    },
-    {
-      "id": "saving",
-      "type": "active",
-      "label": "Guardar dataset",
-      "sublabel": "paso 3 o script",
-      "lane": "main",
-      "col": 1,
-      "step": "02"
-    },
-    {
-      "id": "check",
-      "type": "decision",
-      "label": "¿Hubo corrección?",
-      "sublabel": "editor › disco",
-      "lane": "main",
-      "col": 2,
-      "step": "03"
-    },
-    {
-      "id": "write",
-      "type": "active",
-      "label": "Escribe el caso",
-      "sublabel": "manifest y expected",
-      "lane": "main",
-      "col": 3,
-      "step": "04"
-    },
-    {
-      "id": "stored",
-      "type": "success",
-      "label": "Caso golden",
-      "sublabel": "listo para replay",
-      "lane": "main",
-      "col": 4,
-      "step": "05"
-    },
-    {
-      "id": "edited",
-      "type": "waiting",
-      "label": "Editado por el QA",
-      "sublabel": "arregló un step",
-      "lane": "revision",
-      "col": 0,
-      "tag": "revalida"
-    },
-    {
-      "id": "invalid",
-      "type": "failure",
-      "label": "Validación falla",
-      "sublabel": "no se toca nada",
-      "lane": "revision",
-      "col": 1,
-      "tag": "recuperable",
-      "yOffset": 84
-    },
-    {
-      "id": "seed",
-      "type": "external",
-      "label": "Memoria sembrada",
-      "sublabel": "seed-memory",
-      "lane": "memoria",
-      "col": 2,
-      "tag": "100 %"
-    }
+    { "id": "ready", "type": "start", "label": "Caso revisable", "sublabel": "aplicado o recuperado", "lane": "main", "col": 0, "step": "01" },
+    { "id": "preview", "type": "active", "label": "Preview de revisión", "sublabel": "archivos y diagnósticos", "lane": "main", "col": 1, "step": "02" },
+    { "id": "approve", "type": "decision", "label": "¿Aprueba el QA?", "sublabel": "digest explícito", "lane": "main", "col": 2, "step": "03" },
+    { "id": "publish", "type": "active", "label": "Evento publicado", "sublabel": "cadena por hash", "lane": "main", "col": 3, "step": "04" },
+    { "id": "active", "type": "success", "label": "Referencia activa", "sublabel": "última del índice", "lane": "main", "col": 4, "step": "05" },
+    { "id": "pending", "type": "waiting", "label": "Sin aprobación", "sublabel": "no hay evento", "lane": "sin", "col": 0, "tag": "en espera" },
+    { "id": "failed", "type": "failure", "label": "Fallo previo", "sublabel": "snapshot inactivo", "lane": "sin", "col": 1, "tag": "recuperable", "yOffset": 84 },
+    { "id": "revoked", "type": "failure", "label": "Versión retirada", "sublabel": "historial intacto", "lane": "retiro", "col": 2, "tag": "revocación" }
   ],
   "transitions": [
-    {
-      "id": "t-save",
-      "from": "applied",
-      "to": "saving"
-    },
-    {
-      "id": "t-check",
-      "from": "saving",
-      "to": "check",
-      "route": "straight"
-    },
-    {
-      "id": "t-edit",
-      "from": "check",
-      "to": "edited",
-      "label": "sí",
-      "variant": "emphasis",
-      "labelAt": [
-        402,
-        202
-      ]
-    },
-    {
-      "id": "t-reuse",
-      "from": "check",
-      "to": "write",
-      "label": "no",
-      "route": "straight",
-      "labelAt": [
-        440,
-        202
-      ]
-    },
-    {
-      "id": "t-revalidate",
-      "from": "edited",
-      "to": "write",
-      "label": "revalida",
-      "variant": "emphasis"
-    },
-    {
-      "id": "t-fail",
-      "from": "edited",
-      "to": "invalid",
-      "variant": "security"
-    },
-    {
-      "id": "t-retry",
-      "from": "invalid",
-      "to": "saving",
-      "label": "corrige y reintenta",
-      "variant": "security",
-      "route": "bottom-channel",
-      "fromSide": "bottom",
-      "toSide": "bottom"
-    },
-    {
-      "id": "t-store",
-      "from": "write",
-      "to": "stored"
-    },
-    {
-      "id": "t-seed",
-      "from": "stored",
-      "to": "seed",
-      "label": "fingerprint nuevo",
-      "variant": "dashed",
-      "labelAt": [
-        710,
-        245
-      ]
-    }
+    { "id": "t-preview", "from": "ready", "to": "preview" },
+    { "id": "t-check", "from": "preview", "to": "approve", "route": "straight" },
+    { "id": "t-hold", "from": "approve", "to": "pending", "label": "no", "labelAt": [402, 202] },
+    { "id": "t-approve", "from": "approve", "to": "publish", "label": "sí", "variant": "emphasis", "route": "straight", "labelAt": [440, 202] },
+    { "id": "t-active", "from": "publish", "to": "active", "variant": "emphasis" },
+    { "id": "t-fail", "from": "publish", "to": "failed", "variant": "security" },
+    { "id": "t-retry", "from": "failed", "to": "preview", "label": "reintenta", "variant": "security", "route": "bottom-channel", "fromSide": "bottom", "toSide": "bottom" },
+    { "id": "t-revoke", "from": "active", "to": "revoked", "label": "revoca", "variant": "security", "labelAt": [710, 245] }
   ],
   "cards": [
-    {
-      "dot": "emerald",
-      "title": "Qué queda guardado",
-      "items": [
-        "manifest.json con squad, ejecución y notas del QA",
-        "package/ con la whitelist de archivos y las baselines del framework",
-        "catalog.json sin telemetría y la respuesta del agente ya aceptada",
-        "expected/<capa>-<archivo> con el contenido que debe volver a salir"
-      ]
-    },
-    {
-      "dot": "amber",
-      "title": "La corrección manda",
-      "items": [
-        "El orden de verdad es editor › disco › agent-response",
-        "Con corrección se revalida antes de escribir: si falla, no se toca nada",
-        "Al aceptar se regeneran application-receipt, agent-response y validation"
-      ]
-    },
-    {
-      "dot": "cyan",
-      "title": "Para qué sirve después",
-      "items": [
-        "golden:save toma lo que hay en disco, aunque la corrección sea de días después",
-        "golden:seed-memory promueve a memoria solo los casos válidos al 100 %",
-        "test:golden repite el caso resolviendo con catálogo y snapshot"
-      ]
-    }
+    { "dot": "emerald", "title": "Qué fija la aprobación", "items": ["El token queda ligado a paquete, revisión, contenido y checkout", "No exige score 100, validación verde, ejecución adicional, commit ni PR integrado", "Conserva los diagnósticos tal como se obtuvieron y la declaración QA de ejecución"] },
+    { "dot": "amber", "title": "Versiones y sustitución", "items": ["Repetir la aprobación del mismo snapshot no duplica versiones", "Otra declaración de ejecución o notas publica una aprobación nueva sobre la misma versión", "Cambiar el código o el contexto crea otra versión y sustituye la referencia activa"] },
+    { "dot": "rose", "title": "Lo que nunca ocurre", "items": ["Publicar golden no escribe el framework ni el recibo de exportación", "Nunca se reemplaza un evento previo: la cadena solo crece", "Un caso corrupto se excluye del índice con diagnóstico, sin rescatar una aprobación anterior"] }
   ]
 }

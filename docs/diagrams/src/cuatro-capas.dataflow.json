@@ -23,7 +23,7 @@
           "memory",
           "plan"
         ],
-        "note": "El catálogo del squad y la memoria del recorder deciden qué no hay que volver a redactar."
+        "note": "El catálogo del squad y el corpus golden aprobado deciden qué no hay que volver a redactar."
       },
       {
         "id": "capas",
@@ -98,11 +98,11 @@
     {
       "id": "memory",
       "type": "database",
-      "label": "Memoria",
-      "sublabel": "casos y fragmentos",
+      "label": "Golden aprobado",
+      "sublabel": "referencias QA",
       "stage": 1,
       "row": 4,
-      "tag": "global"
+      "tag": "en Git"
     },
     {
       "id": "feature",
@@ -185,8 +185,8 @@
       "id": "f-memory",
       "from": "memory",
       "to": "plan",
-      "label": "fragmentos por step",
-      "classification": "memoria global",
+      "label": "referencias compatibles",
+      "classification": "corpus QA",
       "variant": "dashed",
       "labelAt": [
         345,

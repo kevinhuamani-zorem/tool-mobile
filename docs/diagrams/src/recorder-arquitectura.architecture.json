@@ -32,11 +32,12 @@
         "focus": [
           "core",
           "agents",
+          "golden",
           "codegraph",
           "registry",
           "framework"
         ],
-        "note": "Lo determinista manda: la IA solo ve gaps abiertos y nada se escribe sin pasar por el registro."
+        "note": "Lo determinista manda: la IA recibe los gaps abiertos y las referencias golden aprobadas, y nada se escribe sin pasar por el registro."
       }
     ]
   },
@@ -214,6 +215,21 @@
         170,
         64
       ]
+    },
+    {
+      "id": "golden",
+      "type": "external",
+      "label": "tests/golden",
+      "sublabel": "corpus aprobado",
+      "pos": [
+        830,
+        40
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "tag": "en Git"
     }
   ],
   "boundaries": [
@@ -305,7 +321,8 @@
       "from": "core",
       "to": "codegraph",
       "label": "consultas acotadas",
-      "labelDy": -46
+      "labelDy": -56,
+      "labelDx": -60
     },
     {
       "id": "state",
@@ -327,6 +344,40 @@
       "label": "commit recuperable",
       "variant": "emphasis",
       "labelDy": 24
+    },
+    {
+      "id": "approve",
+      "from": "core",
+      "to": "golden",
+      "label": "aprobación publicada",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          1090,
+          472
+        ],
+        [
+          1090,
+          72
+        ]
+      ],
+      "labelAt": [
+        1112,
+        190
+      ]
+    },
+    {
+      "id": "refs",
+      "from": "golden",
+      "to": "agents",
+      "label": "referencias por rol",
+      "variant": "dashed",
+      "labelAt": [
+        920,
+        172
+      ]
     }
   ],
   "cards": [
@@ -345,7 +396,7 @@
       "items": [
         "El resolver decide reuse/create y fija las cuatro rutas antes de cualquier agente",
         "La IA solo recibe los gaps abiertos y su mitad proyectada del borrador",
-        "La memoria por fingerprint y por fragmentos evita invocar al agente"
+        "La memoria legacy está deshabilitada: la reutilización viene del corpus golden aprobado"
       ]
     },
     {
@@ -354,7 +405,7 @@
       "items": [
         "outputValidator fija rutas permitidas, sintaxis y hashes",
         "Snapshots por destino: aplicar comprueba que sigan intactos",
-        "Solo artefactos aprobados salen del runtime hacia el framework"
+        "Aprobar un golden no escribe el framework: exportar sigue siendo otra operación"
       ]
     }
   ]

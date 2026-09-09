@@ -12,9 +12,10 @@
           "recording",
           "resolver",
           "draftmem",
+          "golden",
           "derek"
         ],
-        "note": "El resolver fija reuse/create y las cuatro rutas; el borrador y la memoria ya dan forma al caso."
+        "note": "El resolver fija reuse/create y las cuatro rutas; el borrador y las referencias golden aprobadas dan forma al caso antes de delegar."
       },
       {
         "id": "paralelo",
@@ -42,7 +43,7 @@
   "lanes": [
     {
       "id": "qa",
-      "label": "QA y grabación"
+      "label": "QA: grabación y referencias"
     },
     {
       "id": "plan",
@@ -126,9 +127,9 @@
       "id": "draftmem",
       "lane": "plan",
       "col": 2,
-      "type": "database",
-      "label": "Borrador y memoria",
-      "sublabel": "draft + fragmentos",
+      "type": "backend",
+      "label": "Borrador determinista",
+      "sublabel": "deterministic-draft",
       "width": 138
     },
     {
@@ -185,6 +186,16 @@
       "type": "security",
       "label": "Validador oficial",
       "sublabel": "familias de reglas",
+      "width": 138
+    },
+    {
+      "id": "golden",
+      "lane": "qa",
+      "col": 2,
+      "type": "external",
+      "label": "tests/golden",
+      "sublabel": "corpus aprobado",
+      "tag": "en Git",
       "width": 138
     }
   ],
@@ -262,6 +273,13 @@
       "label": "feedback por capa",
       "variant": "security",
       "role": "error"
+    },
+    {
+      "id": "e-golden",
+      "from": "golden",
+      "to": "derek",
+      "label": "referencias por rol",
+      "variant": "dashed"
     }
   ],
   "cards": [
@@ -276,11 +294,11 @@
     },
     {
       "dot": "emerald",
-      "title": "Memoria antes que modelo",
+      "title": "Referencias golden, no memoria",
       "items": [
-        "Caso equivalente por fingerprint: no se invoca al agente",
-        "Fragmentos por step: el tramo ya redactado sale como wording de memoria",
-        "Cuando todo viene de memoria, Zorem no corre y Lorem solo revisa el diseño"
+        "La memoria legacy está deshabilitada: no aporta casos, fragmentos ni decisiones de gaps",
+        "goldenExamples selecciona publicaciones QA compatibles y las reproyecta antes de cada etapa",
+        "Si todas las filas se reutilizan del framework y no quedan gaps, Zorem no corre y Lorem solo revisa el diseño"
       ]
     },
     {
