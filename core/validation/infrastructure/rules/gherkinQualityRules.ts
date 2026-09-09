@@ -30,6 +30,13 @@ import { PreviewRuleContext, RuleReport } from './ruleContext';
 export function gherkinQualityRules(context: PreviewRuleContext, report: RuleReport): void {
     const { scenario, plan, response, preview, definitions } = context;
     const { errors, warnings } = report;
+    if (/^<<<<<<< COBERTURA EXISTENTE/m.test(preview.featureContent)) errors.push({
+        code: 'case-coverage-review', file: response.files.find(f => f.layer === 'feature')?.path,
+        message: 'El mismo TC tiene cobertura previa que la nueva grabación no incluye. Revisa ambas versiones en el editor y conserva los pasos vigentes antes de actualizar el caso.',
+    });
+    const reusedStepTexts = new Set((scenario.request?.scenarioRows || []).filter(row => row.status === 'reused')
+        .map(row => selectorNormalization.normalizeStepText(row.text)));
+    const inheritedLines = new Set((context.updateBaselines.get('feature') || '').split(/\r?\n/).map(line => line.trim()));
             if (!/^\s*Then\s+\S+/m.test(preview.featureContent)) {
                 errors.push({
                     code: 'assertion',
@@ -90,6 +97,7 @@ export function gherkinQualityRules(context: PreviewRuleContext, report: RuleRep
             // accion que sigue a un Then vuelve a ser When, y un resultado
             // tras un When es Then.
             for (const problem of gherkinKeywordProblems(preview.featureContent, response.actionTrace, scenario.actions)) {
+                if (reusedStepTexts.has(selectorNormalization.normalizeStepText(problem.step.replace(/^(Given|When|Then|And|But)\s+/, ''))) || inheritedLines.has(problem.step.trim())) continue;
                 const kindLabel = problem.kind === 'assertion'
                     ? 'un resultado esperado'
                     : problem.kind === 'behavior' ? 'una acción del usuario' : 'contexto inicial';

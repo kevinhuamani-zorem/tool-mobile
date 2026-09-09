@@ -152,6 +152,7 @@ export function projectRoleJson(relativePath: string, value: any, role: AuthorRo
                 recordingId: value.recordingId,
                 decision: value.decision,
                 reuseTarget: value.reuseTarget,
+                behaviorReuse: value.behaviorReuse,
                 candidates: value.candidates || [],
                 updateBaselines: (value.updateBaselines || []).filter((item: any) =>
                     item?.layer === 'feature' || item?.layer === 'steps'
@@ -163,6 +164,7 @@ export function projectRoleJson(relativePath: string, value: any, role: AuthorRo
             recordingId: value.recordingId,
             decision: value.decision,
             reuseTarget: value.reuseTarget,
+                behaviorReuse: value.behaviorReuse,
             // El codigo de cada getter ya viaja integro en `baselines/`; aqui
             // solo hace falta la identidad del elemento y sus locators.
             elements: (value.elements || []).map((module: any) => ({
@@ -279,6 +281,7 @@ export function projectIntegrationJson(relativePath: string, value: any): any {
             recordingId: value.recordingId,
             decision: value.decision,
             reuseTarget: value.reuseTarget,
+                behaviorReuse: value.behaviorReuse,
             candidates: value.candidates || [],
             updateBaselines: value.updateBaselines || [],
         };

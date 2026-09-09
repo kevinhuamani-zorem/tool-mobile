@@ -1315,6 +1315,7 @@ export class AutomationPackageBuilder {
             decision: result.resolvedContext.frameworkAwareness?.decision || 'create-new',
             existingCase: result.plan.existingCase,
             reuseTarget: result.plan.reuseTarget,
+            behaviorReuse: result.plan.behaviorReuse,
             candidates: reuseCandidates,
             // Tipo, bloque, valor y expresión exacta de cada elemento existente
             // que el caso toca, agrupados por módulo: es lo que permite
@@ -1470,6 +1471,7 @@ export class AutomationPackageBuilder {
             packageDirectory,
             recordingId: result.scenario.recordingId,
             planId: result.plan.planId,
+            behaviorReuse: result.plan.behaviorReuse,
             status: result.plan.status,
             deterministicCoverage: result.plan.deterministicCoverage,
             unresolvedGaps: result.plan.unresolvedGapIds.length,

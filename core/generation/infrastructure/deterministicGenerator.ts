@@ -612,9 +612,25 @@ function scenarioBlocks(content: string): Array<{ name: string; block: string }>
  * segunda debe anadir su Scenario, no reemplazar el archivo (y con el, el
  * caso anterior). Los Scenarios cuyo nombre ya existe no se duplican.
  */
-export function mergeFeatureUpdate(baseline: string, generated: string): string {
+export function mergeFeatureUpdate(baseline: string, generated: string, preserveCoverage = false): string {
     const existing = scenarioBlocks(baseline);
-    const existingNames = new Set(existing.map(item => item.name));
+    const caseId = (name: string) => name.match(/\[(TC-\d+)\]/i)?.[1]?.toUpperCase();
+    // Identity survives a renamed title. An unreviewed scope reduction remains a visible conflict.
+    for (const proposed of scenarioBlocks(generated)) {
+        const id = caseId(proposed.name);
+        const sameId = id ? existing.filter(item => caseId(item.name) === id) : [];
+        if (sameId.length !== 1 || (!preserveCoverage && sameId[0].name === proposed.name)) continue;
+        const current = sameId[0];
+        const texts = (block: string) => [...block.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gm)].map(m => m[1].trim());
+        const next = texts(proposed.block);
+        const removed = texts(current.block).filter(text => !next.includes(text));
+        const replacement = preserveCoverage && removed.length
+            ? `<<<<<<< COBERTURA EXISTENTE ${id}\n${current.block.trimEnd()}\n======= PROPUESTA PARA REVISAR\n${proposed.block.trimEnd()}\n>>>>>>> REVISAR CAMBIO DE COBERTURA\n`
+            : proposed.block;
+        baseline = baseline.replace(current.block.trimEnd(), replacement.trimEnd());
+        generated = generated.replace(proposed.block.trimEnd(), '');
+    }
+    const existingNames = new Set(scenarioBlocks(baseline).map(item => item.name));
     const proposed = scenarioBlocks(generated).filter(item => item.name);
     // El mismo caso regenerado (mismo nombre de Scenario, es decir mismo TC)
     // sustituye su propio bloque: conservar el viejo dejaria el Feature
@@ -640,11 +656,20 @@ function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan
         featureContent = mergeFeatureUpdate(
             readUtf8File(path.join(projectPaths.frameworkRoot, featurePlan.path)),
             featureContent,
+            Boolean(plan.behaviorReuse?.sameCase.length && !plan.reconciliation),
         );
     }
     const screenPlan = plan.files.find(file => file.layer === 'screen' && file.operation === 'update');
     const locatorPlan = plan.files.find(file => file.layer === 'locators' && file.operation === 'update');
     const stepsPlan = plan.files.find(file => file.layer === 'steps' && file.operation === 'update');
+    if (stepsPlan && !stepContent) {
+        stepContent = readUtf8File(path.join(projectPaths.frameworkRoot, stepsPlan.path));
+        preview = { ...preview, stepPath: path.join(projectPaths.frameworkRoot, stepsPlan.path) };
+    }
+    if (screenPlan && !screenContent) {
+        screenContent = readUtf8File(path.join(projectPaths.frameworkRoot, screenPlan.path));
+        preview = { ...preview, screenPath: path.join(projectPaths.frameworkRoot, screenPlan.path) };
+    }
     if (stepsPlan && stepContent) {
         stepContent = mergeStepsUpdate(
             readUtf8File(path.join(projectPaths.frameworkRoot, stepsPlan.path)),

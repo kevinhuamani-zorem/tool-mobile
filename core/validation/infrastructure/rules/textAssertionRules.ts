@@ -1,3 +1,4 @@
+import { preservedBehaviorBinding } from './behaviorReuseRules';
 import ts from 'typescript';
 import { RECORDED_TEXT_READER } from '../../../automation/contracts';
 import { ResponseRuleContext, RuleReport } from './ruleContext';
@@ -176,7 +177,8 @@ export function validatedTextAssertionGetters(context: ResponseRuleContext): Map
     return verified;
 }
 
-function inspectTextAssertions({ scenario, response }: ResponseRuleContext, report: RuleReport): Map<number, string> {
+function inspectTextAssertions(context: ResponseRuleContext, report: RuleReport): Map<number, string> {
+    const { scenario, response, plan } = context;
     const verified = new Map<number, string>();
     const actions = scenario.actions.filter(action => action.textAssertion);
     if (!actions.length) return verified;
@@ -188,6 +190,11 @@ function inspectTextAssertions({ scenario, response }: ResponseRuleContext, repo
     const expectedHelper = canonical((template.statements[0] as ts.ClassDeclaration).members[0], template);
     const classes = source.statements.filter(ts.isClassDeclaration);
     for (const action of actions) {
+        if (preservedBehaviorBinding(context, action.sequence!)) {
+            const locator = plan.resolutions.find(r => r.sequence === action.sequence)?.locatorName;
+            if (locator) verified.set(action.sequence!, locator);
+            continue;
+        }
         const assertion = action.textAssertion!;
         const trace = response.actionTrace.find(trace => trace.sequence === action.sequence);
         const operator = assertion.operator === 'contains' ? 'toContain' : 'toBe';

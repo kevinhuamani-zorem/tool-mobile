@@ -1,3 +1,5 @@
+import { buildReuseReport } from './resolver/reuseReport';
+import { resolveBehaviorRows } from './resolver/behaviorReuse';
 import crypto from 'crypto';
 import path from 'path';
 import {
@@ -780,9 +782,10 @@ export class DeterministicResolver {
             });
         });
         const usedCanonicals = new Set<string>();
-        const uniqueScenarioRows = scenarioRows.map(row => {
+        const behaviorRows = resolveBehaviorRows(scenarioRows, catalog, resolutions, reusableBundle?.bundle.screens[0]);
+        const uniqueScenarioRows = behaviorRows.map(row => {
             if (row.status !== 'missing') return row;
-            const existing = existingStepFor(row, catalog, resolutions);
+            const existing = row.reuse ? undefined : existingStepFor(row, catalog, resolutions);
             if (existing) {
                 usedCanonicals.add(canonicalStepExpressionShared(existing.text));
                 return {
@@ -807,7 +810,7 @@ export class DeterministicResolver {
                 normalizedRequest.caseId,
             ) };
         });
-        const consolidatedValidationRows = repetition
+        const consolidatedValidationRows = repetition && !uniqueScenarioRows.some(row => row.reuse)
             ? consolidateRepeatedValidationCycle(
                 uniqueScenarioRows,
                 repetition,
@@ -817,7 +820,7 @@ export class DeterministicResolver {
             )
             : undefined;
         const finalRows = consolidatedValidationRows
-            || (repetition ? attachRepetitionDataTable(uniqueScenarioRows, repetition) : uniqueScenarioRows);
+            || (repetition && !uniqueScenarioRows.some(row => row.reuse) ? attachRepetitionDataTable(uniqueScenarioRows, repetition) : uniqueScenarioRows);
         // Given: contexto inicial. When: accion. Then: resultado esperado.
         // And: complementa el paso anterior (hereda su tipo), asi que la
         // accion que sigue a un Then vuelve a ser When.
@@ -837,6 +840,8 @@ export class DeterministicResolver {
             selectorCoverage: reusable.selectorCoverage,
             paths: reusable.paths,
         } : undefined;
+        const sameCaseCandidates = (catalog.scenarios || []).filter(candidate => candidate.caseId === scenario.request.caseId);
+        const sameCaseTarget = sameCaseCandidates.length === 1 ? sameCaseCandidates[0] : undefined;
         const featurePrefix = featureScope ? `${scenario.squad}/${featureScope}` : scenario.squad;
         const reuseTarget = reusableBundle && !existingCase ? {
             reason: reusableBundle.reason,
@@ -930,8 +935,8 @@ export class DeterministicResolver {
             // mas; crearlo lo pisaria y el caso anterior desapareceria.
             plannedFile(
                 'feature',
-                `features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`,
-                this.baselineSnapshot.read(`features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`).exists
+                (sameCaseTarget?.file || `features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`),
+                sameCaseTarget || this.baselineSnapshot.read(`features/yape-features/${featurePrefix}/${normalizedRequest.fileName}.feature`).exists
                     ? 'update'
                     : 'create',
                 this.baselineSnapshot,
@@ -1055,12 +1060,16 @@ export class DeterministicResolver {
             files,
             existingCase,
             reuseTarget,
+            behaviorRows: normalizedRequest.scenarioRows,
+            catalogRevision: catalog.revision,
         })).digest('hex').slice(0, 24)}`;
         const unresolved = resolutions.filter(item => item.resolution === 'unresolved').length;
         // Un gap que nace resuelto (memoria) queda en unresolved-context como
         // traza, pero no abre el paquete al agente ni exige resolucion.
         const openGaps = gaps.filter(gap => gap.status !== 'resolved');
+        const behaviorReuse = buildReuseReport(normalizedRequest.scenarioRows || [], catalog, scenario);
         const plan: GenerationPlan = {
+            behaviorReuse,
             schemaVersion: AUTOMATION_SCHEMA_VERSION,
             pipelineVersion: AUTOMATION_PIPELINE_VERSION,
             planId,

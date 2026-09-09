@@ -11,3 +11,7 @@ export * from './infrastructure/codeGraphExporter';
 export * from './infrastructure/recorderCodeGraph';
 export * from './infrastructure/locatorStrategy';
 export * from './infrastructure/reuseAnalyzer';
+
+export { stepDelegation } from './domain/behaviorContract';
+
+export { verifiedFrameworkHelpers } from './infrastructure/behaviorHelpers';

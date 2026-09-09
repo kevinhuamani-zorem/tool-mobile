@@ -327,3 +327,37 @@ Contrato y procedimiento: [AUTOMATION_GOLDEN_LEARNING.md](AUTOMATION_GOLDEN_LEAR
 Configuración y flujo de PR: [tests/golden/README.md](../tests/golden/README.md).
 Continúan abiertos el corpus de 5–8 casos, la reserva de evaluación, el piloto
 funcional completo y la comparación con/sin ejemplos.
+
+## R1–R6: reutilización por comportamiento (2026-09-09)
+
+Implementación y alcance en [BEHAVIOR_REUSE.md](BEHAVIOR_REUSE.md). El catálogo
+se actualiza con el checkout; el resolver agrupa acciones compatibles con Steps
+existentes y conserva sus firmas, aserciones y dependencias. La decisión viaja
+a los autores y al validador. Revisión muestra decisiones reales y conflictos
+de cobertura del mismo TC. La evaluación compara con grupos independientes.
+
+Validación contra el framework commiteado `09674ce`, en una copia aislada:
+
+- 30 pruebas nuevas de reutilización aprobadas; 34/34 junto con casos encadenados.
+- `npm run quality`: tipos y arquitectura aprobados; 908/910 pruebas aprobadas.
+  El comando conserva salida fallida por dos replays preexistentes.
+- `npm run quality:metrics` y `npm run build` ejecutados por separado: aprobados,
+  con los umbrales vigentes y compilación de main y renderer.
+- El mismo replay golden de TC-10251 (revisión `7a4b0600`) y el fixture
+  `rec-7588c175` fallan también con Recorder anterior `672e5cdf`. El primero
+  espera un gap de refinamiento que no reproduce el resolver inicial; el segundo
+  encuentra colisiones con el contenido de main actualizado. No se modificaron
+  sus snapshots ni expected. Requieren reconciliar evidencia histórica y contexto
+  de replay en un cambio separado, manteniendo las aprobaciones originales.
+- El piloto estático TC-10140 reutiliza cinco Steps de negocio y cubre 11/13
+  acciones. Las cinco decisiones coinciden con los grupos esperados de la
+  auditoría técnica: cero reutilizaciones incorrectas, perdidas o sin evaluar.
+  Las dos verificaciones de fecha requieren implementación/revisión; el borrador
+  presenta el conflicto de cobertura con hoy/7/15 días del escenario vigente.
+- No se ejecutaron Copilot ni Appium y no se concedió aprobación golden. El QA
+  debe ejecutar, recuperar las correcciones y aprobar una revisión como referencia.
+
+La evidencia local de esta entrega está en
+`/private/tmp/recorder-behavior-reuse-c4fzkswl/`: `quality-complete.log`,
+`baseline-replay.log`, `options-focused.log` y `pilot-evaluation.json`. Los
+reportes temporales no forman parte de los golden versionados.

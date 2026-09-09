@@ -192,6 +192,7 @@ export function ScenarioBuilderModal() {
               <div id="testDesignSuggestionSummary" className="wizard-help" />
               <ul id="testDesignSuggestionIssues" />
             </section>
+            <section id="automationReuseSummary" className="qa-observations-panel" aria-label="Reutilización del framework" style={{display: 'none'}} />
             <section id="qaObservationsPanel" className="qa-observations-panel" style={{display: 'none'}}>
               <div className="qa-observations-heading">
                 <div>

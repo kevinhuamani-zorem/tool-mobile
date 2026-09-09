@@ -31,7 +31,8 @@
     "golden:seed-memory": "npm run build:main --silent && node scripts/golden-seed-memory.js",
     "test:golden": "npm run build:main && node --test tests/goldenDataset.test.js",
     "agents:evaluate": "npm run build:main --silent && node scripts/agent-evaluate.js",
-    "golden:replay": "npm run build:main --silent && node scripts/golden-replay.js"
+    "golden:replay": "npm run build:main --silent && node scripts/golden-replay.js",
+    "reuse:evaluate": "npm run build:main --silent && node scripts/reuse-evaluate.js"
   },
   "author": "Kevin Huamani",
   "license": "MIT",

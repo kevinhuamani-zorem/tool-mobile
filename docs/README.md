@@ -31,3 +31,5 @@ Cuando documentación y código difieran, detén el cambio, confirma el contrato
 con las pruebas y actualiza ambos en el mismo commit.
 
 - [Fidelidad de locators](LOCATOR_FIDELITY.md): tipo/valor grabado, corrección determinista, compatibilidad y métricas.
+
+- [Reutilización por comportamiento R1–R6](BEHAVIOR_REUSE.md): contratos de métodos, agrupación funcional, revisión y evaluación independiente.

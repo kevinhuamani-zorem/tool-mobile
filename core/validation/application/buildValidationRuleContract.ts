@@ -455,6 +455,18 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
             'agent-response.schema.json\n' +
             '{ "needs": [{ "query": "searchFrameworkContent", "args": { "pattern": "TypeLocator" } }] }',
     },
+    'case-coverage-review': {
+        requirement: 'El mismo TC debe conservar su cobertura previa; la reducción requiere reconciliar la propuesta visible con el caso existente.',
+        minimalExample: 'TC-10140 existente: hoy, 7, 15, 30 y 90 días; propuesta: 30 y 90. Conservar los días anteriores al actualizar el caso.',
+    },
+    'reuse-binding-mismatch': {
+        requirement: 'La propuesta debe conservar el método y secuencias de scenarioRows.reuse; afirma el retorno si es boolean.',
+        minimalExample: 'actionTrace: { sequence: 4, screenMethod: \"showMovementsExpected\" }; Steps: await movementsScreen.showMovementsExpected();',
+    },
+    'reuse-implementation-changed': {
+        requirement: 'La propuesta debe conservar el cuerpo y dependencias del método reutilizado; no cambies una aserción interna void por otra API.',
+        minimalExample: 'scenarioRows.reuse: { kind: \"step\", methodName: \"showMovementsExpected\", returnType: \"void\" }; Screen: conservar baseline.',
+    },
     'reused-step-rewritten': {
         requirement: 'Todo step reutilizado desde framework debe copiarse literal, sin reescritura.',
         minimalExample:

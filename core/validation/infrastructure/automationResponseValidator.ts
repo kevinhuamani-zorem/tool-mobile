@@ -1,3 +1,4 @@
+import { behaviorReuseRules } from './rules/behaviorReuseRules';
 import { recordedLocatorRules } from './rules/recordedLocatorRules';
 /**
  * Validador determinista de la respuesta del agente.
@@ -137,6 +138,7 @@ export class AutomationResponseValidator {
                 codeStructureRules(previewContext, report);
                 updateSafetyRules(previewContext, report);
                 frameworkCollisionRules(previewContext, report);
+                behaviorReuseRules(previewContext, report);
             } catch (error: any) {
                 errors.push({ code: 'preview', message: error.message });
             }

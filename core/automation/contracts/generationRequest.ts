@@ -54,6 +54,21 @@ export interface GenerationRequest {
          */
         wording?: 'domain' | 'qa' | 'template' | 'agent' | 'memory';
         methodName?: string;
+        reuse?: {
+            kind: 'step' | 'method';
+            className: string;
+            screenFile: string;
+            stepFile?: string;
+            methodName: string;
+            signature: string;
+            returnType: 'void' | 'boolean';
+            sourceHash: string;
+            dependencies: Record<string, string>;
+            helpers: string[];
+            catalogRevision?: string;
+            sequences: number[];
+            reason: string;
+        };
         /** Trazabilidad de una fila `wording: memory`: de qué caso viene. */
         memory?: { caseId: string; screenMethod?: string };
     }[];

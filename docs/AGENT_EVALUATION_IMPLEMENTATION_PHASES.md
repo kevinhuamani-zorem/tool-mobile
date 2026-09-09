@@ -362,3 +362,10 @@ centralizada entre equipos no son dependencias de estas fases. Las estimaciones
 anteriores de 18–21 días no cubren este alcance; cualquier estimación de calendario
 se recalcula después de F0, atendiendo especialmente a reconciliación de archivos
 compartidos, migración y disponibilidad del QA para el piloto.
+
+## Ampliación: reutilización por comportamiento
+
+[R1–R6](BEHAVIOR_REUSE.md) implementa catálogo de comportamiento actualizado,
+reutilización de Steps/métodos, agrupación funcional, contratos entre autores,
+revisión del mismo TC y evaluación con etiquetas independientes. Conserva las
+entregas F0–F7 y sus pendientes de corpus y piloto funcional.

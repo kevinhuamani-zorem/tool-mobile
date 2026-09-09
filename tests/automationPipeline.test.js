@@ -2355,7 +2355,7 @@ test('una grabación sin verificación no llega a armar el paquete', () => {
 test('package builder limita el contexto y deja verificador autocontenido', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'automation-package-'));
     const resolved = new DeterministicResolver(emptyCatalog);
-    const builder = new AutomationPackageBuilder(resolved, new AutomationMemory(path.join(root, 'memory')));
+    const builder = new AutomationPackageBuilder(resolved, new AutomationMemory(path.join(root, 'memory')), undefined, new AutomationResponseValidator(undefined, emptyCatalog));
     const candidate = selectorCandidate(
         'primary-movements',
         'id=movimientos',

@@ -171,7 +171,7 @@ export function existingStepFor(
         const methods = definition.screenMethods.map(call =>
             (catalog.screenMethods || []).find(method => method.file === call.file && method.name === call.method)
         );
-        if (methods.some(method => !method)) continue;
+        if (methods.some(method => !method || method.behavior)) continue;
         // El indice conoce las claves que alcanza el metodo y los modulos de
         // locators que importa; la clave no viene atada a un modulo concreto.
         const reachableNames = new Set(methods.flatMap(method => method!.locatorKeys || []));
@@ -277,7 +277,7 @@ export function frameworkCandidates(
             paths: candidate.artifacts,
             relatedPaths: candidate.relatedArtifacts,
         };
-    }).filter(candidate => candidate.score >= 0.35)
-        .sort((left, right) => right.score - left.score || right.selectorCoverage - left.selectorCoverage)
+    }).filter(candidate => candidate.score >= 0.35 || candidate.caseId === scenario.request.caseId)
+        .sort((left, right) => Number(right.caseId === scenario.request.caseId) - Number(left.caseId === scenario.request.caseId) || right.score - left.score || right.selectorCoverage - left.selectorCoverage)
         .slice(0, 5);
 }

@@ -35,6 +35,11 @@ export function frameworkCollisionRules(context: PreviewRuleContext, report: Rul
                         || selectorNormalization.canonicalStepExpression(existing.expression) === normalizedDefinition
                     )
                 );
+                if (collision && stepDefinitionPatterns(updateBaselines.get('steps') || '').some(pattern =>
+                    selectorNormalization.canonicalStepExpression(pattern) === normalizedDefinition)) {
+                    warnings.push(`framework-preexisting-step-collision: la definición ${definition} ya estaba duplicada entre ${stepsPath} y ${collision.file}. No fue creada por este intento; revisa los archivos existentes.`);
+                    continue;
+                }
                 if (collision) {
                     errors.push({
                         code: 'framework-step-collision',

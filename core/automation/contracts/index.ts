@@ -1,3 +1,5 @@
+import type { BehaviorReuseReport } from './behaviorReuse';
+export * from './behaviorReuse';
 export * from './automationHistory';
 import type { RecordedStep } from './models';
 
@@ -324,6 +326,7 @@ export interface RepetitionProposal {
 }
 
 export interface GenerationPlan {
+    behaviorReuse?: BehaviorReuseReport;
     /** Immutable QA/framework baseline authorizing scoped three-way reconciliation. */
     reconciliation?: { revisionId: string };
     schemaVersion: number;
@@ -715,6 +718,7 @@ export interface LocatorCompletion {
 }
 
 export interface AutomationPackageResult {
+    behaviorReuse?: BehaviorReuseReport;
     packageDirectory: string;
     recordingId: string;
     planId: string;

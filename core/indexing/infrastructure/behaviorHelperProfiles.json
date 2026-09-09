@@ -1,0 +1,23 @@
+[
+  {
+    "file": "screenobjects/commons/core/UIHelper.ts",
+    "className": "UIHelper",
+    "method": "waitForElementExistByLocator",
+    "binding": "uiHelper.waitForElementExistByLocator",
+    "bodyHash": "41e6c8ba4864bf0400d04fcf87a84d856b22cf702f0a103e357469decad6aee4"
+  },
+  {
+    "file": "screenobjects/commons/core/UIHelper.ts",
+    "className": "UIHelper",
+    "method": "waitForElementDisplayedAndExpect",
+    "binding": "uiHelper.waitForElementDisplayedAndExpect",
+    "bodyHash": "c2e758a3b2fcf9dc35c8449a412113d6545a4929bab15e0cfd2ee1fa18589fe4"
+  },
+  {
+    "file": "screenobjects/commons/core/GestureHelper.ts",
+    "className": "GestureHelper",
+    "method": "verticalScrollingToEnd",
+    "binding": "gestureHelper.verticalScrollingToEnd",
+    "bodyHash": "c02d19412b9860593a66df2a7c83a0eb5efe0c7e0b84e7aeb5dadd2854baf295"
+  }
+]

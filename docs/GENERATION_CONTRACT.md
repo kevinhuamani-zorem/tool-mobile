@@ -293,13 +293,16 @@ plan; la propuesta normalizada sigue pasando por preview y validación completa.
 - Antes de avanzar desde Gherkin se contrasta cada texto con todas las
   definiciones y escenarios indexados. Los impactos se muestran; no se altera
   código ajeno.
-- Un step existente se **reutiliza** (fila `reused`, sin definición nueva y
-  con `methodName` del step existente para la trazabilidad) solo con
-  evidencia: el índice registra qué métodos de Screen Object invoca cada
-  definición, y se reutiliza cuando esos métodos alcanzan exactamente los
-  locators que el caso ya resolvió como `reuse` para esa fila — ni uno más ni
-  uno menos. Sin esa evidencia el texto se desambigua con un sufijo, como
-  antes; nunca se adopta un step por el texto.
+- Un step existente se **reutiliza** cuando un contrato de comportamiento
+  comprobado cubre las acciones y verificaciones en orden, con el mismo par
+  TypeLocator/valor y contexto. Varias filas pueden corresponder a un solo Step.
+  `scenarioRows.reuse` fija firma, método, secuencias, hashes y dependencias.
+  El texto puede diferir; al reutilizar se conserva la expresión existente.
+  Métodos con aserción interna `void` no se convierten en boolean. Cuando solo
+  se reutiliza el método, la nueva definición respeta su retorno y no genera
+  otro Screen method. El catálogo histórico sin contratos conserva la
+  resolución exacta por texto/locators para reproducir snapshots anteriores.
+  Ver [alcance, perfiles técnicos y evaluación R1–R6](BEHAVIOR_REUSE.md).
 - Cada línea del Feature debe resolver a **exactamente una** step definition
   de **todo** el framework, que es como resuelve Cucumber: carga
   `features/yape-steps-definitions/**` (todos los squads), no distingue
@@ -1191,3 +1194,14 @@ El selector primary sigue siendo la autoridad. Distintos archivos o bloques,
 tipos desconocidos, valores diferentes o cobertura distinta de la plataforma
 contraria no se consideran equivalentes. Una tercera coincidencia ajena al grupo
 conserva el gap QA bloqueante. La generación sigue validando tipos y selectores.
+
+## Revisión de identidad y cobertura (R5)
+
+Un TC existente con destino único conserva su ruta Feature aunque cambie el
+nombre del escenario. Una propuesta con menos pasos conserva ambas versiones
+como conflicto de cobertura en el preview; requiere reconciliar el contenido,
+no crea silenciosamente un segundo caso. Múltiples destinos se informan para
+revisión. Las colisiones previas de archivos compartidos no se atribuyen a la
+nueva definición; un Step ambiguo usado por el escenario sigue siendo un error.
+El reporte muestra operaciones reutilizadas, métodos y pendientes; la cobertura
+determinista de locators no se presenta como porcentaje de Steps reutilizados.

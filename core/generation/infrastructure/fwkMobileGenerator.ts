@@ -546,14 +546,14 @@ export class FwkMobileGenerator {
             const setup = dataTableBinding
                 ? [`    const ${dataTableBinding.callArgument} = ${dataTableBinding.extractExpression};`]
                 : [];
-            const returned = this.returnedTextAssertion(row.actions || [], existingMethods);
+            const returned = row.reuse ? undefined : this.returnedTextAssertion(row.actions || [], existingMethods);
             const assertion = returned
                 ? parseTextAssertion(returned.textAssertion, returned.action, returned.value)!
                 : undefined;
             const call = `${screenInstanceName}.${methodName}(${callArgs})`;
             return {
                 key: `${keyword}:${expression}`,
-                asserts: Boolean(assertion),
+                asserts: Boolean(assertion) || row.reuse?.returnType === 'boolean',
                 content: [
                 `${keyword}(/^${expression}$/, async (${args}) => {`,
                 ...setup,
@@ -564,7 +564,7 @@ export class FwkMobileGenerator {
                         `    const actualText: string = await ${call};`,
                         `    expect(actualText).${assertion.operator === 'contains' ? 'toContain' : 'toBe'}(${this.codeValue(returned!.value || '', parameters)});`,
                     ]
-                    : [`    await ${call};`]),
+                    : row.reuse?.returnType === 'boolean' ? [`    const visible: boolean = await ${call};`, '    expect(visible).toBe(true);'] : [`    await ${call};`]),
                 `});`
                 ].join('\n')
             };
@@ -710,7 +710,7 @@ export class FwkMobileGenerator {
         ];
 
         const hasTimeout = Boolean(contract.timeoutHelperImport && contract.timeoutHelperSymbol);
-        const methods = rows.map((row, index) => {
+        const methods = rows.filter(row => !row.reuse).map((row, index) => {
             const parameters = [...row.text.matchAll(/<([A-Za-z_][A-Za-z0-9_]*)>/g)]
                 .map(match => match[1]);
             const rowActions = row.actions || [];

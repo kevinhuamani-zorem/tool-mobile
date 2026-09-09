@@ -382,7 +382,15 @@ export function createReviewFeature(deps) {
         if (!automationAnalysisSummary) return;
         const processed = enlazarSteps.length;
         const unresolved = Number(result?.unresolvedGaps || 0);
-        const reusable = Math.max(0, processed - unresolved);
+        const report = result?.behaviorReuse;
+        const metrics = report?.metrics;
+        const reuseSummary = metrics
+            ? `${metrics.reusedSteps} Steps reutilizados · ${metrics.reusedMethods} métodos reutilizados · ${metrics.newImplementations} operaciones por implementar`
+            : `${unresolved} decisiones pendientes`;
+        const details = report ? `<details class="reuse-analysis-details"><summary>Ver reutilización y observaciones</summary>
+            <ul>${report.decisions.map(item => `<li><strong>${escapeHtml(item.kind === 'step' ? 'Step existente' : item.kind === 'method' ? 'Método existente' : 'Por implementar')}</strong>: ${escapeHtml(item.text)}${item.method ? ` — ${escapeHtml(item.method)}` : ''}<br><small>${escapeHtml(item.reason)}</small></li>`).join('')}</ul>
+            ${report.observations.map(item => `<p>${escapeHtml(item)}</p>`).join('')}
+        </details>` : '';
         // El puerto golden solo aporta fragmentos con aprobación QA y relaciones
         // verificadas. El nombre del campo mantiene compatibilidad con el historial.
         const recall = result?.memoryRecall;
@@ -390,9 +398,14 @@ export function createReviewFeature(deps) {
             ? ` · ${recall.steps} step(s) y ${recall.gaps} decisión(es) reutilizados desde referencias QA` +
               (recall.cases?.length ? ` (${recall.cases.join(', ')})` : '')
             : '';
+        const reusePanel = document.getElementById('automationReuseSummary');
+        if (reusePanel) {
+            reusePanel.style.display = report ? 'block' : 'none';
+            reusePanel.innerHTML = report ? `<strong>Reutilización del framework</strong><p>${reuseSummary}</p>${details}` : '';
+        }
         automationAnalysisSummary.innerHTML = `<span class="generation-icon">✓</span><div>
             <h3>Análisis completado</h3>
-            <p>${processed} acciones procesadas · ${reusable} componentes reutilizables · ${unresolved} decisión(es) pendiente(s)${recallText}</p>
+            <p>${processed} acciones procesadas · ${reuseSummary}${recallText}</p>${details}
         </div>`;
     }
 

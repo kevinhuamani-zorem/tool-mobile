@@ -123,7 +123,7 @@ export function similarExistingMethods(
 ): NonNullable<ActionResolution['existingMethod']>[] {
     const assertion = /^VERIFICAR_/.test(resolution.action);
     return (catalog.screenMethods || [])
-        .filter(method => method.file === screenFile)
+        .filter(method => method.file === screenFile && method.visibility !== 'private' && method.visibility !== 'protected')
         .map(method => {
             const byName = conceptSimilarity(resolution.intent, method.name);
             const byLocator = Math.max(0, ...(method.locatorKeys || [])

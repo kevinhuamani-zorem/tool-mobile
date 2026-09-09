@@ -2649,3 +2649,9 @@ body {
     .golden-dataset-heading .btn { margin-left: 58px; }
     .golden-dataset-next { margin-left: 0; gap: 8px; }
 }
+
+.reuse-analysis-details { margin-top: 12px; font-size: 0.9em; color: var(--text-primary, #d5d2f0); }
+.reuse-analysis-details summary { cursor: pointer; padding: 8px 0; }
+.reuse-analysis-details ul { padding-left: 22px; }
+.reuse-analysis-details li { margin: 10px 0; overflow-wrap: anywhere; }
+.reuse-analysis-details small { color: var(--text-secondary, #aaa7c5); }

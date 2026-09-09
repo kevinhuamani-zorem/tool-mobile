@@ -53,6 +53,7 @@ export interface CodeGraphEdge {
 
 interface CachedFile {
     mtimeMs: number;
+    ctimeMs?: number;
     size: number;
     nodes: CodeGraphNode[];
     edges: CodeGraphEdge[];
@@ -275,13 +276,14 @@ export class CodeGraph {
             const relative = path.relative(this.frameworkRoot, absolute).replace(/\\/g, '/');
             const stat = fs.statSync(absolute);
             const cached = previous.files[relative];
-            if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+            if (cached && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.size === stat.size) {
                 nextFiles[relative] = cached;
                 continue;
             }
             const parsed = this.parseFile(absolute, relative);
             nextFiles[relative] = {
                 mtimeMs: stat.mtimeMs,
+                ctimeMs: stat.ctimeMs,
                 size: stat.size,
                 ...parsed
             };
@@ -293,7 +295,7 @@ export class CodeGraph {
             builtAt: new Date().toISOString(),
             files: nextFiles
         };
-        if (this.reindexedFiles === 0 && previous.files.__derived__) {
+        if (this.reindexedFiles === 0 && previous.files.__derived__ && Object.keys(previous.files).length === files.length + 1) {
             this.cache.files.__derived__ = previous.files.__derived__;
         } else {
             this.addDerivedEdges();
@@ -313,7 +315,7 @@ export class CodeGraph {
         const edges = Object.values(this.cache.files).flatMap(file => file.edges);
         const revision = files.map(file => {
             const cached = this.cache.files[file];
-            return `${file}:${cached.mtimeMs}:${cached.size}`;
+            return `${file}:${cached.mtimeMs}:${cached.ctimeMs}:${cached.size}`;
         }).join('|');
         return { revision, files, nodes, edges, metrics: { ...this.buildMetrics } };
     }

@@ -1,4 +1,7 @@
 import fs from 'fs';
+import { MethodBehavior, indexMethodBehaviors, stepDelegation, behaviorHash } from '../domain/behaviorContract';
+import { verifiedFrameworkHelpers } from './behaviorHelpers';
+export type { MethodBehavior, BehaviorOperation } from '../domain/behaviorContract';
 import { indexDeclaredStrategies } from './locatorStrategy';
 import ts from 'typescript';
 import path from 'path';
@@ -21,6 +24,8 @@ export interface StepDefinitionInfo {
      * si un step existente hace exactamente lo que este caso grabo.
      */
     screenMethods?: Array<{ file: string; method: string }>;
+    delegation?: { method: string; alias: string; assertsBoolean: boolean };
+    sourceHash?: string;
 }
 
 export interface ScreenMethodInfo {
@@ -33,6 +38,9 @@ export interface ScreenMethodInfo {
     /** Claves del .locator.json que alcanza el método, directas o vía getter. */
     locatorKeys: string[];
     className: string;
+    behavior?: MethodBehavior;
+    visibility?: 'public' | 'private' | 'protected';
+    exported?: boolean;
 }
 
 export interface ArtifactBundle {
@@ -106,6 +114,7 @@ export interface SquadReuseCatalog {
     scenarios: FeatureScenarioInfo[];
     artifactBundles: ArtifactBundle[];
     /** Telemetría del acceso que produjo este catálogo; no forma parte del contexto del agente. */
+    revision?: string;
     frameworkMetrics?: CodeGraphBuildMetrics & { queryCount: number };
 }
 
@@ -266,6 +275,7 @@ export class ReuseAnalyzer {
         const stepDefinitions = this.getStepDefinitions(squad);
         const catalog: SquadReuseCatalog = {
             squad,
+            revision: behaviorHash(this.graphRevision),
             featureScope: normalizedScope,
             platform,
             stepDefinitions,
@@ -436,6 +446,7 @@ export class ReuseAnalyzer {
             const squad = relativeToSteps.split(path.sep)[0];
             if (!squad || squad === '..') continue;
             const content = this.readFrameworkFile(file);
+            const syntax = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
             const screenAliases = new Map<string, string>();
             for (const imported of content.matchAll(
                 /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@screenobjects\/([^'"]+?)(?:\.ts)?['"]/g
@@ -463,6 +474,8 @@ export class ReuseAnalyzer {
                     squad,
                     scope: squad === 'commons' ? 'commons' : 'squad',
                     ...(screenMethods.length ? { screenMethods } : {}),
+                    delegation: stepDelegation(syntax, entry.match[2].replace(/\\\//g, '/')),
+                    sourceHash: behaviorHash(body),
                 });
             });
         }
@@ -600,6 +613,7 @@ export class ReuseAnalyzer {
 
     private indexScreenMethods(): ScreenMethodInfo[] {
         const methods: ScreenMethodInfo[] = [];
+        const helpers = verifiedFrameworkHelpers(projectPaths.frameworkRoot);
         for (const relativeFile of this.frameworkFiles.filter(file =>
             file.startsWith('screenobjects/') && file.endsWith('.ts')
         )) {
@@ -613,6 +627,10 @@ export class ReuseAnalyzer {
             for (const declaration of source.statements) {
                 if (!ts.isClassDeclaration(declaration)) continue;
                 const className = declaration.name?.text || '';
+                const behaviors = indexMethodBehaviors(source, declaration, helpers);
+                const exported = !declaration.members.some(ts.isConstructorDeclaration) && source.statements.some(statement =>
+                    ts.isExportAssignment(statement) && !statement.isExportEquals && ts.isNewExpression(statement.expression)
+                    && statement.expression.expression.getText(source) === className);
                 // Los getters traducen `this.x` a una clave del locator JSON; sin
                 // resolverlos, un método parecería no usar ningún locator.
                 const getters = new Map<string, string[]>();
@@ -636,6 +654,10 @@ export class ReuseAnalyzer {
                         signature: methodSignature(member, source),
                         locatorKeys: [...used].sort(),
                         className,
+                        behavior: behaviors.get(member.name.text),
+                        exported,
+                        visibility: member.modifiers?.some(m => m.kind === ts.SyntaxKind.PrivateKeyword) ? 'private'
+                            : member.modifiers?.some(m => m.kind === ts.SyntaxKind.ProtectedKeyword) ? 'protected' : 'public',
                     });
                 }
             }
