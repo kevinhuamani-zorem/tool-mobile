@@ -37,6 +37,7 @@ import {
     groupRepairErrors,
     layerRules,
     textAssertionRules,
+    testDataRules,
     locatorContractRules,
     outputRules,
     stepDefinitionExpressions,
@@ -91,6 +92,7 @@ export class AutomationResponseValidator {
         };
         envelopeRules(context, report);
         syntaxRules(context, report);
+        testDataRules(context, report);
         completionRules(context, report);
         const updateBaselines = new Map<string, string>();
         for (const file of plan.files.filter(item => item.operation === 'update')) {

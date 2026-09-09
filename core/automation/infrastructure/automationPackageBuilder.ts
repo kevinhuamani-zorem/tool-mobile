@@ -1,3 +1,4 @@
+import { prepareTestDataContext } from './testDataContext';
 import { prepareGoldenExamples, goldenFragmentMemory } from './goldenExamples';
 import fs from 'fs';
 import path from 'path';
@@ -1194,6 +1195,7 @@ export class AutomationPackageBuilder {
             : undefined;
         runStore.setContextBytes(contextBytes);
         runStore.mark('ready-for-agent');
+        prepareTestDataContext(packageDirectory);
         prepareGoldenExamples(packageDirectory);
         history.checkpoint('package-prepared');
         return {
@@ -1460,6 +1462,7 @@ export class AutomationPackageBuilder {
             : undefined;
         runStore.setContextBytes(contextBytes);
         runStore.mark(response ? (validation?.valid ? 'ready-for-review' : 'needs-repair') : 'ready-for-agent');
+        prepareTestDataContext(packageDirectory);
         prepareGoldenExamples(packageDirectory);
         history.checkpoint('package-prepared');
         if (validation) history.append({ ...history.identity()!, kind: 'generation-result', origin: 'recorder', result: validation.valid ? 'passed' : 'failed', stage: 'deterministic-preparation' });

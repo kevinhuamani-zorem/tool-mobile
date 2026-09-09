@@ -1,7 +1,7 @@
 # Recuperación progresiva de referencias golden
 
 El recorder conserva todos los casos y su evidencia en Git. Desde
-golden-selection/v3 prepara el contexto de cada rol por cobertura de la tarea.
+golden-selection/v4 prepara el contexto de cada rol por cobertura de la tarea.
 Los ejemplos con la misma estructura se agrupan y el resto permanece consultable
 durante la misma invocación del agente. No se reinstala un tope de bytes o de
 cantidad de casos: cada archivo solicitado se devuelve completo.
@@ -30,7 +30,18 @@ aprobado actualizan también esta proyección.
 La compatibilidad conserva squad, plataforma, ambiente, subruta Feature,
 contrato y hashes actuales del framework. Las lecturas compartidas de hashes
 se deduplican durante cada búsqueda. Se excluyen versiones retiradas, casos
-reservados para evaluación y el propio recording/caseId.
+reservados para evaluación. En generación, la referencia aprobada del propio
+recording/caseId tiene prioridad y se identifica como `same-case-approved`.
+Sus archivos propios pueden diferir del checkout porque se está regenerando; las
+dependencias ajenas mantienen la comprobación de hashes. Esto no habilita la
+reutilización automática de fragmentos ni sustituye el código QA actual.
+
+Para un ensayo independiente, inicia el Recorder con
+`RECORDER_GOLDEN_PURPOSE=evaluation`: excluye el propio recording/caseId en la
+selección inicial y en cada consulta de ambas pasadas. Sin esta variable, el
+pipeline usa `generation`. Las APIs de consulta directa conservan por defecto
+la exclusión, salvo propósito explícito. El propósito queda en el contexto
+histórico; una regeneración asistida por su solución no es una prueba independiente.
 
 ## Selección inicial
 
@@ -120,3 +131,17 @@ agentes falta comparar sobre casos reservados, con el mismo modelo y framework,
 las variantes con/sin referencias, medir fallos y correcciones QA y resolver la
 discrepancia previa del replay de TC-10239. Las pruebas de ese replay siguen
 activas y el snapshot aprobado no se cambia para hacerlas pasar.
+
+## Datos del caso
+
+`test-data-context.json` informa a Lorem si existen los nombres ya solicitados
+o presentes en el baseline QA. Solo se leen nombres de `resources/data/**/*.yml`,
+con comparación sin distinguir mayúsculas como `ScenarioSession`; no se incluyen
+credenciales ni nombres ajenos. No certifica ausencia de ventas ni ejecución.
+No se agregan filas de Examples para conciliar metadata obsoleta con el baseline.
+
+La regla `test-data-user-missing` comprueba cada ejecución del login del caso
+en el Feature propuesto y dirige el diagnóstico a Lorem. Si falta el catálogo,
+un YAML no puede leerse o hay enlaces, se informa `test-data-unavailable` en
+lugar de afirmar que el usuario no existe. La comprobación se repite al validar
+el preview y al exportar; el QA puede exportar el borrador con observaciones.

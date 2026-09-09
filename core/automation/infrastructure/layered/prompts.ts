@@ -22,6 +22,7 @@ export function partialPrompt(role: AuthorRole, outputFile: string, repair = fal
     const ownership = role === 'behavior-author'
         ? [
             'Genera únicamente Feature y Steps.',
+            'Lee test-data-context.json: comprueba los usuarios de Examples con sus resultados de existencia. No añadas filas para conciliar datos contradictorios entre la grabación y el caso QA; conserva el caso aprobado e informa el conflicto para QA. Un cambio de usuario explícito debe existir en el framework, y no autoriza duplicar el Scenario.',
             'Usa deterministic-draft.json como punto de partida rápido, no como restricción: mejora su Gherkin y reutilización cuando el plan lo autorice.',
             'El Gherkin debe ser declarativo, conservar tags y formato del framework y cada acción grabada debe quedar trazada.',
             'Cada columna de Examples se nombra como <columna> en el step que la usa y la definition pasa ese argumento al método del Screen Object: el dato de la grabación nunca queda fijo en el código (ni en Steps ni en el Screen).',

@@ -26,8 +26,9 @@ QA revise y publique su versión actualizada.
 
 El modal permite elegir **Referencia para los agentes** o **Reservado para evaluación**.
 La clasificación se conserva en nuevas aprobaciones del caso; cambiarla requiere
-seleccionarla explícitamente. Los casos reservados y el propio recording/caseId
-se excluyen de los ejemplos. El índice muestra su uso. Antes de cada etapa se
+seleccionarla explícitamente. Los casos reservados se excluyen siempre. En generación se admite el propio
+recording/caseId como referencia QA; para evaluaciones independientes,
+`RECORDER_GOLDEN_PURPOSE=evaluation` lo excluye. El índice muestra su uso. Antes de cada etapa se
 recomprueba la autoridad; una publicación nueva sustituye a la anterior y una
 revocación retira la referencia.
 
@@ -136,7 +137,8 @@ no existe aún una tasa observada atribuible a referencias golden.
    corrección y ejecutar replay. Revisar discrepancias sin cambiar los esperados
    solo para aceptar el validador.
 3. Sobre las mismas entradas reservadas y baselines previos a sus soluciones,
-   fijar modelo, contratos, framework y corpus. Ejecutar con ejemplos habilitados
+   fijar modelo, contratos, framework y corpus. Iniciar ambos grupos con
+   `RECORDER_GOLDEN_PURPOSE=evaluation`. Ejecutar con ejemplos habilitados
    y con `RECORDER_GOLDEN_EXAMPLES=0` al iniciar el recorder, creando intentos
    independientes. Evitar que el framework ya contenga las soluciones reservadas;
    medir el contexto efectivamente recibido y conservar también los fallos.

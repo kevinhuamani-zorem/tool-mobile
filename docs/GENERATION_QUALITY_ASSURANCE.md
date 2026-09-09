@@ -206,3 +206,12 @@ intentos sin evidencia como no evaluados. Los errores funcionales de la app no
 se clasifican como fallos del generador. El replay compara planes y diagnósticos
 sin corregir los golden aprobados. La medición causal requiere corpus QA y un
 piloto controlado: [procedimiento F7](AUTOMATION_GOLDEN_LEARNING.md).
+
+### Usuarios de prueba y regeneración golden
+
+`frameworkTestData.test.js` reproduce el segundo Examples con usuario inexistente,
+comprueba todos los bloques del caso, catálogos actualizados, YAML incompleto y
+ausencia de secretos. `automationDraftExport.test.js` comprueba que el diagnóstico
+se conserva en el recibo sin bloquear exportar. `goldenRetrieval.test.js` verifica
+la referencia del mismo caso en ambas pasadas, la exclusión durante evaluación
+y la invalidación por dependencias, alcance o reserva.

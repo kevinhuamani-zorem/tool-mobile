@@ -98,6 +98,10 @@ const EXAMPLE_RESPONSE_SHAPE =
     '{ "recordingId": "rec-...", "planId": "plan-...", "resolutions": [], "actionTrace": [], "files": [] }';
 
 const RULE_GUIDANCE: Record<string, RuleGuidance> = {
+    'test-data-user-missing': {
+        requirement: 'Cada usuario enviado al login debe existir por nombre en resources/data/**/*.yml; conserva el dato QA y comunica discrepancias sin inventar filas adicionales.',
+        minimalExample: 'resources/data/payment/qa.yml: name: QA Aprobado\nExamples:\n  | username |\n  | QA Aprobado |',
+    },
     assertion: {
         requirement: 'Cada Scenario debe terminar con al menos un Then que verifique resultado de negocio.',
         minimalExample: EXAMPLE_SCENARIO_THEN,

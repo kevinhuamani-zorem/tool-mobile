@@ -173,7 +173,7 @@ export const BEHAVIOR_RULE_CODES = new Set([
     'gherkin-keyword', 'gherkin-person',
     // El dato parametrizado en Examples viaja por el step y su definition.
     'examples-unused-column', 'parameter-not-forwarded',
-    'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
+    'test-data-user-missing', 'missing-examples', 'reused-step-rewritten', 'ungrouped-technical-action',
     'verbatim-context-hint', 'platform-tag', 'behavior-path',
     // El import del Screen Object y su alias viven en Steps: los escribe
     // Lorem. Zorem no puede corregirlos y encadenaba rondas de feedback (15

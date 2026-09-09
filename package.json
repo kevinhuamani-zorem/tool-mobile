@@ -102,6 +102,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "typescript": "^5.0.0",
-    "webdriverio": "^8.0.0"
+    "webdriverio": "^8.0.0",
+    "yaml": "^2.9.0"
   }
 }

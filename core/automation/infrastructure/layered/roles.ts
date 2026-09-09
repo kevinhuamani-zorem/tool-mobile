@@ -12,6 +12,7 @@ import {
 
 export const INPUT_FILES = [
     'scenario.json',
+    'test-data-context.json',
     'generation-plan.json',
     'gaps.json',
     'hints.json',
@@ -30,6 +31,7 @@ export const INPUT_FILES = [
 export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
     'behavior-author': [
         'scenario.json',
+    'test-data-context.json',
         'generation-plan.json',
         'gaps.json',
         'hints.json',
@@ -46,6 +48,7 @@ export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
     // ~4k tokens por corrida sin aportar nada que el catalogo no diga.
     'interaction-author': [
         'scenario.json',
+    'test-data-context.json',
         'generation-plan.json',
         'gaps.json',
         'query-results.json',
@@ -60,6 +63,7 @@ export const ROLE_INPUT_FILES: Record<AuthorRole, string[]> = {
 
 export const INTEGRATION_INPUT_FILES = [
     'scenario.json',
+    'test-data-context.json',
     'generation-plan.json',
     'gaps.json',
     'query-results.json',

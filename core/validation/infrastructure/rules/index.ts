@@ -32,3 +32,5 @@ export { updateSafetyRules } from './updateSafetyRules';
 export { frameworkCollisionRules } from './frameworkCollisionRules';
 export { stepDefinitionExpressions } from './gherkinInspection';
 export { emptyOnRecordedPlatform } from './screenInspection';
+
+export { testDataRules } from './testDataRules';

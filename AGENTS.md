@@ -116,7 +116,9 @@ generadores, validadores o plantillas.
     golden. Ninguna generación recupera respuestas de otro intento. El índice
     derivado de revisiones golden aprobadas por QA existe desde F6;
     las lecturas legacy siguen vacías. F7 selecciona referencias compatibles por
-    capa, excluye casos reservados y el propio caso, y registra sus versiones.
+    capa y registra sus versiones. Regenerar admite la referencia QA del propio
+    caso; evaluar la excluye (RECORDER_GOLDEN_PURPOSE=evaluation). Los casos
+    reservados nunca se entregan a agentes.
     Los fragmentos exigen relaciones recuperadas verificadas y datos exactos;
     no cierran gaps de verificación automáticamente. La reutilización exacta
     del framework permanece disponible y no acredita aprobación golden.

@@ -11,7 +11,7 @@ import { goldenDatasetRoot, readGoldenCase } from './goldenDataset';
 import { AutomationHistoryStore } from './automationHistoryStore';
 import { projectPaths } from '../../workspace';
 import { GoldenExample, readGoldenReference } from './goldenReference';
-import { GoldenRetrievalIndex, GOLDEN_CONTRACT } from './goldenRetrievalIndex';
+import { GoldenRetrievalIndex, GOLDEN_CONTRACT, GoldenRetrievalPurpose, goldenRetrievalPurpose } from './goldenRetrievalIndex';
 import { GoldenReferenceSession, GoldenPreparedContext, GOLDEN_SELECTION_VERSION } from './goldenRetrieval';
 
 export { GOLDEN_SELECTION_VERSION } from './goldenRetrieval';
@@ -27,11 +27,11 @@ const empty = (scenario: AutomationScenario, enabled: boolean): GoldenExamples =
     examples: [], excluded: [], issues: [] });
 
 /** Explicit full reads remain available to deterministic consumers, with no count or byte caps. */
-export function selectGoldenExamples(scenario: AutomationScenario, options: { root?: string; frameworkRoot?: string; enabled?: boolean; exactFragments?: boolean } = {}): GoldenExamples {
+export function selectGoldenExamples(scenario: AutomationScenario, options: { root?: string; frameworkRoot?: string; enabled?: boolean; exactFragments?: boolean; purpose?: GoldenRetrievalPurpose } = {}): GoldenExamples {
     const enabled = options.enabled ?? process.env.RECORDER_GOLDEN_EXAMPLES !== '0', result = empty(scenario, enabled);
     if (!enabled) return result;
     const root = options.root || goldenDatasetRoot(), store = new ApprovedGoldenStore(root);
-    const search = new GoldenRetrievalIndex(root).search(scenario, options.frameworkRoot || projectPaths.frameworkRoot);
+    const search = new GoldenRetrievalIndex(root).search(scenario, options.frameworkRoot || projectPaths.frameworkRoot, undefined, [], options.exactFragments ? 'evaluation' : options.purpose);
     Object.assign(result, { fingerprint: search.fingerprint, excluded: search.excluded, issues: search.issues });
     const actions = (scenario.actions || []).map(action => JSON.stringify([actionIdentity(action, scenario.platform), action.selectorVerified === true, action.value ?? '', action.textAssertion ?? null]));
     for (const candidate of search.candidates) {
@@ -49,9 +49,9 @@ export function prepareGoldenExamples(packageDirectory: string): GoldenExamples 
     let discovery: unknown;
     try {
         if (result.enabled) {
-            const search = new GoldenRetrievalIndex(goldenDatasetRoot()).search(scenario, projectPaths.frameworkRoot);
+            const search = new GoldenRetrievalIndex(goldenDatasetRoot()).search(scenario, projectPaths.frameworkRoot, undefined, [], goldenRetrievalPurpose());
             Object.assign(result, { fingerprint: search.fingerprint, excluded: search.excluded, issues: search.issues });
-            discovery = { candidates: search.candidates.length, needs: search.needs, delivery: 'progressive-by-role' };
+            discovery = { candidates: search.candidates.length, needs: search.needs, delivery: 'progressive-by-role', purpose: goldenRetrievalPurpose() };
         }
     } catch (error: any) { result.issues.push(error.message); }
     fs.writeFileSync(path.join(packageDirectory, 'golden-examples.json'), JSON.stringify({ ...result, discovery }, null, 2) + '\n');
@@ -68,7 +68,7 @@ export function writeGoldenRoleExamples(packageDirectory: string, stageDirectory
     let payload: any;
     try {
         session = new GoldenReferenceSession({ root: goldenDatasetRoot(), frameworkRoot: projectPaths.frameworkRoot,
-            scenario, role, pass, integrationErrors, enabled: process.env.RECORDER_GOLDEN_EXAMPLES !== '0' });
+            scenario, role, pass, integrationErrors, purpose: goldenRetrievalPurpose(), enabled: process.env.RECORDER_GOLDEN_EXAMPLES !== '0' });
         payload = session.initialPayload();
     } catch (error: any) {
         payload = { ...empty(scenario, process.env.RECORDER_GOLDEN_EXAMPLES !== '0'), role, pass, issues: [error.message] };

@@ -8,6 +8,8 @@
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { isolatedFramework } = require('./helpers/isolatedFramework');
+isolatedFramework({ after: callback => test.after(callback) }, 'avr-parameter-flow-');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');

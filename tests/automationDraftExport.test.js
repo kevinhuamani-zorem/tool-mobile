@@ -225,3 +225,20 @@ test('F3 el botón envía bytes inválidos al IPC sin exigir corrección local p
     assert.match(fake.document.getElementById('lblGenerateResult').textContent, /TS1005/);
     feature.unmount();
 });
+
+test('F3 exports the reviewed Feature with a missing fixture user and preserves the diagnostic', async t => {
+    const f = fixture(t);
+    const data = path.join(f.root, 'resources/data'); fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(path.join(data, 'valid.yml'), 'name: Approved User\n');
+    const feature = { layer: 'feature', path: f.plan.files[0].path, origin: 'agent', pass: 2,
+        content: 'Feature: Sales\n Scenario Outline: [TC-3] Sales\n  Given el usuario <username> inicia sesión en Yape\n  Examples:\n   | username |\n   | Missing User |\n' };
+    const preview = f.importer.prepareRecoveredDraft(f.pkg, { files: [feature], missingLayers: ['steps', 'screen', 'locators'], diagnostics: [] });
+    assert.equal(preview.exportReady, true, preview.exportBlockers.join(' '));
+    const result = await applyReviewedAutomation(f.deps, preview.previewToken);
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.exportStatus, 'exported-with-observations');
+    assert.ok(result.validation.errors.some(error => error.code === 'test-data-user-missing'));
+    assert.equal(fs.readFileSync(path.join(f.root, feature.path), 'utf8'), feature.content);
+    const receipt = JSON.parse(fs.readFileSync(path.join(f.pkg, 'application-receipt.json')));
+    assert.ok(receipt.validation.errors.some(error => error.code === 'test-data-user-missing'));
+});

@@ -4,6 +4,7 @@ import { goldenCaseContext, GoldenDependencyReference } from './goldenCaseContex
 
 export type GoldenEntry = ApprovedGoldenIndex['entries'][number];
 export interface GoldenExample {
+    relationship?: 'same-case-approved' | 'related-example';
     goldenId: string; revisionId: string; versionHash: string; caseId: string; recordingId: string; score: number;
     dependencies: GoldenDependencyReference[]; frameworkCommit?: string;
     approval: unknown; objective: string; actions: string[]; relationsVerified: boolean;

@@ -27,6 +27,12 @@ function isolatedFramework(t, prefix = 'avr-isolated-') {
     const frameworkRoot = path.join(root, 'framework');
     const runtimeRoot = path.join(root, 'recorder');
     copyCommittedFramework(SOURCE_FRAMEWORK_ROOT, frameworkRoot);
+    // Synthetic positive cases need real fixture names now that login data is validated.
+    // This file exists only in this temporary checkout; no credentials or QA data are changed.
+    const dataDirectory = path.join(frameworkRoot, 'resources/data/recorder-tests');
+    fs.mkdirSync(dataDirectory, { recursive: true });
+    fs.writeFileSync(path.join(dataDirectory, 'synthetic-users.yml'),
+        ['QA', 'Usuario QA', 'Usuario QA Temporal'].map(name => `- name: ${name}\n`).join(''));
     fs.mkdirSync(runtimeRoot, { recursive: true });
     configureWorkspacePaths({ targetProject: frameworkRoot, runtimeRoot, source: 'selected' });
     t.after(() => {

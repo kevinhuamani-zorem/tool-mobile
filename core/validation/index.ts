@@ -41,3 +41,5 @@ export {
     readValidatorRuleSource,
     validatorRuleSourcePaths,
 } from './infrastructure/validationRuleCatalogFileAdapter';
+
+export { featureLoginUsers } from './infrastructure/rules/testDataRules';

@@ -7,6 +7,10 @@ import type { GenerationAgentRole } from '../domain/layeredGenerationContracts';
 import { ApprovedGoldenStore, goldenHash, goldenPath } from './approvedGoldenStore';
 import { GoldenEntry, readGoldenReference } from './goldenReference';
 
+export type GoldenRetrievalPurpose = 'generation' | 'evaluation';
+/** Evaluation must be opted into before preparing packages; it never exposes the target solution. */
+export const goldenRetrievalPurpose = (): GoldenRetrievalPurpose => process.env.RECORDER_GOLDEN_PURPOSE === 'evaluation' ? 'evaluation' : 'generation';
+
 export const GOLDEN_RETRIEVAL_VERSION = 'golden-retrieval/v1';
 export const GOLDEN_RETRIEVAL_INDEX = 'retrieval-index.json';
 export const GOLDEN_CONTRACT = 'mobile-four-layers/v1';
@@ -41,7 +45,7 @@ export interface GoldenMetadata {
     frameworkFiles: Array<{ path: string; sha256: string }>;
     exactActions: string[];
 }
-export interface GoldenCandidate { entry: GoldenEntry; metadata: GoldenMetadata; score: number; coverage: string[]; groupId: string }
+export interface GoldenCandidate { sameCase: boolean; entry: GoldenEntry; metadata: GoldenMetadata; score: number; coverage: string[]; groupId: string }
 export interface GoldenSearchResult {
     fingerprint: string; issues: string[]; candidates: GoldenCandidate[]; needs: string[];
     excluded: Array<{ goldenId: string; reason: string }>;
@@ -102,7 +106,7 @@ export class GoldenRetrievalIndex {
         } catch { /* A read-only checkout still permits verified references in memory. */ }
         return { index, records, metrics: { indexedCases: records.length, rebuiltCases, reusedCases, indexMs: performance.now() - started } };
     }
-    search(scenario: AutomationScenario, frameworkRoot: string, role?: GenerationAgentRole, integrationErrors: string[] = []): GoldenSearchResult {
+    search(scenario: AutomationScenario, frameworkRoot: string, role?: GenerationAgentRole, integrationErrors: string[] = [], purpose: GoldenRetrievalPurpose = 'evaluation'): GoldenSearchResult {
         const started = performance.now();
         const { index, records, metrics } = this.refresh();
         const actions = [...new Set((scenario.actions || []).map(action => action.action))];
@@ -115,13 +119,18 @@ export class GoldenRetrievalIndex {
             const exclude = (reason: string) => excluded.push({ goldenId: entry.goldenId, reason });
             if (entry.squad !== scenario.squad || entry.platform !== scenario.platform || entry.contract !== GOLDEN_CONTRACT
                 || entry.environment !== (scenario.environment || '') || entry.featureScope !== (scenario.request?.featureScope || '')) { exclude('incompatible-framework-or-scope'); continue; }
-            if (entry.recordingId === scenario.recordingId || entry.caseId && entry.caseId === scenario.request?.caseId) { exclude('same-case'); continue; }
+            const sameCase = entry.recordingId === scenario.recordingId || Boolean(entry.caseId && entry.caseId === scenario.request?.caseId);
+            if (sameCase && purpose !== 'generation') { exclude('same-case'); continue; }
             const matchedActions = actions.filter(action => metadata.actions.includes(action));
             const matchedTerms = terms.filter(term => metadata.terms.includes(term));
             if (!matchedActions.length || !matchedTerms.length) { exclude('unrelated-intent-or-actions'); continue; }
             if (role && role !== 'integration-reviewer' && !metadata.layers.some(layer => goldenRoleLayers(role).includes(layer))) continue;
             if (role === 'integration-reviewer' && (!integrationErrors.length || !metadata.relationsVerified)) continue;
+            const owned = new Set(metadata.files.map(file => file.path));
+            // The case being regenerated is expected to change. Its approved code is only a reference;
+            // external dependencies still require exact compatibility and fragments keep stricter checks.
             const compatible = metadata.frameworkFiles.every(file => {
+                if (sameCase && purpose === 'generation' && owned.has(file.path)) return true;
                 if (!frameworkHashes.has(file.path)) {
                     try { frameworkHashes.set(file.path, goldenHash(fs.readFileSync(goldenPath(frameworkRoot, file.path)))); }
                     catch { frameworkHashes.set(file.path, null); }
@@ -130,15 +139,15 @@ export class GoldenRetrievalIndex {
             });
             if (!compatible) { exclude('incompatible-framework-or-scope'); continue; }
             const matchedRules = rules.filter(rule => metadata.lessons.some(lesson => lesson.observedRuleCodes.includes(rule)));
-            const coverage = [...matchedActions.map(action => 'action:' + action), ...matchedTerms.map(term => 'intent:' + term),
+            const coverage = [...(sameCase ? ['case:approved-baseline'] : []), ...matchedActions.map(action => 'action:' + action), ...matchedTerms.map(term => 'intent:' + term),
                 ...facets(scenario).filter(facet => metadata.facets.includes(facet)), ...matchedRules.map(rule => 'rule:' + rule)];
             const score = matchedActions.length / new Set([...actions, ...metadata.actions]).size * 0.65
                 + matchedTerms.length / new Set([...terms, ...metadata.terms]).size * 0.35 + matchedRules.length;
-            candidates.push({ entry, metadata, score, coverage, groupId: 'pattern-' + goldenHash(JSON.stringify([
+            candidates.push({ sameCase, entry, metadata, score, coverage, groupId: 'pattern-' + goldenHash(JSON.stringify([
                 role || 'all', metadata.patterns[role || 'all'], metadata.facets, metadata.lessons.map(lesson => lesson.observedRuleCodes),
             ])) });
         }
-        candidates.sort((a, b) => b.score - a.score || b.entry.approval.at.localeCompare(a.entry.approval.at) || a.entry.goldenId.localeCompare(b.entry.goldenId));
+        candidates.sort((a, b) => Number(b.sameCase) - Number(a.sameCase) || b.score - a.score || b.entry.approval.at.localeCompare(a.entry.approval.at) || a.entry.goldenId.localeCompare(b.entry.goldenId));
         return { fingerprint: index.fingerprint, issues: index.issues, candidates, needs, excluded,
             metrics: { ...metrics, searchMs: performance.now() - started - metrics.indexMs } };
     }

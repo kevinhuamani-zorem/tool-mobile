@@ -195,3 +195,47 @@ test('redirected mailboxes cannot write outside the stage and do not interrupt g
     assert.equal(result, 'generated'); assert.equal(fs.readFileSync(external, 'utf8'), 'KEEP');
     assert.equal(report.goldenRetrieval.requests, 1);
 });
+
+test('regeneration receives its approved case despite owned edits, while evaluation excludes it', t => {
+    const { f, root, saved, helper } = setup(t);
+    fs.appendFileSync(path.join(f.frameworkRoot, f.featurePath), '\n# current QA change\n');
+    const options = { root, frameworkRoot: f.frameworkRoot, scenario: f.scenario, role: 'behavior-author', pass: 1 };
+    assert.equal(new GoldenReferenceSession(options).initialPayload().examples.length, 0);
+    const session = new GoldenReferenceSession({ ...options, purpose: 'generation' });
+    const payload = session.initialPayload();
+    assert.equal(payload.purpose, 'generation');
+    assert.equal(payload.examples.length, 1);
+    assert.equal(payload.examples[0].relationship, 'same-case-approved');
+    assert.equal(payload.examples[0].versionHash, saved.manifest.versionHash);
+    assert.ok(payload.examples[0].files.every(file => !file.content.includes('current QA change')));
+    assert.equal(payload.examples[0].automaticReuse, false);
+    assert.equal(session.request(request(saved, 'example')).data.relationship, 'same-case-approved');
+    fs.appendFileSync(path.join(f.frameworkRoot, helper.path), '// incompatible dependency');
+    assert.throws(() => session.request(request(saved, 'example')), /incompatible/);
+    assert.equal(new GoldenReferenceSession({ ...options, purpose: 'generation' }).initialPayload().examples.length, 0);
+});
+
+test('generation wiring includes its own golden and evaluation switch excludes it on both passes', t => {
+    const { f, saved } = setup(t);
+    const previous = process.env.RECORDER_GOLDEN_PURPOSE;
+    t.after(() => { if (previous === undefined) delete process.env.RECORDER_GOLDEN_PURPOSE; else process.env.RECORDER_GOLDEN_PURPOSE = previous; });
+    const stage = path.join(f.root, 'role'); fs.mkdirSync(stage);
+    process.env.RECORDER_GOLDEN_PURPOSE = 'generation';
+    for (const pass of [1, 2]) {
+        const payload = JSON.parse(fs.readFileSync(writeGoldenRoleExamples(f.packageDirectory, stage, 'behavior-author', pass).file));
+        assert.equal(payload.examples[0].versionHash, saved.manifest.versionHash);
+        assert.equal(payload.examples[0].relationship, 'same-case-approved');
+    }
+    process.env.RECORDER_GOLDEN_PURPOSE = 'evaluation';
+    for (const pass of [1, 2]) assert.equal(JSON.parse(fs.readFileSync(writeGoldenRoleExamples(f.packageDirectory, stage, 'behavior-author', pass).file)).examples.length, 0);
+});
+
+test('same-case references cannot bypass reservation, scope or revocation during regeneration', t => {
+    const { f, root, saved } = setup(t);
+    const options = { root, frameworkRoot: f.frameworkRoot, scenario: f.scenario, role: 'behavior-author', pass: 1, purpose: 'generation' };
+    assert.equal(new GoldenReferenceSession({ ...options, scenario: { ...f.scenario, platform: 'ios' } }).initialPayload().examples.length, 0);
+    const session = new GoldenReferenceSession(options);
+    saveGoldenCaseFromPackage(f.deps(), { approved: true, source: 'recovery', usage: 'evaluation' });
+    assert.throws(() => session.request(request(saved, 'example')), /fuera|retirada|incompatible/);
+    assert.equal(new GoldenReferenceSession(options).initialPayload().examples.length, 0);
+});

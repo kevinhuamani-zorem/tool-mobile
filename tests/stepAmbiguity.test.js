@@ -11,6 +11,8 @@
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { isolatedFramework } = require('./helpers/isolatedFramework');
+isolatedFramework({ after: callback => test.after(callback) }, 'avr-step-matching-');
 const {
     stepDefinitionRegExp,
     matchingStepDefinitions,

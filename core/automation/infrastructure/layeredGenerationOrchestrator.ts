@@ -345,7 +345,7 @@ export class LayeredGenerationOrchestrator {
         const identity = LAYERED_GENERATION_AGENTS[role];
         const stageDirectory = path.join(agentsRoot, identity.directory);
         const judgment = gapJudgment(packageDirectory, plan);
-        for (const file of ['scenario.json', 'generation-plan.json']) {
+        for (const file of ['scenario.json', 'generation-plan.json', 'test-data-context.json']) {
             copyRoleInput(packageDirectory, stageDirectory, file, role, judgment);
         }
         const prompt = designReviewPrompt(memoryCases);
@@ -353,7 +353,7 @@ export class LayeredGenerationOrchestrator {
         writeJsonUtf8(path.join(stageDirectory, 'result.schema.json'), designReviewSchema());
         writeAgentProfile(stageDirectory, role, prompt);
         const golden = writeGoldenRoleExamples(packageDirectory, stageDirectory, role, 1);
-        const inputs = ['scenario.json', 'generation-plan.json', 'behavior-result.json', 'golden-examples.json']
+        const inputs = ['scenario.json', 'generation-plan.json', 'behavior-result.json', 'golden-examples.json', 'test-data-context.json']
             .map(file => path.join(stageDirectory, file))
             .filter(file => fs.existsSync(file));
         const inputArtifacts = inputs.map(file => artifact(file, stageDirectory));
