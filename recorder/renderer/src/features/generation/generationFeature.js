@@ -20,11 +20,13 @@ import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
  * @param {() => boolean} deps.hasInvalidAutomationDraft dueño: review.
  * @param {() => Promise<any>} deps.revalidateReviewedAutomation dueño: review.
  * @param {(preserveReviewed: boolean) => Promise<any>} deps.importAutomationResponse dueño: review.
+ * @param {(input: object) => Promise<void>} deps.openGoldenReview abre la revisión previa a aprobación (dueño: golden).
  */
 export function createGenerationFeature(deps) {
     const {
         api, state, setStatus, reloadSquadCatalogAfterGenerate,
         isAutomationWorkflow, revalidateReviewedAutomation, importAutomationResponse,
+        openGoldenReview,
     } = deps;
 
     const cmbFrameworkSquad = document.getElementById('cmbFrameworkSquad');
@@ -65,6 +67,7 @@ export function createGenerationFeature(deps) {
     const GENERATED_FILES_STORAGE_KEY = 'appiumVisualRecorder.generatedFiles.v1';
 
     const bound = [];
+    let openingGoldenReview = false;
     function on(target, type, handler, options) {
         if (!target) return;
         target.addEventListener(type, handler, options);
@@ -154,9 +157,23 @@ export function createGenerationFeature(deps) {
     }
 
     async function saveGoldenCase() {
-        if (!isAutomationWorkflow()) return;
-        await openGoldenReview?.({ executed: cmbGoldenExecution?.value || 'not-run', notes: txtGoldenNotes?.value || '',
-            reviewedContents: editedReviewedContents() });
+        if (!isAutomationWorkflow() || openingGoldenReview) return;
+        openingGoldenReview = true;
+        disableBtn(btnSaveGolden, 'Abriendo revisión…');
+        setGoldenStatus('', '');
+        try {
+            if (typeof openGoldenReview !== 'function') throw new Error('La revisión golden no está disponible. Vuelve a abrir el Recorder.');
+            await openGoldenReview({
+                executed: cmbGoldenExecution?.value || 'not-run',
+                notes: txtGoldenNotes?.value || '',
+                reviewedContents: editedReviewedContents()
+            });
+        } catch (error) {
+            setGoldenStatus(`No se pudo abrir la revisión golden: ${error instanceof Error ? error.message : String(error)}`, 'err');
+        } finally {
+            openingGoldenReview = false;
+            enableBtn(btnSaveGolden);
+        }
     }
 
     function previewLayer(document) {
@@ -471,7 +488,7 @@ export function createGenerationFeature(deps) {
             lblCodeValidation.className = 'ok';
         });
 
-        on(btnSaveGolden, 'click', () => { void saveGoldenCase(); });
+        on(btnSaveGolden, 'click', saveGoldenCase);
 
         on(btnResetCode, 'click', () => {
             const document = state.previewDocuments[state.activePreviewDocumentIndex];
