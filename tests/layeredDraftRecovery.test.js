@@ -64,7 +64,8 @@ test('Revisión muestra un Screen sin Feature y declara capas faltantes y proced
     assert.match(fake.document.getElementById('lblGenerationFileCount').textContent, /pasada 1/);
     assert.equal(fake.document.getElementById('codeReviewWorkspace').style.display, 'grid');
     assert.match(fake.document.getElementById('lblCodeFileState').textContent, /Agente.*pasada 1/);
-    assert.match(fake.document.getElementById('lblGenerateResult').textContent, /Sumrak no terminó/);
+    assert.match(fake.document.getElementById('caseCoveragePanel').innerHTML, /Sumrak no terminó/);
+    assert.doesNotMatch(fake.document.getElementById('lblGenerateResult').textContent, /Sumrak no terminó/);
     feature.showPreviewDocuments(layeredDraftPreview({ files: [], missingLayers: ['feature', 'steps', 'screen', 'locators'], diagnostics: ['Sin entrega'] }, root), false, false);
     assert.equal(fake.document.getElementById('txtGherkin').value, '', 'no muestra código del intento anterior si la recuperación está vacía');
     assert.equal(fake.document.getElementById('lblCodeFilePath').textContent, '');

@@ -484,3 +484,117 @@ La evidencia local de esta entrega está en
 `/private/tmp/recorder-behavior-reuse-c4fzkswl/`: `quality-complete.log`,
 `baseline-replay.log`, `options-focused.log` y `pilot-evaluation.json`. Los
 reportes temporales no forman parte de los golden versionados.
+
+
+## F1–F3: conservación de cobertura al regenerar (2026-09-10)
+
+Se incorporó el comparador determinista documentado en
+[CASE_COVERAGE.md](CASE_COVERAGE.md), la captura de instantáneas separadas, la
+integración común de generación/validación y la reutilización de parámetros
+string con capturas directas y Examples comprobados.
+
+La revisión del TC-10240 local conservó ocho correspondencias, una fila de
+Examples y cero diferencias de cobertura. Se examinaron 63 archivos de Steps y
+259 archivos por instantánea. La validación técnica fue correcta y la ejecución
+funcional permaneció `not-evaluated`. La auditoría fue de solo lectura; no se
+reescribieron ni la grabación ni sus diagnósticos históricos.
+
+El replay de TC-10251 detectó una regresión de la primera implementación: el QA
+había separado seis instrucciones de navegación de un método con diez
+instrucciones. Se agregó una prueba acotada de extracción exacta de prefijo,
+con reconstrucción del AST anterior y comprobación de orden, aserciones,
+getters, dependencias e inicialización. El golden vuelve a conservar su
+cobertura sin cambiar sus archivos aprobados.
+
+Las contrapruebas cubren pérdidas de aserciones/argumentos/repeticiones,
+bindings ambiguos, tipos de locator, hooks compartidos y por Step, cambios de
+inicialización/prototipo, métodos separados de su receptor y getters evaluados
+en otro momento. Los formatos no demostrables quedan `unverified`.
+
+Verificación final: 133 pruebas focalizadas correctas; `npm run quality`
+completó typecheck, arquitectura y 1147 pruebas, con 1146 correctas y únicamente
+la discrepancia histórica de replay TC-10239 descrita abajo. La puerta completa
+sigue fallando por esa discrepancia. `quality:metrics` pasó por separado y
+`RECORDER_SKIP_REVEAL=1 npm run package:mac` compiló y preparó la aplicación macOS,
+incluida la verificación del runtime TypeScript empaquetado. Se incorporaron 97
+controles nuevos respecto de la suite de 1050 pruebas anterior.
+
+El fallo histórico TC-10239 se reprodujo además con una copia aislada del
+commit anterior `88725eca8141d2cc34dcc37f5a33253ae3a7e65d`: el resolver obtiene un
+plan distinto al conservado en la revisión `77c7c67b6cd3…f09c55`. No se ajustaron
+expected, publicaciones ni snapshots aprobados para convertirlo en éxito.
+
+Pendientes:
+
+- **F4:** comparación visual por paso, agrupación entre pasadas y reparación
+  dirigida a la capa que cambió. Los diagnósticos estructurados ya se guardan
+  en `validation.caseCoverage` y el nuevo código llega al contrato de Lorem.
+- **F5:** verificar en dispositivo los selectores y esperados del importe y
+  teléfono ofuscado de yapeo; implementar las aserciones y recuperar los cambios
+  del framework antes de aprobar otra revisión golden.
+- **F6:** piloto con entradas y revisiones congeladas, etiquetas independientes,
+  comparación antes/después, ejecución móvil y revisión de la discrepancia del
+  replay TC-10239. El éxito de pruebas unitarias no acredita una mejora del LLM.
+
+Se mantienen las dos pasadas y la exportación del borrador. La aprobación
+explícita del QA y los bytes aprobados siguen siendo la autoridad golden.
+
+
+## Conservación de cobertura — F4 (2026-09-10)
+
+Implementada la vista de comparación y diagnósticos en Revisión. Presenta
+conservación, pérdida o equivalencia pendiente, diferencias y correspondencias
+por paso/Examples. Las ediciones invalidan la comparación hasta revalidar.
+Los diagnósticos se agrupan por problema y pasadas; los problemas históricos que
+ya no aparecen se mantienen separados, sin atribuir su corrección al agente.
+
+Las alertas de grabación/diseño indican al QA verificar el elemento, corregir la
+comprobación o volver a grabar. El caso TC-10240 se comprobó con sus artefactos
+reales: ocho correspondencias conservadas, error técnico previo resuelto y
+seis advertencias QA (acciones 8, 9, 11, 14, 16 y 18). No se cambiaron recording,
+archivos del framework ni golden. La exportación permanece disponible.
+
+La segunda pasada técnica usa las capas que cambiaron entre instantáneas para
+asignar la reparación a Lorem/Zorem; dependencias compartidas o atribución
+incompleta incluyen revisión de integración. Las alertas QA no abren pasadas.
+Los informes legacy se leen de forma tolerante y no sustituyen los diagnósticos
+confiables de la grabación por afirmaciones de cobertura del agente.
+
+Verificación focalizada: 78 pruebas de F4, IPC, exportación, UI y enrutado
+correctas. El alcance y contrato están en [CASE_COVERAGE.md](CASE_COVERAGE.md).
+
+Pendientes del plan: F5 corresponde al QA para completar la evidencia en el
+dispositivo; F6 requiere el piloto/harness real y revisar el replay histórico
+TC-10239. F4 no acredita ejecución móvil ni promociona casos golden.
+
+Verificación final en el repositorio real: `npm run quality` pasó tipos y
+arquitectura; 1200 de 1201 pruebas correctas. Permanece únicamente el fallo
+histórico del replay golden TC-10239 (`77c7c67b6cd3…f09c55`), por lo que la
+puerta completa sigue sin quedar verde. `quality:metrics` y `package:mac`
+pasaron por separado, incluida la compilación del runtime TypeScript
+empaquetado. El panel se verificó en Chrome a 1280, 640 y 390 px con el reporte
+real: sin desbordamientos, sin errores y con los detalles accesibles por teclado.
+
+## Reorientación del alcance general — 2026-09-10
+
+Aclaración del producto: el QA debe poder grabar cualquier flujo de cualquier
+squad y obtener las cuatro capas desde sus evidencias y el framework
+seleccionado. Yapeo, movimientos y ventas son controles iniciales del mismo
+squad; su éxito no demuestra el alcance completo.
+
+Esta revisión sustituye la descripción de pendientes F5/F6 del plan de
+conservación de cobertura que aparece en las entradas históricas anteriores:
+
+- **F5:** auditar y cerrar brechas generales de evidencia y revisión entre
+  distintos recordings/squads, usando las alertas y recuperación existentes.
+  Mantener las correcciones particulares como pendientes de cada QA.
+- **F6:** evaluar una matriz diversa de squads, capacidades y plataformas;
+  separar creación, reutilización y regeneración, incluir casos sin golden y
+  publicar resultados desglosados y límites comprobados.
+- **TC-10240:** las verificaciones de importe y teléfono siguen pendientes del
+  QA de ese caso; no condicionan el desarrollo general ni el uso de otros flujos.
+
+Se actualizaron AGENTS.md, CASE_COVERAGE.md y AGENT_HARNESS_STRATEGY.md para
+conservar este alcance. Cambio documental: no se modificó el generador, no se
+ejecutó un piloto nuevo ni se declaró compatibilidad universal. Los estados
+implementados F1–F4 y sus resultados de pruebas previos permanecen vigentes.

@@ -3,6 +3,7 @@
  */
 import {
     AutomationAgentResponse,
+    CoverageRepairTargets,
 } from '../../contracts';
 import {
     LAYERED_GENERATION_AGENTS,
@@ -155,11 +156,12 @@ export type LayeredResponseValidator = (
     packageDirectory: string,
     response: AutomationAgentResponse,
     pass?: 1 | 2,
-) => { valid: boolean; qualityScore?: number; errors: Array<{ code?: string; message: string; file?: string }> };
+) => { valid: boolean; qualityScore?: number; errors: RepairIssue[] };
 
 export interface RepairIssue {
     code?: string;
     message: string;
     /** Archivo del plan al que apunta el error (ruta relativa al framework). */
     file?: string;
+    coverageRepairTargets?: CoverageRepairTargets;
 }

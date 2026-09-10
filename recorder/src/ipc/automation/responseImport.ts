@@ -25,8 +25,6 @@ import {
     AutomationApplicationReceipt,
     planAgainstApplicationReceipt,
     requireUnchangedAppliedFiles,
-    QaObservationsArtifact,
-    analyzeScenarioUiTextQuality,
     AutomationApplier,
     PreparedAutomation,
     loadUpdateBaselinesForCorrection,
@@ -37,6 +35,7 @@ import { normalizeJsonUnicode, readJsonUtf8, writeJsonUtf8 } from '../../../../c
 import { RecorderRuntimeState } from '../runtimeState';
 import { AutomationProgressEmitter } from './progress';
 import { prepareRecoveredExport } from './draftExport';
+import { loadReviewDiagnostics, loadQaObservations } from './reviewContext';
 import type { AutomationExportReadiness } from '../../automationExportContracts';
 import type { LayeredGenerationResult } from '../../../../core/automation';
 
@@ -331,7 +330,11 @@ export class AutomationResponseImporter {
         if (prepared) state.automationPreview = { token, scenario, plan, response, prepared, correctionBaselines, packageDirectory };
         const exportFields: AutomationExportReadiness = { previewToken: token, exportReady: Boolean(token), exportBlockers,
             missingLayers: plan.files.filter(file => !response.files.some(item => item.layer === file.layer)).map(file => file.layer) };
-        const draftPayload = { ...exportFields, draft: { preview, validation, ...exportFields } };
+        const observationsArtifact = loadQaObservations(packageDirectory, scenario);
+        const qaObservations = observationsArtifact.observations;
+        const reviewDiagnostics = loadReviewDiagnostics(packageDirectory, validation, scenario, plan, qaObservations);
+        const draftPayload = { ...exportFields, reviewDiagnostics,
+            draft: { preview, validation, reviewDiagnostics, ...exportFields } };
         if (!validation.valid) {
             if (options.trackRepair === false) {
                 return {
@@ -438,13 +441,10 @@ export class AutomationResponseImporter {
             };
         }
         const observationsFile = path.join(packageDirectory, 'qa-observations.json');
-        const observationsArtifact = fs.existsSync(observationsFile)
-            ? readJsonUtf8<QaObservationsArtifact>(observationsFile)
-            : analyzeScenarioUiTextQuality(scenario);
+
         if (!fs.existsSync(observationsFile)) {
             writeJsonUtf8(observationsFile, observationsArtifact);
         }
-        const qaObservations = observationsArtifact.observations;
         runStore.mark('ready-for-review');
         emitAutomationProgress('READY_FOR_REVIEW', 'Validación completa', 6, 6);
         return {
@@ -454,6 +454,7 @@ export class AutomationResponseImporter {
             ...exportFields,
             conflicts: exportBlockers,
             qaObservations,
+            reviewDiagnostics,
         };
     }
 

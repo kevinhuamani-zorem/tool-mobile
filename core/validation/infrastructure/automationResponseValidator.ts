@@ -25,7 +25,7 @@ import {
 import { GeneratedPreview } from '../../generation';
 import { OutputValidator } from './outputValidator';
 import { projectPaths } from '../../workspace';
-import { ReuseAnalyzer } from '../../indexing';
+import { ReuseAnalyzer, collectCaseCoverageSnapshots } from '../../indexing';
 import { declaredIdentifiers } from '../../shared';
 import {
     PreviewRuleContext,
@@ -103,7 +103,22 @@ export class AutomationResponseValidator {
             const absolute = path.join(projectPaths.frameworkRoot, file.path);
             if (fs.existsSync(absolute)) updateBaselines.set(file.layer, fs.readFileSync(absolute, 'utf-8'));
         }
-        caseIdentityRules({ ...context, updateBaselines, reuseAnalyzer: this.reuseAnalyzer }, report);
+        let coverageSnapshots: ReturnType<typeof collectCaseCoverageSnapshots> | undefined;
+        let coverageUnavailable = false;
+        const feature = response.files.find(file => file.layer === 'feature');
+        if (feature && updateBaselines.has('feature') && scenario.request.caseId) {
+            try {
+                const catalog = this.reuseAnalyzer.getCatalog(scenario.squad, scenario.platform, scenario.request.featureScope);
+                coverageSnapshots = collectCaseCoverageSnapshots({
+                    frameworkRoot: projectPaths.frameworkRoot, featurePath: feature.path,
+                    stepFiles: [...new Set((catalog.frameworkStepDefinitions || []).map(item => item.file))],
+                    beforeFiles: Object.fromEntries(plan.files.filter(file => updateBaselines.has(file.layer))
+                        .map(file => [file.path, updateBaselines.get(file.layer)!])),
+                    afterFiles: Object.fromEntries(response.files.map(file => [file.path, file.content])),
+                });
+            } catch { coverageUnavailable = true; }
+        }
+        caseIdentityRules({ ...context, updateBaselines, coverageSnapshots, coverageUnavailable, reuseAnalyzer: this.reuseAnalyzer }, report);
         const proposedScreen = response.files.find(file => file.layer === 'screen')?.content || '';
         const baselineScreen = updateBaselines.get('screen');
         const baselineScreenNames = new Set(declaredIdentifiers({ screen: baselineScreen || '' })
@@ -158,6 +173,7 @@ export class AutomationResponseValidator {
             qualityScore: valid ? 100 : Math.max(0, 100 - unique.length * 10),
             errors: unique,
             warnings: report.warnings,
+            ...(report.caseCoverage ? { caseCoverage: report.caseCoverage } : {}),
             ...(valid ? {} : {
                 repairContext: {
                     attempt,

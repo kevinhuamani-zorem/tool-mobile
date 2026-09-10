@@ -953,7 +953,7 @@ export class LayeredGenerationOrchestrator {
         }
         const officialValidation = this.responseValidator?.(packageDirectory, response, attempt === 0 ? 1 : 2);
         if (officialValidation && !officialValidation.valid) {
-            fileContractErrors.push(...officialValidation.errors.map(error => ({ code: error.code, message: error.message, file: error.file })));
+            fileContractErrors.push(...officialValidation.errors.map(error => ({ ...error })));
         }
         history.capture('evaluation-validation.json', JSON.stringify({ pass: attempt === 0 ? 1 : 2,
             valid: fileContractErrors.length === 0, qualityScore: officialValidation?.qualityScore ?? null,

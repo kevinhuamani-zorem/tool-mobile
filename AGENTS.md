@@ -4,6 +4,20 @@ Este archivo aplica a todo `tools/visual-recorder`. Su objetivo es que una IA o
 persona pueda modificar el recorder sin romper sus contratos de seguridad,
 generación o compatibilidad con `fwk-mobile-test`.
 
+## Alcance del producto
+
+El objetivo es que un QA grabe cualquier flujo de la aplicación, de cualquier
+squad, y que el Recorder genere o reutilice Feature, Steps, Screen Objects y
+Locators a partir de esa evidencia y del framework seleccionado. Los casos
+auditados son ejemplos de regresión; no delimitan el producto. No agregues
+ramas por TC, squad o flujo para resolver un defecto particular del generador:
+corrige el contrato general y compruébalo con variantes de otros contextos.
+Las reglas de negocio pertenecen al objetivo, criterios QA, datos, evidencias y
+APIs del framework; no se deducen de un caso golden ajeno. Un golden previo no
+es requisito para generar. Una capacidad no soportada o evidencia insuficiente
+se declara y se dirige al QA, sin inventar soporte ni verificaciones.
+Distingue el alcance deseado de la compatibilidad demostrada por las pruebas.
+
 ## Antes de cambiar código
 
 Lee, en este orden:
@@ -305,6 +319,23 @@ generadores, validadores o plantillas.
   se completa después mediante **Completar una grabación**, nunca se inventa.
 - Nunca registres valores de los ambientes del framework, username/access key de BrowserStack ni
   datos sensibles en logs, previews o errores.
+
+## Conservación de cobertura
+
+- Para regenerar el mismo TC usa `compareCaseCoverage` desde la API pública de
+  indexing; no exijas frases idénticas como prueba de conservación. El resultado
+  `unverified` requiere revisión y nunca equivale a `preserved`.
+- Generación y validación comparan instantáneas separadas, conservando datos,
+  orden, repeticiones, aserciones y contexto de código. No reconstruyas un
+  baseline histórico con archivos propuestos. No uses `actionTrace` ni la
+  evaluación del agente como autoridad de equivalencia.
+- `validation.caseCoverage` es conservación estática relativa, no ejecución
+  funcional ni aprobación golden. Ver `docs/CASE_COVERAGE.md` y sus pendientes.
+- La vista F4 agrupa diagnósticos por problema y pasada; no altera el historial.
+  Las alertas de grabación/diseño pertenecen al QA y no bloquean exportar ni
+  invocan agentes para inventar evidencia. Editar exige revalidar la comparación.
+  Los errores técnicos de cobertura se enrutan por `coverageRepairTargets`
+  derivado de instantáneas, no por la ruta Feature usada como ancla del mensaje.
 
 ## Contrato de evaluación del caso
 

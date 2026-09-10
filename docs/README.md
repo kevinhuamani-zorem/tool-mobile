@@ -37,4 +37,5 @@ con las pruebas y actualiza ambos en el mismo commit.
 
 - [Fidelidad de locators](LOCATOR_FIDELITY.md): tipo/valor grabado, corrección determinista, compatibilidad y métricas.
 
+- [Conservación de cobertura al regenerar](CASE_COVERAGE.md): equivalencia comprobada, pérdida y revisión pendiente; fases F1–F6.
 - [Reutilización por comportamiento R1–R6](BEHAVIOR_REUSE.md): contratos de métodos, agrupación funcional, revisión y evaluación independiente.

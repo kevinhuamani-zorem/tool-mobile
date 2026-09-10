@@ -94,6 +94,8 @@ test('el contrato publica requisitos positivos y ejemplo minimo por regla', () =
     assert.equal(nonPositive.length, 0, `Reglas sin requisito positivo: ${nonPositive.map(rule => rule.code).join(', ')}`);
     const critical = new Set([
         'assertion',
+        'case-coverage-review',
+        'case-coverage-unverified',
         'imperative-gherkin',
         'generic-template-gherkin',
         'non-english-identifier',

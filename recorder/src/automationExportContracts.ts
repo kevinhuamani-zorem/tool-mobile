@@ -1,4 +1,5 @@
 import type { GeneratedPreview } from '../../core/generation';
+import type { ReviewDiagnostic } from './ipc/automation/reviewDiagnostics';
 import type { AutomationValidation } from '../../core/validation';
 
 /** Export permission is independent of validation.valid and generation success. */
@@ -17,4 +18,5 @@ export interface AutomationExportResult {
     validation?: AutomationValidation;
     missingLayers?: string[];
     generationDiagnostics?: string[];
+    reviewDiagnostics?: ReviewDiagnostic[];
 }

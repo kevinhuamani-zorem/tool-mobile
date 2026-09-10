@@ -488,8 +488,12 @@ const RULE_GUIDANCE: Record<string, RuleGuidance> = {
         minimalExample: 'Una acción VERIFICAR_TEXTO con equals exige comparar el texto leído por igualdad al esperado; una mera comprobación de presencia no satisface ese criterio.',
     },
     'case-coverage-review': {
-        requirement: 'El mismo TC debe conservar su cobertura previa; la reducción requiere reconciliar la propuesta visible con el caso existente.',
+        requirement: 'El mismo TC debe conservar las operaciones, argumentos, aserciones, orden y repeticiones de su cobertura previa. Puede cambiar la redacción si la cadena de código demuestra conservación; restaurar definiciones que el Feature ya no ejecuta no corrige una pérdida.',
         minimalExample: 'TC-10140 existente: hoy, 7, 15, 30 y 90 días; propuesta: 30 y 90. Conservar los días anteriores al actualizar el caso.',
+    },
+    'case-coverage-unverified': {
+        requirement: 'La equivalencia debe apoyarse en definiciones únicas y dependencias comprobables. Revisa validation.caseCoverage y conserva las implementaciones previas cuando sus llamadas ya cubren el caso; una frase parecida, actionTrace o una afirmación del agente no demuestra equivalencia.',
+        minimalExample: 'Un cambio de frase con await screen.confirmar(monto) intacto puede conservar cobertura; si también cambia confirmar o su locator, revisar esa implementación y sus argumentos. Mantener el borrador y la revisión pendiente cuando falta evidencia; no modificar validation.json para aprobarlo.',
     },
     'reuse-binding-mismatch': {
         requirement: 'La propuesta debe conservar el método y secuencias de scenarioRows.reuse; afirma el retorno si es boolean.',

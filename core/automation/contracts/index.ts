@@ -6,6 +6,8 @@ import type { RecordedStep } from './models';
 
 export type {
     AutomationValidation,
+    CoverageRepairTargets,
+    CaseCoverageAssessment,
     ValidationIssue,
     ValidationRepairContext,
     ValidationRepairGroup,

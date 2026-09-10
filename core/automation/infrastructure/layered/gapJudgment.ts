@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import {
     AutomationAgentResponse,
+    CoverageRepairTargets,
     GenerationPlan,
 } from '../../contracts';
 import {
@@ -164,9 +165,20 @@ export function gapJudgment(packageDirectory: string, plan: GenerationPlan): Gap
  * proyecta `validation-contract.json` a cada autor y con la que Derek dirige el
  * feedback de reparacion: un error llega solo al agente que puede corregirlo.
  */
+// Coverage spans all four layers. Both authors receive its contract; routing
+// below uses Recorder-owned snapshot differences instead of its Feature anchor.
+export const CASE_COVERAGE_RULE_CODES = new Set(['case-coverage-review', 'case-coverage-unverified']);
+
+export function mergeCoverageRepairTargets(first?: CoverageRepairTargets, second?: CoverageRepairTargets): CoverageRepairTargets | undefined {
+    if (!first && !second) return undefined;
+    const files = [...new Map([...(first?.files || []), ...(second?.files || [])]
+        .map(file => [JSON.stringify([file.path, file.layer]), { ...file }])).values()];
+    return { files, complete: first?.complete === true && second?.complete === true };
+}
+
 export const BEHAVIOR_RULE_CODES = new Set([
     'case-identity-unavailable', 'case-duplicate', 'framework-case-collision', 'acceptance-contract',
-    'case-coverage-review', 'reuse-binding-mismatch', 'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
+    'reuse-binding-mismatch', 'assertion', 'duplicate-step-definition', 'framework-scenario-collision',
     'framework-step-collision', 'generic-template-gherkin', 'imperative-gherkin',
     // Cada linea del Feature resuelve a exactamente una definicion de todo
     // el framework: la redaccion y la definicion son de Lorem.
@@ -236,21 +248,41 @@ export function classifyValidationErrors(
     issues: Array<RepairIssue | string>,
     plan?: Pick<GenerationPlan, 'files'>,
 ): LayeredRepairFeedback {
-    const normalized = issues.map(issue => typeof issue === 'string' ? { message: issue } : ({
+    const normalized: RepairIssue[] = issues.map(issue => typeof issue === 'string' ? { message: issue } : ({
         ...issue,
         message: `${issue.code ? `[${issue.code}] ` : ''}${issue.file ? `${issue.file}: ` : ''}${issue.message}`,
     }));
+    const grouped = new Map<string, RepairIssue>();
+    for (const issue of normalized) {
+        const previous = grouped.get(issue.message);
+        const coverageRepairTargets = previous && mergeCoverageRepairTargets(previous.coverageRepairTargets, issue.coverageRepairTargets);
+        grouped.set(issue.message, previous ? { ...previous, ...(coverageRepairTargets ? { coverageRepairTargets } : {}) } : issue);
+    }
     const owners = layerOwnersOf(plan);
     const feedback: LayeredRepairFeedback = {
-        all: [...new Set(normalized.map(issue => issue.message).filter(Boolean))],
+        all: [...grouped.keys()].filter(Boolean),
         behavior: [],
         interaction: [],
         integration: [],
     };
     const seen = new Set<string>();
-    for (const issue of normalized) {
+    for (const issue of grouped.values()) {
         if (!issue.message || seen.has(issue.message)) continue;
         seen.add(issue.message);
+        const coverageCode = issue.code || issue.message.match(/^\[(case-coverage-(?:review|unverified))\]/)?.[1];
+        if (coverageCode && CASE_COVERAGE_RULE_CODES.has(coverageCode)) {
+            const targets = issue.coverageRepairTargets;
+            const files = targets?.files || [];
+            const unknown = targets?.complete !== true || files.length === 0
+                || files.some(file => !['feature', 'steps', 'screen', 'locators'].includes(file.layer));
+            const behaviorFiles = files.filter(file => file.layer === 'feature' || file.layer === 'steps').map(file => file.path);
+            const interactionFiles = files.filter(file => file.layer === 'screen' || file.layer === 'locators').map(file => file.path);
+            const guidance = (paths: string[], label: string) => `${issue.message} [coverage-repair] ${paths.length ? `Cambios en ${label}: ${paths.join(', ')}.` : `Revisa la interfaz de ${label} junto con el otro autor; la atribución está incompleta.`} Corrige únicamente las capas asignadas y conserva el comportamiento del baseline. Las acciones, selectores verificados y esperados del recording pertenecen al QA; si falta evidencia o el plan no autoriza el cambio, informa el pendiente y conserva el borrador.`;
+            if (unknown || behaviorFiles.length) feedback.behavior.push(guidance(behaviorFiles, 'Feature/Steps'));
+            if (unknown || interactionFiles.length) feedback.interaction.push(guidance(interactionFiles, 'Screen/Locators'));
+            if (unknown) feedback.integration.push(`${issue.message} [coverage-repair] La atribución incluye dependencias compartidas o evidencia incompleta. Coordina la interfaz con ambos autores y conserva sus archivos; los cambios fuera del plan requieren revisión QA.`);
+            continue;
+        }
         let behavior = false;
         let interaction = false;
         let integration = false;

@@ -10,6 +10,18 @@
 
 import { disableBtn, enableBtn, escapeHtml } from '../shared/domHelpers.js';
 import { renderAcceptanceAssessment } from './assessmentSummary.js';
+import { createCaseCoverageControls } from '../shared/caseCoverageControls.js';
+
+function reviewForResult(result) {
+    return { coverage: result.validation?.caseCoverage,
+        diagnostics: result.reviewDiagnostics || [
+            ...(result.validation?.errors || []),
+            ...(result.generationDiagnostics || []).map(message => ({ code: 'generation-incomplete', message })),
+        ].map((issue, index) => ({ ...issue, id: `current-${index}`, source: 'generation', severity: 'error',
+            sequences: [], passes: [], status: 'pending' })),
+    };
+}
+
 
 /**
  * @param {object} deps
@@ -60,6 +72,8 @@ export function createGenerationFeature(deps) {
     const reviewValidationIcon = document.getElementById('reviewValidationIcon');
     const reviewValidationTitle = document.getElementById('reviewValidationTitle');
     const acceptanceAssessment = document.getElementById('acceptanceAssessment');
+    const coverageControls = createCaseCoverageControls({ document });
+    let currentReview = {};
     let currentAssessment;
     let currentTechnicalValid;
     const goldenDatasetPanel = document.getElementById('goldenDatasetPanel');
@@ -133,6 +147,8 @@ export function createGenerationFeature(deps) {
         state.lastPreviewToken = '';
         currentAssessment = undefined;
         currentTechnicalValid = undefined;
+        currentReview = {};
+        coverageControls.clear();
         if (acceptanceAssessment) acceptanceAssessment.style.display = 'none';
         if (isAutomationWorkflow()) btnGenerate.disabled = true;
         state.previewDocuments = [];
@@ -235,6 +251,7 @@ export function createGenerationFeature(deps) {
         if (isAutomationWorkflow()) {
             const edited = state.previewDocuments.some(item => item.content !== item.originalContent);
             renderAcceptanceAssessment(acceptanceAssessment, currentAssessment, edited);
+            coverageControls.render({ ...currentReview, stale: edited });
             if (edited) {
                 if (reviewValidationTitle) reviewValidationTitle.textContent = 'Validación técnica: pendiente de revalidar';
                 if (reviewValidationIcon) reviewValidationIcon.textContent = '↻';
@@ -423,6 +440,7 @@ export function createGenerationFeature(deps) {
         state.lastPreviewToken = result.previewToken || '';
         currentAssessment = result.validation?.assessment;
         currentTechnicalValid = valid;
+        currentReview = reviewForResult(result);
         const proposedDocuments = [
             ...(result.preview.featurePath ? [{ path: result.preview.featurePath, content: result.preview.featureContent }] : []),
             ...(result.preview.locatorPath ? [{ path: result.preview.locatorPath, content: result.preview.locatorContent }] : []),
@@ -463,11 +481,12 @@ export function createGenerationFeature(deps) {
                 item.origin === 'deterministic' ? 'borrador determinista' : item.origin === 'qa' ? 'corrección QA' : `agente, pasada ${item.pass || '?'}`))];
             lblGenerationFileCount.textContent =
                 `${state.previewDocuments.length} archivo(s) con observaciones${missing}${sources.length ? ` · Origen: ${sources.join('; ')}` : ''}`;
-            const diagnostics = (result.validation?.errors || []).map(error => error.message).join('\n');
-            setGenerate(`⚠ Borrador disponible para revisión. Puedes exportar los archivos disponibles y corregirlos en el framework.${diagnostics ? `\n${diagnostics}` : ''}`, 'err');
+            setGenerate('⚠ Borrador disponible. Revisa los diagnósticos; puedes exportar los archivos y corregirlos en el framework.', 'err');
         }
         renderAcceptanceAssessment(acceptanceAssessment, currentAssessment,
             state.previewDocuments.some(item => item.content !== item.originalContent));
+        coverageControls.render({ ...currentReview,
+            stale: state.previewDocuments.some(item => item.content !== item.originalContent) });
         if (state.previewDocuments.some(item => item.content !== item.originalContent)) updatePreviewDocumentState();
         if (result.exportBlockers?.length) setGenerate(`No se puede escribir sobre el destino: ${result.exportBlockers.join(' | ')}`, 'err');
     }
@@ -542,13 +561,14 @@ export function createGenerationFeature(deps) {
                 rememberGeneratedFiles(result.generated.files);
                 setGenerate(
                     `✓ ${result.generated.files.length} archivos exportados${result.exportStatus === 'exported-with-observations' ? ' con observaciones' : ''} · pendientes de verificación del QA`
-                        + (result.missingLayers?.length ? `\nCapas faltantes: ${result.missingLayers.join(', ')}` : '')
-                        + [...(result.validation?.errors || []).map(item => item.message), ...(result.generationDiagnostics || [])].map(message => `\n${message}`).join(''),
+                        + (result.missingLayers?.length ? `\nCapas faltantes: ${result.missingLayers.join(', ')}` : ''),
                     'ok'
                 );
                 state.lastPreviewToken = '';
                 currentAssessment = result.validation?.assessment;
                 currentTechnicalValid = result.validation?.valid;
+                currentReview = reviewForResult(result);
+                coverageControls.render(currentReview);
                 btnGenerate.disabled = true;
                 state.previewDocuments.forEach(document => {
                     document.originalContent = document.content;

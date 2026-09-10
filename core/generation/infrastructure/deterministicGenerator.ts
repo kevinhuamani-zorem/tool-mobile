@@ -20,7 +20,7 @@ import {
 } from './fwkMobileGenerator';
 import { frameworkContract, projectPaths } from '../../workspace';
 import { effectiveGenerationPlan } from './effectiveGenerationPlan';
-import { ReuseAnalyzer } from '../../indexing';
+import { ReuseAnalyzer, collectCaseCoverageSnapshots, compareCaseCoverage } from '../../indexing';
 import { readJsonUtf8, readUtf8File, writeJsonUtf8 } from '../../shared';
 import { mergePatchImports, proposedImports } from './patchImports';
 import {
@@ -612,7 +612,10 @@ function scenarioBlocks(content: string): Array<{ name: string; block: string }>
  * segunda debe anadir su Scenario, no reemplazar el archivo (y con el, el
  * caso anterior). Los Scenarios cuyo nombre ya existe no se duplican.
  */
-export function mergeFeatureUpdate(baseline: string, generated: string, preserveCoverage = false): string {
+export function mergeFeatureUpdate(
+    baseline: string, generated: string, preserveCoverage = false,
+    coverageStatus?: (caseId: string) => 'preserved' | 'lost' | 'unverified',
+): string {
     const existing = scenarioBlocks(baseline);
     const caseId = (name: string) => name.match(/\[(TC-\d+)\]/i)?.[1]?.toUpperCase();
     // Identity survives a renamed title. An unreviewed scope reduction remains a visible conflict.
@@ -623,8 +626,18 @@ export function mergeFeatureUpdate(baseline: string, generated: string, preserve
         const current = sameId[0];
         const texts = (block: string) => [...block.matchAll(/^\s*(?:Given|When|Then|And|But)\s+(.+)$/gm)].map(m => m[1].trim());
         const next = texts(proposed.block);
-        const removed = texts(current.block).filter(text => !next.includes(text));
-        const replacement = preserveCoverage && removed.length
+        let cursor = 0;
+        const removed = texts(current.block).filter(text => {
+            const index = next.indexOf(text, cursor);
+            if (index < 0) return true;
+            cursor = index + 1;
+            return false;
+        });
+        // The production path compares final code across all four layers.
+        // Callers without snapshots retain a conservative wording fallback.
+        const needsReview = preserveCoverage && (coverageStatus
+            ? coverageStatus(id!) !== 'preserved' : removed.length > 0);
+        const replacement = needsReview
             ? `<<<<<<< COBERTURA EXISTENTE ${id}\n${current.block.trimEnd()}\n======= PROPUESTA PARA REVISAR\n${proposed.block.trimEnd()}\n>>>>>>> REVISAR CAMBIO DE COBERTURA\n`
             : proposed.block;
         baseline = baseline.replace(current.block.trimEnd(), replacement.trimEnd());
@@ -646,33 +659,28 @@ export function mergeFeatureUpdate(baseline: string, generated: string, preserve
     return `${output.replace(/\s+$/, '')}\n\n${additions.map(item => item.block).join('\n')}`;
 }
 
-function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan): GeneratedPreview {
+function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan, scenario: AutomationScenario): GeneratedPreview {
     let screenContent = preview.screenContent;
     let locatorContent = preview.locatorContent;
     let stepContent = preview.stepContent;
     let featureContent = preview.featureContent;
     const featurePlan = plan.files.find(file => file.layer === 'feature' && file.operation === 'update');
-    if (featurePlan && featureContent && !plan.existingCase) {
-        featureContent = mergeFeatureUpdate(
-            readUtf8File(path.join(projectPaths.frameworkRoot, featurePlan.path)),
-            featureContent,
-            Boolean(plan.behaviorReuse?.sameCase.length && !plan.reconciliation),
-        );
-    }
+    const baselines = new Map(plan.files.filter(file => file.operation === 'update')
+        .map(file => [file.path, readUtf8File(path.join(projectPaths.frameworkRoot, file.path))]));
     const screenPlan = plan.files.find(file => file.layer === 'screen' && file.operation === 'update');
     const locatorPlan = plan.files.find(file => file.layer === 'locators' && file.operation === 'update');
     const stepsPlan = plan.files.find(file => file.layer === 'steps' && file.operation === 'update');
     if (stepsPlan && !stepContent) {
-        stepContent = readUtf8File(path.join(projectPaths.frameworkRoot, stepsPlan.path));
+        stepContent = baselines.get(stepsPlan.path)!;
         preview = { ...preview, stepPath: path.join(projectPaths.frameworkRoot, stepsPlan.path) };
     }
     if (screenPlan && !screenContent) {
-        screenContent = readUtf8File(path.join(projectPaths.frameworkRoot, screenPlan.path));
+        screenContent = baselines.get(screenPlan.path)!;
         preview = { ...preview, screenPath: path.join(projectPaths.frameworkRoot, screenPlan.path) };
     }
     if (stepsPlan && stepContent) {
         stepContent = mergeStepsUpdate(
-            readUtf8File(path.join(projectPaths.frameworkRoot, stepsPlan.path)),
+            baselines.get(stepsPlan.path)!,
             stepContent,
         );
     }
@@ -681,7 +689,7 @@ function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan
             .filter(item => item.locatorReplacement && item.locatorName)
             .map(item => item.locatorName!));
         screenContent = mergeScreenUpdate(
-            readUtf8File(path.join(projectPaths.frameworkRoot, screenPlan.path)),
+            baselines.get(screenPlan.path)!,
             screenContent,
             screenPlan.path,
             replacementGetters,
@@ -689,10 +697,31 @@ function preserveUpdateBaselines(preview: GeneratedPreview, plan: GenerationPlan
     }
     if (locatorPlan && locatorContent) {
         locatorContent = mergeLocatorUpdate(
-            readUtf8File(path.join(projectPaths.frameworkRoot, locatorPlan.path)),
+            baselines.get(locatorPlan.path)!,
             locatorContent,
             plan,
         );
+    }
+    if (featurePlan && featureContent && !plan.existingCase) {
+        const baselineFeature = baselines.get(featurePlan.path)!;
+        const proposedFeature = mergeFeatureUpdate(baselineFeature, featureContent);
+        let coverageStatus: ((caseId: string) => 'preserved' | 'lost' | 'unverified') | undefined;
+        const preserveCoverage = Boolean(plan.behaviorReuse?.sameCase.length && !plan.reconciliation);
+        if (preserveCoverage) {
+            try {
+                const catalog = new ReuseAnalyzer().getCatalog(scenario.squad, scenario.platform, scenario.request.featureScope);
+                const byLayer = { feature: proposedFeature, steps: stepContent, screen: screenContent, locators: locatorContent };
+                const snapshots = collectCaseCoverageSnapshots({
+                    frameworkRoot: projectPaths.frameworkRoot, featurePath: featurePlan.path,
+                    stepFiles: [...new Set((catalog.frameworkStepDefinitions || []).map(item => item.file))],
+                    beforeFiles: Object.fromEntries(baselines),
+                    afterFiles: Object.fromEntries(plan.files.filter(file => byLayer[file.layer] !== undefined)
+                        .map(file => [file.path, byLayer[file.layer]!])),
+                });
+                coverageStatus = caseId => compareCaseCoverage({ caseId, platform: scenario.platform, ...snapshots }).status;
+            } catch { coverageStatus = () => 'unverified'; }
+        }
+        featureContent = mergeFeatureUpdate(baselineFeature, featureContent, preserveCoverage, coverageStatus);
     }
     return { ...preview, screenContent, locatorContent, stepContent, featureContent };
 }
@@ -839,7 +868,7 @@ export class DeterministicGenerator {
                 locatorNaming: updateLocatorNaming(plan),
             },
         );
-        const preview = preserveUpdateBaselines(generatedPreview, plan);
+        const preview = preserveUpdateBaselines(generatedPreview, plan, effectiveScenario);
         assertCreateArtifacts(effectiveScenario, plan, preview);
         return responseFromPreview(effectiveScenario, plan, preview, resolutions);
     }

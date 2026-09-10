@@ -177,7 +177,8 @@ test('una revisión funcional se muestra como sugerencia y no bloquea la automat
     assert.match(modal, /Son recomendaciones de Copilot\. No bloquean/);
     assert.match(modal, /id="btnImproveTestDesign"/);
     assert.doesNotMatch(review, /QA_TEST_DESIGN_REQUIRED/);
-    assert.match(review, /renderTestDesignSuggestions\(launched\.testDesignReview \|\| null\)/);
+    assert.match(review, /renderTestDesignSuggestions\(launched\.imported\?\.reviewDiagnostics \|\| launched\.draft\?\.reviewDiagnostics/);
+    assert.match(review, /\? null : launched\.testDesignReview \|\| null/);
     assert.match(review, /review\?\.status === 'suggestion'/);
     assert.match(modal, /Volver y mejorar la grabación/);
     assert.match(review, /Las sugerencias de Copilot son informativas y no invalidan la automatización/);

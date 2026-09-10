@@ -1,3 +1,4 @@
+import { loadReviewDiagnostics } from './reviewContext';
 import { loadFrameworkBaseline } from '../../../../core/automation';
 import fs from 'fs';
 import path from 'path';
@@ -168,6 +169,7 @@ export async function applyReviewedAutomation(
         state.automationPreview = null;
         emitAutomationProgress('COMPLETED', 'Archivos exportados; verificación QA pendiente', 2, 2);
         return { success: true, generated, validation, exportStatus, generationDiagnostics,
+            reviewDiagnostics: loadReviewDiagnostics(state.activeAutomationPackage, validation, scenario, plan),
             missingLayers: plan.files.filter(file => !response.files.some(item => item.layer === file.layer)).map(file => file.layer), patched: patched.outcomes };
     } catch (e: any) {
         emitAutomationProgress('FAILED', 'No pudimos aplicar la automatización', 0, 2, {

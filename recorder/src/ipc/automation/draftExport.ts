@@ -10,6 +10,7 @@ import { AutomationApplier, AutomationHistoryStore, AutomationApplicationReceipt
     withRecoveredResponseMetadata, recoverDraftMetadata } from '../../../../core/automation';
 import type { AutomationResponseImporterDependencies } from './responseImport';
 import { layeredDraftPreview } from './layeredDraftPreview';
+import { loadReviewDiagnostics } from './reviewContext';
 import { FrameworkCompilationValidator, includeFrameworkCompilation, refreshAssessmentStatic, AutomationValidation } from '../../../../core/validation';
 
 /** Recovery is an export candidate, never a new successful agent response. */
@@ -17,14 +18,16 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
     draft: NonNullable<LayeredGenerationResult['draft']>, reviewedContents?: Record<string, string>) {
     const previousPreview = deps.state.automationPreview;
     deps.state.automationPreview = null;
-    const result = { ...layeredDraftPreview(draft, projectPaths.frameworkRoot),
-        exportReady: false, previewToken: '', exportBlockers: [] as string[] };
+    const display = layeredDraftPreview(draft, projectPaths.frameworkRoot);
+    const result = { ...display, exportReady: false, previewToken: '', exportBlockers: [] as string[],
+        reviewDiagnostics: loadReviewDiagnostics(packageDirectory, display.validation) };
     try {
         const scenario = deps.automationPackageBuilder.requireTrustedScenarioPackage(
             readJsonUtf8<AutomationScenario>(path.resolve(packageDirectory, '../..', 'scenario.json')),
             readJsonUtf8<PackagedAutomationScenario>(path.join(packageDirectory, 'scenario.json')), packageDirectory);
         const effective = path.join(packageDirectory, 'effective-generation-plan.json');
         let plan = readJsonUtf8<GenerationPlan>(fs.existsSync(effective) ? effective : path.join(packageDirectory, 'generation-plan.json'));
+        result.reviewDiagnostics = loadReviewDiagnostics(packageDirectory, result.validation, scenario, plan);
         const receiptFile = path.join(packageDirectory, 'application-receipt.json');
         let correctionBaselines = new Map<string, string>();
         const frameworkBaseline = loadFrameworkBaseline(packageDirectory, plan);
@@ -80,6 +83,7 @@ export function prepareRecoveredExport(deps: AutomationResponseImporterDependenc
         result.validation = { ...validation, valid: validation.valid && !draft.diagnostics.length,
             errors: [...result.validation.errors, ...validation.errors] };
         refreshAssessmentStatic(result.validation);
+        result.reviewDiagnostics = loadReviewDiagnostics(packageDirectory, result.validation, scenario, plan);
         history.capture('prepared-response.json', JSON.stringify(prepared.response), 'recorder', 'draft:prepared');
         history.capture('validation.json', JSON.stringify(result.validation), 'recorder', 'draft:prepared-validation');
         if (reviewedContents) {

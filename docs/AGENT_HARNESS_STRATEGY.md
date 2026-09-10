@@ -19,6 +19,13 @@ El Recorder ya implementa gran parte de ambos. La prioridad es operarlos con
 casos representativos, corregir sus brechas a partir de evidencia e incorporar
 la ejecución funcional del código generado.
 
+El alcance es generar o reutilizar las cuatro capas desde grabaciones de
+cualquier flujo y squad del framework seleccionado. Los casos de payment
+revisados hasta ahora son controles iniciales. El corpus debe crecer por squads,
+capacidades, plataformas y modos de conexión; resultados en payment no acreditan
+otros contextos. Un golden previo no es requisito para generar. La corrección
+de una grabación particular se sigue con su QA y no bloquea el avance del harness.
+
 | Capacidad | Estado comprobado | Acción de esta estrategia |
 | --- | --- | --- |
 | Recording, plan determinista, catálogo y recuperación golden | Implementada | Fijar entradas y procedencia en cada evaluación. |
@@ -108,9 +115,14 @@ se interpreta como control positivo ni se declara verde una puerta que falla.
 
 **Trabajo:**
 
-- [ ] Empezar con ventas, movimientos y yapeo, usando variantes revisadas por
-  QA. Cubrir reutilización, creación, ampliación de módulos compartidos y
-  regeneración después de cambios del framework.
+- [ ] Usar ventas, movimientos y yapeo como lote inicial de payment y añadir
+  casos reales de otros squads antes de concluir generalización. Organizar el
+  corpus por navegación, formularios, permisos, filtros, listas, parámetros y
+  aserciones; registrar plataforma y modo de conexión evaluados.
+- [ ] Cubrir reutilización, creación sin salidas previas, ampliación de módulos
+  compartidos y regeneración después de cambios QA/framework. Incluir flujos sin
+  golden previo. Mantener reglas de negocio y esperados en los fixtures y
+  criterios del caso, sin ramificaciones por TC o squad en el generador.
 - [ ] Para cada caso fijar objetivo, verificaciones, criterios críticos,
   precondiciones de datos, usuario válido y fijo del squad, plataforma, baseline
   y etiquetas de reutilización
@@ -159,8 +171,10 @@ Esta es cobertura de regresión del corpus, no precisión general del agente.
   pasadas, diagnósticos, archivos preparados, compilación y resultado final.
 - [ ] Revisar una muestra de salidas con QA usando la misma rúbrica, también
   las que pasan automáticamente. No ajustar etiquetas para favorecer un brazo.
-- [ ] Publicar resultados por caso, por rol y agregados, con errores de entorno,
-  interrupciones, casos sin evaluación y versiones de golden realmente usadas.
+- [ ] Publicar resultados por caso, rol, squad, capacidad y plataforma evaluada,
+  además de agregados, con errores de entorno, interrupciones, casos sin
+  evaluación y versiones de golden realmente usadas. Un lote de payment es
+  exploratorio; no acredita rendimiento en squads o capacidades no probados.
 
 **Entrega:** manifest e informe del piloto, con lista priorizada de fallos y
 muestra QA. **Cierre:** todas las generaciones programadas tienen un resultado
@@ -204,7 +218,9 @@ una mejora del agente. El ensayo pequeño no demuestra cero fallos futuros.
 
 - [ ] Definir el adaptador funcional sobre el runner real del framework:
   selección inequívoca del caso, configuración, preparación, ejecución y lectura
-  del resultado. Mantenerlo separado de la sesión de grabación.
+  del resultado. Mantenerlo separado de la sesión de grabación. Los perfiles
+  seleccionan caso, squad y datos; el adaptador no contiene lógica exclusiva de
+  movimientos ni de otro flujo de negocio.
 - [ ] Empezar con Android local, ambiente QA, un dispositivo, un TC de consulta
   de movimientos y una fila de Examples. Fijar app/build, OS y usuario. Ampliar
   después a Android BrowserStack, iOS local e iOS BrowserStack mediante perfiles

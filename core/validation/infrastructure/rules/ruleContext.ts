@@ -20,6 +20,7 @@ import { OutputValidator } from '../outputValidator';
 /** Acumulador que comparten todas las familias durante una validacion. */
 export interface RuleReport {
     errors: AutomationValidation['errors'];
+    caseCoverage?: AutomationValidation['caseCoverage'];
     warnings: string[];
 }
 

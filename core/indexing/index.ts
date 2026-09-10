@@ -15,3 +15,6 @@ export * from './infrastructure/reuseAnalyzer';
 export { stepDelegation, indexMethodBehaviors } from './domain/behaviorContract';
 
 export { verifiedFrameworkHelpers, helperBodyHash } from './infrastructure/behaviorHelpers';
+
+export * from './domain/caseCoverage';
+export * from './infrastructure/caseCoverageSnapshot';

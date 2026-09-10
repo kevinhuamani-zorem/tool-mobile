@@ -174,7 +174,8 @@ test('F3 Revisión habilita exportar con diagnóstico y solo bloquea por conflic
     feature.showPreviewDocuments(preview, false, false);
     assert.equal(fake.document.getElementById('btnGenerate').disabled, false);
     assert.match(fake.document.getElementById('btnGenerate').textContent, /Exportar al framework/);
-    assert.match(fake.document.getElementById('lblGenerateResult').textContent, /Dos pasadas agotadas/);
+    assert.match(fake.document.getElementById('caseCoveragePanel').innerHTML, /Dos pasadas agotadas/);
+    assert.doesNotMatch(fake.document.getElementById('lblGenerateResult').textContent, /Dos pasadas agotadas/);
     feature.showPreviewDocuments({ ...preview, exportReady: false, previewToken: '', exportBlockers: ['Cambio externo'] }, false, false);
     assert.equal(fake.document.getElementById('btnGenerate').disabled, true);
     assert.match(fake.document.getElementById('lblGenerateResult').textContent, /Cambio externo/);
@@ -222,7 +223,8 @@ test('F3 el botón envía bytes inválidos al IPC sin exigir corrección local p
     assert.equal(state.lastPreviewToken, '');
     assert.equal(button.disabled, true);
     assert.match(fake.document.getElementById('lblGenerateResult').textContent, /exportados con observaciones/);
-    assert.match(fake.document.getElementById('lblGenerateResult').textContent, /TS1005/);
+    assert.match(fake.document.getElementById('caseCoveragePanel').innerHTML, /TS1005/);
+    assert.doesNotMatch(fake.document.getElementById('lblGenerateResult').textContent, /TS1005/);
     feature.unmount();
 });
 

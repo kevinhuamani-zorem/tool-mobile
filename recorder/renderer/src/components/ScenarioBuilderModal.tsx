@@ -201,7 +201,8 @@ export function ScenarioBuilderModal() {
               <ul id="testDesignSuggestionIssues" />
             </section>
             <section id="automationReuseSummary" className="qa-observations-panel" aria-label="Reutilización del framework" style={{display: 'none'}} />
-            <section id="qaObservationsPanel" className="qa-observations-panel" style={{display: 'none'}}>
+            <details id="qaObservationsPanel" className="qa-observations-panel" style={{display: 'none'}}>
+              <summary>Detalle de la grabación y reporte QA</summary>
               <div className="qa-observations-heading">
                 <div>
                   <strong>⚠ Observaciones para QA</strong>
@@ -211,7 +212,7 @@ export function ScenarioBuilderModal() {
               </div>
               <ul id="qaObservationsList" />
               <span id="qaReportCopyStatus" className="wizard-help" />
-            </section>
+            </details>
             <select id="cmbPreviewFile" className="field-select wizard-file-tabs" style={{display: 'none'}} />
             <div id="codeReviewWorkspace" className="code-review-workspace" style={{display: 'none'}}>
               <aside className="code-file-explorer">
@@ -256,6 +257,7 @@ export function ScenarioBuilderModal() {
                 <button className="btn btn-green btn-generate-final" id="btnGenerate">Aplicar automatización</button>
               </div>
             </div>
+            <section id="caseCoveragePanel" className="case-coverage-panel" aria-label="Comparación de cobertura y diagnósticos" style={{display: 'none'}} />
             <section id="acceptanceAssessment" className="acceptance-assessment" aria-label="Evaluación de criterios" aria-live="polite" style={{display: 'none'}} />
             <div id="lblGenerateResult" className="generate-result review-generation-result" />
             <section id="goldenDatasetPanel" className="golden-dataset-panel" style={{display: 'none'}}>

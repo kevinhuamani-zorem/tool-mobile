@@ -2774,3 +2774,57 @@ body {
     .workspace-context .saved-context { flex-wrap: wrap; }
     .workspace-context .saved-context-ok { flex-basis: 100%; margin-left: 0; }
 }
+
+
+/* Coverage comparison and diagnostics share the Recorder review workspace. */
+.case-coverage-panel { margin: 18px 0; padding: 20px; min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--bg3); color: var(--text); }
+.coverage-panel-heading, .coverage-recording-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.coverage-panel-heading h3 { margin-top: 6px; font-size: 16px; overflow-wrap: anywhere; }
+.coverage-eyebrow { color: #c693ef; font-size: 10px; font-weight: 700; letter-spacing: .13em; }
+.coverage-platform { padding: 5px 10px; border: 1px solid var(--border); border-radius: 20px; color: var(--text); font-size: 10px; }
+.coverage-state { margin-top: 16px; padding: 14px 16px; display: flex; align-items: flex-start; gap: 12px; border: 1px solid; border-radius: 9px; }
+.coverage-state-icon { width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 700; }
+.coverage-state strong { font-size: 14px; }
+.coverage-state p { margin-top: 5px; color: #c0bed4; line-height: 1.5; }
+.coverage-state-preserved { border-color: #286249; background: #172b26; color: #a6e2be; }
+.coverage-state-lost { border-color: #944554; background: #321e27; color: #ffa6b1; }
+.coverage-state-unverified, .coverage-state-stale { border-color: #78633e; background: #29251f; color: #f0d093; }
+.coverage-scope, .coverage-details-help, .coverage-export-note { margin-top: 12px; color: #afadc5; line-height: 1.6; font-size: 12px; }
+.coverage-export-note { padding-top: 12px; border-top: 1px solid var(--border); }
+.coverage-differences { margin-top: 18px; }
+.coverage-differences h4 { font-size: 13px; margin-bottom: 10px; }
+.coverage-difference { margin-top: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); }
+.coverage-difference p { line-height: 1.5; overflow-wrap: anywhere; }
+.coverage-difference small { display: block; margin-top: 10px; color: #afadc5; }
+.coverage-difference-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+.coverage-column-label { display: block; margin-bottom: 7px; color: #afadc5; font-size: 11px; }
+.coverage-step-number { display: inline-block; padding: 4px 7px; margin: 0 3px 4px 0; border: 1px solid #484565; border-radius: 5px; background: #29273c; color: var(--text); font-size: 11px; }
+.coverage-unmapped { color: #aaa7bf; font-size: 12px; line-height: 1.5; }
+.coverage-mappings, .coverage-diagnostic-group { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.case-coverage-panel summary { cursor: pointer; line-height: 1.5; color: var(--text); font-size: 13px; }
+.case-coverage-panel summary:focus-visible { outline: 2px solid #c693ef; outline-offset: 4px; border-radius: 2px; }
+.case-coverage-panel summary > span { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 10px; background: var(--bg4); font-size: 11px; }
+.coverage-match { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.coverage-match:last-child { border-bottom: 0; }
+.coverage-example { grid-column: 1 / -1; color: #afadc5; font-size: 11px; }
+.coverage-match-arrow { text-align: center; color: #afadc5; }
+.coverage-diagnostic-group ul, .coverage-recording-guidance ul { padding-left: 18px; margin-top: 10px; }
+.coverage-diagnostic-group li, .coverage-recording-guidance li { margin: 12px 0; padding-left: 3px; }
+.coverage-diagnostic-group li p, .coverage-recording-guidance li p { line-height: 1.5; overflow-wrap: anywhere; }
+.coverage-diagnostic-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; font-size: 11px; line-height: 1.5; color: #afadc5; }
+.coverage-diagnostic-file { flex-basis: 100%; overflow-wrap: anywhere; }
+.coverage-recording-guidance { padding: 16px; margin-top: 18px; background: #262334; border: 1px solid #625078; border-radius: 9px; }
+.coverage-recording-heading strong { color: #dbb4f4; font-size: 13px; }
+.coverage-recording-heading > span { color: #c4b6d1; font-size: 11px; }
+.coverage-recording-guidance > p { margin-top: 10px; line-height: 1.5; color: #c0bed4; font-size: 12px; }
+.coverage-recording-note { padding-top: 10px; border-top: 1px solid #48405b; }
+.coverage-resolved summary { color: #b8cbbf; }
+@media (max-width: 700px) {
+    .case-coverage-panel { padding: 14px; }
+    .coverage-state { padding: 12px; }
+    .coverage-state strong { font-size: 13px; }
+    .coverage-difference-steps { grid-template-columns: minmax(0, 1fr); }
+    .coverage-match { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+    .coverage-example { grid-column: auto; margin-bottom: 4px; }
+    .coverage-match-arrow { display: none; }
+}

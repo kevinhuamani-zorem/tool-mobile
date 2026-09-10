@@ -5,6 +5,8 @@ export interface BehaviorOperation {
     kind: 'click' | 'scroll-down' | 'exists' | 'visible' | 'enabled' | 'text' | 'write';
     locator?: string;
     value?: string;
+    /** Index in the method signature, never an inferred or embedded example value. */
+    valueParameter?: number;
     operator?: 'equals' | 'contains';
     guard?: boolean;
 }
@@ -15,6 +17,7 @@ export interface MethodBehavior {
     operations: BehaviorOperation[];
     returnType: 'void' | 'boolean' | 'string' | 'unknown';
     parameters: number;
+    parameterNames?: string[];
     sourceHash: string;
     dependencies: Record<string, string>;
     helpers: string[];
@@ -65,10 +68,15 @@ export function indexMethodBehaviors(source: ts.SourceFile, declaration: ts.Clas
             sourceHash: behaviorHash(member.getText(source)),
         };
         const reject = (reason: string) => { contract.complete = false; contract.reason = reason; };
-        if (parents.has(name) || !member.body || member.parameters.length) {
-            reject('Recursive, parameterized or absent implementation requires a reviewed binding.');
+        const parameterNames = member.parameters.map(parameter => ts.isIdentifier(parameter.name) ? parameter.name.text : '');
+        const simpleParameters = member.parameters.every(parameter => ts.isIdentifier(parameter.name) && !parameter.questionToken
+            && !parameter.dotDotDotToken && !parameter.initializer && parameter.type?.kind === ts.SyntaxKind.StringKeyword);
+        if (parents.has(name) || !member.body || !simpleParameters || new Set(parameterNames).size !== parameterNames.length) {
+            reject('Recursive, non-scalar parameter or absent implementation requires a reviewed binding.');
+            if (!parents.has(name)) result.set(name, contract);
             return contract;
         }
+        if (parameterNames.length) contract.parameterNames = parameterNames;
         const chain = new Set([...parents, name]);
         const locals = new Map<string, ts.Expression>();
         const target = (expression: ts.Expression | undefined): string | undefined => {
@@ -78,7 +86,11 @@ export function indexMethodBehaviors(source: ts.SourceFile, declaration: ts.Clas
             return ts.isPropertyAccessExpression(e) && e.expression.kind === ts.SyntaxKind.ThisKeyword
                 ? getters.get(e.name.text) : undefined;
         };
-        const literal = (e?: ts.Expression) => e && ts.isStringLiteralLike(e) ? e.text : undefined;
+        const valueBinding = (e?: ts.Expression): Pick<BehaviorOperation, 'value' | 'valueParameter'> | undefined => {
+            if (e && ts.isStringLiteralLike(e)) return { value: e.text };
+            const index = e && ts.isIdentifier(e) ? parameterNames.indexOf(e.text) : -1;
+            return index >= 0 ? { valueParameter: index } : undefined;
+        };
         const waitOptions = (args: ts.NodeArray<ts.Expression>): boolean => !args.length || (args.length === 1
             && ts.isObjectLiteralExpression(args[0]) && args[0].properties.every(property =>
                 (ts.isShorthandPropertyAssignment(property) && property.name.text === 'timeout')
@@ -101,14 +113,20 @@ export function indexMethodBehaviors(source: ts.SourceFile, declaration: ts.Clas
                 contract.operations.push({ kind: method === 'click' ? 'click' : method === 'waitForExist' ? 'exists' : method === 'waitForEnabled' ? 'enabled' : 'visible', locator: getter, ...(method !== 'click' ? { guard: !returning } : {}) });
                 return;
             }
-            if (getter && awaited && !returning && method === 'setValue' && e.arguments.length === 1 && literal(e.arguments[0]) !== undefined) {
-                contract.operations.push({ kind: 'write', locator: getter, value: literal(e.arguments[0]) }); return;
+            if (getter && awaited && !returning && method === 'setValue' && e.arguments.length === 1 && valueBinding(e.arguments[0])) {
+                contract.operations.push({ kind: 'write', locator: getter, ...valueBinding(e.arguments[0]) }); return;
             }
-            if (receiver.kind === ts.SyntaxKind.ThisKeyword && awaited && methods.has(method) && !e.arguments.length) {
+            if (receiver.kind === ts.SyntaxKind.ThisKeyword && awaited && !returning && methods.has(method)) {
                 const nested = parse(method, chain);
-                if (!nested.complete || nested.returnType !== 'void') reject('Unproved nested call.');
+                const argumentsBound = e.arguments.map(argument => valueBinding(argument));
+                if (!nested.complete || nested.returnType !== 'void' || e.arguments.length !== nested.parameters
+                    || argumentsBound.some(binding => !binding)) reject('Unproved nested call or parameter binding.');
                 else {
-                    contract.operations.push(...nested.operations);
+                    contract.operations.push(...nested.operations.map(operation => {
+                        if (operation.valueParameter === undefined) return { ...operation };
+                        const { valueParameter, ...literalOperation } = operation;
+                        return { ...literalOperation, ...argumentsBound[valueParameter] };
+                    }));
                     Object.assign(contract.dependencies, nested.dependencies, { [method]: nested.sourceHash });
                     contract.helpers.push(...nested.helpers);
                 }
@@ -135,9 +153,9 @@ export function indexMethodBehaviors(source: ts.SourceFile, declaration: ts.Clas
                 if (element && method === 'toBeDisplayed' && !e.arguments.length) {
                     contract.operations.push({ kind: 'visible', locator: element }); return;
                 }
-                const expected = literal(e.arguments[0]);
-                if (element && method === 'toHaveText' && e.arguments.length === 1 && expected !== undefined) {
-                    contract.operations.push({ kind: 'text', locator: element, operator: 'equals', value: expected }); return;
+                const expected = valueBinding(e.arguments[0]);
+                if (element && method === 'toHaveText' && e.arguments.length === 1 && expected) {
+                    contract.operations.push({ kind: 'text', locator: element, operator: 'equals', ...expected }); return;
                 }
             }
             reject('Unknown helper, assertion, side effect or unawaited call.');
@@ -156,9 +174,12 @@ export function indexMethodBehaviors(source: ts.SourceFile, declaration: ts.Clas
             } else reject('Control flow requires review.');
         }
         if (!contract.operations.length) reject('No observable operation.');
+        if (parameterNames.some((_parameter, index) => !contract.operations.some(operation => operation.valueParameter === index))) {
+            reject('Unused or transformed parameter requires review.');
+        }
         // Readiness before an interaction is a guard, not another recorded action.
         contract.operations = contract.operations.filter((op, i, all) => {
-            if (!['exists', 'visible', 'enabled'].includes(op.kind)) return true;
+            if (!op.guard || !['exists', 'visible', 'enabled'].includes(op.kind)) return true;
             const next = all.slice(i + 1).find(other => !['exists', 'visible', 'enabled'].includes(other.kind));
             return !(next && next.locator === op.locator && ['click', 'write', 'text'].includes(next.kind));
         });
@@ -169,8 +190,16 @@ export function indexMethodBehaviors(source: ts.SourceFile, declaration: ts.Clas
     return result;
 }
 
+export interface StepDelegation {
+    method: string;
+    alias: string;
+    assertsBoolean: boolean;
+    /** Screen argument position -> Cucumber callback capture position. */
+    parameterBindings?: number[];
+}
+
 /** A reusable Step delegates exactly once and does not add hidden effects. */
-export function stepDelegation(source: ts.SourceFile, expression: string): { method: string; alias: string; assertsBoolean: boolean } | undefined {
+export function stepDelegation(source: ts.SourceFile, expression: string): StepDelegation | undefined {
     for (const statement of source.statements) {
         if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
         const call = statement.expression;
@@ -178,7 +207,11 @@ export function stepDelegation(source: ts.SourceFile, expression: string): { met
         const regex = call.arguments[0];
         if (!regex || !ts.isRegularExpressionLiteral(regex) || regex.getText(source).replace(/^\//, '').replace(/\/[a-z]*$/, '').replace(/\\\//g, '/') !== expression) continue;
         const callback = call.arguments[1];
-        if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || !ts.isBlock(callback.body) || callback.parameters.length) continue;
+        if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || !ts.isBlock(callback.body)) continue;
+        const parameters = callback.parameters.map(parameter => ts.isIdentifier(parameter.name) ? parameter.name.text : '');
+        if (callback.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.questionToken || parameter.dotDotDotToken
+            || parameter.initializer || parameter.type?.kind !== ts.SyntaxKind.StringKeyword) || new Set(parameters).size !== parameters.length) continue;
+        if (parameters.length && /\/[a-z]+$/.test(regex.getText(source))) continue;
         const statements = callback.body.statements;
         let e: ts.Expression | undefined;
         let assertsBoolean = false;
@@ -198,10 +231,14 @@ export function stepDelegation(source: ts.SourceFile, expression: string): { met
         }
         if (!e || !ts.isAwaitExpression(e)) continue;
         const delegated = unwrap(e);
-        if (!ts.isCallExpression(delegated) || delegated.arguments.length || !ts.isPropertyAccessExpression(delegated.expression)) continue;
+        if (!ts.isCallExpression(delegated) || !ts.isPropertyAccessExpression(delegated.expression)) continue;
+        const parameterBindings = delegated.arguments.map(argument => ts.isIdentifier(argument) ? parameters.indexOf(argument.text) : -1);
+        if (parameterBindings.length !== parameters.length || parameterBindings.some(index => index < 0)
+            || new Set(parameterBindings).size !== parameters.length) continue;
         const receiver = delegated.expression.expression;
         if (!ts.isIdentifier(receiver)) continue;
-        return { alias: receiver.text, method: delegated.expression.name.text, assertsBoolean };
+        return { alias: receiver.text, method: delegated.expression.name.text, assertsBoolean,
+            ...(parameters.length ? { parameterBindings } : {}) };
     }
     return undefined;
 }

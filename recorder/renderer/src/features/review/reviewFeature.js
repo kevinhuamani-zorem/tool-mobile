@@ -122,8 +122,8 @@ export function createReviewFeature(deps) {
             `Plataforma: ${String(observation.platform || '').toUpperCase()}`,
             `Selector: ${observation.selector}`,
             `Evidencia: acción ${observation.actionSequence}`,
-            `Detalle: ${observation.message}`,
-            'Nota: el selector grabado se conserva; la automatización puede refinarlo en el Screen Object.',
+            'Detalle: el selector genérico puede identificar otro elemento distinto al esperado.',
+            'Nota: el QA debe verificar el selector en el dispositivo y corregir o volver a grabar la comprobación.',
         ].join('\n') : observation.type === 'unspecific-selector' ? [
             'Título: Acción con selector sin predicado identificador',
             `Plataforma: ${String(observation.platform || '').toUpperCase()}`,
@@ -223,7 +223,7 @@ export function createReviewFeature(deps) {
                 return `<li><strong>Verificación con XPath genérico:</strong> ` +
                     `<code>${escapeHtml(observation.selector || '')}</code>` +
                     `<small>${where}. El selector se conserva tal cual; si buscas un elemento concreto, ` +
-                    'refínalo o pide al agente que lo haga en código.</small></li>';
+                    'comprueba el elemento en el dispositivo y corrige el selector o vuelve a grabar la verificación.</small></li>';
             }
             if (observation.type === 'unspecific-selector') {
                 return `<li><strong>Selector sin predicado identificador:</strong> ` +
@@ -710,14 +710,16 @@ export function createReviewFeature(deps) {
     async function importAutomationResponse(preserveReviewed = false, manualCorrection = false) {
         const result = await api.importAutomationResponse({ manualCorrection, reviewOnly: true });
         await copilotModel.refresh();
+        if (result.reviewDiagnostics || result.draft?.reviewDiagnostics) renderTestDesignSuggestions(null);
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || null;
             state.automationWorkflow = true;
             if (result.draft) {
                 generation.showPreviewDocuments(result.draft, preserveReviewed, false);
             }
-            automationPackageStatus.textContent = '⚠ Borrador importado con observaciones: ' +
-                (result.error || 'requiere revisión manual');
+            automationPackageStatus.textContent = result.draft
+                ? '⚠ Borrador disponible. Los diagnósticos están agrupados en Revisión.'
+                : '⚠ No se pudo importar: ' + (result.error || 'requiere revisión manual');
             automationPackageStatus.className = 'generate-result err';
             setCorrectionReimportVisible(
                 true,
@@ -745,6 +747,7 @@ export function createReviewFeature(deps) {
         const result = await api.revalidateAutomationResponse(reviewedContents);
         await copilotModel.refresh();
         enableBtn(btnPreview);
+        if (result.reviewDiagnostics || result.draft?.reviewDiagnostics) renderTestDesignSuggestions(null);
         if (!result.success) {
             state.invalidAutomationDraft = result.draft || state.invalidAutomationDraft;
             if (result.draft) generation.showPreviewDocuments(result.draft, false, false);
@@ -891,7 +894,9 @@ export function createReviewFeature(deps) {
                         true
                     );
                 }
-                automationPackageStatus.textContent = `✗ ${launched.error || 'No se pudo continuar con la generación automática.'}`;
+                automationPackageStatus.textContent = launched.draft
+                    ? '⚠ Finalizó la generación. Revisa los archivos disponibles y sus diagnósticos.'
+                    : `✗ ${launched.error || 'No se pudo continuar con la generación automática.'}`;
                 automationPackageStatus.className = 'generate-result err';
                 if (!launched.draft) {
                     const recovered = await importAutomationResponse(true, true);
@@ -908,7 +913,8 @@ export function createReviewFeature(deps) {
                 automationPipelineRunning = false;
                 return;
             }
-            renderTestDesignSuggestions(launched.testDesignReview || null);
+            renderTestDesignSuggestions(launched.imported?.reviewDiagnostics || launched.draft?.reviewDiagnostics
+                ? null : launched.testDesignReview || null);
         }
 
         updateProductStage('GENERATING', 'Generando automatización...', 'Materializando las cuatro capas del caso.');

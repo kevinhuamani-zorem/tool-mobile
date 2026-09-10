@@ -17,9 +17,10 @@ pasadas, la exportación con observaciones ni la aprobación QA de golden.
 ## Alcance del análisis
 
 El análisis es conservador y acotado a TypeScript reconocible: getters directos
-de LocatorProvider, llamadas esperadas de WebdriverIO, métodos sin argumentos,
-delegaciones locales y secuencias sin bifurcaciones. Registra firmas con
-parámetros, pero su equivalencia necesita un binding revisado y sigue como gap.
+de LocatorProvider, llamadas esperadas de WebdriverIO, delegaciones locales y
+secuencias sin bifurcaciones. Incluye parámetros string simples cuando un Step
+existente los recibe mediante capturas directas y Examples comprobados. Las
+firmas con transformaciones o sin un binding probado siguen pendientes.
 Loops, ramas, helpers desconocidos, opciones que cambian la aserción (como
 `reverse`), efectos adicionales o retornos descartados
 no reciben una prueba de equivalencia automática. No se eliminan sus archivos
@@ -49,8 +50,10 @@ capas siguen disponibles, con su procedencia, sin exigir cuatro archivos nuevos.
 ## Casos existentes y revisión
 
 Con un único escenario del mismo TC, el plan conserva la ruta Feature existente.
-Cambiar solo el título no crea otra identidad. Si la nueva grabación omite
-pasos de la versión previa, el borrador muestra `COBERTURA EXISTENTE` y
+Cambiar solo el título no crea otra identidad. El comparador de
+[conservación de cobertura](CASE_COVERAGE.md) sigue las operaciones y aserciones
+de ambas revisiones, en vez de exigir las mismas frases. Si demuestra una
+pérdida o no puede verificar la equivalencia, el borrador muestra `COBERTURA EXISTENTE` y
 `PROPUESTA PARA REVISAR`; `case-coverage-review` explica la reconciliación
 pendiente. El QA conserva los pasos vigentes y edita el resultado en el preview.
 La preparación no escribe en el framework.

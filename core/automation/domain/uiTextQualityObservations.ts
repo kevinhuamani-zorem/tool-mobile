@@ -118,7 +118,7 @@ export function analyzeUiTextQuality(
             severity: 'warning',
             platform: step.platform || defaultPlatform,
             message: `La verificación usa "${selector}", un XPath sin predicado que engancha el primer nodo de ese tipo. ` +
-                'Se conserva tal cual; si buscas un elemento concreto, refina el selector o pide al agente que lo haga en código.',
+                'Se conserva tal cual; el QA debe verificar el elemento en el dispositivo y corregir el selector o volver a grabar la comprobación.',
             actionSequence,
             selector,
         });

@@ -1275,3 +1275,33 @@ Un nombre traducido conserva validez cuando mantiene la identidad del locator.
 La reutilización, completions y pruebas que enlazan Steps con una lectura de
 Screen mantienen su validación completa en integración. Ningún comprobador
 necesita explorar el framework desde la sesión del agente.
+
+
+## Conservación de cobertura del mismo TC (2026-09-10)
+
+La comparación de cobertura usa `compareCaseCoverage` sobre instantáneas de las
+cuatro capas y sus dependencias. Cambiar frases imperativas por declarativas no
+produce por sí mismo `case-coverage-review`: se comprueba la conservación de
+operaciones, argumentos, aserciones, orden y repeticiones. La pérdida demostrada
+mantiene ese código; la equivalencia sin evidencia suficiente produce
+`case-coverage-unverified`. Ambos dejan el borrador disponible.
+
+`validation.caseCoverage` fija los hashes de las instantáneas y las
+correspondencias examinadas. No reemplaza `validation.assessment`, la revisión
+QA ni la ejecución en dispositivo. Ver [CASE_COVERAGE.md](CASE_COVERAGE.md) para
+el alcance soportado y las fases pendientes.
+
+
+### Presentación y reparación de conservación (F4)
+
+Revisión presenta correspondencias y diferencias de `validation.caseCoverage`,
+con estado pendiente de revalidación después de una edición. `reviewDiagnostics`
+agrupa errores y pasadas sin modificar sus informes históricos; muestra aparte
+las advertencias de grabación que corrige el QA en el dispositivo. Las alertas
+no bloquean exportación ni activan otra pasada del agente.
+
+Los errores de conservación incluyen `coverageRepairTargets` obtenido de las
+instantáneas comparadas para dirigir la segunda pasada al autor de la capa
+modificada. Dependencias compartidas o diferencias no localizadas conservan una
+revisión de integración, sin asumir que siempre deba corregir Lorem. Ver
+[CASE_COVERAGE.md](CASE_COVERAGE.md).

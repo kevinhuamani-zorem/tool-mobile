@@ -9,6 +9,7 @@ import { AutomationHistoryStore } from './automationHistoryStore';
 import { loadFrameworkBaseline, planForReconciliation } from './automationReconciliation';
 import { loadUpdateBaselinesForCorrection } from './automationCorrectionBaseline';
 import { planAgainstApplicationReceipt, requireUnchangedAppliedFiles, type AutomationApplicationReceipt } from './automationApplicationReceipt';
+import { mergeCoverageRepairTargets } from './layered/gapJudgment';
 import type { LayeredResponseValidator } from './layered/roles';
 
 /** Same read-only preparation as import, while the automatic repair pass is still available. */
@@ -55,6 +56,13 @@ export function validatePreparedAgentResponse(
     } catch (error: any) {
         errors.push({ code: 'preparation', message: `No se pudo preparar la exportación: ${error?.message || error}` });
     }
-    const unique = [...new Map(errors.map(issue => [JSON.stringify([issue.code, issue.file, issue.message]), issue])).values()];
+    const grouped = new Map<string, AutomationValidation['errors'][number]>();
+    for (const issue of errors) {
+        const key = JSON.stringify([issue.code, issue.file, issue.message]);
+        const previous = grouped.get(key);
+        const coverageRepairTargets = previous && mergeCoverageRepairTargets(previous.coverageRepairTargets, issue.coverageRepairTargets);
+        grouped.set(key, previous ? { ...previous, ...(coverageRepairTargets ? { coverageRepairTargets } : {}) } : issue);
+    }
+    const unique = [...grouped.values()];
     return { valid: unique.length === 0, qualityScore, errors: unique };
 }

@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { MethodBehavior, indexMethodBehaviors, stepDelegation, behaviorHash } from '../domain/behaviorContract';
+import { MethodBehavior, StepDelegation, indexMethodBehaviors, stepDelegation, behaviorHash } from '../domain/behaviorContract';
 import { verifiedFrameworkHelpers } from './behaviorHelpers';
 export type { MethodBehavior, BehaviorOperation } from '../domain/behaviorContract';
 import { indexDeclaredStrategies } from './locatorStrategy';
@@ -24,7 +24,7 @@ export interface StepDefinitionInfo {
      * si un step existente hace exactamente lo que este caso grabo.
      */
     screenMethods?: Array<{ file: string; method: string }>;
-    delegation?: { method: string; alias: string; assertsBoolean: boolean };
+    delegation?: StepDelegation;
     sourceHash?: string;
 }
 

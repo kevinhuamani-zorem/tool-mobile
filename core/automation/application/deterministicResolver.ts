@@ -778,7 +778,7 @@ export class DeterministicResolver {
             });
         });
         const usedCanonicals = new Set<string>();
-        const behaviorRows = resolveBehaviorRows(scenarioRows, catalog, resolutions, reusableBundle?.bundle.screens[0]);
+        const behaviorRows = resolveBehaviorRows(scenarioRows, catalog, resolutions, reusableBundle?.bundle.screens[0], examples);
         const uniqueScenarioRows = behaviorRows.map(row => {
             if (row.status !== 'missing') return row;
             const existing = row.reuse ? undefined : existingStepFor(row, catalog, resolutions);
