@@ -19,11 +19,14 @@ export function createGoldenFeature({ api }) {
         el('goldenStatus').textContent = text; el('goldenStatus').className = 'golden-status' + (kind ? ' ' + kind : '');
         if (kind) el('goldenStatus').scrollIntoView({ block: 'nearest' });
     };
-    function setBusy(value) {
+    function setBusy(value, operation = 'save') {
         busy = value;
-        for (const id of ['btnCloseGolden', 'btnSelectGoldenRepository', 'btnRebuildGolden', 'goldenApproved', 'goldenExecution', 'goldenUsage', 'goldenNotes']) el(id).disabled = value;
+        for (const id of ['btnCloseGolden', 'btnSelectGoldenRepository', 'btnRebuildGolden', 'btnSeedGoldenReferences', 'goldenApproved', 'goldenExecution', 'goldenUsage', 'goldenNotes']) el(id).disabled = value;
         el('btnApproveGolden').disabled = value || !token || !el('goldenApproved').checked;
-        el('btnApproveGolden').textContent = value ? 'Guardando…' : 'Aprobar y guardar golden';
+        el('btnApproveGolden').textContent = value && operation === 'save' ? 'Guardando…' : 'Aprobar y guardar golden';
+        el('btnRebuildGolden').textContent = value && operation === 'refresh' ? 'Actualizando referencias…' : '↻ Actualizar referencias';
+        el('btnSeedGoldenReferences').textContent = value && operation === 'refresh' ? 'Actualizando referencias…' : 'Actualizar referencias';
+        el('goldenModal').setAttribute('aria-busy', String(value));
     }
     function usageHelp() {
         el('goldenUsageHelp').textContent = el('goldenUsage').value === 'evaluation'
@@ -74,8 +77,7 @@ export function createGoldenFeature({ api }) {
             + observations.map(item => item.message || String(item)).join('\n') + '\nVerificación funcional automática: no reportada. El resultado en dispositivo lo declara el QA.';
         el('goldenExecution').value = p.executionDeclaration || 'not-run'; el('goldenNotes').value = p.notes || ''; el('goldenUsage').value = p.usage || 'reference'; usageHelp();
     }
-    async function open(input) {
-        if (busy) return;
+    function prepareOpen(input) {
         if (el('goldenModal').style.display !== 'flex') returnFocus = document.activeElement;
         currentInput = input; invalidate(); const requested = version;
         entries = []; el('goldenDatasetPath').textContent = ''; el('goldenList').innerHTML = ''; el('goldenLegacy').innerHTML = ''; el('goldenIssues').innerHTML = '';
@@ -85,6 +87,11 @@ export function createGoldenFeature({ api }) {
         el('goldenSubtitle').textContent = input ? 'Revisa esta versión antes de incorporarla a la biblioteca del equipo.' : 'Casos revisados por QA que sirven de ejemplo a los agentes.';
         el('goldenRepositoryDetails').open = false; el('goldenCount').textContent = '…';
         el('btnCloseGolden').focus(); status(input ? 'Preparando los archivos para revisión…' : 'Cargando casos aprobados…');
+        return requested;
+    }
+    async function open(input) {
+        if (busy) return;
+        const requested = prepareOpen(input);
         try {
             const result = input ? await api.previewGoldenCase(input) : await api.listGoldenCases();
             if (requested !== version) return;
@@ -113,7 +120,7 @@ export function createGoldenFeature({ api }) {
     }
     async function selectRepository() {
         if (busy) return;
-        setBusy(true); let changed = false; const requested = version;
+        setBusy(true, 'repository'); let changed = false; const requested = version;
         try {
             const result = await api.selectGoldenRepository();
             if (requested !== version || result.canceled) return;
@@ -125,11 +132,33 @@ export function createGoldenFeature({ api }) {
     }
     async function refresh() {
         if (busy) return;
-        setBusy(true); let refreshed = false;
-        try { const result = await api.rebuildGoldenIndex(); if (!result.success) throw new Error(result.error); refreshed = true; }
-        catch (error) { status(error.message, 'err'); }
-        finally { setBusy(false); }
-        if (refreshed) await open();
+        const requested = prepareOpen();
+        setBusy(true, 'refresh');
+        status('Comprobando los golden aprobados y actualizando las referencias locales…');
+        try {
+            const result = await api.rebuildGoldenIndex();
+            if (requested !== version) return;
+            if (!result.success) throw new Error(result.error || 'No se pudieron actualizar las referencias.');
+            const library = await api.listGoldenCases();
+            if (requested !== version) return;
+            if (!library.success) throw new Error(library.error || 'No se pudo cargar la biblioteca actualizada.');
+            el('goldenDatasetPath').textContent = library.datasetRoot || result.datasetRoot || '';
+            const issues = [...new Set([...(result.issues || result.index?.issues || []), ...(library.index.issues || [])])];
+            renderLibrary({ ...library, index: { ...library.index, issues } });
+            if (issues.length) {
+                status('Actualización completada con observaciones. Algunas referencias necesitan revisión; consulta el detalle al final de la lista.', 'warn');
+                el('goldenIssues').querySelector('details')?.setAttribute('open', '');
+            } else {
+                const references = library.index.entries.filter(entry => entry.usage !== 'evaluation').length;
+                const reserved = library.index.entries.length - references;
+                const counts = `${references} ${references === 1 ? 'caso aprobado para agentes' : 'casos aprobados para agentes'}${reserved ? ` · ${reserved} para evaluación` : ''}`;
+                status(`Referencias actualizadas · ${counts}. ${references ? 'Se consultarán en las próximas generaciones según su compatibilidad con el caso.' : 'Todavía no hay ejemplos para agentes; puedes añadirlos desde la revisión de un caso.'}`, 'ok');
+            }
+        } catch (error) {
+            if (requested === version) { status(error.message, 'err'); el('goldenRepositoryDetails').open = true; }
+        } finally {
+            if (requested === version) { setBusy(false); el('btnRebuildGolden').focus(); }
+        }
     }
     async function withdraw(event) {
         const id = event.target.closest('[data-golden-revoke]')?.dataset.goldenRevoke;
@@ -158,10 +187,10 @@ export function createGoldenFeature({ api }) {
         on(el('btnCloseGolden'), 'click', close); on(el('goldenModal'), 'keydown', keyboard);
         on(el('goldenApproved'), 'change', () => { el('btnApproveGolden').disabled = !token || !el('goldenApproved').checked || busy; });
         on(el('goldenUsage'), 'change', usageHelp); on(el('btnApproveGolden'), 'click', approve);
-        on(el('btnRebuildGolden'), 'click', refresh); on(el('goldenSearch'), 'input', renderCases); on(el('goldenFilter'), 'change', renderCases);
+        on(el('btnRebuildGolden'), 'click', refresh); on(el('btnSeedGoldenReferences'), 'click', refresh); on(el('goldenSearch'), 'input', renderCases); on(el('goldenFilter'), 'change', renderCases);
         on(el('goldenList'), 'click', withdraw);
         on(el('goldenLegacy'), 'click', event => { const id = event.target.closest('[data-golden-legacy]')?.dataset.goldenLegacy; if (id) void open({ legacyId: id }); });
     }
-    function unmount() { bound.forEach(([target, event, handler]) => target?.removeEventListener(event, handler)); bound.length = 0; invalidate(); }
+    function unmount() { setBusy(false); bound.forEach(([target, event, handler]) => target?.removeEventListener(event, handler)); bound.length = 0; invalidate(); }
     return { mount, unmount, open, approve, selectRepository };
 }

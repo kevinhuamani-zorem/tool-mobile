@@ -63,8 +63,8 @@ esa sesión automáticamente. El QA puede comenzar casos nuevos grabándolos en 
    preparar Java 17+, SDK/ADB y el dispositivo. iOS local requiere macOS y Xcode.
    El empaquetado documentado de la app es macOS; otro sistema requiere verificar
    su instalación y ejecución, sin asumir que la app de macOS sea portable.
-4. Seleccionar el framework local desde el Recorder. En **Configuración →
-   Casos golden → Seleccionar repositorio**, elegir la raíz del clon del
+4. Seleccionar el framework local desde el Recorder. En **Revisión QA y golden →
+   Ver casos golden → Repositorio compartido**, elegir la raíz del clon del
    Recorder, donde está package.json. El destino mostrado termina en tests/golden.
 5. Ejecutar `npm run harness:controls` en el Recorder para comprobar el conjunto
    sintético. Luego seguir [Harness offline](AGENT_HARNESS_OFFLINE.md) para
@@ -92,9 +92,10 @@ Pasar sus controles no convierte esos fixtures en golden ni en pruebas mobile.
    commit/push/PR del Recorder para tests/golden. Guardar golden no publica Git
    automáticamente. Actualizar la rama antes de aprobar evita trabajar con
    publicaciones desactualizadas.
-7. Comprobar la integridad con `npm run golden:seed-memory`; otro QA recibe el
-   dataset al actualizar su clon. Una corrección posterior abre otra revisión y
-   aprobación, conservando el historial.
+7. Comprobar la integridad con `npm run golden:seed-memory` o, desde la app,
+   **Revisión QA y golden → Actualizar referencias**. Usa las versiones del
+   checkout local; otro QA recibe el dataset al actualizar su rama por Git.
+   Una corrección posterior abre otra revisión y aprobación, conservando el historial.
 
 Esta es la revisión recomendada para producir referencias útiles. El contrato de
 la app no exige score 100, validación verde, ejecución adicional ni PR integrado

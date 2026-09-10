@@ -7,8 +7,9 @@ La recuperación lee el framework; no modifica sus archivos.
 
 ## Uso
 
-1. Abre **Recuperar cambios del framework** desde Configuración, Revisión o el
-   selector de una grabación existente. Elige el caso del ambiente/squad activos.
+1. En el inicio, abre **Revisión QA y golden → Revisar cambios del framework**.
+   También puedes recuperarlos desde Revisión o el selector de una grabación
+   existente. Elige el caso del ambiente/squad activos.
 2. Añade opcionalmente URL del PR y notas, y pulsa **Comparar cambios**.
 3. Revisa cada archivo: baseline previo, versión exportada, cambios del caso,
    cambios ajenos y código que se guardará. También se muestran repo/rama/commit
@@ -22,6 +23,11 @@ La recuperación lee el framework; no modifica sus archivos.
 5. Pulsa **Guardar revisión QA**. El recorder conserva el código asociado, las
    relaciones, parámetros, procedencia y pendientes en una revisión histórica.
    Las asociaciones y referencia PR se conservan al volver a recuperar el caso.
+6. Pulsa **Revisar como golden** para abrir los archivos recuperados y aprobar esa
+   versión explícitamente. La guía indica qué paso sigue y explica por qué una
+   acción todavía está deshabilitada. Cambiar el caso o los metadatos requiere
+   comparar de nuevo. Los errores permiten reintentar; los resultados obsoletos
+   y envíos duplicados no avanzan el flujo.
 
 ## Identidad y evidencia
 

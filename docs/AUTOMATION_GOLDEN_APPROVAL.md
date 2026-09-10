@@ -15,7 +15,7 @@ regrabación o regeneración. Las trazas pendientes no se convierten en eventos 
 
 El almacenamiento es `tests/golden/` del repositorio Git del recorder, tanto en
 desarrollo como en la app instalada. Se detecta el checkout del recorder o se
-selecciona desde **Casos golden → Seleccionar repositorio**. La selección local
+selecciona desde **Revisión QA y golden → Ver casos golden → Repositorio compartido**. La selección local
 persiste en `config/golden-repository.json` del runtime y no se versiona. Si falta
 el checkout, la generación/exportación continúa sin ejemplos; guardar golden
 requiere seleccionarlo. No se utiliza `runtime/golden` como fallback. Ver el
@@ -131,7 +131,22 @@ La biblioteca **Casos golden** usa el tema oscuro del Recorder. Permite buscar
 por caso, squad o QA y filtrar referencias o casos reservados para evaluación.
 Cada tarjeta muestra su uso y aprobación; la versión y la acción de retirada
 quedan en **Detalles de la versión**. **Repositorio compartido** muestra la ruta
-y permite cambiar el checkout. **Actualizar lista** reconstruye los índices locales.
+y permite cambiar el checkout.
+
+El inicio distingue **Grabar y automatizar** de **Revisión QA y golden**. Este
+segundo apartado reúne **Revisar cambios del framework**, **Ver casos golden** y
+**Actualizar referencias**, con descripciones y una guía para preparar, aprobar y
+compartir un caso. Está disponible sin dispositivo; el contexto de framework y
+squad permanece visible en ambos apartados.
+
+**Actualizar referencias**, disponible también dentro de la biblioteca, ejecuta
+el mismo rebuild aprobado y refresh de referencias que `npm run golden:seed-memory`
+mediante `preload`/IPC, sin procesos de terminal. Informa progreso, casos aprobados,
+reservas y problemas de ambos índices. Un problema de recuperación no desaparece
+al refrescar la lista. Deshabilita envíos duplicados y permite reintentar o elegir
+el repositorio ante errores. No aprueba casos, descarga Git, ejecuta pruebas ni
+reactiva memoria legacy. La compatibilidad con cada caso se verifica al consultar
+las referencias durante la generación.
 
 En la revisión del caso, **Revisar y guardar golden** abre los archivos propios;
 las dependencias y los diagnósticos se despliegan por separado. El QA declara

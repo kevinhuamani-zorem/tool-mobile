@@ -1,5 +1,17 @@
 // @ts-nocheck -- marcado para tipado incremental.
+import { useState } from 'react';
+import { QaGoldenWorkspace } from './QaGoldenWorkspace';
+
 export function ConfigurationScreen() {
+  const [workspace, setWorkspace] = useState('record');
+  const selectTab = (event) => {
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 'record' : event.key === 'End' ? 'qa' : workspace === 'record' ? 'qa' : 'record';
+    setWorkspace(next);
+    document.getElementById(`workspaceTab-${next}`)?.focus();
+  };
   return (
     <div id="screenConfig" className="screen">
       <div className="connection-shell">
@@ -8,12 +20,14 @@ export function ConfigurationScreen() {
             <span className="logo">📱</span>
             <div><h1>Appium Recorder</h1><p>Graba flujos de pruebas visualmente</p></div>
           </div>
-          <button id="btnGoldenCases" className="btn btn-dark">Casos golden</button>
-          <button id="btnRecoverFramework" className="btn btn-dark">Recuperar cambios del framework</button>
           <button id="btnChangeFramework" className="btn btn-dark">⚙️ Ajustes</button>
         </header>
 
-        <main className="connection-main">
+        <div className="workspace-tabs" role="tablist" aria-label="Apartados del Recorder" onKeyDown={selectTab}>
+          <button type="button" id="workspaceTab-record" role="tab" aria-controls="workspacePanel-record" aria-selected={workspace === 'record'} tabIndex={workspace === 'record' ? 0 : -1} onClick={() => setWorkspace('record')}>Grabar y automatizar</button>
+          <button type="button" id="workspaceTab-qa" role="tab" aria-controls="workspacePanel-qa" aria-selected={workspace === 'qa'} tabIndex={workspace === 'qa' ? 0 : -1} onClick={() => setWorkspace('qa')}>Revisión QA y golden</button>
+        </div>
+        <div className="workspace-context">
           <section className="saved-context">
             <span>📁</span>
             <strong id="lblSavedEnvironment">QA</strong>
@@ -24,6 +38,12 @@ export function ConfigurationScreen() {
             <span className="saved-context-ok">✓ Usaremos la configuración guardada</span>
             <button id="btnChangeFrameworkInline" className="link-button">Cambiar</button>
           </section>
+        </div>
+        <div id="workspacePanel-qa" role="tabpanel" aria-labelledby="workspaceTab-qa" hidden={workspace !== 'qa'}>
+          <QaGoldenWorkspace />
+        </div>
+        <main id="workspacePanel-record" role="tabpanel" aria-labelledby="workspaceTab-record" className="connection-main" hidden={workspace !== 'record'}>
+
 
           <div className="source-cards">
             <button id="tabLocal" className="source-card active">

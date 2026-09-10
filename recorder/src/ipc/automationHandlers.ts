@@ -374,7 +374,8 @@ export function registerAutomationHandlers(context: AutomationHandlersContext): 
         try {
             const root = goldenDatasetRoot(); const index = new ApprovedGoldenStore(root).rebuildIndex();
             const retrieval = new GoldenRetrievalIndex(root).refresh(true);
-            return { success: true, index, retrieval: retrieval.metrics };
+            return { success: true, datasetRoot: root, index, retrieval: retrieval.metrics,
+                issues: [...new Set([...index.issues, ...retrieval.index.issues])] };
         }
         catch (error: any) { return { success: false, error: error.message }; }
     });
