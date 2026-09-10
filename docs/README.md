@@ -10,6 +10,8 @@
 - [Referencias golden y evaluación (F7)](AUTOMATION_GOLDEN_LEARNING.md): ejemplos por capa, reservas, métricas, replay y cierre del piloto.
 - [Criterios de aceptación del QA](ACCEPTANCE_CRITERIA.md): captura, evidencia por revisión y separación del resultado funcional.
 - [Evaluación y piloto de generaciones nuevas](AGENT_EVALUATION_PILOT.md): tasas, precisión/recall, fallos controlados y comparación repetida.
+- [Estrategia del harness H0–H5](AGENT_HARNESS_STRATEGY.md): baseline, corpus, piloto real, mejoras medidas, ejecución mobile y operación del equipo; avance H0/H1 y pendientes.
+- [Harness offline H0/H1](AGENT_HARNESS_OFFLINE.md): comandos, controles, auditoría golden y pendientes de cierre.
 - [Historial de automatización](AUTOMATION_HISTORY.md): revisiones, intentos y recibos.
 - [Regeneración y reexportación con correcciones QA](AUTOMATION_RECONCILIATION.md): base histórica, combinación y conflictos durante el PR.
 - [Recuperación de correcciones QA](AUTOMATION_FRAMEWORK_RECOVERY.md): relaciones del caso, diff y revisiones desde el framework.

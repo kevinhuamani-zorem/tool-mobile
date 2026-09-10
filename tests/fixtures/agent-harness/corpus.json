@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "kind": "recorder-agent-harness-corpus",
+  "corpusId": "recorder-harness-h1-v1",
+  "synthetic": true,
+  "qaReview": {
+    "status": "pending"
+  },
+  "purpose": "offline-regression-controls",
+  "cases": [
+    {
+      "id": "sales-empty",
+      "family": "sales-empty",
+      "caseId": "TC-10239",
+      "platform": "android",
+      "synthetic": true,
+      "pilotEligible": false,
+      "qaReview": {
+        "status": "pending"
+      },
+      "source": {
+        "kind": "reported-regression",
+        "construction": "synthetic-reduction",
+        "sourceRecording": {
+          "recordingId": "rec-f7c98dff-d5da-4ffb-9039-2cbb1eca6f7e",
+          "scenarioSha256": "190f951bef5debc8ae36c807470ef226e7d10f257a223da753723f5018ac5a9a"
+        }
+      },
+      "scenario": {
+        "path": "sales-empty/scenario.json",
+        "sha256": "6d8871bc5ac1ddcaced03fafdcad2f6befee2d9767e59021afaaee170a652c8e"
+      },
+      "labels": {
+        "path": "sales-empty/labels.json",
+        "sha256": "8a44266686545b197b99915d8f56433f573397b4d8a0cfd717b74a9f7ec21a50"
+      }
+    },
+    {
+      "id": "movements-period",
+      "family": "movements-period",
+      "caseId": "TC-10140",
+      "platform": "android",
+      "synthetic": true,
+      "pilotEligible": false,
+      "qaReview": {
+        "status": "pending"
+      },
+      "source": {
+        "kind": "reported-regression",
+        "construction": "synthetic-reduction",
+        "sourceRecording": {
+          "recordingId": "rec-e12d9d16-7ecf-40cc-b9ac-b62edf0669f9",
+          "scenarioSha256": "054a84353faffee0f86bc64759a471e3c78e3db963dcb471a5db3a798fb1fd67"
+        }
+      },
+      "scenario": {
+        "path": "movements-period/scenario.json",
+        "sha256": "35407e427d84ddcf155ade0bdfa53ccd6de4cafa45f1c13dd25ce62de395cbae"
+      },
+      "labels": {
+        "path": "movements-period/labels.json",
+        "sha256": "01c79c3e185da94d5c622c55a095e737b9e4d4f964df74d4dd46c5a9163c8afc"
+      }
+    },
+    {
+      "id": "yapeo-recipient",
+      "family": "yapeo-recipient",
+      "caseId": "TC-10240",
+      "platform": "android",
+      "synthetic": true,
+      "pilotEligible": false,
+      "qaReview": {
+        "status": "pending"
+      },
+      "source": {
+        "kind": "reported-regression",
+        "construction": "synthetic-reduction",
+        "sourceRecording": {
+          "recordingId": "rec-f98d051e-c07d-4f6a-9577-a1ff85a9110f",
+          "scenarioSha256": "da3f22e0355c4da8db1f170b1ccf172ae708f252eda0b731f0b6b997a7fd68b1"
+        }
+      },
+      "scenario": {
+        "path": "yapeo-recipient/scenario.json",
+        "sha256": "a89801c730d1bb6930fa367d3558176b22d634b571e007ca2f5df20aac0ac9cd"
+      },
+      "labels": {
+        "path": "yapeo-recipient/labels.json",
+        "sha256": "8a0742e2d290cc3545306eb94e611d6206a88091648103876d8cc83d9f5ee95c"
+      }
+    }
+  ],
+  "testData": {
+    "path": "framework/resources/data/payment/harness-users.yml",
+    "sha256": "17799a7c5689794fbe7da629edc33270397c165a22c971659eeb5fa7ad9cae83",
+    "synthetic": true
+  }
+}

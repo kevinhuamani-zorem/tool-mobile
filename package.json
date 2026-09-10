@@ -34,7 +34,9 @@
     "golden:replay": "npm run build:main --silent && node scripts/golden-replay.js",
     "reuse:evaluate": "npm run build:main --silent && node scripts/reuse-evaluate.js",
     "agents:pilot": "npm run build:main --silent && node scripts/agent-pilot.js",
-    "validator:evaluate": "npm run build:main --silent && node scripts/validator-evaluate.js"
+    "validator:evaluate": "npm run build:main --silent && node scripts/validator-evaluate.js",
+    "harness:baseline": "npm run build:main --silent && node scripts/harness-baseline.js",
+    "harness:controls": "npm run build:main --silent && node scripts/harness-controls.js"
   },
   "author": "Kevin Huamani",
   "license": "MIT",

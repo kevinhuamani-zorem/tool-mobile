@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "harness-h1-v1",
+  "recordingId": "harness-synthetic-movements-period-v1",
+  "revision": 1,
+  "createdAt": "2026-09-09T00:00:00.000Z",
+  "squad": "payment",
+  "platform": "android",
+  "environment": "synthetic-offline",
+  "objective": "Consultar movimientos y comprobar los períodos de 30 y 90 días.",
+  "acceptanceCriteria": "Cada período muestra su etiqueta y la fecha visible; la validez del rango requiere una comprobación adicional.",
+  "request": {
+    "squad": "payment",
+    "platform": "android",
+    "featureScope": "",
+    "featureName": "Consultar movimientos por período",
+    "scenarioName": "Consultar movimientos por período",
+    "fileName": "movements-period",
+    "locatorModule": "movements-period",
+    "caseId": "TC-10140",
+    "pathType": "Happy Path",
+    "tag": "harness_movements_period",
+    "executionTag": "smoke_mobile",
+    "dataName": "Harness Movements Period",
+    "examples": {
+      "username": "Harness Movements Period"
+    },
+    "acceptanceChecks": [],
+    "scenarioRows": [
+      {
+        "keyword": "Given",
+        "text": "el usuario <username> inicia sesión en Yape",
+        "status": "reused",
+        "wording": "domain",
+        "actions": []
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario consulta sus movimientos",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 1,
+            "action": "CLICK",
+            "variableName": "movementsButton",
+            "contextHint": "movementsButton",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/movements\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/movements\")",
+            "platform": "android"
+          }
+        ]
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario filtra sus movimientos de los últimos 30 días",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 2,
+            "action": "CLICK",
+            "variableName": "last30DaysButton",
+            "contextHint": "last30DaysButton",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/last_30_days\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/last_30_days\")",
+            "platform": "android"
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestra el período de los últimos 30 días",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 3,
+            "action": "VERIFICAR_TEXTO",
+            "variableName": "selectedPeriod",
+            "contextHint": "selectedPeriod",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/selected_period\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/selected_period\")",
+            "platform": "android",
+            "value": "Últimos 30 días",
+            "textAssertion": {
+              "version": 1,
+              "source": "element",
+              "operator": "equals"
+            }
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestra la fecha del movimiento más antiguo del primer período",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 4,
+            "action": "VERIFICAR_TEXTO",
+            "variableName": "oldestMovementDate",
+            "contextHint": "oldestMovementDate",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+            "platform": "android",
+            "value": "08 sep. 2026",
+            "textAssertion": {
+              "version": 1,
+              "source": "element",
+              "operator": "equals"
+            }
+          }
+        ]
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario filtra sus movimientos de los últimos 90 días",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 5,
+            "action": "CLICK",
+            "variableName": "last90DaysButton",
+            "contextHint": "last90DaysButton",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/last_90_days\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/last_90_days\")",
+            "platform": "android"
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestra el período de los últimos 90 días",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 6,
+            "action": "VERIFICAR_TEXTO",
+            "variableName": "selectedPeriod",
+            "contextHint": "selectedPeriod",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/selected_period\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/selected_period\")",
+            "platform": "android",
+            "value": "Últimos 90 días",
+            "textAssertion": {
+              "version": 1,
+              "source": "element",
+              "operator": "equals"
+            }
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestra la fecha del movimiento más antiguo del segundo período",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 7,
+            "action": "VERIFICAR_TEXTO",
+            "variableName": "oldestMovementDate",
+            "contextHint": "oldestMovementDate",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+            "platform": "android",
+            "value": "01 ago. 2026",
+            "textAssertion": {
+              "version": 1,
+              "source": "element",
+              "operator": "equals"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "sequence": 1,
+      "action": "CLICK",
+      "variableName": "movementsButton",
+      "contextHint": "movementsButton",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/movements\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/movements\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 2,
+      "action": "CLICK",
+      "variableName": "last30DaysButton",
+      "contextHint": "last30DaysButton",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/last_30_days\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/last_30_days\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 3,
+      "action": "VERIFICAR_TEXTO",
+      "variableName": "selectedPeriod",
+      "contextHint": "selectedPeriod",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/selected_period\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/selected_period\")",
+      "platform": "android",
+      "value": "Últimos 30 días",
+      "textAssertion": {
+        "version": 1,
+        "source": "element",
+        "operator": "equals"
+      }
+    },
+    {
+      "sequence": 4,
+      "action": "VERIFICAR_TEXTO",
+      "variableName": "oldestMovementDate",
+      "contextHint": "oldestMovementDate",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+      "platform": "android",
+      "value": "08 sep. 2026",
+      "textAssertion": {
+        "version": 1,
+        "source": "element",
+        "operator": "equals"
+      }
+    },
+    {
+      "sequence": 5,
+      "action": "CLICK",
+      "variableName": "last90DaysButton",
+      "contextHint": "last90DaysButton",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/last_90_days\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/last_90_days\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 6,
+      "action": "VERIFICAR_TEXTO",
+      "variableName": "selectedPeriod",
+      "contextHint": "selectedPeriod",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/selected_period\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/selected_period\")",
+      "platform": "android",
+      "value": "Últimos 90 días",
+      "textAssertion": {
+        "version": 1,
+        "source": "element",
+        "operator": "equals"
+      }
+    },
+    {
+      "sequence": 7,
+      "action": "VERIFICAR_TEXTO",
+      "variableName": "oldestMovementDate",
+      "contextHint": "oldestMovementDate",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/oldest_movement_date\")",
+      "platform": "android",
+      "value": "01 ago. 2026",
+      "textAssertion": {
+        "version": 1,
+        "source": "element",
+        "operator": "equals"
+      }
+    }
+  ],
+  "fingerprint": "dda1335a6691ab20e7b124a51b3b672530a8dd8dae51f359dc6b00bf557d51d8"
+}

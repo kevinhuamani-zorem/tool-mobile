@@ -16,6 +16,73 @@ Su cierre con corpus QA y piloto real sigue abierto; el checklist en
 [las fases acordadas](AGENT_EVALUATION_IMPLEMENTATION_PHASES.md) conserva todos
 los pendientes hasta terminar el ciclo completo.
 
+## Continuación: harness H0/H1 — 2026-09-09
+
+La [estrategia H0–H5](AGENT_HARNESS_STRATEGY.md) ya tiene su primer lote de
+herramientas offline. [Operación y pendientes](AGENT_HARNESS_OFFLINE.md) documenta
+los comandos, límites de la evidencia y responsables. El código parte de
+Recorder `ae4e68607ef76bd5f5edffb8be2eb9240d3d1173`.
+
+| Fase | Entregado | Pendiente para cerrar |
+| --- | --- | --- |
+| H0 | Captura/verificación por commit, hashes, lockfiles, entorno y auditoría de los dos golden. | Dependencias compatibles; resolver nuevas capturas golden y revisión de ventas. |
+| H1 | Tres casos sintéticos versionados; 10 controles negativos y tres positivos del validador real; cobertura y ausencias explícitas. | Entradas reales, precondiciones y etiquetas QA, contrapartes adicionales y reserva por familias. |
+| H2 | Runner existente conservado. | Piloto con proveedor real, con/sin golden y repeticiones. |
+| H3 | Regresiones conocidas convertidas en controles. | Mejoras justificadas por resultados y comparación baseline/candidata. |
+| H4 | Estrategia Android local QA definida. | Adaptador funcional, entorno y recibos de ejecución. |
+| H5 | Reportes offline disponibles por CLI. | CI/UI y reproducción desde otra PC. |
+
+Verificación de este lote:
+
+- **46/46 pruebas focalizadas**: baseline, corpus, controles y compatibilidad de
+  evaluación/piloto. Cubren hashes alterados, rutas/enlaces, fuentes QA intactas,
+  contraparte fallida, código equivocado, mutación vacía y cobertura incompleta.
+- **Modo sintético:** 13 controles medidos: tres positivos correctos y diez
+  negativos detectados por su código; cero falsos positivos/negativos y cero
+  sin evaluar. Las 24 etiquetas propuestas se asocian con las diez sondas;
+  esa asociación no acredita ejecución de los tres escenarios del corpus.
+- **Framework fijado `09674ce8ba298f650ad116c8d1dd82c7e19e8577`:** 11 controles
+  medidos (dos positivos y nueve negativos detectados), cero falsas alarmas.
+  La contraparte de rango y su mutación quedan sin evaluar, exit 2: el locator
+  compartido del commit difiere del fixture mínimo. El runner conserva esa
+  diferencia y no sobrescribe el contexto para aprobar el control.
+- **Suite completa: 1030/1031 aprobadas** en el Recorder real. Tipos y arquitectura
+  pasan. `quality` conserva exit 1 por la discrepancia histórica del golden de
+  ventas TC-10239; métricas y build se ejecutaron después y pasaron.
+- Captura y `--verify` del baseline completadas, con fuente y compilado identificados.
+  El framework exige Node >=24/npm >=11; el runtime disponible es Node 22.18.0/npm
+  10.9.3. Dependencias y QA siguen pendientes; no se declara listo el piloto.
+- [Resumen verificable](reports/harness-h0-h1-summary.json): huellas y resultados
+  por control. Los 11 archivos pendientes del framework conservaron sus hashes.
+  Los artefactos completos de ejecución quedaron fuera del repositorio.
+
+La [auditoría golden](reports/harness-h0-golden-audit.json) conserva hash idéntico
+del corpus antes/después. TC-10251 reproduce una regeneración, con baseline que
+ya incluye el caso. TC-10239 mezcla plan inicial y catálogo posterior a exportar,
+y `locator-provider.ts`/`redis.helper.ts` están proyectados parcialmente. Además,
+su aprobación QA convive con validación técnica histórica fallida: no es un
+control técnico positivo. Ninguna aprobación ni expectativa fue reescrita.
+
+No hubo llamadas LLM ni Appium. H0/H1 están **parciales**, H2–H5 **pendientes**;
+estas cifras no son una tasa de éxito de los agentes ni cierran F7. Las cifras
+históricas de las secciones siguientes mantienen su contexto original.
+
+### Seguimiento de yapeo TC-10240 — 2026-09-09
+
+La generación `run-151a3c56-fda0-406f-8b7c-1d3bb295c3d8` terminó en una pasada,
+con score técnico 100 y TypeScript del preview sin errores. Las cuatro capas
+coinciden byte a byte con la exportación anterior; el plan las marca update.
+La nueva corrida no registra exportación propia. El resultado funcional y la
+aceptación estructurada siguen sin evaluar (`acceptanceChecks` vacío).
+
+Pendiente: completar comparaciones del monto, teléfono ofuscado y comentario
+esperados, reformular los pasos imperativos heredados y ejecutar en Android QA.
+La comprobación actual del teléfono sólo afirma `¡Yapeaste!` y visibilidad de
+nombre/fecha/comentario. La sugerencia `test-design-review.json` conserva las
+carencias de las acciones 14 y 18; no se convierte el score en aprobación QA.
+Después corresponde recuperar correcciones, revisar la versión y proponer golden
+con su aprobación explícita. No se modificaron ni ejecutaron archivos del framework.
+
 ## Continuación: aceptación y evaluación — 2026-09-09
 
 | Fase de esta continuación | Entrega | Estado |

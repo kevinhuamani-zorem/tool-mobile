@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "caseId": "TC-10240",
+  "reviewed": false,
+  "qaReview": {
+    "status": "pending"
+  },
+  "provenance": {
+    "kind": "synthetic-reduction",
+    "selectorVerification": "synthetic-contract-only",
+    "actionCountMeaning": "Invented minimal fixture; not a copy or complete replay of the source recording."
+  },
+  "functional": {
+    "status": "not-evaluated"
+  },
+  "preconditions": [
+    "Permiso de contactos pendiente dentro del fixture sintético.",
+    "000000001 es un valor inventado, no un contacto ejecutable.",
+    "El flujo termina antes de ingresar monto o enviar dinero."
+  ],
+  "proposedAcceptanceCriteria": [
+    {
+      "id": "recipient-name",
+      "kind": "recorded-assertion",
+      "description": "Comparar el nombre exacto del destinatario.",
+      "sequences": [
+        6
+      ],
+      "critical": true,
+      "reviewed": false
+    },
+    {
+      "id": "recipient-masked-number",
+      "kind": "recorded-assertion",
+      "description": "Comparar el número enmascarado; la presencia de la vista no acredita este criterio.",
+      "sequences": [
+        7
+      ],
+      "critical": true,
+      "reviewed": false
+    }
+  ],
+  "expectedNegatives": [
+    {
+      "id": "locator-type",
+      "mutation": "Cambiar TypeLocator.ANDROID por XPATH manteniendo el valor registrado.",
+      "expectedRuleCodes": [
+        "locator-type-mismatch"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "locator-value-invented",
+      "mutation": "Sustituir el valor del locator por uno que no aparece en la evidencia sintética.",
+      "expectedRuleCodes": [
+        "invented-selector"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "test-data-user-missing",
+      "mutation": "Reemplazar Examples.username por un alias ausente del catálogo sintético.",
+      "expectedRuleCodes": [
+        "test-data-user-missing"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "duplicate-case",
+      "mutation": "Agregar otra declaración del mismo TC en el framework aislado.",
+      "expectedRuleCodes": [
+        "case-duplicate"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "duplicate-step",
+      "mutation": "Agregar una definición equivalente a un Step existente.",
+      "expectedRuleCodes": [
+        "duplicate-step-definition"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "remove-text-assertion",
+      "mutation": "Quitar la aserción de texto y conservar sólo la espera del elemento en Steps.",
+      "expectedRuleCodes": [
+        "recorded-text-assertion-steps"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "mechanical-gherkin",
+      "mutation": "Reemplazar un Step nuevo por el usuario selecciona cerrar.",
+      "expectedRuleCodes": [
+        "imperative-gherkin"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "trace-getter-changed",
+      "mutation": "Cambiar permitirButton por allowButton en la traza sin que el plan autorice ese alias.",
+      "expectedRuleCodes": [
+        "trace-locator"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    }
+  ],
+  "reuseExpectations": []
+}

@@ -1,0 +1,4 @@
+# Aliases sintéticos para validación estática. Sin cuentas ni credenciales ejecutables.
+- name: Harness Sales Empty
+- name: Harness Movements Period
+- name: Harness Yapeo Sender

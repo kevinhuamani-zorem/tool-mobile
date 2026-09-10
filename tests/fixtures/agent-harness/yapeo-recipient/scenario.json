@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "pipelineVersion": "harness-h1-v1",
+  "recordingId": "harness-synthetic-yapeo-recipient-v1",
+  "revision": 1,
+  "createdAt": "2026-09-09T00:00:00.000Z",
+  "squad": "payment",
+  "platform": "android",
+  "environment": "synthetic-offline",
+  "objective": "Iniciar un yapeo sintético y comprobar la identidad y el número enmascarado del destinatario seleccionado.",
+  "acceptanceCriteria": "La vista muestra el nombre del destinatario y su número enmascarado esperado. No se completa una transferencia.",
+  "request": {
+    "squad": "payment",
+    "platform": "android",
+    "featureScope": "",
+    "featureName": "Consultar el destinatario de un yapeo",
+    "scenarioName": "Consultar el destinatario de un yapeo",
+    "fileName": "yapeo-recipient",
+    "locatorModule": "yapeo-recipient",
+    "caseId": "TC-10240",
+    "pathType": "Happy Path",
+    "tag": "harness_yapeo_recipient",
+    "executionTag": "smoke_mobile",
+    "dataName": "Harness Yapeo Sender",
+    "examples": {
+      "username": "Harness Yapeo Sender",
+      "recipient": "000000001"
+    },
+    "acceptanceChecks": [],
+    "scenarioRows": [
+      {
+        "keyword": "Given",
+        "text": "el usuario <username> inicia sesión en Yape",
+        "status": "reused",
+        "wording": "domain",
+        "actions": []
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario inicia un yapeo",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 1,
+            "action": "CLICK",
+            "variableName": "yapearButton",
+            "contextHint": "yapearButton",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/yapear\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/yapear\")",
+            "platform": "android"
+          },
+          {
+            "sequence": 2,
+            "action": "CLICK",
+            "variableName": "permitirButton",
+            "contextHint": "permitirButton",
+            "selector": "id=com.android.permissioncontroller:id/permission_allow_button",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"com.android.permissioncontroller:id/permission_allow_button\")",
+            "platform": "android"
+          },
+          {
+            "sequence": 3,
+            "action": "CLICK",
+            "variableName": "closeButton",
+            "contextHint": "closeButton",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/close_intro\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/close_intro\")",
+            "platform": "android"
+          }
+        ]
+      },
+      {
+        "keyword": "When",
+        "text": "el usuario busca al destinatario con el número <recipient>",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 4,
+            "action": "ESCRIBIR",
+            "variableName": "recipientSearchInput",
+            "contextHint": "recipientSearchInput",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_search\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_search\")",
+            "platform": "android",
+            "value": "000000001"
+          },
+          {
+            "sequence": 5,
+            "action": "CLICK",
+            "variableName": "recipientRow",
+            "contextHint": "recipientRow",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_row\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_row\")",
+            "platform": "android"
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestra el nombre del destinatario esperado",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 6,
+            "action": "VERIFICAR_TEXTO",
+            "variableName": "recipientName",
+            "contextHint": "recipientName",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_name\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_name\")",
+            "platform": "android",
+            "value": "Harness Recipient",
+            "textAssertion": {
+              "version": 1,
+              "source": "element",
+              "operator": "equals"
+            }
+          }
+        ]
+      },
+      {
+        "keyword": "Then",
+        "text": "se muestra el número enmascarado del destinatario esperado",
+        "wording": "domain",
+        "status": "missing",
+        "actions": [
+          {
+            "sequence": 7,
+            "action": "VERIFICAR_TEXTO",
+            "variableName": "recipientMaskedNumber",
+            "contextHint": "recipientMaskedNumber",
+            "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_masked_number\")",
+            "selectorVerified": true,
+            "locatorType": "ANDROID",
+            "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_masked_number\")",
+            "platform": "android",
+            "value": "*** *** 001",
+            "textAssertion": {
+              "version": 1,
+              "source": "element",
+              "operator": "equals"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "sequence": 1,
+      "action": "CLICK",
+      "variableName": "yapearButton",
+      "contextHint": "yapearButton",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/yapear\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/yapear\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 2,
+      "action": "CLICK",
+      "variableName": "permitirButton",
+      "contextHint": "permitirButton",
+      "selector": "id=com.android.permissioncontroller:id/permission_allow_button",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"com.android.permissioncontroller:id/permission_allow_button\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 3,
+      "action": "CLICK",
+      "variableName": "closeButton",
+      "contextHint": "closeButton",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/close_intro\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/close_intro\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 4,
+      "action": "ESCRIBIR",
+      "variableName": "recipientSearchInput",
+      "contextHint": "recipientSearchInput",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_search\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_search\")",
+      "platform": "android",
+      "value": "000000001"
+    },
+    {
+      "sequence": 5,
+      "action": "CLICK",
+      "variableName": "recipientRow",
+      "contextHint": "recipientRow",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_row\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_row\")",
+      "platform": "android"
+    },
+    {
+      "sequence": 6,
+      "action": "VERIFICAR_TEXTO",
+      "variableName": "recipientName",
+      "contextHint": "recipientName",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_name\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_name\")",
+      "platform": "android",
+      "value": "Harness Recipient",
+      "textAssertion": {
+        "version": 1,
+        "source": "element",
+        "operator": "equals"
+      }
+    },
+    {
+      "sequence": 7,
+      "action": "VERIFICAR_TEXTO",
+      "variableName": "recipientMaskedNumber",
+      "contextHint": "recipientMaskedNumber",
+      "selector": "android=new UiSelector().resourceId(\"harness:id/recipient_masked_number\")",
+      "selectorVerified": true,
+      "locatorType": "ANDROID",
+      "locatorValue": "new UiSelector().resourceId(\"harness:id/recipient_masked_number\")",
+      "platform": "android",
+      "value": "*** *** 001",
+      "textAssertion": {
+        "version": 1,
+        "source": "element",
+        "operator": "equals"
+      }
+    }
+  ],
+  "fingerprint": "49254f3b7aeb4d1f9957a882ce901b363faac320dd988cfa1905434bb2fbeba5"
+}

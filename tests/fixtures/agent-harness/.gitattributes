@@ -1,0 +1,3 @@
+# Entradas del corpus verificadas por SHA-256: conservar bytes exactos en cada checkout.
+*.json -text -filter -ident !working-tree-encoding
+*.yml -text -filter -ident !working-tree-encoding

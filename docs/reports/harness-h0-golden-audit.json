@@ -1,0 +1,1059 @@
+{
+  "schemaVersion": 1,
+  "auditVersion": "harness-golden-audit/v1",
+  "createdAt": "2026-09-10T01:05:02.614Z",
+  "methodology": {
+    "mode": "read-only-approved-corpus",
+    "runnerSources": [
+      "scripts/golden-replay.js",
+      "scripts/validator-evaluate.js"
+    ],
+    "reader": "GoldenSnapshotReader",
+    "llmCalls": 0,
+    "deviceExecutions": 0,
+    "mutableFrameworkWrites": 0,
+    "temporaryArchiveOnly": true,
+    "scopeNotes": [
+      "Los runners usan archives temporales del commit local fijado y overlays de baselines aprobados; no checkout del framework real.",
+      "Las proyecciones deterministas se evaluaron separadamente en archives temporales sin completar dependencias; eso permite observar la discrepancia de plan aunque el replay integral se detenga antes.",
+      "Un primer intento de resolver fuera del workspace temporal intentó escribir cache y fue denegado por el sandbox; no produjo cambios. Se repitió íntegramente dentro del archive temporal.",
+      "No se construyeron bundles. Se utilizaron los módulos dist presentes, identificados por hash; los archivos fuente usados para la auditoría también quedan identificados."
+    ]
+  },
+  "recorderCommit": "ae4e68607ef76bd5f5edffb8be2eb9240d3d1173",
+  "frameworkWorkingCommit": "09674ce8ba298f650ad116c8d1dd82c7e19e8577",
+  "corpus": {
+    "size": 2,
+    "versions": 2,
+    "fingerprint": "fc1a42126e8afc7da6b46251d303553f0b9b87ac842166263d14753154530b99",
+    "issues": [],
+    "physicalInventoryBeforeHash": "0fb0da657ac032a392b5b9e81154fce8ca3cc525fed53b8812d1797b28a55c98",
+    "physicalInventoryAfterHash": "0fb0da657ac032a392b5b9e81154fce8ca3cc525fed53b8812d1797b28a55c98"
+  },
+  "cases": [
+    {
+      "caseId": "TC-10251",
+      "goldenId": "golden-683c6046276fc3598f108688139da3b5d58fd3094623dfe321df323d3ece16fe",
+      "versionHash": "7a4b06002531ca3623eb8dd479c64d24c520d775a85bda7fb9633bfd095e73ad",
+      "manifestHash": "f00488fca5606089cfe07bced7e57bf9d942de1e70bd756095837e3593b18ad4",
+      "frameworkCommit": "57e60c58b28ad4981e9a0b20ec50563c36ff854c",
+      "source": "review",
+      "usage": "reference",
+      "approvalSource": "qa-declaration",
+      "qaDeclaredExecution": "passed",
+      "snapshotHashes": {
+        "catalog.json": "caa46be194f920cd6db4b74f35492201b224962f0ef9b43c7380546a8b38996e",
+        "package/generation-plan.json": "3b24980f6608606e233edfc6dbc814ea39e232c6085fdb770a23601b7a3cf5ac",
+        "package/effective-generation-plan.json": null,
+        "package/scenario.json": "80583667e737614d7773cef40026b4ffb1e187f0f705b444e53221ef96a2d312",
+        "agent-response.json": "6e9ad866b6e03e3398c0c174d5277038b165d7b4f395378db2daa25f823c2714",
+        "dependency-files.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "package/framework-recovery.json": "d23bdbf7f1e63282817ac5871c62371cc16d1d340e10ae89002bf8aba448393c"
+      },
+      "recordedValidation": {
+        "valid": true,
+        "qualityScore": 100,
+        "errorCounts": {},
+        "source": "apply"
+      },
+      "recordedProjection": {
+        "reuseTarget": {
+          "steps": "features/yape-steps-definitions/payment/confirmation-send-email-report.steps.ts",
+          "screen": "screenobjects/payment/movements.screen.ts",
+          "locators": "resources/locators/payment/movements.locator.json"
+        },
+        "files": [
+          {
+            "layer": "feature",
+            "path": "features/yape-features/payment/confirmation-send-email-report.feature",
+            "operation": "update"
+          },
+          {
+            "layer": "steps",
+            "path": "features/yape-steps-definitions/payment/confirmation-send-email-report.steps.ts",
+            "operation": "update"
+          },
+          {
+            "layer": "screen",
+            "path": "screenobjects/payment/movements.screen.ts",
+            "operation": "update"
+          },
+          {
+            "layer": "locators",
+            "path": "resources/locators/payment/movements.locator.json",
+            "operation": "update"
+          }
+        ],
+        "resolutions": [
+          {
+            "sequence": 1,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "movementsButton",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 2,
+            "action": "SCROLL_DOWN",
+            "resolution": "builtin",
+            "locatorName": null,
+            "module": null
+          },
+          {
+            "sequence": 3,
+            "action": "SCROLL_DOWN",
+            "resolution": "builtin",
+            "locatorName": null,
+            "module": null
+          },
+          {
+            "sequence": 4,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "seeAllMovements",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 5,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "sendReportEmailMovements",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 6,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "btnsend",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 7,
+            "action": "VERIFICAR_EXISTE",
+            "resolution": "reuse",
+            "locatorName": "veValidateEmailSentMessage",
+            "module": "payment/movements"
+          }
+        ],
+        "gaps": [
+          {
+            "id": "gap-extend-existing-artifacts",
+            "type": "semantic-naming",
+            "blocking": false
+          }
+        ]
+      },
+      "replayedProjection": {
+        "reuseTarget": {
+          "steps": "features/yape-steps-definitions/payment/confirmation-send-email-report.steps.ts",
+          "screen": "screenobjects/payment/movements.screen.ts",
+          "locators": "resources/locators/payment/movements.locator.json"
+        },
+        "files": [
+          {
+            "layer": "feature",
+            "path": "features/yape-features/payment/confirmation-send-email-report.feature",
+            "operation": "update"
+          },
+          {
+            "layer": "steps",
+            "path": "features/yape-steps-definitions/payment/confirmation-send-email-report.steps.ts",
+            "operation": "update"
+          },
+          {
+            "layer": "screen",
+            "path": "screenobjects/payment/movements.screen.ts",
+            "operation": "update"
+          },
+          {
+            "layer": "locators",
+            "path": "resources/locators/payment/movements.locator.json",
+            "operation": "update"
+          }
+        ],
+        "resolutions": [
+          {
+            "sequence": 1,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "movementsButton",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 2,
+            "action": "SCROLL_DOWN",
+            "resolution": "builtin",
+            "locatorName": null,
+            "module": null
+          },
+          {
+            "sequence": 3,
+            "action": "SCROLL_DOWN",
+            "resolution": "builtin",
+            "locatorName": null,
+            "module": null
+          },
+          {
+            "sequence": 4,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "seeAllMovements",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 5,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "sendReportEmailMovements",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 6,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "btnsend",
+            "module": "payment/movements"
+          },
+          {
+            "sequence": 7,
+            "action": "VERIFICAR_EXISTE",
+            "resolution": "reuse",
+            "locatorName": "veValidateEmailSentMessage",
+            "module": "payment/movements"
+          }
+        ],
+        "gaps": [
+          {
+            "id": "gap-extend-existing-artifacts",
+            "type": "semantic-naming",
+            "blocking": false
+          }
+        ]
+      },
+      "effectiveFiles": [
+        {
+          "path": "features/yape-features/payment/confirmation-send-email-report.feature",
+          "layer": "feature",
+          "operation": "update",
+          "baselineSha256": "fc77fc4462ba585441cadfd960d70410c0d7685c57fd6bfa36c2a5caceef0aa7",
+          "baselineMatchesPinnedCommit": false
+        },
+        {
+          "path": "features/yape-steps-definitions/payment/confirmation-send-email-report.steps.ts",
+          "layer": "steps",
+          "operation": "update",
+          "baselineSha256": "dae95fa0201bfa6e4bad075dff9334c2a89ce2b9374ac48ea7995196e1e729c6",
+          "baselineMatchesPinnedCommit": false
+        },
+        {
+          "path": "screenobjects/payment/movements.screen.ts",
+          "layer": "screen",
+          "operation": "update",
+          "baselineSha256": "86ad439a56c9664a24c6cefe5acbd69183f725c57225a2d9b2155a3688736879",
+          "baselineMatchesPinnedCommit": false
+        },
+        {
+          "path": "resources/locators/payment/movements.locator.json",
+          "layer": "locators",
+          "operation": "update",
+          "baselineSha256": "bfd3b3c89de542e30d1189399daa1a7a00876aed928ee258a2d473b4eb4e5fb5",
+          "baselineMatchesPinnedCommit": false
+        }
+      ],
+      "dependencyRecovery": [],
+      "dependencies": [],
+      "catalogSummary": {
+        "features": [
+          {
+            "file": "features/yape-features/payment/confirmation-send-email-report.feature"
+          }
+        ],
+        "locators": [
+          {
+            "name": "btnsend",
+            "file": "resources/locators/payment/movements.locator.json",
+            "module": "payment/movements",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          },
+          {
+            "name": "movementsButton",
+            "file": "resources/locators/payment/movements.locator.json",
+            "module": "payment/movements",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          },
+          {
+            "name": "seeAllMovements",
+            "file": "resources/locators/payment/movements.locator.json",
+            "module": "payment/movements",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          },
+          {
+            "name": "sendReportEmailMovements",
+            "file": "resources/locators/payment/movements.locator.json",
+            "module": "payment/movements",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          },
+          {
+            "name": "veValidateEmailSentMessage",
+            "file": "resources/locators/payment/movements.locator.json",
+            "module": "payment/movements",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          }
+        ],
+        "scenarios": [
+          {
+            "keys": [
+              "feature",
+              "name",
+              "caseId",
+              "file",
+              "steps",
+              "relatedArtifacts"
+            ],
+            "caseId": "TC-10251",
+            "file": "features/yape-features/payment/confirmation-send-email-report.feature"
+          }
+        ]
+      },
+      "execution": {
+        "declaration": {
+          "status": "passed",
+          "source": "qa-declaration"
+        },
+        "automaticVerification": "not-reported"
+      },
+      "baselineContainsCase": [
+        {
+          "path": "features/yape-features/payment/confirmation-send-email-report.feature",
+          "containsCase": true
+        }
+      ],
+      "provenanceSummary": {
+        "eventCount": 80,
+        "kinds": {
+          "revision-created": 4,
+          "artifact-captured": 65,
+          "attempt-started": 2,
+          "attempt-planned": 1,
+          "generation-result": 6,
+          "export-result": 2
+        },
+        "generationOutcomes": [
+          "passed",
+          "passed",
+          "passed",
+          "passed",
+          "passed",
+          "passed"
+        ],
+        "exportOutcomes": [
+          "exported",
+          "exported"
+        ]
+      },
+      "artifactCount": 84
+    },
+    {
+      "caseId": "TC-10239",
+      "goldenId": "golden-f8465538d7620ec2675a76ca6887d523609e9ad1ab8f90818aa9d58caf926625",
+      "versionHash": "77c7c67b6cd3b69bedebdec7f6e127af1ae45f61ec47aae321d1fe49b5f09c55",
+      "manifestHash": "df34f34904adee51c1bb5d571a4a3862b0a295c7f6ab1ec4a3344e0a2b067cbd",
+      "frameworkCommit": "57e60c58b28ad4981e9a0b20ec50563c36ff854c",
+      "source": "framework-recovery",
+      "usage": "reference",
+      "approvalSource": "qa-declaration",
+      "qaDeclaredExecution": "passed",
+      "snapshotHashes": {
+        "catalog.json": "c7ebef4e31ecc3873f9ea8cb9d2a5716fd626b447eab3b1cb14baebdd67845cb",
+        "package/generation-plan.json": "4588785e2285f517b04bff750fefdf2e365b83f77b7dc00f8caca453145d7837",
+        "package/effective-generation-plan.json": null,
+        "package/scenario.json": "ebf2c0ed15185e6486de09718f387f9b2bb16e2e601a895f19d55875adb7cec2",
+        "agent-response.json": "d89bcb21db7aab929a1a3d6eb50f3c1cd3374f49972fa0f5382b1b40c969ae5e",
+        "dependency-files.json": "09ba5f6f30a7361c1ac930fc5bebb831020d5f73448f334af3d0b5c546820626",
+        "package/framework-recovery.json": "67c0744cb75d6a603a495953faf87d1e6f8a72c8b2c0dcca516032c9ffb02dcd"
+      },
+      "recordedValidation": {
+        "valid": false,
+        "qualityScore": 0,
+        "errorCounts": {
+          "duplicate-layer": 1,
+          "missing-gap-resolution": 4,
+          "trace": 2,
+          "trace-screen-method": 2,
+          "output": 7,
+          "framework-step-collision": 1
+        },
+        "source": "golden"
+      },
+      "recordedProjection": {
+        "reuseTarget": {
+          "screen": "screenobjects/payment/sales.screen.ts",
+          "locators": "resources/locators/payment/showsales.locator.json"
+        },
+        "files": [
+          {
+            "layer": "feature",
+            "path": "features/yape-features/payment/verify-sales-message.feature",
+            "operation": "create"
+          },
+          {
+            "layer": "steps",
+            "path": "features/yape-steps-definitions/payment/verify-sales-message.steps.ts",
+            "operation": "create"
+          },
+          {
+            "layer": "screen",
+            "path": "screenobjects/payment/sales.screen.ts",
+            "operation": "update"
+          },
+          {
+            "layer": "locators",
+            "path": "resources/locators/payment/showsales.locator.json",
+            "operation": "update"
+          }
+        ],
+        "resolutions": [
+          {
+            "sequence": 1,
+            "action": "CLICK",
+            "resolution": "create",
+            "locatorName": "salesButton",
+            "module": null
+          },
+          {
+            "sequence": 2,
+            "action": "VERIFICAR_EXISTE",
+            "resolution": "create",
+            "locatorName": "noSalesMessage",
+            "module": null
+          }
+        ],
+        "gaps": [
+          {
+            "id": "gap-duplicate-element-1",
+            "type": "semantic-naming",
+            "blocking": false
+          },
+          {
+            "id": "gap-extend-existing-artifacts",
+            "type": "semantic-naming",
+            "blocking": false
+          },
+          {
+            "id": "gap-duplicate-1",
+            "type": "semantic-naming",
+            "blocking": false
+          },
+          {
+            "id": "gap-duplicate-2",
+            "type": "semantic-naming",
+            "blocking": false
+          }
+        ]
+      },
+      "replayedProjection": {
+        "reuseTarget": {
+          "screen": "screenobjects/payment/sales.screen.ts",
+          "locators": "resources/locators/payment/showsales.locator.json"
+        },
+        "files": [
+          {
+            "layer": "feature",
+            "path": "features/yape-features/payment/verify-sales-message.feature",
+            "operation": "update"
+          },
+          {
+            "layer": "steps",
+            "path": "features/yape-steps-definitions/payment/verify-sales-message.steps.ts",
+            "operation": "create"
+          },
+          {
+            "layer": "screen",
+            "path": "screenobjects/payment/sales.screen.ts",
+            "operation": "update"
+          },
+          {
+            "layer": "locators",
+            "path": "resources/locators/payment/showsales.locator.json",
+            "operation": "update"
+          }
+        ],
+        "resolutions": [
+          {
+            "sequence": 1,
+            "action": "CLICK",
+            "resolution": "reuse",
+            "locatorName": "salesButton",
+            "module": "payment/showsales"
+          },
+          {
+            "sequence": 2,
+            "action": "VERIFICAR_EXISTE",
+            "resolution": "reuse",
+            "locatorName": "noSalesMessage",
+            "module": "payment/showsales"
+          }
+        ],
+        "gaps": [
+          {
+            "id": "gap-extend-existing-artifacts",
+            "type": "semantic-naming",
+            "blocking": false
+          }
+        ]
+      },
+      "effectiveFiles": [
+        {
+          "path": "features/yape-features/payment/verify-sales-message.feature",
+          "layer": "feature",
+          "operation": "create",
+          "baselineSha256": null,
+          "baselineMatchesPinnedCommit": null
+        },
+        {
+          "path": "features/yape-steps-definitions/payment/verify-sales-message.steps.ts",
+          "layer": "steps",
+          "operation": "create",
+          "baselineSha256": null,
+          "baselineMatchesPinnedCommit": null
+        },
+        {
+          "path": "screenobjects/payment/sales.screen.ts",
+          "layer": "screen",
+          "operation": "update",
+          "baselineSha256": "95f0ba8b49e2ddba2b6daebc48ce72a4b890bca34b12b03fdefd80bb404f2456",
+          "baselineMatchesPinnedCommit": true
+        },
+        {
+          "path": "resources/locators/payment/showsales.locator.json",
+          "layer": "locators",
+          "operation": "update",
+          "baselineSha256": "6e5b9c074f7b9a411a24f80ce5e6f8f07b9a6141ae6d2a15f043ef959549324e",
+          "baselineMatchesPinnedCommit": true
+        }
+      ],
+      "dependencyRecovery": [
+        {
+          "path": "support/common/types/assertions.types.ts",
+          "keys": [
+            "path",
+            "layer",
+            "association",
+            "shared",
+            "exported",
+            "content",
+            "currentHash",
+            "symbols",
+            "changes"
+          ],
+          "currentHash": "f9fd995a4e46b25a2adcd28957865001829c46778885da74cdfc6ba0bde46387",
+          "contentSha256": "f9fd995a4e46b25a2adcd28957865001829c46778885da74cdfc6ba0bde46387",
+          "symbols": [
+            "ApiResponse"
+          ],
+          "association": "relations",
+          "layer": "dependency"
+        },
+        {
+          "path": "support/common/utils/element/handler.ts",
+          "keys": [
+            "path",
+            "layer",
+            "association",
+            "shared",
+            "exported",
+            "content",
+            "currentHash",
+            "symbols",
+            "changes"
+          ],
+          "currentHash": "72e5c84e5ce94f6b2b84d5f050714398f6459212b2d185296c229aa4dc1b81d2",
+          "contentSha256": "72e5c84e5ce94f6b2b84d5f050714398f6459212b2d185296c229aa4dc1b81d2",
+          "symbols": [
+            "handlePopupIfVisible",
+            "validateElementWithRetries",
+            "handlePopupIfVisibleWithTimeOut",
+            "import:webdriverio"
+          ],
+          "association": "relations",
+          "layer": "dependency"
+        },
+        {
+          "path": "support/common/locators/locator-provider.ts",
+          "keys": [
+            "path",
+            "layer",
+            "association",
+            "shared",
+            "exported",
+            "content",
+            "currentHash",
+            "symbols",
+            "changes"
+          ],
+          "currentHash": "2c8b5dece307290404801f37483d534189a242ad52b79563dda1b5acca344054",
+          "contentSha256": "4e6c0a8a1ab4be54fd631fd940a8d1470ccfd904da720bc2d4d7afeb7cd3b784",
+          "symbols": [
+            "getElement",
+            "import:@common/enums/locator-type.enum.js",
+            "import:@wdio/globals"
+          ],
+          "association": "relations",
+          "layer": "dependency"
+        },
+        {
+          "path": "support/common/enums/locator-type.enum.ts",
+          "keys": [
+            "path",
+            "layer",
+            "association",
+            "shared",
+            "exported",
+            "content",
+            "currentHash",
+            "symbols",
+            "changes"
+          ],
+          "currentHash": "78575278f18367053aeb5a702ddf0c5c5c7b5e18ecdf859df4e894392f4ad8a6",
+          "contentSha256": "78575278f18367053aeb5a702ddf0c5c5c7b5e18ecdf859df4e894392f4ad8a6",
+          "symbols": [
+            "CLASSCHAIN",
+            "XPATH",
+            "ID",
+            "TypeLocator",
+            "ANDROID",
+            "PREDICATESTRING"
+          ],
+          "association": "relations",
+          "layer": "dependency"
+        },
+        {
+          "path": "support/utils/redis.helper.ts",
+          "keys": [
+            "path",
+            "layer",
+            "association",
+            "shared",
+            "exported",
+            "content",
+            "currentHash",
+            "symbols",
+            "changes"
+          ],
+          "currentHash": "8de7777e7ac0a35be96d2ba20ab0fb98bf4aa437b858c27da4d8dc80b368daf0",
+          "contentSha256": "fa4e8eaa6107a188169582976f988a4832a8dc1f70b75b97ce3e7ae7aa3ddf53",
+          "symbols": [
+            "readDataRedis",
+            "openConnectionRedis",
+            "import:../../support/utils/constants.ts",
+            "getValueForKey",
+            "import:timers/promises",
+            "getRedisConfig",
+            "import:redis",
+            "loadEnvConfig",
+            "getEnvValue",
+            "import:node:path"
+          ],
+          "association": "relations",
+          "layer": "dependency"
+        }
+      ],
+      "dependencies": [
+        {
+          "path": "support/common/enums/locator-type.enum.ts",
+          "snapshotSha256": "78575278f18367053aeb5a702ddf0c5c5c7b5e18ecdf859df4e894392f4ad8a6",
+          "snapshotBytes": 516,
+          "snapshotLines": 17,
+          "commitSha256": "78575278f18367053aeb5a702ddf0c5c5c7b5e18ecdf859df4e894392f4ad8a6",
+          "commitBytes": 516,
+          "commitLines": 17,
+          "exactMatch": true,
+          "snapshotExportedSymbols": [
+            "TypeLocator"
+          ],
+          "commitExportedSymbols": [
+            "TypeLocator"
+          ]
+        },
+        {
+          "path": "support/common/locators/locator-provider.ts",
+          "snapshotSha256": "4e6c0a8a1ab4be54fd631fd940a8d1470ccfd904da720bc2d4d7afeb7cd3b784",
+          "snapshotBytes": 1147,
+          "snapshotLines": 29,
+          "commitSha256": "2c8b5dece307290404801f37483d534189a242ad52b79563dda1b5acca344054",
+          "commitBytes": 2679,
+          "commitLines": 57,
+          "exactMatch": false,
+          "snapshotExportedSymbols": [
+            "LocatorProvider"
+          ],
+          "commitExportedSymbols": [
+            "LocatorProvider"
+          ]
+        },
+        {
+          "path": "support/common/types/assertions.types.ts",
+          "snapshotSha256": "f9fd995a4e46b25a2adcd28957865001829c46778885da74cdfc6ba0bde46387",
+          "snapshotBytes": 79,
+          "snapshotLines": 5,
+          "commitSha256": "f9fd995a4e46b25a2adcd28957865001829c46778885da74cdfc6ba0bde46387",
+          "commitBytes": 79,
+          "commitLines": 5,
+          "exactMatch": true,
+          "snapshotExportedSymbols": [
+            "ApiResponse"
+          ],
+          "commitExportedSymbols": [
+            "ApiResponse"
+          ]
+        },
+        {
+          "path": "support/common/utils/element/handler.ts",
+          "snapshotSha256": "72e5c84e5ce94f6b2b84d5f050714398f6459212b2d185296c229aa4dc1b81d2",
+          "snapshotBytes": 3668,
+          "snapshotLines": 93,
+          "commitSha256": "72e5c84e5ce94f6b2b84d5f050714398f6459212b2d185296c229aa4dc1b81d2",
+          "commitBytes": 3668,
+          "commitLines": 93,
+          "exactMatch": true,
+          "snapshotExportedSymbols": [],
+          "commitExportedSymbols": []
+        },
+        {
+          "path": "support/utils/redis.helper.ts",
+          "snapshotSha256": "fa4e8eaa6107a188169582976f988a4832a8dc1f70b75b97ce3e7ae7aa3ddf53",
+          "snapshotBytes": 6528,
+          "snapshotLines": 165,
+          "commitSha256": "8de7777e7ac0a35be96d2ba20ab0fb98bf4aa437b858c27da4d8dc80b368daf0",
+          "commitBytes": 19597,
+          "commitLines": 515,
+          "exactMatch": false,
+          "snapshotExportedSymbols": [],
+          "commitExportedSymbols": []
+        }
+      ],
+      "catalogSummary": {
+        "features": [
+          {
+            "file": "features/yape-features/payment/verify-sales-message.feature"
+          }
+        ],
+        "locators": [
+          {
+            "name": "noSalesMessage",
+            "file": "resources/locators/payment/showsales.locator.json",
+            "module": "payment/showsales",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          },
+          {
+            "name": "salesButton",
+            "file": "resources/locators/payment/showsales.locator.json",
+            "module": "payment/showsales",
+            "androidStrategy": "ANDROID",
+            "iosStrategy": "XPATH"
+          }
+        ],
+        "scenarios": [
+          {
+            "keys": [
+              "feature",
+              "name",
+              "caseId",
+              "file",
+              "steps",
+              "relatedArtifacts"
+            ],
+            "caseId": "TC-10239",
+            "file": "features/yape-features/payment/verify-sales-message.feature"
+          }
+        ]
+      },
+      "execution": {
+        "declaration": {
+          "status": "passed",
+          "source": "qa-declaration"
+        },
+        "automaticVerification": "not-reported"
+      },
+      "baselineContainsCase": [
+        {
+          "path": "features/yape-features/payment/verify-sales-message.feature",
+          "containsCase": null
+        }
+      ],
+      "provenanceSummary": {
+        "eventCount": 37,
+        "kinds": {
+          "revision-created": 3,
+          "artifact-captured": 30,
+          "attempt-started": 1,
+          "attempt-planned": 1,
+          "generation-result": 1,
+          "export-result": 1
+        },
+        "generationOutcomes": [
+          "failed"
+        ],
+        "exportOutcomes": [
+          "exported-with-observations"
+        ]
+      },
+      "artifactCount": 70
+    }
+  ],
+  "replay": {
+    "schemaVersion": 1,
+    "replayVersion": "golden-replay/v2",
+    "status": "requires-review",
+    "corpusSize": 2,
+    "fingerprint": "fc1a42126e8afc7da6b46251d303553f0b9b87ac842166263d14753154530b99",
+    "issues": [],
+    "results": [
+      {
+        "goldenId": "golden-683c6046276fc3598f108688139da3b5d58fd3094623dfe321df323d3ece16fe",
+        "revisionId": "revision-0a6e5c1c-9c8a-411e-adc1-97f32748b739",
+        "versionHash": "7a4b06002531ca3623eb8dd479c64d24c520d775a85bda7fb9633bfd095e73ad",
+        "frameworkCommit": "57e60c58b28ad4981e9a0b20ec50563c36ff854c",
+        "status": "matched",
+        "planEquivalent": true,
+        "planScope": "deterministic-resolver-decisions",
+        "recordedRegenerationControls": [
+          {
+            "id": "gap-regeneration-refinement",
+            "type": "refinement",
+            "description": "Incorporar las acciones de la grabación actual conservando las correcciones QA y la identidad del caso.",
+            "requiredOutput": "Actualizar las cuatro capas conservando las correcciones QA, rutas vigentes y trazabilidad; las asociaciones inciertas siguen pendientes."
+          }
+        ],
+        "replayRegenerationControls": [],
+        "recordedValidation": {
+          "valid": true,
+          "qualityScore": 100,
+          "errorCounts": {},
+          "source": "apply"
+        },
+        "actualValidation": {
+          "valid": true,
+          "errorCounts": {}
+        },
+        "discrepancies": [],
+        "functionalVerification": "not-evaluated"
+      },
+      {
+        "goldenId": "golden-f8465538d7620ec2675a76ca6887d523609e9ad1ab8f90818aa9d58caf926625",
+        "versionHash": "77c7c67b6cd3b69bedebdec7f6e127af1ae45f61ec47aae321d1fe49b5f09c55",
+        "status": "unreproducible",
+        "reason": "Dependencia compartida requiere un snapshot completo: support/common/locators/locator-provider.ts"
+      }
+    ]
+  },
+  "controlled": {
+    "schemaVersion": 1,
+    "evaluationVersion": "controlled-faults/v1",
+    "corpusFingerprint": "fc1a42126e8afc7da6b46251d303553f0b9b87ac842166263d14753154530b99",
+    "corpusIssues": [],
+    "truePositives": 2,
+    "falsePositives": 0,
+    "falseNegatives": 0,
+    "precision": {
+      "numerator": 2,
+      "denominator": 2,
+      "rate": 1,
+      "notEvaluated": 0
+    },
+    "recall": {
+      "numerator": 2,
+      "denominator": 2,
+      "rate": 1,
+      "notEvaluated": 0
+    },
+    "notEvaluated": 1,
+    "measured": 3,
+    "samples": [
+      {
+        "id": "golden-683c6046276fc3598f108688139da3b5d58fd3094623dfe321df323d3ece16fe:baseline",
+        "expected": "valid",
+        "observed": "valid",
+        "actualCodes": []
+      },
+      {
+        "id": "golden-683c6046276fc3598f108688139da3b5d58fd3094623dfe321df323d3ece16fe:duplicate-case",
+        "expected": "invalid",
+        "expectedCode": "case-duplicate",
+        "observed": "invalid",
+        "actualCodes": [
+          "case-duplicate"
+        ]
+      },
+      {
+        "id": "golden-683c6046276fc3598f108688139da3b5d58fd3094623dfe321df323d3ece16fe:locator-type",
+        "expected": "invalid",
+        "expectedCode": "locator-type-mismatch",
+        "observed": "invalid",
+        "actualCodes": [
+          "locator-type-mismatch"
+        ]
+      },
+      {
+        "id": "golden-f8465538d7620ec2675a76ca6887d523609e9ad1ab8f90818aa9d58caf926625:baseline",
+        "expected": "valid",
+        "observed": "not-evaluated",
+        "actualCodes": [],
+        "reason": "Se requiere baseline completo de dependencia: support/common/locators/locator-provider.ts"
+      }
+    ],
+    "scope": "Validator mutation detection. No LLM calls, device execution or golden promotion.",
+    "cases": [
+      {
+        "goldenId": "golden-683c6046276fc3598f108688139da3b5d58fd3094623dfe321df323d3ece16fe",
+        "versionHash": "7a4b06002531ca3623eb8dd479c64d24c520d775a85bda7fb9633bfd095e73ad",
+        "commit": "57e60c58b28ad4981e9a0b20ec50563c36ff854c",
+        "unsupported": [
+          "remove-text-assertion"
+        ],
+        "baselineOracle": "approved-historical-static-verdict",
+        "baselineRequiresQaReview": false
+      }
+    ]
+  },
+  "sourceHashes": {
+    "scripts/golden-replay.js": "ffdfb12eee419ff1d9778d0de3b64142d8e09aae82c820b3a64fa13f050aeb90",
+    "scripts/validator-evaluate.js": "84eb18d981909ae82209638fbcaecec102a85fc1188b9b4069465f626f3af7df",
+    "core/automation/infrastructure/goldenDataset.ts": "7b9da7b89e921b98ef918c4d3d93d4f27d5bc4a25ee5a7711124ce454e8c6fd2",
+    "core/automation/infrastructure/goldenSnapshot.ts": "732860823c809bbd3e227a90138a9753d1a539469407d15a67776673869c873c",
+    "core/automation/infrastructure/frameworkRecovery/service.ts": "60d7090e56be52f931cfe89d3f25d5e3803f0f2da4be8e2a428b407240f4c4cb",
+    "recorder/src/ipc/automation/goldenCase.ts": "97bbb439a9efaf1c27887080b0b0f65ad1247ec110b86834647f7fea0ce319b0"
+  },
+  "compiledHashes": {
+    "dist/core/automation/infrastructure/goldenDataset.js": "b89161ec4fa3329745e0c5013adcba4f62edaf5a968d59a5a45ed0e86fd1e6d2",
+    "dist/core/automation/infrastructure/goldenSnapshot.js": "d3ed22857b3b5179156ed853fef1b2760a6daba594ecd28b333c92e0c1e998c5",
+    "dist/core/automation/infrastructure/deterministicResolver.js": "5231e2179e2f29b7ddb2b81fbab9c80f0216fb47ca7c22a549b06875123570ce"
+  },
+  "findings": [
+    {
+      "id": "historical-context-mismatch",
+      "caseId": "TC-10239",
+      "status": "confirmed",
+      "severity": "baseline-blocker",
+      "summary": "El plan histórico crea la Feature y los locators salesButton/noSalesMessage, pero el catálogo aprobado ya contiene la misma Feature/TC y ambos locators. El replay aislado resuelve Feature update y ambos locators reuse. Los archivos JSON y Screen siguen update; no confundir la resolución de cada locator con la operación del archivo JSON.",
+      "evidence": [
+        "cases[TC-10239].snapshotHashes",
+        "cases[TC-10239].recordedProjection",
+        "cases[TC-10239].replayedProjection",
+        "cases[TC-10239].catalogSummary"
+      ],
+      "sourceReferences": [
+        "recorder/src/ipc/automation/goldenCase.ts:60",
+        "recorder/src/ipc/automation/goldenCase.ts:89",
+        "core/automation/infrastructure/goldenDataset.ts:248",
+        "core/automation/infrastructure/goldenDataset.ts:317"
+      ],
+      "cause": "La aprobación captura un catálogo vigente mientras conserva el plan original; para este snapshot se mezclan contexto posterior a exportar y decisiones anteriores. No hay un catálogo completo anterior independiente entre los artefactos aprobados."
+    },
+    {
+      "id": "partial-shared-dependencies",
+      "caseId": "TC-10239",
+      "status": "confirmed",
+      "severity": "replay-blocker",
+      "summary": "locator-provider.ts y redis.helper.ts contienen proyecciones de símbolos, no los módulos completos. El replay detecta primero locator-provider.ts y se detiene. TypeLocator enum sí está presente completo y coincide con el commit.",
+      "details": [
+        {
+          "path": "support/common/locators/locator-provider.ts",
+          "omittedCalledSymbols": [
+            "getObjectAndroid",
+            "getObjectIos"
+          ],
+          "snapshotBytes": 1147,
+          "fullCommitBytes": 2679
+        },
+        {
+          "path": "support/utils/redis.helper.ts",
+          "omittedCalledSymbols": [
+            "redisReconnectStrategy"
+          ],
+          "snapshotBytes": 6528,
+          "fullCommitBytes": 19597
+        }
+      ],
+      "evidence": [
+        "cases[TC-10239].dependencies",
+        "cases[TC-10239].dependencyRecovery"
+      ],
+      "sourceReferences": [
+        "core/automation/infrastructure/frameworkRecovery/inspection.ts:80",
+        "core/automation/infrastructure/frameworkRecovery/inspection.ts:94",
+        "core/automation/infrastructure/frameworkRecovery/service.ts:159",
+        "recorder/src/ipc/automation/goldenCase.ts:74",
+        "scripts/golden-replay.js:33"
+      ],
+      "cause": "La recuperación selecciona símbolos y conserva currentHash del archivo completo; dependency-files conserva el contenido proyectado. Ambos currentHash coinciden exactamente con los módulos completos disponibles en el commit fijado. Una futura hidratación verificando ese hash puede reconstruir el contexto en checkout temporal, sin reescribir el golden; esa ruta aún no está implementada por los runners auditados."
+    },
+    {
+      "id": "approved-is-not-valid-oracle",
+      "caseId": "TC-10239",
+      "status": "confirmed",
+      "severity": "positive-control-blocker",
+      "summary": "La aprobación QA declara ejecución passed, pero el manifiesto histórico conserva valid=false, qualityScore=0 y 17 errores técnicos en 6 categorías. Resolver dependencias no convierte la versión en control positivo.",
+      "evidence": [
+        "cases[TC-10239].recordedValidation",
+        "cases[TC-10239].execution"
+      ],
+      "sourceReferences": [
+        "scripts/validator-evaluate.js:66",
+        "scripts/validator-evaluate.js:106"
+      ]
+    },
+    {
+      "id": "reproducible-regeneration-control",
+      "caseId": "TC-10251",
+      "status": "confirmed",
+      "severity": "scope-limitation",
+      "summary": "Replay matched y validación estática actual passed. Sus cuatro archivos usan update con baselines capturados; la Feature baseline ya contiene TC-10251. Es reproducible para regeneración/ampliación, no evidencia independiente de creación inicial. No tiene dependencias suplementarias.",
+      "evidence": [
+        "cases[TC-10251].effectiveFiles",
+        "cases[TC-10251].baselineContainsCase",
+        "replay.results",
+        "controlled.samples"
+      ]
+    },
+    {
+      "id": "measured-scope",
+      "status": "confirmed",
+      "severity": "measurement-limitation",
+      "summary": "Dos golden activos, ningún reservado. Se midieron tres muestras: un control válido y dos defectos controlados detectados por la regla esperada (TC duplicado y TypeLocator). Una baseline permanece sin evaluar; remove-text-assertion no aplica al control reproducible. Precisión/recall 2/2 no miden éxito del LLM ni cobertura de otros defectos. Ambos golden conservan declaración QA passed, sin verificación automática de dispositivo.",
+      "evidence": [
+        "controlled",
+        "cases[TC-10251].execution",
+        "cases[TC-10239].execution"
+      ]
+    }
+  ],
+  "nextActions": [
+    {
+      "owner": "development",
+      "action": "Separar snapshot del catálogo previo a generar de catálogo de aprobación y ligar ambos a hashes/revisión. Conservar el contexto histórico y reportar discrepancias."
+    },
+    {
+      "owner": "development",
+      "action": "Para dependencias proyectadas, aceptar hidratación aislada únicamente si el commit completo disponible coincide con currentHash registrado; guardar diagnóstico y ambas identidades. Mantener fallo explícito cuando no hay prueba suficiente."
+    },
+    {
+      "owner": "qa",
+      "action": "Revisar nueva versión de ventas contra baseline limpio y contexto coherente; confirmar precondiciones/criterios, etiquetar reutilización independientemente y aprobar explícitamente si se quiere incorporarla como control positivo. La versión histórica queda intacta."
+    },
+    {
+      "owner": "qa",
+      "action": "Aportar o revisar casos de creación, movimientos y yapeo, con variantes negativas/etiquetas y conjunto reservado por familia de flujo. TC-10251 puede servir ya como referencia de regeneración."
+    },
+    {
+      "owner": "development-and-qa",
+      "action": "Registrar ejecución funcional sobre hash exacto de archivos y contexto de dispositivo/app. La declaración histórica se conserva separada de esa nueva evidencia."
+    }
+  ]
+}

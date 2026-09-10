@@ -15,6 +15,12 @@ conserva los hallazgos de origen. Esta secuencia reemplaza la numeración de
 entregas E0–E5/E3B y las fases históricas F0–F7 del plan anterior para el trabajo
 nuevo. Los documentos históricos no constituyen evidencia de pruebas actuales.
 
+La [estrategia del harness H0–H5](AGENT_HARNESS_STRATEGY.md) detalla la
+continuación del corpus, piloto real y ejecución funcional. H0/H1 ya tienen
+herramientas offline y corpus sintético; su cierre requiere entorno y revisión
+QA. H2–H5 siguen pendientes. Ver [operación y evidencia](AGENT_HARNESS_OFFLINE.md);
+estas entregas no acreditan el cierre experimental de F7.
+
 ## Resultado de producto
 
 Un QA puede generar un caso, recibir el borrador tras un máximo de dos pasadas,

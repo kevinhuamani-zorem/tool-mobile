@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "caseId": "TC-10239",
+  "reviewed": false,
+  "qaReview": {
+    "status": "pending"
+  },
+  "provenance": {
+    "kind": "synthetic-reduction",
+    "selectorVerification": "synthetic-contract-only",
+    "actionCountMeaning": "Invented minimal fixture; not a copy or complete replay of the source recording."
+  },
+  "functional": {
+    "status": "not-evaluated"
+  },
+  "preconditions": [
+    "El alias corresponde exclusivamente al fixture sintético sin ventas; requiere un dato real revisado antes de ejecución móvil."
+  ],
+  "proposedAcceptanceCriteria": [
+    {
+      "id": "empty-sales-message",
+      "kind": "recorded-assertion",
+      "description": "Comparar el texto del estado sin ventas con el esperado.",
+      "sequences": [
+        2
+      ],
+      "critical": true,
+      "reviewed": false
+    }
+  ],
+  "expectedNegatives": [
+    {
+      "id": "locator-type",
+      "mutation": "Cambiar TypeLocator.ANDROID por XPATH manteniendo el valor registrado.",
+      "expectedRuleCodes": [
+        "locator-type-mismatch"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "locator-value-invented",
+      "mutation": "Sustituir el valor del locator por uno que no aparece en la evidencia sintética.",
+      "expectedRuleCodes": [
+        "invented-selector"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "test-data-user-missing",
+      "mutation": "Reemplazar Examples.username por un alias ausente del catálogo sintético.",
+      "expectedRuleCodes": [
+        "test-data-user-missing"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "duplicate-case",
+      "mutation": "Agregar otra declaración del mismo TC en el framework aislado.",
+      "expectedRuleCodes": [
+        "case-duplicate"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "duplicate-step",
+      "mutation": "Agregar una definición equivalente a un Step existente.",
+      "expectedRuleCodes": [
+        "duplicate-step-definition"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "remove-text-assertion",
+      "mutation": "Quitar la aserción de texto y conservar sólo la espera del elemento en Steps.",
+      "expectedRuleCodes": [
+        "recorded-text-assertion-steps"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "mechanical-gherkin",
+      "mutation": "Reemplazar un Step nuevo por el usuario selecciona cerrar.",
+      "expectedRuleCodes": [
+        "imperative-gherkin"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    }
+  ],
+  "reuseExpectations": []
+}

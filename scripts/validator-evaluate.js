@@ -63,18 +63,18 @@ function controlledMutations(scenario, response) {
     }
     return mutations;
 }
-function evaluateControlledFixture(scenario, response, validate, id = 'fixture', baselineExpectedValid = true) {
+function evaluateControlledFixture(scenario, response, validate, id = 'fixture', baselineExpectedValid = true, controls) {
     const baseline = validate(response), samples = [];
     if (!baselineExpectedValid || !baseline.valid) return { samples: [{ id: `${id}:baseline`, expected: 'valid', observed: baselineExpectedValid ? 'invalid' : 'not-evaluated', actualCodes: baseline.errors.map(error => error.code),
         reason: 'The unmodified approved snapshot does not pass the current validator; resolve baseline drift before injecting faults.' }], unsupported: [] };
     samples.push({ id: `${id}:baseline`, expected: 'valid', observed: 'valid', actualCodes: [] });
-    const mutations = controlledMutations(scenario, response);
+    const mutations = controls?.mutations ?? controlledMutations(scenario, response);
     for (const mutation of mutations) {
         const result = validate(mutation.response);
         samples.push({ id: `${id}:${mutation.id}`, expected: 'invalid', expectedCode: mutation.expectedCode,
             observed: result.valid ? 'valid' : 'invalid', actualCodes: result.errors.map(error => error.code) });
     }
-    return { samples, unsupported: ['duplicate-case', 'locator-type', 'remove-text-assertion'].filter(id => !mutations.some(mutation => mutation.id === id)) };
+    return { samples, unsupported: (controls?.requiredMutationIds ?? ['duplicate-case', 'locator-type', 'remove-text-assertion']).filter(id => !mutations.some(mutation => mutation.id === id)) };
 }
 function evaluateValidator({ root = goldenDatasetRoot(), framework = projectPaths.frameworkRoot } = {}) {
     const original = { targetProject: projectPaths.frameworkRoot, runtimeRoot: projectPaths.runtimeRoot, source: 'selected' };

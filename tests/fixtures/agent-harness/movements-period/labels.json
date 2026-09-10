@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "caseId": "TC-10140",
+  "reviewed": false,
+  "qaReview": {
+    "status": "pending"
+  },
+  "provenance": {
+    "kind": "synthetic-reduction",
+    "selectorVerification": "synthetic-contract-only",
+    "actionCountMeaning": "Invented minimal fixture; not a copy or complete replay of the source recording."
+  },
+  "functional": {
+    "status": "not-evaluated"
+  },
+  "preconditions": [
+    "Reloj sintético fijo: 2026-09-09, zona America/Lima.",
+    "Las fechas y los movimientos son inventados para controles técnicos; no describen la cuenta del recording original."
+  ],
+  "proposedAcceptanceCriteria": [
+    {
+      "id": "period-30-label",
+      "kind": "recorded-assertion",
+      "description": "Comparar la etiqueta exacta del período de 30 días.",
+      "sequences": [
+        3
+      ],
+      "critical": true,
+      "reviewed": false
+    },
+    {
+      "id": "period-90-label",
+      "kind": "recorded-assertion",
+      "description": "Comparar la etiqueta exacta del período de 90 días.",
+      "sequences": [
+        6
+      ],
+      "critical": true,
+      "reviewed": false
+    },
+    {
+      "id": "oldest-within-30-days",
+      "kind": "date-range",
+      "description": "Comprobar que el movimiento más antiguo pertenece a los últimos 30 días; la comparación de texto sola no acredita este criterio.",
+      "sequences": [
+        4
+      ],
+      "days": 30,
+      "critical": true,
+      "reviewed": false
+    },
+    {
+      "id": "oldest-within-90-days",
+      "kind": "date-range",
+      "description": "Comprobar que el movimiento más antiguo pertenece a los últimos 90 días; la comparación de texto sola no acredita este criterio.",
+      "sequences": [
+        7
+      ],
+      "days": 90,
+      "critical": true,
+      "reviewed": false
+    }
+  ],
+  "expectedNegatives": [
+    {
+      "id": "locator-type",
+      "mutation": "Cambiar TypeLocator.ANDROID por XPATH manteniendo el valor registrado.",
+      "expectedRuleCodes": [
+        "locator-type-mismatch"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "locator-value-invented",
+      "mutation": "Sustituir el valor del locator por uno que no aparece en la evidencia sintética.",
+      "expectedRuleCodes": [
+        "invented-selector"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "test-data-user-missing",
+      "mutation": "Reemplazar Examples.username por un alias ausente del catálogo sintético.",
+      "expectedRuleCodes": [
+        "test-data-user-missing"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "duplicate-case",
+      "mutation": "Agregar otra declaración del mismo TC en el framework aislado.",
+      "expectedRuleCodes": [
+        "case-duplicate"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "duplicate-step",
+      "mutation": "Agregar una definición equivalente a un Step existente.",
+      "expectedRuleCodes": [
+        "duplicate-step-definition"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "remove-text-assertion",
+      "mutation": "Quitar la aserción de texto y conservar sólo la espera del elemento en Steps.",
+      "expectedRuleCodes": [
+        "recorded-text-assertion-steps"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "mechanical-gherkin",
+      "mutation": "Reemplazar un Step nuevo por el usuario selecciona cerrar.",
+      "expectedRuleCodes": [
+        "imperative-gherkin"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "date-range-weakened",
+      "mutation": "Cambiar la comprobación del rango de 30 días para que acepte 90 días.",
+      "expectedRuleCodes": [
+        "acceptance-date-range"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "reused-method-changed",
+      "mutation": "Modificar la implementación de un método marcado como reutilizado.",
+      "expectedRuleCodes": [
+        "reuse-implementation-changed"
+      ],
+      "expectationStatus": "proposed",
+      "reviewed": false
+    }
+  ],
+  "reuseExpectations": [
+    {
+      "id": "existing-date-range-30",
+      "fixture": "acceptance-framework/date-range-profile",
+      "methodName": "userViewMovementsLast30DaysConfirmaDateMostrada",
+      "sequences": [
+        4
+      ],
+      "status": "proposed",
+      "reviewed": false
+    },
+    {
+      "id": "existing-date-range-90",
+      "fixture": "acceptance-framework/date-range-profile",
+      "methodName": "userViewMovementsLast90DaysConfirmaDateMostrada",
+      "sequences": [
+        7
+      ],
+      "status": "proposed",
+      "reviewed": false
+    }
+  ]
+}

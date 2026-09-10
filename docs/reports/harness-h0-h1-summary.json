@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "reportVersion": "harness-h0-h1-summary/v1",
+  "baselineCreatedAt": "2026-09-10T01:22:19.385Z",
+  "recorder": {
+    "commit": "ae4e68607ef76bd5f5edffb8be2eb9240d3d1173",
+    "source": {
+      "sha256": "f51bc2d07065c7849920533d353f062bcf1ed9c114e4458a9282ea09b9bce83c",
+      "files": 455
+    },
+    "lockfileSha256": "ff26ca357441c47f290a6f548d9a81198018395d9d1bcb2bd0a60c8f5efa575a",
+    "builtCore": {
+      "sha256": "bdc0478d2a98c462168052cbb7721124dbe410345c60753ab844af88c0f66208",
+      "files": 412
+    }
+  },
+  "toolRuntime": {
+    "node": "v22.18.0",
+    "npm": "10.9.3",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "baseline": {
+    "protocol": "recorder-harness-baseline/v1",
+    "manifestSha256": "322792f8940381c961fbd033db6ee010ea864f84604aeebb1337373e1b43aa27",
+    "framework": {
+      "commit": "09674ce8ba298f650ad116c8d1dd82c7e19e8577",
+      "tree": "075e424cb345f0031e897413b3faf5e41fdf4bc8",
+      "snapshot": "framework",
+      "snapshotFingerprint": {
+        "sha256": "1b5a9bed888d1f1aae6ee082b22501b2c48d4e2b117bb48ca0c2aa00162efd97",
+        "files": 605
+      },
+      "archiveSha256": "7d1f651417dcde7d6f0684c5a5dfa5a99e1630c6a9b913434b62213fcd9ce44d",
+      "packageSha256": "b4be072da1f1dc9e4369d9dab5d1fa21bed71238775a516bd139e6ed05dcb515",
+      "lockfileSha256": "3b67995df66739ce01000e891f23d5d5d072a835767db1578a590a56b6746a30",
+      "lockfileVersion": 3,
+      "engines": {
+        "node": {
+          "version": "v22.18.0",
+          "required": ">=24.0.0",
+          "status": "incompatible"
+        },
+        "npm": {
+          "version": "10.9.3",
+          "required": ">=11.0.0",
+          "status": "incompatible"
+        }
+      },
+      "sourceWorkingChangesIncluded": false,
+      "dependencies": {
+        "status": "not-provisioned",
+        "installExecuted": false
+      }
+    },
+    "corpusSha256": "7c9837a1930fffed972650bee8af00ec1e251d7722c87f2f6c0ceacd2e9cb16f",
+    "corpusId": "recorder-harness-h1-v1",
+    "integrityVerification": "passed",
+    "readiness": {
+      "baselineCaptured": true,
+      "pilot": "not-ready",
+      "blockers": [
+        "target-dependencies-not-provisioned",
+        "corpus-qa-review-pending",
+        "target-runtime-not-compatible-or-unverified"
+      ]
+    },
+    "execution": {
+      "providerInvoked": false,
+      "functionalExecution": "not-evaluated",
+      "approval": "not-granted"
+    }
+  },
+  "syntheticControls": {
+    "reportSha256": "efc3b7a33fa7c6dc3de32c4153f454b8b769fc266c77225b6e8e81a6a6e8130f",
+    "evaluationVersion": "harness-controls/v1",
+    "exitCode": 0,
+    "framework": {
+      "source": "synthetic-contract-framework",
+      "commit": null
+    },
+    "measured": 13,
+    "validPositiveControls": 3,
+    "detectedNegatives": 10,
+    "falsePositives": 0,
+    "falseNegatives": 0,
+    "notEvaluated": 0,
+    "samples": [
+      {
+        "id": "generated-contract:baseline",
+        "expected": "valid",
+        "observed": "valid",
+        "actualCodes": []
+      },
+      {
+        "id": "generated-contract:duplicate-case",
+        "expected": "invalid",
+        "expectedCode": "case-duplicate",
+        "observed": "invalid",
+        "actualCodes": [
+          "case-duplicate"
+        ]
+      },
+      {
+        "id": "generated-contract:locator-type",
+        "expected": "invalid",
+        "expectedCode": "locator-type-mismatch",
+        "observed": "invalid",
+        "actualCodes": [
+          "create-locator-contract",
+          "locator-type-mismatch",
+          "locator-type-mismatch"
+        ]
+      },
+      {
+        "id": "generated-contract:remove-text-assertion",
+        "expected": "invalid",
+        "expectedCode": "recorded-text-assertion-steps",
+        "observed": "invalid",
+        "actualCodes": [
+          "recorded-text-assertion-steps"
+        ]
+      },
+      {
+        "id": "generated-contract:locator-value-invented",
+        "expected": "invalid",
+        "expectedCode": "invented-selector",
+        "observed": "invalid",
+        "actualCodes": [
+          "create-locator-contract",
+          "invented-selector",
+          "locator-type-mismatch"
+        ]
+      },
+      {
+        "id": "generated-contract:test-data-user-missing",
+        "expected": "invalid",
+        "expectedCode": "test-data-user-missing",
+        "observed": "invalid",
+        "actualCodes": [
+          "test-data-user-missing"
+        ]
+      },
+      {
+        "id": "generated-contract:duplicate-step",
+        "expected": "invalid",
+        "expectedCode": "duplicate-step-definition",
+        "observed": "invalid",
+        "actualCodes": [
+          "duplicate-step-definition",
+          "step-ambiguous"
+        ]
+      },
+      {
+        "id": "generated-contract:mechanical-gherkin",
+        "expected": "invalid",
+        "expectedCode": "imperative-gherkin",
+        "observed": "invalid",
+        "actualCodes": [
+          "imperative-gherkin"
+        ]
+      },
+      {
+        "id": "generated-contract:trace-getter-changed",
+        "expected": "invalid",
+        "expectedCode": "trace-locator",
+        "observed": "invalid",
+        "actualCodes": [
+          "trace-locator",
+          "trace-screen-method"
+        ]
+      },
+      {
+        "id": "frozen-method:baseline",
+        "expected": "valid",
+        "observed": "valid",
+        "actualCodes": []
+      },
+      {
+        "id": "frozen-method:reused-method-changed",
+        "expected": "invalid",
+        "expectedCode": "reuse-implementation-changed",
+        "observed": "invalid",
+        "actualCodes": [
+          "reuse-implementation-changed"
+        ]
+      },
+      {
+        "id": "date-range:baseline",
+        "expected": "valid",
+        "observed": "valid",
+        "actualCodes": []
+      },
+      {
+        "id": "date-range:date-range-weakened",
+        "expected": "invalid",
+        "expectedCode": "acceptance-date-range",
+        "observed": "invalid",
+        "actualCodes": [
+          "reuse-implementation-changed",
+          "acceptance-date-range"
+        ]
+      }
+    ],
+    "requiredNegativeControls": 10,
+    "proposedLabels": {
+      "total": 24,
+      "mapped": 24,
+      "unmapped": 0
+    },
+    "unsupported": [],
+    "scope": "Offline production-validator regression controls, with exact expected rule codes. This is not agent accuracy, device success, QA approval or golden promotion."
+  },
+  "pinnedFrameworkControls": {
+    "reportSha256": "d87a66edcf4ff36f70d44039f6bb0dea580953ec7ff7a858a872bc1b9720803d",
+    "evaluationVersion": "harness-controls/v1",
+    "exitCode": 2,
+    "framework": {
+      "source": "isolated-git-archive",
+      "commit": "09674ce8ba298f650ad116c8d1dd82c7e19e8577",
+      "tree": "075e424cb345f0031e897413b3faf5e41fdf4bc8",
+      "archiveSha256": "7d1f651417dcde7d6f0684c5a5dfa5a99e1630c6a9b913434b62213fcd9ce44d"
+    },
+    "measured": 11,
+    "validPositiveControls": 2,
+    "detectedNegatives": 9,
+    "falsePositives": 0,
+    "falseNegatives": 0,
+    "notEvaluated": 2,
+    "samples": [
+      {
+        "id": "generated-contract:baseline",
+        "expected": "valid",
+        "observed": "valid",
+        "actualCodes": []
+      },
+      {
+        "id": "generated-contract:duplicate-case",
+        "expected": "invalid",
+        "expectedCode": "case-duplicate",
+        "observed": "invalid",
+        "actualCodes": [
+          "case-duplicate"
+        ]
+      },
+      {
+        "id": "generated-contract:locator-type",
+        "expected": "invalid",
+        "expectedCode": "locator-type-mismatch",
+        "observed": "invalid",
+        "actualCodes": [
+          "create-locator-contract",
+          "locator-type-mismatch",
+          "locator-type-mismatch"
+        ]
+      },
+      {
+        "id": "generated-contract:remove-text-assertion",
+        "expected": "invalid",
+        "expectedCode": "recorded-text-assertion-steps",
+        "observed": "invalid",
+        "actualCodes": [
+          "recorded-text-assertion-steps"
+        ]
+      },
+      {
+        "id": "generated-contract:locator-value-invented",
+        "expected": "invalid",
+        "expectedCode": "invented-selector",
+        "observed": "invalid",
+        "actualCodes": [
+          "create-locator-contract",
+          "invented-selector",
+          "locator-type-mismatch"
+        ]
+      },
+      {
+        "id": "generated-contract:test-data-user-missing",
+        "expected": "invalid",
+        "expectedCode": "test-data-user-missing",
+        "observed": "invalid",
+        "actualCodes": [
+          "test-data-user-missing"
+        ]
+      },
+      {
+        "id": "generated-contract:duplicate-step",
+        "expected": "invalid",
+        "expectedCode": "duplicate-step-definition",
+        "observed": "invalid",
+        "actualCodes": [
+          "duplicate-step-definition",
+          "step-ambiguous"
+        ]
+      },
+      {
+        "id": "generated-contract:mechanical-gherkin",
+        "expected": "invalid",
+        "expectedCode": "imperative-gherkin",
+        "observed": "invalid",
+        "actualCodes": [
+          "imperative-gherkin"
+        ]
+      },
+      {
+        "id": "generated-contract:trace-getter-changed",
+        "expected": "invalid",
+        "expectedCode": "trace-locator",
+        "observed": "invalid",
+        "actualCodes": [
+          "trace-locator",
+          "trace-screen-method"
+        ]
+      },
+      {
+        "id": "frozen-method:baseline",
+        "expected": "valid",
+        "observed": "valid",
+        "actualCodes": []
+      },
+      {
+        "id": "frozen-method:reused-method-changed",
+        "expected": "invalid",
+        "expectedCode": "reuse-implementation-changed",
+        "observed": "invalid",
+        "actualCodes": [
+          "reuse-implementation-changed"
+        ]
+      },
+      {
+        "id": "date-range:baseline",
+        "expected": "valid",
+        "observed": "not-evaluated",
+        "actualCodes": [],
+        "reason": "Synthetic fixture path is occupied: resources/locators/payment/movements.locator.json"
+      },
+      {
+        "id": "date-range:date-range-weakened",
+        "expected": "invalid",
+        "expectedCode": "acceptance-date-range",
+        "observed": "not-evaluated",
+        "actualCodes": [],
+        "reason": "Synthetic fixture path is occupied: resources/locators/payment/movements.locator.json"
+      }
+    ],
+    "requiredNegativeControls": 10,
+    "proposedLabels": {
+      "total": 24,
+      "mapped": 24,
+      "unmapped": 0
+    },
+    "unsupported": [
+      {
+        "fixtureId": "date-range",
+        "controlId": "date-range-weakened",
+        "reason": "Synthetic fixture path is occupied: resources/locators/payment/movements.locator.json"
+      }
+    ],
+    "scope": "Offline production-validator regression controls, with exact expected rule codes. This is not agent accuracy, device success, QA approval or golden promotion."
+  },
+  "softwareValidation": {
+    "focused": {
+      "passed": 46,
+      "total": 46,
+      "environment": "isolated-staging"
+    },
+    "fullSuite": {
+      "passed": 1030,
+      "total": 1031,
+      "environment": "source-recorder"
+    },
+    "qualityExitCode": 1,
+    "typecheck": "passed",
+    "architecture": "passed",
+    "metrics": "passed",
+    "build": "passed",
+    "knownFailure": {
+      "test": "tests/goldenDataset.test.js",
+      "caseId": "TC-10239",
+      "versionHash": "77c7c67b6cd3b69bedebdec7f6e127af1ae45f61ec47aae321d1fe49b5f09c55",
+      "reason": "Stored initial plan differs from the post-export catalog; original golden preserved."
+    }
+  },
+  "preservation": {
+    "frameworkPendingFilesCompared": 11,
+    "frameworkPendingFilesUnchanged": true,
+    "goldenAudit": "harness-h0-golden-audit.json",
+    "goldenAuditSha256": "8c8b910307d4ae5f23da6a78c97b4a14d4134e13272357544c7bfa822858c534"
+  },
+  "status": {
+    "H0": "partial-environment-and-qa-pending",
+    "H1": "partial-real-corpus-and-qa-pending",
+    "H2": "pending",
+    "H3": "pending",
+    "H4": "pending",
+    "H5": "pending"
+  },
+  "scope": "Offline regression evidence. No LLM or device executed, no agent success rate, no implicit QA or golden approval."
+}
